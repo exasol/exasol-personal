@@ -1,0 +1,29 @@
+# Database Ready Wait Phase
+#
+# Purpose: Waits for Exasol to become fully operational
+# Runs as: ubuntu user
+# Dependencies: Requires installation to complete first
+#
+# Tasks:
+# - Waits for c4 process to be running
+# - Waits for Exasol to accept connections
+# - Waits for AdminUI (confd) to be accessible
+#
+# Idempotency: Only runs if ready.complete marker doesn't exist
+
+[Unit]
+Description=Exasol Launcher Ready
+ConditionPathExists=!/var/lib/exasol_launcher/state/ready.complete
+Requires=exasol_launcher_install.service
+After=exasol_launcher_install.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/echo "EXASOL-INSTALL-STEP: Waiting for Exasol to become ready"
+ExecStart=/opt/exasol_launcher/scripts/waitC4Present.sh
+ExecStart=/opt/exasol_launcher/scripts/waitDatabaseBootup.sh
+ExecStart=/opt/exasol_launcher/scripts/waitConfdStartup.sh
+ExecStartPost=/usr/bin/echo "EXASOL-INSTALL-STEP: Exasol is ready"
+ExecStartPost=/usr/bin/touch /var/lib/exasol_launcher/state/ready.complete
+User=ubuntu
+WorkingDirectory=~

@@ -1,0 +1,31 @@
+# Build and dependency directories
+/vendor/
+/bin/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Taskfile cache and configuration
+.task/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# State and artifacts
+tfstate*
+*.tfplan
+*.log
+.terraform-providers/
+.terraform/
+__pycache__
+coverage.out
+
+# Credentials and secrets
+*.pem
+*.key
+# Added by goreleaser init:
+dist/

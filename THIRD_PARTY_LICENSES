@@ -1,0 +1,45 @@
+Third-Party Software Licenses
+==============================
+
+This software includes or distributes the following third-party software:
+
+## OpenTofu
+
+**Version:** 1.10.5
+**License:** Mozilla Public License 2.0 (MPL-2.0)
+**Source Code:** https://github.com/opentofu/opentofu/tree/v1.10.5
+**Copyright:** Copyright (c) 2023 The OpenTofu Authors
+
+### Description
+
+This software embeds the OpenTofu binary, an open-source infrastructure as code tool.
+OpenTofu is distributed under the Mozilla Public License 2.0.
+
+### License Text
+
+The full text of the Mozilla Public License 2.0 can be found at:
+https://www.mozilla.org/en-US/MPL/2.0/
+
+### Source Code Availability
+
+The complete source code for OpenTofu version 1.10.5 is available at:
+- GitHub Repository: https://github.com/opentofu/opentofu
+- Specific Version: https://github.com/opentofu/opentofu/tree/v1.10.5
+- Release Archive: https://github.com/opentofu/opentofu/releases/tag/v1.10.5
+
+### Mozilla Public License 2.0 Summary
+
+The Mozilla Public License 2.0 is a weak copyleft license that allows you to:
+- Use the software for any purpose
+- Modify the software
+- Distribute the software
+
+Under the following conditions:
+- The source code of the MPL-licensed portions must be made available under MPL-2.0
+- Modifications to MPL-licensed files must also be released under MPL-2.0
+- You must include a notice about the use of MPL-licensed software
+
+---
+
+Full MPL-2.0 License Text:
+https://www.mozilla.org/media/MPL/2.0/index.815ca599c9df.txt

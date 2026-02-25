@@ -1,0 +1,6 @@
+name: Exasol in AWS on Ubuntu
+description: Provisioning in AWS. Ubuntu, S3 archive volume, dynamic IP.
+
+tofu:
+  variablesFile: variables_public.tf
+  varsOutputFile: vars.tfvars

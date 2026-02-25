@@ -1,0 +1,64 @@
+name: setup-codesigntool
+description: Setup SSL.com CodeSignTool for Windows binary signing
+
+inputs:
+  version:
+    description: 'CodeSignTool version to install'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Java for CodeSignTool
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '11'
+    
+    - name: Cache CodeSignTool
+      id: cache-codesigntool
+      uses: actions/cache@v4
+      with:
+        path: /tmp/codesigntool
+        key: codesigntool-${{ inputs.version }}-${{ runner.os }}
+        restore-keys: |
+          codesigntool-${{ inputs.version }}-
+    
+    - name: Download and setup SSL.com CodeSignTool
+      if: steps.cache-codesigntool.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        CODESIGNTOOL_VERSION: ${{ inputs.version }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        
+        # Download CodeSignTool from GitHub releases to /tmp (outside repo)
+        cd /tmp
+        
+        echo "Downloading CodeSignTool version: ${CODESIGNTOOL_VERSION}"
+        DOWNLOAD_URL="https://github.com/SSLcom/CodeSignTool/releases/download/${CODESIGNTOOL_VERSION}/CodeSignTool-${CODESIGNTOOL_VERSION}.zip"
+        echo "URL: ${DOWNLOAD_URL}"
+        
+        # Download with GitHub token to avoid rate limiting
+        curl -sSLf --retry 3 --retry-delay 5 \
+          -H "Authorization: token ${GITHUB_TOKEN}" \
+          -o CodeSignTool.zip "$DOWNLOAD_URL"
+        
+        echo "Downloaded $(stat -c%s CodeSignTool.zip) bytes"
+
+        # Extract and setup
+        mkdir -p /tmp/codesigntool
+        unzip -q CodeSignTool.zip -d /tmp/codesigntool
+        rm CodeSignTool.zip
+        
+        echo "CodeSignTool ${CODESIGNTOOL_VERSION} downloaded and extracted"        
+    
+    - name: Verify CodeSignTool installation
+      shell: bash
+      run: |
+        # Ensure the shell script is executable (in case restored from cache)
+        chmod +x /tmp/codesigntool/CodeSignTool.sh
+        
+        echo "CodeSignTool installed successfully at /tmp/codesigntool"
+        cd /tmp/codesigntool && ./CodeSignTool.sh --version || echo "CodeSignTool ready"

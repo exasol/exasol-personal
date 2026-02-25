@@ -1,0 +1,19 @@
+# Build and dependency directories
+bin/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Taskfile cache and configuration
+.task/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
+coverage.out
+
+

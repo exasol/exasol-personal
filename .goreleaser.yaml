@@ -1,0 +1,94 @@
+# Make sure to check the documentation at https://goreleaser.com
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+project_name: exasol-personal
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    targets:
+      - darwin_arm64
+      - darwin_amd64
+      - linux_amd64
+      - linux_arm64
+      - windows_amd64
+      # currently opentofu do not provide arm builds for windows
+      # - windows_arm64
+    main: ./cmd/exasol
+    # Name of the output binary
+    binary: exasol
+    hooks:
+      pre:        
+        - cmd: go run ./tools/downloadtofu/main.go -goos="{{ .Os }}" -goarch="{{ .Arch }}" -dir "./assets/tofubin/generated/"      
+          output: true
+      post:
+        - cmd: ./.github/scripts/sign-windows-binary.sh "{{ .Path }}"
+          output: true
+
+
+archives:
+  - formats: ['tar.gz']
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- if eq .Os "darwin" }}macOS
+      {{- else }}{{ title .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        formats: ['zip']
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^(?i)docs"
+      - "^(?i)test"
+      - "^(?i)chore"
+
+release:
+  # if there's a hyphen after the version numbers, it's a pre-release.
+  prerelease: auto
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
+
+
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      sign:
+        # The .p12 certificate file path or its base64'd contents. 
+        # Contains signing certifactes and private key
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        # The password to be used to open the certificate.
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+        # Allows to set the signature entitlements XML file.
+        entitlements: ./entitlements.plist
+      notarize:
+        # The issuer ID.
+        # Its the UUID you see when creating the App Store Connect key.
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        # Key ID.
+        # You can see it in the list of App Store Connect Keys.
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        # The .p8 key file path or its base64'd contents.
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+
+        # Whether to wait for the notarization to finish.
+        # Not recommended, as it could take a really long time.
+        wait: false
+        timeout: 20m

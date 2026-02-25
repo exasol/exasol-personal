@@ -1,0 +1,303 @@
+version: '3'
+
+vars:
+  COMMAND_NAME: exasol
+  BINARY_SUFFIX:
+    sh: test "$(go env GOOS)" = "windows" && echo ".exe" || true
+  BINARY_NAME: "{{.COMMAND_NAME}}{{.BINARY_SUFFIX}}"
+  MAIN_PATH_REL: "./cmd/exasol"
+  BUILD_DIR_NAME: "bin"
+  ROOT_PATH: >-
+    {{- if eq OS "windows" }}
+      {{- .ROOT_DIR | replace "\\" "\\\\" }}
+    {{- else }}
+      {{- .ROOT_DIR }}
+    {{- end }}
+  SEP: '{{if eq OS "windows"}}\\{{else}}/{{end}}'
+  BUILD_DIR: '{{.ROOT_PATH}}{{.SEP}}{{.BUILD_DIR_NAME}}'
+  TESTS_DIR: '{{.ROOT_PATH}}{{.SEP}}tests'
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - "task --list"
+
+  tofu-placeholders:
+    desc: Create placeholder files for tofu binaries required by go:embed
+    vars:
+      PLACEHOLDER_TEXT: "placeholder for go:embed"
+      TARGETS: >-
+        darwin/amd64/tofu
+        darwin/arm64/tofu
+        linux/amd64/tofu
+        linux/arm64/tofu
+        windows/amd64/tofu.exe        
+    cmds:
+      - for:
+          var: TARGETS
+        cmd: >-
+          {{- if eq OS "windows" }}
+          if not exist "assets\tofubin\generated\{{.ITEM | replace "/" "\\"}}" (
+            mkdir "assets\tofubin\generated\{{.ITEM | replace "/" "\\" | dir | replace "/" "\\"}}" 2>nul
+            echo {{.PLACEHOLDER_TEXT}} > "assets\tofubin\generated\{{.ITEM | replace "/" "\\"}}"
+          )
+          {{- else }}
+          test -f "assets/tofubin/generated/{{.ITEM}}" || (mkdir -p "assets/tofubin/generated/$(dirname {{.ITEM}})" && echo "{{.PLACEHOLDER_TEXT}}" > "assets/tofubin/generated/{{.ITEM}}")
+          {{- end }}
+
+  generate:
+    desc: run generation for all packages
+    cmds:
+      - go generate ./...
+      - go run ./tools/downloadtofu/main.go -goos="$GOOS" -goarch="$GOARCH" -dir "./assets/tofubin/generated/"
+
+  tofu-download-windows:
+    desc: Download OpenTofu binaries for Windows (required for go:embed)
+    vars:
+      TARGET_ARCHS: >-
+        amd64
+    cmds:
+      - for:
+          var: TARGET_ARCHS
+        cmd: >-
+          go run ./tools/downloadtofu/main.go
+          -goos="windows"
+          -goarch="{{.ITEM}}"
+          -dir "./assets/tofubin/generated/"
+
+  tofu-lock-update:
+    desc: Regenerate multi-platform .terraform.lock.hcl files (no temp files in assets)
+    deps:
+      - generate
+    cmds:
+      - >-
+        go run ./tools/lockfileupdate/main.go
+        -platform=linux_amd64
+        -platform=linux_arm64
+        -platform=windows_amd64
+        -platform=darwin_amd64
+        -platform=darwin_arm64
+
+  # Using relative paths to build because on Windows the .ROOT_DIR
+  # variable messes with path separators and results in incompatible
+  # with Windows path.
+  build:
+    desc: Build the binary
+    cmds:
+      - |
+        version=$(git describe --tags --abbrev=0) # First character is "v".
+        go build -o {{.BUILD_DIR_NAME}}/{{.BINARY_NAME}} \
+          -ldflags "-X main.version=${version:1}" {{.MAIN_PATH_REL}}
+
+  build-windows:
+    desc: Cross-compile the Windows binary (defaults to GOARCH=amd64)
+    deps:
+      - tofu-download-windows
+    vars:
+      TARGET_GOARCH: '{{default "amd64" .GOARCH}}'
+      OUTPUT_NAME: '{{.COMMAND_NAME}}.exe'
+    env:
+      GOOS: windows
+      GOARCH: '{{.TARGET_GOARCH}}'
+      CGO_ENABLED: "0"
+    cmds:
+      - |
+        version=$(git describe --tags --abbrev=0) # First character is "v".
+        go build -o {{.BUILD_DIR_NAME}}/{{.OUTPUT_NAME}} \
+          -ldflags "-X main.version=${version:1}" {{.MAIN_PATH_REL}}
+
+
+  deps-update-golang:
+    desc: Update all Go dependencies
+    cmds:
+      - go get -u ./...
+
+  deps-update-python:
+    desc: Update all Python dependencies
+    dir: '{{.USER_WORKING_DIR}}/{{.TESTS_DIR}}'
+    cmds:
+      - poetry update
+
+  deps-update:
+    desc: Update all Go dependencies
+    deps:
+      - deps-update-golang
+      - deps-update-python
+
+  deps-install-poetry:
+    cmds:
+      - python3 -m pip install poetry
+    status:
+      - which poetry
+
+  tests-setup:
+    desc: Install required test tools
+    dir: '{{.TESTS_DIR}}'
+    cmds:
+      - poetry sync
+    status:
+      - poetry run ruff --version
+      - poetry run mypy --version
+    deps:
+      - deps-install-poetry
+
+  tests-unit:
+    desc: Run unit tests (`task tests-unit TEST=Ready` or `task tests-unit TEST=*Ready*`)
+    deps:
+      - tofu-placeholders
+    vars:
+      TEST: '{{default "" .TEST}}'
+    cmds:
+      - '{{if .TEST}}go test -v -race -run "{{.TEST}}" ./...{{else}}go test -v -race ./...{{end}}'
+      # Disabling coverage until it works with different toolchains
+      # Error that you get when running tests with coverage and when local go is older then what defined in go.mod:
+      # compile: version "go1.25.5" does not match go tool version "go1.25.1"
+      #- go test -v -race -coverprofile=coverage.out ./...
+      #- go tool cover -func=coverage.out
+
+  tests-unit-find:
+    desc: Find Go unit test names by wildcard on Linux (`task tests-unit-find TEST=*Ready*`)
+    platforms:
+      - linux
+    vars:
+      TEST: '{{default "*" .TEST}}'
+    cmds:
+      - |
+        go test -json ./... | jq -r 'select(.Action=="run") | .Test'
+
+  tests-integration:
+    desc: Run integration tests
+    deps: [tests-setup]
+    dir: '{{.TESTS_DIR}}'
+    cmds:
+      - poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}integration
+
+  tests-deployment:
+    desc: Run deployment tests
+    deps: [tests-setup]
+    dir: '{{.TESTS_DIR}}'
+    cmds:
+      - |
+        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
+
+  lint-ruff:
+    desc: Run ruff check
+    cmds:
+      - task: lint-ruff-check
+      - task: lint-ruff-format
+
+  lint-ruff-fix:
+    desc: Run ruff check, format and apply automatic fixes
+    cmds:
+      - task: lint-ruff-check-fix
+      - task: lint-ruff-format-fix
+
+  lint-ruff-check:
+    desc: Run ruff check
+    deps:
+      - tests-setup
+    dir: '{{.TESTS_DIR}}'
+    cmds:
+      - poetry run ruff check
+
+  lint-ruff-check-fix:
+    desc: Run ruff check and apply automatic fixes
+    deps:
+      - tests-setup
+    dir: '{{.TESTS_DIR}}'
+    cmds:
+      - poetry run ruff check --fix
+
+  lint-ruff-format:
+    desc: Run ruff format
+    deps:
+      - tests-setup
+    dir: '{{.TESTS_DIR}}'
+    cmds:
+      - poetry run ruff format --check
+
+  lint-ruff-format-fix:
+    desc: Run ruff format and apply automatic fixes
+    deps:
+      - tests-setup
+    dir: '{{.TESTS_DIR}}'
+    cmds:
+      - poetry run ruff format
+
+  lint-mypy:
+    desc: Run mypy check
+    deps: [tests-setup]
+    dir: '{{.TESTS_DIR}}'
+    cmds:
+      - poetry run mypy {{.TESTS_DIR}}
+
+  lint-golang:
+    desc: Run golangci-lint linters
+    deps:
+      - tofu-placeholders
+    cmds:
+      - go tool golangci-lint run ./...
+
+  lint-golang-fix:
+    desc: Run golangci-lint linters and apply automatic fixes
+    cmds:
+      - go tool golangci-lint run ./... --fix
+
+  lint-terraform:
+    desc: Run tflint for Terraform files within assets/infrastructure
+    cmds:
+      - go tool tflint --init
+      - go tool tflint --recursive --format=default --chdir=./assets/infrastructure
+
+  lint-licenses:
+    desc: Run addlicense on check mode for all source files    
+    cmds:
+      - go tool addlicense -l mit -c "Exasol AG" -check -s=only $(find . -type f -iregex ".*\.\(go\|py\)$")      
+
+  lint-licenses-fix:
+    desc: Run addlicense to add the correct license header for all source files
+    cmds:
+      - go tool addlicense -l mit -c "Exasol AG" -s=only $(find . -type f -iregex ".*\.\(go\|py\)$")
+
+  lint:
+    desc: Run linters
+    cmds:
+      - task: lint-golang
+      - task: lint-ruff
+      - task: lint-mypy
+      - task: lint-terraform
+      - task: lint-licenses
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.BUILD_DIR}}
+      - rm -f coverage.out
+
+  fmt-golang:
+    desc: Format Go code
+    cmds:
+      - task: lint-golang-fix
+
+  fmt-ruff:
+    desc: Format Python code with Ruff
+    deps: [tests-setup]
+    dir: '{{.TESTS_DIR}}'
+    cmds:
+      - poetry run ruff format
+      - poetry run ruff check --fix
+
+  fmt:
+    desc: Format code
+    deps:
+      - fmt-golang
+      - fmt-ruff
+
+  all:
+    desc: Run all tasks (lint, build, test)
+    cmds:
+      - task: lint
+      - task: build
+      - task: tests-unit
+      - task: tests-integration      

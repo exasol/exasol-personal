@@ -1,0 +1,4 @@
+# Enforce LF line endings for shell scripts to prevent execution errors on Linux
+# Shell scripts with CRLF will fail with: /usr/bin/env: 'bash\r': No such file or directory
+*.sh text eol=lf
+*.sh.tftpl text eol=lf

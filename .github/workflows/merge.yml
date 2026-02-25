@@ -1,0 +1,34 @@
+# Extra jobs to run on merges to main.
+# Specifically, build the binaries for the other platforms we want support
+name: Main branch pushed - Build Windows and MacOS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # this is need because we use "git describe" to get the latest version from git       
+          fetch-depth: 0
+      - uses: ./.github/actions/build
+
+      - name: Upload file
+        if: ${{ !contains(matrix.os, 'windows') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: exasol-${{ matrix.os }}
+          path: bin/exasol
+
+      - name: Upload file (Windows)
+        if: ${{ contains(matrix.os, 'windows') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: exasol-${{ matrix.os }}
+          path: bin/exasol.exe

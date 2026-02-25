@@ -1,0 +1,180 @@
+Exasol Personal: End User License Agreement
+
+IMPORTANT: READ THIS END USER LICENSE AGREEMENT (“EULA”) CAREFULLY BEFORE ACCEPTING THIS EULA BELOW.
+This Agreement is by and between Exasol (as defined below) (“Exasol”) and you, on behalf of yourself and any business entity for whom
+you are acting (collectively “You” or “Your” or “Licensee”). Exasol may provide the Software (as defined below) from any of its affiliates
+(collectively, “Us,” “Our,” “We,” or “Exasol”).
+By downloading, installing, copying or otherwise using the Software, Licensee confirms agreement with Exasol´s EULA. The Licensee, on
+behalf of themselves and any business entity for whom they are acting, expressly consents and agrees to be legally bound by all of the
+terms and conditions of this EULA. The individual accepting this EULA for a business entity affirms to be authorized by the business entity
+to accept the terms and conditions of this EULA on its behalf.
+If You do not agree to all of the terms and conditions of this Agreement, (1) You should NOT download the Software and (2) You may not
+use the Software. If You do not accept the terms of this EULA, you do not have a license to, and are prohibited from using the Software,
+in which case You are not permitted to download, install, copy or otherwise use the Software (or any portion thereof).
+1. Definitions
+The following definitions shall apply:
+1.1 "Exasol" means Exasol Europa Vertriebs GmbH, Neumeyerstrasse 22-26, 90411 Nuremberg, Germany if Licensee is located in the
+    European Union, UK or Switzerland; or Exasol Inc., 268 Bush Street #3841 San Francisco, CA 94104–3503, USA, if Licensee is
+    located in the United States of America or the rest of the world;
+1.2 "License" means the authorized use of the Software in accordance with the terms and conditions stipulated in this EULA;
+1.3 "Licensee" means the individual or the company that has accepted the terms and conditions set forth in this EULA and
+    subsequently uses a License from Exasol by download;
+1.4 "Software” means the “Exasol Personal” version of the Exasol database Software and the features included in the “Exasol
+    Personal” version, clients and drivers provided by Exasol as well as any modification, error correction, patch, bug fix etc. that
+    Exasol makes in any form whatsoever (“Product”). It means all proprietary and/or open-source software which may be part of
+    the Product, which may change from time to time.
+2. License and Restrictions
+2.1 Subject to Licensee’s compliance with the terms and conditions in this EULA, Exasol grants to Licensee a royalty-free, non-
+    exclusive, non-transferable, not sub-licensable License to use the Software with a limited number of connections for one
+    installation and exclusively for single user usage. This right of use is further limited according to the parameters described by
+    Exasol in the Software offer or the License file. Exasol shall not provide any form of support or maintenance for the Software for
+    its royalty-free Product.
+2.2 Licensee may not use the Software in a way that circumvents any contractual usage limits or other limitations relating to the use
+    of the Software set forth in this EULA, reverse engineer, disassemble, modify, translate, make any attempt to discover the source
+    code of the Software in whole or in part, distribute, publish, assign, sublicense, sell, bargain, convey, transfer, pledge, lease or
+    grant any further rights to use the Software, modify or create derivative work-based Software in whole or in part, tamper with,
+    alter, disable or circumvent the Software's built-in license verification and enforcement capabilities, remove or alter any
+    trademark, copyright, logo or other proprietary notices in the Software, or use the Software in breach of applicable laws, this
+    EULA, and other instructions and terms stated in the Software or otherwise notified by Exasol, disclose the License key in any
+    way.
+2.3 Without consent of Exasol, the Licensee is not allowed to change, edit or copy the provided Software to an extent that is not in
+    accordance with the relevant laws. Each copy must reproduce all copyright and other proprietary rights notices on or in the
+    Software. A decompilation is only permitted in accordance with the relevant legal provisions. Furthermore, use of Exasol‘s
+    Software is subject to the terms of the Acceptable Use Policy available at https://www.exasol.com/terms-and-conditions/.
+2.4 The Software shall not be sold, rented, subleased or otherwise distributed in tangible or intangible form. The use by and for third
+    parties (e.g., by outsourcing, application service providing) is not permitted.
+2.5 Any breach of the restrictions herein will be in violation of this EULA and grant Exasol the right to immediately terminate the
+    applicable Software license and/or this EULA.
+3.  Third-party Software
+3.1 For drivers, Exasol may define deviating license conditions, which shall take precedence over this EULA.
+3.2 Software, code or related materials from third parties, including, without limitation, “open source” or “freeware” software that
+    is distributed, provided with, or otherwise made use of by the Software (“Third Party Components”) may be licensed under
+    additional or other license terms that accompany such Third Party Components, and Licensee acknowledges and agrees that these
+    accompanying license terms govern their use. Nothing in this EULA grants Licensee rights that supersede the license terms that
+    accompany any Third Party Components.
+
+4. Proprietary and Ownership Rights, Data Rights
+4.1 The Software is the sole and exclusive property of Exasol and/or its third-party suppliers (if applicable), including all
+    improvements, modifications, and enhancements to the Software, and all copyright, trademark, patent, trade secret, database,
+    and other intellectual property and proprietary rights inherent therein or belonging thereto. This EULA does not constitute a sale
+    of the Software and no title or proprietary rights to the Software are transferred to Licensee under this EULA. Exasol is the
+    exclusive owner of all rights in any copy, translation, modification, adaptation, or derivation of the Software, including any
+    improvement or developments thereof suggested by the Licensee.
+4.2 Licensee warrants that Licensee is the owner of, or has obtained applicable permission to have and use, all the data and content
+    that Licensee enters or uploads using the Software (collectively, “Content”). The Licensee acknowledges that Exasol is not
+    responsible for and does not give any assurances to the Licensee regarding the accuracy, quality, integrity, legality, reliability,
+    appropriateness, validity, value, usefulness, or copyright of the Content.
+4.3 Exasol complies with all applicable data protection laws and regulations and may collect statistical information, trends, and usage
+    metrics arising from the Licensee’s use of the Software, including through third-party providers of analytics services (“Usage
+    Data”). Exasol may use such Usage Data to develop, enhance, support, and operate its products and services, as well as for security
+    analysis, license auditing, and marketing purposes. Exasol may transfer and process Customer Data in any jurisdiction in which
+    Exasol, its affiliates, or its subcontractors maintain operations. The Licensee may provide suggestions, comments, bug and test
+    reports and other feedback (“Feedback”) to Exasol. Feedback will not, absent a separate written agreement, create any
+    confidentiality obligation for Exasol. The Licensee acknowledges that Exasol will be free to use, disclose, reproduce, or otherwise
+    distribute Feedback without obligation or restriction of any kind on account of intellectual property rights or otherwise.
+5. Confidentiality
+5.1 The Licensee hereby agrees to treat all information, including but not limited to Software, documents, presentations, etc. as
+    confidential, of which the Licensee became aware or received from Exasol prior to the conclusion of or during the term of the
+    EULA which are protected by law, which evidently contain business or company secrets or are marked as confidential,
+    notwithstanding the expiration of the EULA, unless such information is publicly known in the absence of a breach of this
+    confidentiality obligation (“Confidential Information”). The Licensee hereby agrees to store and secure all Confidential
+    Information in a manner to prevent any unauthorized access by third parties.
+5.2 The Licensee will make Confidential Information available only to those employees (including employees of their affiliates),
+    subcontractors and third parties who require access to perform the obligations under this Agreement (“Need to Know Persons”).
+    The Licensee shall instruct these persons regarding the confidentiality of the objects and documents in question and have written
+    agreements in place which ensure the observance of this confidentiality obligation. Access to third parties shall not be permitted
+    except with the express written consent of Exasol.
+6.  Registration, Data Protection, Data Processing
+6.1 Exasol may require Licensee to complete a registration process prior to getting access to the Software, to fill in all required
+    information, consent to data processing and email communication. Exasol processes the necessary data of the Licensee relevant
+    for business transactions with due consideration of the applicable data protection regulations.
+6.2 The Licensee acknowledges and agrees that the Licensee is the controller of the Content, including any personal identifiable
+    information therein. The Licensee acknowledges that Exasol specifically disclaims that it is a “data controller” and agrees that
+    Exasol is not acting as a “data controller” of any of the Content under any data protection laws in which such definition of “data
+    controller” or similar capacity may be found.
+6.3 The Content may be transferred to, and processed in, the United States or any other country in which Exasol, its affiliates or
+    subcontractors maintain facilities. The Licensee appoints Exasol to perform any transfer of Content to any such country and to
+    process it in compliance with the terms of this EULA.
+7.  Term and Termination
+7.1 This EULA is effective until it is terminated in accordance with this EULA. The continued use of a royalty-free License by Licensee
+    shall be deemed as acceptance of the terms of this EULA. This shall also apply if Licensee indicates disagreement with the EULA
+    by any act or declaration but still uses the royalty-free License thereafter. Either party may terminate this EULA at any time.
+7.2 On termination or expiry of this EULA for any reason: (i) all rights granted to Licensee under this EULA shall cease; (ii) Licensee
+    must immediately cease all activities authorized by this EULA, including use of the Software, and (iii) any Software in possession,
+    custody or control of Licensee must be destroyed and written confirmation of such destruction provided to Exasol.
+7.3 Exasol shall have the right to discontinue the Software at any time without the need for termination.
+8.  Compliance with Laws; Export Regulations; U.S. Government Restrictions
+8.1 The Licensee shall use the Software only for lawful purposes and in conformance with this EULA. The Licensee shall not use the
+    Software in any manner that violates the rights of any third party. The Licensee is solely responsible for compliance with all
+    applicable laws, including all applicable export, import, and data protection laws and regulations relating to the Content.
+8.2 The Licensee acknowledges that the Software and related technical data (“Controlled Technology”) are subject to the import and
+    export control and economic sanctions laws of Germany, the European Union, United Kingdom, the United States and any other
+    jurisdiction in which Controlled Technology is exported or re-exported. Licensee agrees to comply with all such laws and shall not
+    export or re-export, transfer, or otherwise make available Controlled Technology to any country, entity, or person subject to
+    prohibitions or licensing requirements, nor for use in connection with chemical, biological, or nuclear weapons, or missile, drone,
+    or space-launch systems capable of delivering such weapons. Licensee represents that it is not a Restricted Party and will not
+    provide Controlled Technology directly or indirectly, to or for the benefit of any Restricted Party. “Restricted Party” means any
+    person (i) designated on any sanctions list, (ii) that is, or is part of, a governmental authority of a sanctioned territory, (iii) owned
+    or controlled by, or acting on behalf of, any of the foregoing, (iv) located, organized, or resident in, or operating from, a sanctioned
+    territory, or (v) otherwise targeted under any sanctions. This section applies only to the extent its compliance does not result in
+    a violation of EU Regulation (EC) 2271/96, Section 7 of the German Foreign Trade Regulation (Außenwirtschaftsverordnung), or
+    any similar anti-boycott law.
+9. Applicable Law and Jurisdiction
+9.1 If Exasol, Inc., is the contracting entity (as defined in Section 1.1.), this EULA and all matters arising out of or relating to it shall be
+    governed by and construed in accordance with the internal laws of the State of Delaware, USA, excluding its conflict-of-laws
+    principles. Exclusive jurisdiction and venue for any dispute, claim, or legal proceeding arising out of or in connection with this
+    EULA, its subject matter, or formation shall lie with the state and federal courts located in and/or having jurisdiction over the
+    State of Delaware. Each party consents to the personal jurisdiction of, and venue in, those courts.
+9.2 If Exasol AG or Exasol Europa Vertriebs GmbH is the contracting entity (as defined in Section 1.1.), this EULA and all matters arising
+    out of or relating to it shall be governed by and construed in accordance with the laws of the Federal Republic of Germany,
+    excluding the UN Convention on the International Sale of Goods (CISG) and any international private law provisions. The place of
+    performance and exclusive jurisdiction for any dispute, claim, or legal proceeding arising out of or in connection with this EULA,
+    its subject matter, or formation shall be the courts located in Nuremberg, Germany, and each party consents to the personal
+    jurisdiction of, and venue in, those courts.
+9.3 International Private Law shall not apply to matters of jurisdiction.
+10. Jurisdiction Specific Terms
+10.1 If Exasol Inc. is the contracting Exasol entity (as defined in Section 1.1.), the specific terms of this Section 10.1 shall apply:
+    10.1.1 THE SOFTWARE IS PROVIDED ON AN “AS IS” AND “AS AVAILABLE” BASIS WITHOUT ANY WARRANTIES OF ANY KIND, AND
+           EXASOL EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES, WHETHER EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED
+           TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, TITLE, FITNESS FOR A PARTICULAR PURPOSE, AND NON-
+           INFRINGEMENT. LICENSEE ACKNOWLEDGES THAT EXASOL DOES NOT WARRANT THAT THE SERVICE WILL BE
+           UNINTERRUPTED, TIMELY, SECURE, ERROR-FREE OR VIRUS-FREE, NOR DOES IT MAKE ANY WARRANTY AS TO THE RESULTS
+           THAT MAY BE OBTAINED FROM USE OF THE SOFTWARE, AND NO INFORMATION, ADVICE OR SERVICES OBTAINED BY
+           LICENSEE FROM EXASOL SHALL CREATE ANY WARRANTY NOT EXPRESSLY STATED IN THIS EULA. EXASOL ASSUMES NO
+           MAINTENANCE OR SUPPORT OBLIGATION. THIS DISCLAIMER OF WARRANTY SHALL NOT APPLY IN CASE OF FRAUDULENT
+           CONCEALMENT OF DEFECT.
+    10.1.2 EXASOL WILL NOT BE LIABLE TO LICENSEE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL OR
+           EXEMPLARY DAMAGES (INCLUDING DAMAGES FOR LOSS OF PROFITS, REVENUES, CUSTOMERS, OPPORTUNITIES,
+           GOODWILL, USE, OR DATA), EVEN IF A PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. FURTHER,
+           NEITHER EXASOL NOR ANY OF ITS AFFILIATES OR LICENSORS WILL BE RESPONSIBLE FOR ANY COMPENSATION,
+           REIMBURSEMENT, OR DAMAGES ARISING IN CONNECTION WITH: (A) LICENSEE´S INABILITY TO USE THE SOFTWARE,
+           INCLUDING AS A RESULT OF ANY TERMINATION OR SUSPENSION OF THIS EULA, (B) THE COST OF PROCUREMENT OF
+           SUBSTITUTE GOODS OR SERVICES; (C) ANY INVESTMENTS, EXPENDITURES, OR COMMITMENTS BY LICENSEE IN
+           CONNECTION WITH THIS EULA OR LICENSEE´S USE OF THE SOFTWARE; OR (D) ANY UNAUTHORIZED ACCESS TO,
+           ALTERATION OF, OR THE DELETION, DESTRUCTION, DAMAGE, LOSS OR FAILURE TO STORE ANY OF YOUR CONTENT OR
+           OTHER DATA. IN ANY CASE, EXASOL´S AGGREGATE LIABILITY UNDER THIS EULA WILL NOT EXCEED THE AMOUNT LICENSEE
+           ACTUALLY PAYS EXASOL UNDER THIS EULA DURING THE 12 MONTHS BEFORE THE LIABILITY AROSE. THE LIMITATIONS IN
+           THIS SECTION 10.1.2 APPLY ONLY TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW.
+10.2 If Exasol Europa Vertriebs GmbH is the contracting Exasol entity (as defined in Section 1.1.), the specific terms of this Section 10.2 shall apply:
+    10.2.1 Exasol disclaims all warranties express, statutory or implied, including without limitation the implied warranties or
+           conditions of merchantability and fitness for a particular purpose or the statutory warranties in case of defects as to quality
+           (Sachmangel) or of defects of title (Rechtsmangel). Exasol further disclaims any warranty that (a) the Software will meet
+           Licensee’s requirements or will be constantly available, uninterrupted, timely, secure, or error-free; (b) the results that
+           may be obtained from the use of the Software will be effective, accurate, or reliable; (c) the quality of the Software will
+           meet Licensee’s expectations; or that (d) any errors or defects in the Software will be corrected.
+    10.2.2 Exasol shall not be liable irrespective of the legal grounds. Exasol´s liability for damages caused by the use of royalty-free
+           License shall be subject to the provisions on gratuitous lending (section 598 et seq. BGB), i.e., in particular, Exasol´s liability
+           shall be limited to intent and gross negligence. Mandatory liability under the German Product Liability Act or any applicable
+           corresponding mandatory law shall not be excluded.
+11. Final Provisions
+11.1 Exasol reserves the right at any time to alter features, specifications, capabilities, functions, licensing terms, release dates, general
+     availability or other characteristics of the Software.
+11.2 This EULA and access to the Software shall not be resold, assigned, or otherwise transferred by Licensee to another person or
+     entity without Exasol´s prior written consent.
+11.3 Exasol reserves the right to change this EULA and will notify Licensee of any material change via the download platform used by
+     Licensee or via email, blog or on the website. If any change to this EULA is not acceptable to Licensee, Licensee shall no longer
+     use the Software. Amendments and additions to the EULA must be made in writing (electronic signature is sufficient), including
+     amendments to or a waiver of this written form requirement shall be made in writing.
+11.4 In the event that one or more provisions of the EULA should be or become invalid or unenforceable, the validity of the remaining
+     provisions shall not be affected thereby. The invalid or unenforceable provision shall be deemed to be replaced with such legally
+     permissible provision which comes as close as possible to the economic purpose of the invalid or unenforceable provision.

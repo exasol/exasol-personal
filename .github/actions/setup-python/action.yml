@@ -1,0 +1,29 @@
+name: setup-python
+description: Setup Python and Poetry
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Task
+      uses: ./.github/actions/setup-task
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Cache Poetry dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          # List all platform cache paths; only existing ones will be cached.
+          ~/.cache/pypoetry
+          ~/.cache/pip
+          ${{ env.USERPROFILE }}\.cache\pypoetry
+          ${{ env.USERPROFILE }}\.cache\pip
+        key: poetry-venv-${{ runner.os }}-${{ hashFiles('tests/poetry.lock') }}
+        restore-keys: |
+          poetry-venv-${{ runner.os }}-
+
+    - name: Install test dependencies (Poetry)
+      shell: bash
+      run: task tests-setup

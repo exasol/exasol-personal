@@ -1,0 +1,34 @@
+name: setup-aws
+description: Setup AWS credentials
+inputs:
+  aws-ci-role:
+    description: AWS role to use.
+    required: true
+  aws-region:
+    description: AWS region to use.
+    required: true
+runs:
+  using: "composite"
+  steps:
+
+    - name: Install AWS CLI
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          pwsh -Command "
+            Invoke-WebRequest -Uri https://awscli.amazonaws.com/AWSCLIV2.msi -OutFile AWSCLIV2.msi;
+            Start-Process msiexec.exe -ArgumentList '/i AWSCLIV2.msi /qn' -Wait;
+            Remove-Item AWSCLIV2.msi
+          "
+        else
+          sudo snap install aws-cli --classic
+        fi
+      env:
+        RUNNER_OS: ${{ runner.os }}
+
+    - name: Connect GitHub to AWS account
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws-ci-role }}
+        role-session-name: aws-role-for-exasol-launcher
+        aws-region: "${{ inputs.aws-region }}"

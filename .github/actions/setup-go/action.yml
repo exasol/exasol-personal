@@ -1,0 +1,47 @@
+name: setup-go
+description: Setup Go and related tools
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - name: Setup Task
+      uses: ./.github/actions/setup-task
+
+    # This needs to be done so that different jobs can share the cache of the "setup-go" action
+    # "setup-go" caches the entire go env but with a fixed key
+    # If "lint-go" would not build the main app, it would populate the cache entry with the main app deps and vice-versa
+    # So we ensure that ALL go deps defined in "go.mod" are downloaded and seen by every job
+    # 1) `go mod download` should download all the main app go deps
+    # 2) `go tool ...` downloads and builds the tool bins and their deps
+    # 3) `tflint --init` ensure the tflinter plugins are downloaded into the cahge
+    - name: Warm up Go module and build cache
+      shell: bash
+      run: |
+        go mod download
+        go tool golangci-lint version || true
+        go tool tflint --version || true
+        go tool tflint --init || true
+
+    - name: Cache golangci-lint
+      uses: actions/cache@v4
+      with:
+        path: |
+          # List all platform cache paths; only existing ones will be cached.
+          ~/.cache/golangci-lint
+          ${{ env.USERPROFILE }}\.cache\golangci-lint
+        key: golangci-lint-${{ runner.os }}-${{ hashFiles('go.sum') }}
+        restore-keys: |
+          golangci-lint-${{ runner.os }}-
+
+    - name: Cache tflint plugins
+      uses: actions/cache@v4
+      with:
+        path: |
+          # List all platform cache paths; only existing ones will be cached.
+          ~/.tflint.d/plugins
+          ${{ env.USERPROFILE }}\.tflint.d\plugins
+        key: tflint-${{ runner.os }}

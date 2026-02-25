@@ -1,0 +1,27 @@
+# Post-Installation Configuration Phase
+#
+# Purpose: Performs final configuration after database is ready
+# Runs as: ubuntu user
+# Runs on: Primary node (n11) only
+# Dependencies: Requires both installation and readiness
+#
+# Tasks:
+# - Uploads TLS certificates to all nodes via confd API
+# - Executes optional infrastructure-specific post-install actions (declared in infrastructure.json)
+#
+# Idempotency: Only runs if post_install.complete marker doesn't exist
+
+[Unit]
+Description=Exasol Launcher Post-Install
+ConditionPathExists=!/var/lib/exasol_launcher/state/post_install.complete
+Requires=exasol_launcher_install.service exasol_launcher_ready.service
+After=exasol_launcher_install.service exasol_launcher_ready.service
+
+[Service]
+Type=oneshot
+ExecCondition=/opt/exasol_launcher/scripts/isAccessNode.sh
+ExecStart=/opt/exasol_launcher/scripts/uploadTLSCert.sh
+ExecStart=/opt/exasol_launcher/scripts/runInfraHookScripts.sh post-install
+ExecStartPost=/usr/bin/touch /var/lib/exasol_launcher/state/post_install.complete
+User=ubuntu
+WorkingDirectory=~

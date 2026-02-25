@@ -1,0 +1,27 @@
+bootcmd:
+  - "echo 'EXASOL-INSTALL-SUBSTEP: Starting cloud-init bootstrap'"
+
+package_update: true
+package_upgrade: true
+packages:
+  - wget
+  - curl
+  - tar
+  - net-tools
+  - jq
+  - uidmap
+
+runcmd:
+  - "echo 'EXASOL-INSTALL-SUBSTEP: System package installation and updates completed'"
+  - "echo 'EXASOL-INSTALL-SUBSTEP: Installation scripts and systemd services deployed'"
+  - "mkdir -p /etc/exasol_launcher"
+  - "mkdir -p /var/lib/exasol_launcher/state"
+  - "mkdir -p /var/lib/exasol_launcher/state/nodes"
+  - "chown -R ubuntu: /var/lib/exasol_launcher"
+  - "touch /var/lib/exasol_launcher/state/cloud-init.complete"
+  - "echo 'EXASOL-INSTALL-SUBSTEP: Configuring systemd services...'"
+  - "systemctl daemon-reload"
+  - "systemctl enable --now --no-block exasol_launcher.target"
+  - "echo 'EXASOL-INSTALL-SUBSTEP: Installation started in background'"
+
+final_message: "EXASOL-INSTALL-SUBSTEP: Cloud-init preparation complete after $UPTIME seconds"

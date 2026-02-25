@@ -1,0 +1,98 @@
+version: "2"
+
+run:
+  timeout: 5m
+  allow-parallel-runners: true
+
+issues:
+  max-issues-per-linter: 0
+
+linters:
+  default: all
+  disable:
+    - errcheck
+    - err113
+    - exhaustruct
+    - cyclop
+    - funlen
+    - gocognit
+    - wrapcheck
+    - depguard
+    - ireturn
+    - nolintlint
+    - noinlineerr
+    - gochecknoglobals
+    - wsl
+    - testpackage
+
+  exclusions:
+    paths:
+      - assets/tofubin/
+      - tools/
+
+  enable:
+    - wsl_v5
+
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/exasol/exasol-personal)
+
+    nlreturn:
+      block-size: 2
+
+    varnamelen:
+      ignore-type-assert-ok: true
+      ignore-map-index-ok: true
+      ignore-chan-recv-ok: true
+
+    revive:
+      enable-all-rules: true
+      rules:
+        - name: line-length-limit
+          arguments: [100]
+        - name: package-comments
+          disabled: true
+        - name: var-naming
+          disabled: true
+        - name: exported
+          disabled: true
+        - name: cognitive-complexity
+          disabled: true
+        - name: add-constant
+          disabled: true
+        - name: cyclomatic
+          disabled: true
+        - name: function-length
+          disabled: true
+        - name: max-public-structs
+          disabled: true
+
+    gosec:
+      excludes:
+        - G204
+        - G304
+
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+      case-max-lines: 0
+      default: none
+      enable:
+        - label
+        - err
+        - leading-whitespace
+        - trailing-whitespace
+
+formatters:
+  enable:
+  - gci
+  - gofmt
+  - gofumpt
+  - goimports
+  - golines
+  - swaggo
+

@@ -1,0 +1,26 @@
+# Node Synchronization Barrier - Server Side
+#
+# Purpose: Coordinates cluster-wide synchronization before installation begins
+# Runs as: root (default user, needs to listen on port)
+# Runs on: Primary node (n11) only
+# Dependencies: Requires both preparation phases to complete first
+#
+# Tasks:
+# - Acts as synchronization point for all cluster nodes
+# - Waits for all nodes to register their readiness
+# - Completes when expected number of nodes have checked in
+#
+# Pattern: Server-client coordination where n11 is the synchronization authority
+# Idempotency: Only runs if node_barrier_server.complete marker doesn't exist
+
+[Unit]
+Description=Exasol Launcher Installation Node Barrier Server
+ConditionPathExists=!/var/lib/exasol_launcher/state/node_barrier_server.complete
+Requires=exasol_launcher_prepare.service exasol_launcher_prepare_user.service
+After=exasol_launcher_prepare.service exasol_launcher_prepare_user.service
+
+[Service]
+Type=oneshot
+ExecCondition=/opt/exasol_launcher/scripts/isAccessNode.sh
+ExecStart=/opt/exasol_launcher/scripts/waitNodesReady.sh server
+ExecStartPost=/usr/bin/touch /var/lib/exasol_launcher/state/node_barrier_server.complete

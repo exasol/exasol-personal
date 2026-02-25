@@ -1,0 +1,10 @@
+name: tests-deployment
+description: Run Deployment Tests
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python and Task
+      uses: ./.github/actions/setup-python
+    - name: Run Deployment Tests
+      shell: bash
+      run: task tests-deployment

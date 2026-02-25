@@ -1,0 +1,56 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EC2FullAccess",
+      "Effect": "Allow",
+      "Action": "ec2:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3CreateBucket",
+      "Effect": "Allow",
+      "Action": ["s3:CreateBucket"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3FullAccessScoped",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::exasol-*",
+        "arn:aws:s3:::exasol-*/*"
+      ]
+    },
+    {
+      "Sid": "IAMFullAccessScopedRoles",
+      "Effect": "Allow",
+      "Action": "iam:*",
+      "Resource": ["arn:aws:iam::*:role/exasol-*"]
+    },
+    {
+      "Sid": "IAMFullAccessScopedInstanceProfiles",
+      "Effect": "Allow",
+      "Action": "iam:*",
+      "Resource": ["arn:aws:iam::*:instance-profile/exasol-*"]
+    },
+    {
+      "Sid": "SSMFullAccessScopedParameters",
+      "Effect": "Allow",
+      "Action": "ssm:*",
+      "Resource": ["arn:aws:ssm:*:*:parameter/exasol-*/*"]
+    },
+    {
+      "Sid": "SSMDescribeParameters",
+      "Effect": "Allow",
+      "Action": ["ssm:DescribeParameters"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "STSCallerIdentity",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# Installation Phase
+#
+# Purpose: Installs and initializes the Exasol cluster
+# Runs as: ubuntu user
+# Runs on: Primary node (n11) only - coordinates installation across all nodes
+# Dependencies: Requires preparation and node synchronization to complete first
+#
+# Tasks:
+# - Executes c4 host play to install across all cluster nodes
+# - Creates the database with configured passwords
+# - Starts AdminUI service
+#
+# Idempotency: Only runs if install.complete marker doesn't exist
+# Node-specific: ExecCondition checks node.json to ensure primary-only execution
+
+[Unit]
+Description=Exasol Launcher Installation
+ConditionPathExists=!/var/lib/exasol_launcher/state/install.complete
+Requires=exasol_launcher_prepare.service exasol_launcher_prepare_user.service exasol_launcher_node_barrier_client.service exasol_launcher_node_barrier_server.service
+After=exasol_launcher_prepare.service exasol_launcher_prepare_user.service exasol_launcher_node_barrier_client.service exasol_launcher_node_barrier_server.service
+
+[Service]
+Type=oneshot
+ExecCondition=/opt/exasol_launcher/scripts/isAccessNode.sh
+ExecStart=/opt/exasol_launcher/scripts/installExasol.sh
+ExecStartPost=/usr/bin/touch /var/lib/exasol_launcher/state/install.complete
+User=ubuntu
+WorkingDirectory=~

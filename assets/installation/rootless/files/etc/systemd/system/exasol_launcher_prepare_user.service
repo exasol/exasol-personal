@@ -1,0 +1,25 @@
+# User Preparation Phase
+#
+# Purpose: Sets up SSH authentication between cluster nodes
+# Runs as: ubuntu user
+# Dependencies: Requires system preparation to complete first
+#
+# Tasks:
+# - Distributes admin SSH private key to all cluster nodes
+# - Enables password-less SSH between nodes for c4 orchestration
+#
+# Idempotency: Only runs if prepare_user.complete marker doesn't exist
+
+[Unit]
+Description=Exasol Launcher User Preparation
+ConditionPathExists=!/var/lib/exasol_launcher/state/prepare_user.complete
+Requires=exasol_launcher_prepare.service
+After=exasol_launcher_prepare.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/exasol_launcher/scripts/uploadAdminKey.sh
+ExecStart=/opt/exasol_launcher/scripts/runInfraHookScripts.sh pre-install-user
+ExecStartPost=/usr/bin/touch /var/lib/exasol_launcher/state/prepare_user.complete
+User=ubuntu
+WorkingDirectory=~

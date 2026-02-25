@@ -1,0 +1,63 @@
+name: Question / Help
+description: Ask a question or request help
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Need help or have a question? We're here to assist!
+
+        Before asking, please check:
+        - [Documentation](https://docs.exasol.com/db/latest/home.htm)
+        - [README](https://github.com/exasol/exasol-personal/blob/main/README.md)
+        - [Existing issues](https://github.com/exasol/exasol-personal/issues)
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: How do I...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you trying to accomplish?
+      placeholder: I'm trying to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What Have You Tried?
+      description: What steps have you already taken?
+      placeholder: I've tried...
+
+  - type: input
+    id: version
+    attributes:
+      label: Exasol Launcher Version
+      description: Output of `exasol version` (if applicable)
+      placeholder: e.g., 1.0.0
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+        - Not applicable
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Information
+      description: Any other relevant details

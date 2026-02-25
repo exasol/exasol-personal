@@ -1,0 +1,27 @@
+# Node Synchronization Barrier - Client Side
+#
+# Purpose: Signals readiness to the primary node for cluster synchronization
+# Runs as: ubuntu user (needs SSH access)
+# Runs on: All nodes (including n11)
+# Dependencies: Requires both preparation phases to complete first
+#
+# Tasks:
+# - Registers this node's readiness with the primary node (n11)
+# - Retries until successful registration
+#
+# Pattern: Client side of server-client coordination for cluster-wide barrier
+# Note: Even n11 runs this service to register with itself
+
+[Unit]
+Description=Exasol Launcher Installation Node Barrier Client
+ConditionPathExists=!/var/lib/exasol_launcher/state/node_barrier_client.complete
+Requires=exasol_launcher_prepare.service exasol_launcher_prepare_user.service
+After=exasol_launcher_prepare.service exasol_launcher_prepare_user.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/exasol_launcher/scripts/waitNodesReady.sh client
+ExecStartPost=/usr/bin/touch /var/lib/exasol_launcher/state/node_barrier_client.complete
+# Run as ubuntu because we use ssh
+User=ubuntu
+WorkingDirectory=~

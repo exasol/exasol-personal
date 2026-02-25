@@ -1,0 +1,10 @@
+name: tests-unit
+description: Run Unit Tests
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Go and Task
+      uses: ./.github/actions/setup-go
+    - name: Run Unit Tests
+      shell: bash
+      run: task tests-unit

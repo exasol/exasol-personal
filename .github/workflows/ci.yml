@@ -1,0 +1,88 @@
+name: Push to PR or main - Run full CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [review_requested, ready_for_review, synchronize]
+
+jobs:
+  # run all go-based linters together so they can share the go setup and the cache
+  lint-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-go
+      - name: Lint Go code
+        run: task lint-golang
+      - name: Lint Terraform code
+        run: task lint-terraform
+
+  # run all python-based together linters so they can share the python setup and the cache
+  lint-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-python
+      - name: Lint ruff
+        run: task lint-ruff
+      - name: Lint mypy
+        run: task lint-mypy
+
+  build:
+    runs-on: ${{ matrix.os }}
+    needs:
+      - lint-go
+      - lint-python
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # this is need because we use "git describe" to get the latest version from git
+          fetch-depth: 0
+      - uses: ./.github/actions/build
+      # Upload the correct file depending on OS with a unique name
+      - name: Upload file (Windows)
+        if: startsWith(matrix.os, 'windows')
+        uses: actions/upload-artifact@v4
+        with:
+          name: exasol-${{ matrix.os }}
+          path: bin/exasol.exe
+      - name: Upload file (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        uses: actions/upload-artifact@v4
+        with:
+          name: exasol-${{ matrix.os }}
+          path: bin/exasol
+
+  tests-unit:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/tests-unit
+
+  tests-integration:
+    runs-on: ${{ matrix.os }}
+    needs: build
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # Download artifact based on OS
+      - name: Download built artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: exasol-${{ matrix.os }}
+          path: bin/
+      # Only Ubuntu needs chmod
+      - name: Make executable (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: chmod +x bin/exasol
+      - uses: ./.github/actions/tests-integration

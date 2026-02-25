@@ -1,0 +1,28 @@
+name: Exasol on Ubuntu
+description:  Installs Exasol on Ubuntu distributions.
+
+install:
+  - remoteExec:
+    description: "Now monitoring unattended Exasol installation on node 'n11'"
+    filename: monitor-installation.sh
+    executeInParallel: false
+    node: "n11"
+    regexLog:
+      - regex: "EXASOL-INSTALL-STEP: (.+)"
+        message: "$1"
+      - regex: "EXASOL-INSTALL-SUBSTEP: (.+)"
+        message: "  $1"
+      - regex: "EXASOL-INSTALL-ERROR: (.+)"
+        message: "$1"
+        logAsError: true
+      # Long running C4 processes and other interesting stuff
+      - regex: "(Exasol version: .+)"
+        message: "  C4: $1"
+      - regex: "(Exasol package: .+)"
+        message: "  C4: $1"
+      - regex: "(Fetching Exasol packages)"
+        message: "  C4: $1. This may take a few minutes."
+      - regex: "(Copying Exasol packages to remote hosts)"
+        message: "  C4: $1. This may take a few minutes."
+      - regex: "(Extracting packages)"
+        message: "  C4: $1. This may take a few minutes."

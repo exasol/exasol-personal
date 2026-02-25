@@ -1,0 +1,50 @@
+name: Deployment Tests
+
+on:
+  workflow_dispatch:
+
+env:
+  STATUS_DESC: "Deployment tests testing Exasol launcher end to end"
+  JOB_NAME: tests-deployment
+
+jobs:
+  tests-deployment:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      id-token: write # Required for AWS credentials setup
+      contents: read # Required for actions/checkout
+      statuses: write # Required for status updates
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # this is need because we use "git describe" to get the latest version from git
+          fetch-depth: 0
+      - uses: ./.github/actions/status-set
+        with:
+          context: ${{ env.JOB_NAME }}
+          status: pending
+          description: ${{ env.STATUS_DESC }}
+          target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - uses: ./.github/actions/setup-aws
+        with:
+          aws-ci-role: ${{ vars.AWS_CI_ROLE_PLATFORM }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Doing a second build here again. In theory, we could
+      # upload the build artifact from the ci.yml workflow
+      # and fetch it here. However, for now the build run time
+      # is short and we can afford building it a second time.
+      - uses: ./.github/actions/build
+      - uses: ./.github/actions/tests-deployment
+
+      - uses: ./.github/actions/status-set
+        if: always()
+        with:
+          context: ${{ env.JOB_NAME }}
+          status: ${{ job.status }}
+          description: ${{ env.STATUS_DESC }}
+          target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

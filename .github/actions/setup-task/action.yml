@@ -1,0 +1,36 @@
+name: setup-task
+description: Install Task build tool
+runs:
+  using: "composite"
+  steps:
+    # Set the TASK_PATH environment variable for cross-platform compatibility
+    - name: Setup TASK_PATH environment variable
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          echo "TASK_PATH=$GITHUB_WORKSPACE\\bin\\task" >> $GITHUB_ENV
+        else
+          echo "TASK_PATH=$GITHUB_WORKSPACE/bin/task" >> $GITHUB_ENV
+        fi
+
+    - name: Setup PATH environment variable
+      shell: bash
+      run: |
+        echo "${GITHUB_WORKSPACE}/bin" >> "$GITHUB_PATH"
+
+    - name: Cache Task binary
+      uses: actions/cache@v4
+      id: cache-task
+      with:
+        # Use the TASK_PATH set earlier in the workflow
+        # for cross-platform compatibility
+        path: ${{ env.TASK_PATH }}
+        # Will effectively pin the version
+        # but we don't care about that yet.
+        key: go-task-${{ runner.os }}
+
+    - name: Install Task
+      if: steps.cache-task.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        curl -sSL https://taskfile.dev/install.sh | sh

@@ -1,0 +1,46 @@
+name: 'Setup macOS Signing Certificate'
+description: 'Prepares macOS signing certificate for code signing'
+inputs:
+  p12-key:
+    description: 'Base64-encoded PKCS12 private key'
+    required: true
+  p12-password:
+    description: 'Password for PKCS12 private key'
+    required: true
+  application-cert:
+    description: 'Base64-encoded Developer ID Application certificate'
+    required: true
+outputs:
+  p12-path:
+    description: 'Path to the prepared signing certificate'
+    value: /tmp/signing_certificate.p12
+runs:
+  using: 'composite'
+  steps:
+    - name: Prepare signing certificate
+      shell: bash
+      run: |
+        # Decode the p12 key file
+        echo "${{ inputs.p12-key }}" | base64 -d > /tmp/private_key.p12
+
+        echo "=== Checking what's in the existing p12 (presumed only to be the private signing key) ==="
+        openssl pkcs12 -in /tmp/private_key.p12 -passin "pass:${{ inputs.p12-password }}" -noout -info || echo "Failed to read p12"
+        
+        # Check if p12 already contains a certificate
+        if openssl pkcs12 -in /tmp/private_key.p12 -passin "pass:${{ inputs.p12-password }}" -nokeys 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
+          echo "=== P12 already contains certificate, using as-is ==="
+          cp /tmp/private_key.p12 /tmp/signing_certificate.p12
+        else
+          echo "=== P12 only contains key, merging with certificate ==="
+          
+          # Convert signing key to PEM
+          openssl pkcs12 -in /tmp/private_key.p12 -nocerts -nodes -passin "pass:${{ inputs.p12-password }}" -out /tmp/private_key.pem
+          
+          # Convert signing certificate to PEM
+          echo -e "\n=== Convert signing certificate to PEM ==="
+          echo "${{ inputs.application-cert }}" | base64 -d > /tmp/developerID_application.cer
+          openssl x509 -in /tmp/developerID_application.cer -inform DER -out /tmp/developerID_application.crt -outform PEM
+          
+          # Read cert and key from PEM and export as pkcs12
+          openssl pkcs12 -export -inkey /tmp/private_key.pem -in /tmp/developerID_application.crt -out /tmp/signing_certificate.p12 -name "Developer ID Application" -passout "pass:${{ inputs.p12-password }}"
+        fi

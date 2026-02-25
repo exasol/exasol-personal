@@ -1,0 +1,56 @@
+# .github/workflows/release.yml
+name: Version tag pushed - Create GH release
+
+on:
+  push:
+    # run only against version tags
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      
+      - name: Setup CodeSignTool for Windows signing
+        uses: ./.github/actions/setup-codesigntool
+        with:
+          version: v1.3.2
+      
+      - name: Setup macOS signing certificate
+        id: macos-signing
+        uses: ./.github/actions/setup-macos-signing
+        with:
+          p12-key: ${{ secrets.IOS_PKCS12_IDENTITY_CERTIFICATE_BASE64_ENCODED }}
+          p12-password: ${{ secrets.IOS_PKCS12_IDENTITY_CERTIFICATE_PASSWORD }}
+          application-cert: ${{ secrets.IOS_CER_DEVELOPERID_APPLICATION_BASE64_ENCODED }}
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean       
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MACOS_SIGN_P12: ${{ steps.macos-signing.outputs.p12-path }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.IOS_PKCS12_IDENTITY_CERTIFICATE_PASSWORD }}
+          MACOS_NOTARY_ISSUER_ID:  ${{ secrets.IOS_APPSTORECONNECTAPI_ISSUERID }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.IOS_APPSTORECONNECTAPI_KEYID }}
+          MACOS_NOTARY_KEY: ${{ secrets.IOS_APPSTORECONNECTAPI_AUTHKEY }}
+          SSLCOM_USERNAME: ${{ secrets.ESIGN_USERNAME }}
+          SSLCOM_PASSWORD: ${{ secrets.ESIGN_PASSWORD }}
+          SSLCOM_CREDENTIAL_ID: ${{ secrets.ESIGN_CREDENTIAL_ID }}
+          SSLCOM_TOTP_SECRET: ${{ secrets.ESIGN_TOTP_SECRET }}
+      
