@@ -7,10 +7,14 @@ on:
     branches: [main]
     types: [review_requested, ready_for_review, synchronize]
 
+permissions: {}
+
 jobs:
   # run all go-based linters together so they can share the go setup and the cache
   lint-go:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-go
@@ -22,6 +26,8 @@ jobs:
   # run all python-based together linters so they can share the python setup and the cache
   lint-python:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-python
@@ -35,6 +41,8 @@ jobs:
     needs:
       - lint-go
       - lint-python
+    permissions:
+      contents: read
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -61,6 +69,8 @@ jobs:
   tests-unit:
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/tests-unit
@@ -68,6 +78,8 @@ jobs:
   tests-integration:
     runs-on: ${{ matrix.os }}
     needs: build
+    permissions:
+      contents: read
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
