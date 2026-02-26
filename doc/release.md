@@ -2,13 +2,23 @@
 
 This document describes how to create and publish releases of Exasol Personal.
 
+Security requirements for release automation are defined in [CI Security Spec](ci_security_spec.md).
+
 ## Overview
 
-Releases are fully automated using [GoReleaser](https://goreleaser.com/) and GitHub Actions. When a version tag is pushed, the CI pipeline automatically:
+Releases are fully automated using [GoReleaser](https://goreleaser.com/) and GitHub Actions. When a version tag is pushed, the release workflow automatically:
 - Builds binaries for all supported platforms
 - Runs the test suite
 - Creates a GitHub release
 - Uploads release artifacts
+
+Release safety gates:
+- Version tags must follow `v*`.
+- Publishing and signing run in a protected release environment.
+- Third-party release actions are pinned to immutable commit SHAs.
+- Downloaded signing tooling is version-pinned and checksum-verified in CI.
+
+Tag governance controls (for example restricting who can create `v*` tags and what refs are allowed) are enforced through repository rulesets/settings.
 
 ## Creating a Release
 
