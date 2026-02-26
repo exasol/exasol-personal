@@ -1,0 +1,7 @@
+.github/workflows/** @exasol/r-d-platform-blue
+.github/actions/** @exasol/r-d-platform-blue
+.github/scripts/** @exasol/r-d-platform-blue
+.goreleaser.yaml @exasol/r-d-platform-blue
+Taskfile.yml @exasol/r-d-platform-blue
+doc/ci_security_spec.md @exasol/r-d-platform-blue
+doc/ci_security_best_practices.md @exasol/r-d-platform-blue
