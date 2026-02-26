@@ -1,6 +1,7 @@
 # Public Repo CI Security Best Practices
 
 This document captures security best practices for GitHub Actions in public repositories. It focuses on protecting CI/CD from untrusted contributors and supply-chain compromise.
+Repository-specific mandatory controls are defined in [Repository Security and Automation Governance](repository_security_spec.md).
 
 ## Threat Model
 
