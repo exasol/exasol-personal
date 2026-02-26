@@ -30,6 +30,7 @@ jobs:
         uses: ./.github/actions/setup-codesigntool
         with:
           version: v1.3.2
+          checksum-sha256: f14b1e1ef14bfa1fd00279c363aab0debbf5dcfba0e4bcdce5d22bb771de0e3a
       
       - name: Setup macOS signing certificate
         id: macos-signing
