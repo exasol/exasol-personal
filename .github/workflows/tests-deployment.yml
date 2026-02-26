@@ -3,6 +3,8 @@ name: Deployment Tests
 on:
   workflow_dispatch:
 
+permissions: {}
+
 env:
   STATUS_DESC: "Deployment tests testing Exasol launcher end to end"
   JOB_NAME: tests-deployment
