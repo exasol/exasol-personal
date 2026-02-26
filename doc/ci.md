@@ -2,7 +2,7 @@
 
 The project uses GitHub Actions for continuous integration and delivery. Workflow definitions are in `.github/workflows/`.
 
-Security policy for public-repo CI is defined in [CI Security Spec](ci_security_spec.md) and [CI Security Best Practices](ci_security_best_practices.md).
+Security policy for public-repo CI is defined in [Repository Security and Automation Governance](repository_security_spec.md) and [CI Security Best Practices](ci_security_best_practices.md).
 
 ## Automated Workflows
 

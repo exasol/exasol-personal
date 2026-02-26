@@ -2,7 +2,7 @@
 
 This document describes how to create and publish releases of Exasol Personal.
 
-Security requirements for release automation are defined in [CI Security Spec](ci_security_spec.md).
+Security requirements for release automation are defined in [Repository Security and Automation Governance](repository_security_spec.md).
 
 ## Overview
 
