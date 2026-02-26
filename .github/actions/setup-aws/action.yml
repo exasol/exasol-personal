@@ -10,22 +10,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-
-    - name: Install AWS CLI
-      shell: bash
-      run: |
-        if [ "$RUNNER_OS" = "Windows" ]; then
-          pwsh -Command "
-            Invoke-WebRequest -Uri https://awscli.amazonaws.com/AWSCLIV2.msi -OutFile AWSCLIV2.msi;
-            Start-Process msiexec.exe -ArgumentList '/i AWSCLIV2.msi /qn' -Wait;
-            Remove-Item AWSCLIV2.msi
-          "
-        else
-          sudo snap install aws-cli --classic
-        fi
-      env:
-        RUNNER_OS: ${{ runner.os }}
-
     - name: Connect GitHub to AWS account
       uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
       with:
