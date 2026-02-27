@@ -89,7 +89,7 @@ jobs:
           fetch-depth: 0
       # Download artifact based on OS
       - name: Download built artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: exasol-${{ matrix.os }}
           path: bin/
