@@ -20,7 +20,7 @@ jobs:
       contents: read # Required for actions/checkout
       statuses: write # Required for status updates
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           # this is need because we use "git describe" to get the latest version from git
           fetch-depth: 0
