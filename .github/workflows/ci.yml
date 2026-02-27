@@ -55,13 +55,13 @@ jobs:
       # Upload the correct file depending on OS with a unique name
       - name: Upload file (Windows)
         if: startsWith(matrix.os, 'windows')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: exasol-${{ matrix.os }}
           path: bin/exasol.exe
       - name: Upload file (Ubuntu)
         if: startsWith(matrix.os, 'ubuntu')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: exasol-${{ matrix.os }}
           path: bin/exasol
