@@ -25,14 +25,14 @@ jobs:
 
       - name: Upload file
         if: ${{ !contains(matrix.os, 'windows') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: exasol-${{ matrix.os }}
           path: bin/exasol
 
       - name: Upload file (Windows)
         if: ${{ contains(matrix.os, 'windows') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: exasol-${{ matrix.os }}
           path: bin/exasol.exe
