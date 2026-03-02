@@ -17,6 +17,7 @@ The Exasol Personal tool (`exasol`) is a command-line application that automates
 - [Main README](../README.md)
 - [Development Guide](development.md)
 - [Preset Development (contracts and schemas)](presets.md)
+- [Deployment directory compatibility](deployment_compatibility.md)
 - Installation preset documentation (see the README in `assets/installation/<preset>/`)
 - [AWS Infrastructure README](../assets/infrastructure/aws/README.md)
 - [Exasol Documentation](https://docs.exasol.com/db/latest/home.htm)
@@ -203,6 +204,12 @@ Each infrastructure preset documents:
 - Network topology
 
 ## State and Configuration Management
+
+### Deployment directory compatibility
+
+Because the deployment directory is long-lived while the launcher evolves over time, the launcher validates that a deployment directory is compatible with the current launcher version before executing any command that operates on that directory.
+
+For the compatibility contract and user-facing behavior, see [Deployment directory compatibility](deployment_compatibility.md).
 
 ### Deployment Directory
 

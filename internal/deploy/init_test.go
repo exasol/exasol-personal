@@ -40,6 +40,21 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected workflow state to be readable, got error: %v", err)
 	}
+	if state.DeploymentVersion != "0.0.0" {
+		t.Fatalf(
+			"expected deployment version to be persisted as %q, got %q",
+			"0.0.0",
+			state.DeploymentVersion,
+		)
+	}
+	if ver, ok, err := config.ReadDeploymentVersionMarker(deploymentDir); err != nil {
+		t.Fatalf("expected deployment version marker to be readable, got error: %v", err)
+	} else if !ok {
+		t.Fatalf("expected deployment version marker %q to exist",
+			config.DeploymentVersionMarkerFileName)
+	} else if ver != "0.0.0" {
+		t.Fatalf("expected deployment version marker to be %q, got %q", "0.0.0", ver)
+	}
 	workflowState, err := state.GetWorkflowState()
 	if err != nil {
 		t.Fatalf("expected workflow state to be set, got error: %v", err)

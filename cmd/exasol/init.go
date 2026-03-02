@@ -47,6 +47,11 @@ var initCmd = &cobra.Command{
 
 // nolint: gochecknoinits
 func init() {
+	// Init creates the deployment directory state; if a deployment directory already
+	// exists, the compatibility check protects against operating on an incompatible
+	// deployment.
+	requireDeploymentCompatibility(initCmd, minSupportedDeploymentVersionBaseline)
+
 	// Augment long help with embedded preset names so users know what they can pass.
 	initCmd.Long = strings.TrimRight(initCmdLongDesc, "\n") +
 		"\n\t" + presetNamesForHelp(presets.PresetTypeInfrastructure,

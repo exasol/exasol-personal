@@ -22,6 +22,11 @@ Tag governance controls (for example restricting who can create `v*` tags and wh
 
 ## Creating a Release
 
+Before tagging a release, ensure deployment directory compatibility constraints are up to date:
+
+- If the release introduces a breaking change in deployment directory semantics (state layout, workflow invariants, marker files, etc.), add a new minimum supported deployment version constant in the cmd layer (see `cmd/exasol/compatibility_versions.go`) and apply it to the affected commands.
+- Release-candidate versions (for example `1.2.0-rc1`) must not appear in those constants. Compatibility comparisons treat prerelease/build suffixes as irrelevant and compare only the base version (so `1.2.0-rc1` behaves like `1.2.0`).
+
 ### 1. Tag the Release
 
 ```bash

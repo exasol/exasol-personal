@@ -42,6 +42,8 @@ func registerShellFlags() {
 
 // nolint: gochecknoinits
 func init() {
+	requireDeploymentCompatibility(shellCmd, minSupportedDeploymentVersionBaseline)
+	requireInitializedDeploymentDir(shellCmd)
 	registerShellFlags()
 	registerDeploymentDirFlag(shellCmd, commonFlags)
 	diagCmd.AddCommand(shellCmd)

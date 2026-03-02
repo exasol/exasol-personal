@@ -60,6 +60,8 @@ var destroyCmd = &cobra.Command{
 
 // nolint: gochecknoinits
 func init() {
+	requireDeploymentCompatibility(destroyCmd, minSupportedDeploymentVersionBaseline)
+	requireInitializedDeploymentDir(destroyCmd)
 	registerDeploymentDirFlag(destroyCmd, commonFlags)
 	registerDestroyFlags(destroyCmd)
 	rootCmd.AddCommand(destroyCmd)

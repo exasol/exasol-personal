@@ -10,7 +10,9 @@ import (
 	"time"
 )
 
-const exasolPersonalStateFileName = ".exasolLauncherState.json"
+// ExasolPersonalStateFileName is the persistent workflow/metadata state file stored
+// in a deployment directory.
+const ExasolPersonalStateFileName = ".exasolLauncherState.json"
 
 type (
 	WorkflowStateInitialized struct{}
@@ -50,13 +52,20 @@ type WorkflowState struct {
 
 type ExasolPersonalState struct {
 	CurrentWorkflowState WorkflowState `json:"currentWorkflowState"`
-	LastVersionCheck     time.Time     `json:"lastVersionCheck"`
-	VersionCheckEnabled  bool          `json:"versionCheckEnabled"`
+	// DeploymentVersion is the launcher version that created this deployment directory.
+	//
+	// Note: the long-term, stable deployment-version marker used for compatibility
+	// checks is the plain-text file ".exasolLauncher.version".
+	// This JSON field mirrors that marker for convenience, but compatibility checks
+	// should not depend on it.
+	DeploymentVersion   string    `json:"deploymentVersion"`
+	LastVersionCheck    time.Time `json:"lastVersionCheck"`
+	VersionCheckEnabled bool      `json:"versionCheckEnabled"`
 }
 
 // DirectoryExasolPersonalStatefile.
 func IsDirectoryContainingStateFile(directory string) (bool, error) {
-	path := filepath.Join(directory, exasolPersonalStateFileName)
+	path := filepath.Join(directory, ExasolPersonalStateFileName)
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -78,7 +87,7 @@ func IsDirectoryContainingStateFile(directory string) (bool, error) {
 // SetExasolPersonalState writes a new exasol personal state to permanent storage.
 func WriteExasolPersonalState(state *ExasolPersonalState, deploymentDir string) error {
 	return writeConfig(state,
-		filepath.Join(deploymentDir, exasolPersonalStateFileName),
+		filepath.Join(deploymentDir, ExasolPersonalStateFileName),
 		"exasol personal state")
 }
 
@@ -88,7 +97,7 @@ var ErrNoExasolPersonalStateSet = errors.New("no exasol-personal state is set")
 func ReadExasolPersonalState(deploymentDir string) (*ExasolPersonalState, error) {
 	slog.Debug("reading exasol personal state")
 	state, err := readConfig[ExasolPersonalState](
-		filepath.Join(deploymentDir, exasolPersonalStateFileName),
+		filepath.Join(deploymentDir, ExasolPersonalStateFileName),
 		"exasol personal state")
 	if err != nil {
 		return nil, err
