@@ -143,11 +143,11 @@ func InitDeployment(
 
 			slog.Debug("Initializing deployment state")
 			if versionCheckEnabled {
-				if err := writeInitializedStateWithVersionChecks(deploymentDir); err != nil {
+				if err := writeInitializedStateWithVersionChecks(deploymentDir, currentVersion); err != nil {
 					return err
 				}
 			} else {
-				if err := writeInitializedStateWithoutVersionChecks(deploymentDir); err != nil {
+				if err := writeInitializedStateWithoutVersionChecks(deploymentDir, currentVersion); err != nil {
 					return err
 				}
 			}
@@ -244,25 +244,40 @@ func ensureDirectoryIsEmpty(deploymentDir string) error {
 	return nil
 }
 
-func writeInitializedStateWithVersionChecks(deploymentDir string) error {
-	exasolState := newInitializedStateWithVersionChecks()
-	return exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deploymentDir)
+func writeInitializedStateWithVersionChecks(deploymentDir string, deploymentVersion string) error {
+	exasolState := newInitializedStateWithVersionChecks(deploymentVersion)
+	err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deploymentDir)
+	if err != nil {
+		return err
+	}
+
+	return config.WriteDeploymentVersionMarker(deploymentDir, deploymentVersion)
 }
 
-func writeInitializedStateWithoutVersionChecks(deploymentDir string) error {
-	exasolState := newInitializedStateWithoutVersionChecks()
-	return exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deploymentDir)
+func writeInitializedStateWithoutVersionChecks(
+	deploymentDir string,
+	deploymentVersion string,
+) error {
+	exasolState := newInitializedStateWithoutVersionChecks(deploymentVersion)
+	err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deploymentDir)
+	if err != nil {
+		return err
+	}
+
+	return config.WriteDeploymentVersionMarker(deploymentDir, deploymentVersion)
 }
 
-func newInitializedStateWithVersionChecks() *config.ExasolPersonalState {
+func newInitializedStateWithVersionChecks(deploymentVersion string) *config.ExasolPersonalState {
 	return &config.ExasolPersonalState{
+		DeploymentVersion:   deploymentVersion,
 		VersionCheckEnabled: true,
 		LastVersionCheck:    time.Now(),
 	}
 }
 
-func newInitializedStateWithoutVersionChecks() *config.ExasolPersonalState {
+func newInitializedStateWithoutVersionChecks(deploymentVersion string) *config.ExasolPersonalState {
 	return &config.ExasolPersonalState{
+		DeploymentVersion:   deploymentVersion,
 		VersionCheckEnabled: false,
 		LastVersionCheck:    time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC),
 	}

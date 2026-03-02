@@ -1,5 +1,9 @@
 # Version checking
 
+This document describes how the launcher checks for newer launcher releases.
+
+It is **not** the deployment directory compatibility mechanism (which prevents running an incompatible launcher against an existing deployment directory). For that contract, see [Deployment directory compatibility](deployment_compatibility.md).
+
 Exasol personal makes calls to a REST API once per day, per repository.
 
 To determine if 24 hours has passed, the time of the last version check is written to the `.exasolLauncherState.json` file in the deployment directory.

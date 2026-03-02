@@ -135,19 +135,6 @@ func GetStatus(
 	deploymentDir string,
 	checkConnection bool,
 ) (*StatusOutput, error) {
-	initialized, err := config.IsDirectoryContainingStateFile(deploymentDir)
-	if err != nil {
-		return nil, err
-	}
-
-	if !initialized {
-		return &StatusOutput{
-			Status: StatusNotInitialized,
-			Message: "No exasol personal state file was found. " +
-				"Run `init` or `install` to start a new deployment in this directory.",
-		}, nil
-	}
-
 	exasolState, err := config.ReadExasolPersonalState(deploymentDir)
 	if err != nil {
 		return nil, err

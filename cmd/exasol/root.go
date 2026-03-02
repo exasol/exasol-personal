@@ -4,7 +4,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -58,22 +57,31 @@ var rootCmd = &cobra.Command{
 	Example:       rootCmdExample,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-		if err := setuplogging(); err != nil {
+		// Root-level pre-run is the single place where we enforce cross-cutting concerns.
+		// Design decision: keep this centralized so individual commands don't have to
+		// remember to repeat it (and so user-visible behavior stays consistent).
+		if err := setupLogging(); err != nil {
 			return err
 		}
 
-		// Perform silent version check (non-blocking, only logs if update available)
-		// Skip for the version command itself and if disabled
-		// And if the directory isn't initialized
+		// Deployment-directory compatibility is enforced centrally and only for commands
+		// that declare it via annotations.
+		err := enforceDeploymentDirectoryCompatibility(cmd, commonFlags.DeploymentDir)
+		if err != nil {
+			return err
+		}
+
+		// Best-effort version update hint (non-blocking; logs only when an update is available).
+		// Design decision: never block commands on this.
 		if cmd.Name() != "version" {
-			printVersionUpdateHint(cmd.Context())
+			deploy.MaybeLogVersionUpdateHint(cmd.Context(), commonFlags.DeploymentDir, version)
 		}
 
 		return nil
 	},
 }
 
-func setuplogging() error {
+func setupLogging() error {
 	var logger *slog.Logger
 
 	selectedLevel, ok := logLevelMap[commonFlags.LogLevel]
@@ -83,7 +91,7 @@ func setuplogging() error {
 	if term.IsTerminal(int(os.Stdout.Fd())) {
 		levelVar := slog.LevelVar{}
 		levelVar.Set(selectedLevel)
-		// --log-level is not set and terminal is attached. Use pretty-printing for log messages
+		// Design decision: when attached to a terminal, prefer human-friendly logs.
 		logger = slog.New(tint.NewHandler(os.Stderr, &tint.Options{
 			Level: &levelVar, TimeFormat: time.DateTime,
 		}))
@@ -101,29 +109,6 @@ func setuplogging() error {
 	)
 
 	return nil
-}
-
-func printVersionUpdateHint(ctx context.Context) {
-	result, err := deploy.PerformSilentVersionCheck(
-		ctx,
-		commonFlags.DeploymentDir,
-		version,
-	)
-	if err != nil {
-		slog.Debug("launcher version update check failed", "error", err)
-		return
-	}
-	if !result.Checked {
-		return
-	}
-	if result.UpdateAvailable {
-		slog.Info(
-			"A new version of Exasol Personal is available",
-			"current", version,
-			"latest", result.LatestVersion,
-			"info", "Run 'exasol version --latest' for more details",
-		)
-	}
 }
 
 // addHelpFlag adds the help flag to the command and all its children.

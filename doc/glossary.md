@@ -11,6 +11,16 @@ A self-contained directory with all configuration, state, and credentials for ma
 
 See [Architecture: State and Configuration Management](architecture.md#state-and-configuration-management).
 
+### Deployment Version
+The launcher version that was persisted when a deployment directory was created. It is an immutable marker that defines the deployment’s compatibility contract.
+
+See [Deployment directory compatibility](deployment_compatibility.md).
+
+### Deployment Compatibility Check
+A mandatory validation performed before executing any command that operates on a deployment directory. It ensures the deployment version is compatible with the current launcher version and the command’s supported range.
+
+See [Deployment directory compatibility](deployment_compatibility.md).
+
 ### Infrastructure Preset
 The infrastructure template selected for deployment. It defines the infrastructure layout and provisioning approach. Infrastructure presets can target cloud or non-cloud environments.
 

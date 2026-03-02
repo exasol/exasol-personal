@@ -30,6 +30,8 @@ var infoCmd = &cobra.Command{
 
 // nolint: gochecknoinits
 func init() {
+	requireDeploymentCompatibility(infoCmd, minSupportedDeploymentVersionBaseline)
+	requireInitializedDeploymentDir(infoCmd)
 	registerDeploymentDirFlag(infoCmd, commonFlags)
 	diagCmd.AddCommand(infoCmd)
 }

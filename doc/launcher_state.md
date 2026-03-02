@@ -7,6 +7,8 @@ The launcher keeps this lifecycle consistent across command invocations using tw
 - A **persistent state file** (`.exasolLauncherState.json`) that records the deployment's current workflow state and additional launcher metadata.
 - A **temporary lock file** (`.exasolLock.json`) that prevents concurrent, conflicting operations.
 
+Deployment compatibility also relies on a stable, plain-text deployment-version marker file (`.exasolLauncher.version`).
+
 This document is an architecture guide for developers. It describes what is stored in these files, the invariants they must uphold, and the intended usage patterns.
 
 ## Persistent state: `.exasolLauncherState.json`
@@ -16,9 +18,11 @@ The persistent state file is the source of truth for the deployment's lifecycle.
 It has two responsibilities:
 
 - **Workflow coordination:** record the current workflow state so commands can enforce a consistent lifecycle across process invocations.
-- **Launcher metadata:** persist additional launcher-level information that must survive restarts (for example, version-check bookkeeping).
+- **Launcher metadata:** persist additional launcher-level information that must survive restarts (for example, version-check bookkeeping and deployment compatibility metadata).
 
 The version-checking feature stores its bookkeeping in this file; for details, see `doc/version_checking.md`.
+
+The deployment compatibility mechanism reads the deployment version from the marker file (`.exasolLauncher.version`); for details, see [Deployment directory compatibility](deployment_compatibility.md).
 
 ### Key invariants
 
@@ -27,6 +31,8 @@ These are the invariants the code must preserve (independent of implementation d
 - The file must remain readable/writable by the launcher throughout the workflow.
 - The workflow state is a **single, unambiguous value** at any point in time.
 - Commands must treat the persistent state as the contract for what operations are safe/allowed next.
+- The deployment version (used for compatibility checks) is written when the deployment directory is created and remains immutable for the lifetime of the deployment directory.
+- The deployment-version marker is a long-term contract: its presence, identity, and location must remain stable over time so that future launchers can always perform compatibility checks before doing any work.
 - Developers should avoid editing this file by hand; it is meant to be machine-managed.
 
 ## Workflow states (intended meaning)
