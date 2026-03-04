@@ -252,13 +252,16 @@ func PerformSilentVersionCheck(
 		}
 
 		available, latest, checkErr := CheckLatestVersionUpdate(ctx, currentVersion, dir)
+		defer func() {
+			// Treat all attempts as a check for throttling purposes.
+			exasolState.LastVersionCheck = time.Now()
+			_ = config.WriteExasolPersonalState(exasolState, dir)
+		}()
+
 		if checkErr != nil {
 			slog.Debug("launcher version update check failed")
 			return checkErr
 		}
-
-		exasolState.LastVersionCheck = time.Now()
-		_ = config.WriteExasolPersonalState(exasolState, dir)
 
 		result.Checked = true
 		result.UpdateAvailable = available
