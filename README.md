@@ -30,7 +30,7 @@
 
 ## ✅ Prerequisites
 
-- An AWS account that can provision large type instances. Exasol launcher by default uses the r6i.large EC2 instance type.
+- An AWS account that can provision large type instances. Exasol launcher by default uses the r6i.xlarge EC2 instance type.
 - An AWS user with enough permissions to create resources such as EC2 instances.
 
 To learn how to set up an AWS account with an instance profile and configure your local environment to use that profile when installing Exasol Personal, see [Set up an AWS account for Exasol Personal](./HOWTO_SETUP_AWS_ACCOUNT.md).
