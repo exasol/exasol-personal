@@ -71,7 +71,7 @@ In addition, there is currently a **well-known node identity convention** that c
 
 - The node naming scheme includes a fixed primary/access node named **`n11`**.
 - Infrastructure presets are expected to provide primary-node addressing (for example `n11Ip` in `infrastructure.json`).
-- Some installation presets (including `rootless`) use `n11` as a hard-coded leader for cluster-wide coordination and for “run only on primary” tasks.
+- Some installation presets (including `ubuntu`) use `n11` as a hard-coded leader for cluster-wide coordination and for “run only on primary” tasks.
 
 Implications:
 
