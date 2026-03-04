@@ -78,7 +78,7 @@ func InitDeployment(
 ) error {
 	// Do an initial update version check if permitted
 	if versionCheckEnabled {
-		_, _, _ = CheckLatestVersionUpdate(ctx, deploymentDir, currentVersion)
+		_, _, _ = CheckLatestVersionUpdate(ctx, currentVersion, deploymentDir)
 	}
 
 	// Proactively validate the preset selection to produce friendly errors.
