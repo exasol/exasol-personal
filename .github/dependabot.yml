@@ -3,4 +3,31 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
+      interval: "monthly"
+
+    groups:
+      actions-versions-updates:
+        patterns:
+          - "*"
+
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "pip"
+    directory: "/tests"
+    schedule:
       interval: "weekly"
+    groups:
+      python-weekly-patch-updates:
+        update-types:
+          - "patch"
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      go-weekly-patch-updates:
+        update-types:
+          - "patch"
+    open-pull-requests-limit: 10
