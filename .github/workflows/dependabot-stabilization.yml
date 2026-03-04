@@ -1,0 +1,45 @@
+name: Dependabot stabilization window
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 */6 * * *"  # Recheck every 6 hours
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  stabilization-check:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if PR is minor update
+        id: check_minor
+        run: |
+          LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
+
+          if echo "$LABELS" | grep -q '"minor"'; then
+            echo "is_minor=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_minor=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Enforce 48h delay for minor updates
+        if: steps.check_minor.outputs.is_minor == 'true'
+        run: |
+          PR_CREATED=$(date -d "${{ github.event.pull_request.created_at }}" +%s)
+          NOW=$(date +%s)
+          AGE=$((NOW - PR_CREATED))
+
+          REQUIRED_AGE=$((48 * 3600))
+
+          if [ "$AGE" -lt "$REQUIRED_AGE" ]; then
+            echo "Minor update within 48h stabilization window"
+            exit 1
+          else
+            echo "Stabilization window passed"
+          fi
+
+      - name: No delay required
+        if: steps.check_minor.outputs.is_minor == 'false'
+        run: echo "No delay required"
