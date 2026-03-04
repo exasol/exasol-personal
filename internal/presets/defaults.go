@@ -14,7 +14,7 @@ package presets
 // without introducing an import cycle (cmd imports internal, but internal must not import cmd).
 const (
 	DefaultInfrastructure = "aws"
-	DefaultInstallation   = "rootless"
+	DefaultInstallation   = "ubuntu"
 
 	InfrastructureManifestFilename = "infrastructure.yaml"
 	InstallationManifestFilename   = "installation.yaml"
