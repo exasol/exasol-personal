@@ -8,7 +8,7 @@ require (
 	github.com/exasol/exasol-driver-go v1.0.14
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/lmittmann/tint v1.1.2
-	github.com/zclconf/go-cty v1.16.4
+	github.com/zclconf/go-cty v1.18.0
 )
 
 tool (
