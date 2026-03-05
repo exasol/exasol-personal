@@ -5,9 +5,9 @@ This software includes or distributes the following third-party software:
 
 ## OpenTofu
 
-**Version:** 1.10.5
+**Version:** 1.11.5
 **License:** Mozilla Public License 2.0 (MPL-2.0)
-**Source Code:** https://github.com/opentofu/opentofu/tree/v1.10.5
+**Source Code:** https://github.com/opentofu/opentofu/tree/v1.11.5
 **Copyright:** Copyright (c) 2023 The OpenTofu Authors
 
 ### Description
@@ -22,10 +22,10 @@ https://www.mozilla.org/en-US/MPL/2.0/
 
 ### Source Code Availability
 
-The complete source code for OpenTofu version 1.10.5 is available at:
+The complete source code for OpenTofu version 1.11.5 is available at:
 - GitHub Repository: https://github.com/opentofu/opentofu
-- Specific Version: https://github.com/opentofu/opentofu/tree/v1.10.5
-- Release Archive: https://github.com/opentofu/opentofu/releases/tag/v1.10.5
+- Specific Version: https://github.com/opentofu/opentofu/tree/v1.11.5
+- Release Archive: https://github.com/opentofu/opentofu/releases/tag/v1.11.5
 
 ### Mozilla Public License 2.0 Summary
 

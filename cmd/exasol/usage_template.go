@@ -16,6 +16,9 @@ func init() {
 	cobra.AddTemplateFunc("hasInfrastructureVariableFlags", hasInfrastructureVariableFlags)
 	cobra.AddTemplateFunc("infrastructureVariableFlagsTitle", infrastructureVariableFlagsTitle)
 	cobra.AddTemplateFunc("infrastructureVariableFlagUsages", infrastructureVariableFlagUsages)
+	cobra.AddTemplateFunc("hasInstallationVariableFlags", hasInstallationVariableFlags)
+	cobra.AddTemplateFunc("installationVariableFlagsTitle", installationVariableFlagsTitle)
+	cobra.AddTemplateFunc("installationVariableFlagUsages", installationVariableFlagUsages)
 	cobra.AddTemplateFunc("hasGlobalFlags", hasGlobalFlags)
 	cobra.AddTemplateFunc("globalFlagUsages", globalFlagUsages)
 	cobra.AddTemplateFunc("commandsInGroup", commandsInGroup)
@@ -67,6 +70,15 @@ func isInfrastructureVariableFlagName(flagName string) bool {
 	return ok
 }
 
+func isInstallationVariableFlagName(flagName string) bool {
+	if strings.TrimSpace(flagName) == "" {
+		return false
+	}
+	_, ok := installFlagToVarName[flagName]
+
+	return ok
+}
+
 func hasInfrastructureVariableFlags(cmd *cobra.Command) bool {
 	if cmd == nil {
 		return false
@@ -98,6 +110,43 @@ func infrastructureVariableFlagsTitle(cmd *cobra.Command) string {
 func infrastructureVariableFlagUsages(cmd *cobra.Command) string {
 	flagset := pflag.NewFlagSet("infrastructure-variables", pflag.ContinueOnError)
 	for flagName := range infraFlagToVarName {
+		if f := cmd.LocalNonPersistentFlags().Lookup(flagName); f != nil {
+			flagset.AddFlag(f)
+		}
+	}
+
+	return strings.TrimRight(flagset.FlagUsages(), "\n")
+}
+
+func hasInstallationVariableFlags(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+
+	for flagName := range installFlagToVarName {
+		if cmd.LocalNonPersistentFlags().Lookup(flagName) != nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+func installationVariableFlagsTitle(cmd *cobra.Command) string {
+	label := ""
+	if cmd != nil && cmd.Annotations != nil {
+		label = strings.TrimSpace(cmd.Annotations[installPresetLabelAnnotationKey])
+	}
+	if label == "" {
+		return "Installation variable flags:"
+	}
+
+	return fmt.Sprintf("Installation variable flags of preset `%s`:", label)
+}
+
+func installationVariableFlagUsages(cmd *cobra.Command) string {
+	flagset := pflag.NewFlagSet("installation-variables", pflag.ContinueOnError)
+	for flagName := range installFlagToVarName {
 		if f := cmd.LocalNonPersistentFlags().Lookup(flagName); f != nil {
 			flagset.AddFlag(f)
 		}
@@ -184,6 +233,9 @@ func otherLocalFlags(cmd *cobra.Command) []*pflag.Flag {
 		if isInfrastructureVariableFlagName(flag.Name) {
 			return
 		}
+		if isInstallationVariableFlagName(flag.Name) {
+			return
+		}
 		flags = append(flags, flag)
 	})
 
@@ -223,6 +275,9 @@ Additional Commands:
 
 {{end}}{{if hasInfrastructureVariableFlags .}}{{infrastructureVariableFlagsTitle .}}
 {{infrastructureVariableFlagUsages . | trimTrailingWhitespaces}}
+
+{{end}}{{if hasInstallationVariableFlags .}}{{installationVariableFlagsTitle .}}
+{{installationVariableFlagUsages . | trimTrailingWhitespaces}}
 
 {{end}}{{if hasOtherLocalFlags .}}Flags:
 {{otherLocalFlagUsages . | trimTrailingWhitespaces}}

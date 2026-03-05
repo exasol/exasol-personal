@@ -1,6 +1,14 @@
 name: Exasol on Ubuntu
 description:  Installs Exasol on Ubuntu distributions.
 
+variables:
+  outputFile: files/etc/exasol_launcher/installation.json
+  vars:
+    no_db_version_check:
+      description: Disable the daily database version check (C4).
+      type: bool
+      default: false
+
 install:
   - remoteExec:
     description: "Now monitoring unattended Exasol installation on node 'n11'"

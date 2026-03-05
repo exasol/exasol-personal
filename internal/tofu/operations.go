@@ -142,5 +142,5 @@ func Destroy(
 
 	tofuRunner := NewTofuRunner(cfg, out, outErr)
 
-	return tofuRunner.Destroy(ctx, cfg.StateFile())
+	return tofuRunner.Destroy(ctx, cfg.VarsOutputFile(), cfg.StateFile())
 }

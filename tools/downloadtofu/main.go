@@ -18,7 +18,7 @@ import (
 	"runtime"
 )
 
-const tofuVersion = "1.10.5"
+const tofuVersion = "1.11.5"
 
 func tofuCompressedFileName(operatingSystem, arch string) string {
 	return fmt.Sprintf("tofu_%s_%s_%s.tar.gz", tofuVersion, operatingSystem, arch)

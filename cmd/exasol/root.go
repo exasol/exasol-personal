@@ -128,6 +128,9 @@ func Execute() error {
 	if err := prepareInfrastructureVariableFlags(os.Args[1:]); err != nil {
 		return err
 	}
+	if err := prepareInstallationVariableFlags(os.Args[1:]); err != nil {
+		return err
+	}
 
 	// Customize usage/help formatting.
 	rootCmd.SetUsageTemplate(customUsageTemplate)

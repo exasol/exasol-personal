@@ -53,6 +53,7 @@ func init() {
 	// Run initialization
 	installCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		infraVars := collectInfrastructureVariableOverrides(cmd)
+		installVars := collectInstallationVariableOverrides(cmd)
 		infraPreset := presetRefFromArg(args[0])
 		installPreset := defaultedPresetRefFromOptionalArg(args, 1, defaultInstallationPresetRef())
 
@@ -64,8 +65,9 @@ func init() {
 			infraPreset,
 			installPreset,
 			infraVars,
+			installVars,
 			commonFlags.DeploymentDir,
-			commonFlags.NoLauncherVersionCheck,
+			!commonFlags.NoLauncherVersionCheck,
 			version,
 		); err != nil {
 			return fmt.Errorf("initialization failed: %w", err)

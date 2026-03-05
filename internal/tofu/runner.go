@@ -24,7 +24,7 @@ type TofuRunner interface {
 	Init(ctx context.Context, lockfileMode LockfileMode) error
 	Apply(ctx context.Context, opts ApplyOptions) error
 	Plan(ctx context.Context, planFilePath, varsFilePath, stateFilePath string) error
-	Destroy(ctx context.Context, stateFilePath string) error
+	Destroy(ctx context.Context, varsFilePath, stateFilePath string) error
 
 	GetOutput() io.Writer
 	SetOutput(out io.Writer)
@@ -119,9 +119,10 @@ func (s *tofuRunnerImpl) Apply(ctx context.Context, opts ApplyOptions) error {
 	return s.exec(ctx, args)
 }
 
-func (s *tofuRunnerImpl) Destroy(ctx context.Context, stateFilePath string) error {
+func (s *tofuRunnerImpl) Destroy(ctx context.Context, varsFilePath, stateFilePath string) error {
 	args := []string{
 		"destroy",
+		"-var-file=" + varsFilePath,
 		"--auto-approve",
 	}
 	if stateFilePath != "" {

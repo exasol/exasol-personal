@@ -72,6 +72,7 @@ func InitDeployment(
 	infrastructurePreset PresetRef,
 	installationPreset PresetRef,
 	infraVars map[string]string,
+	installVars map[string]string,
 	deploymentDir string,
 	versionCheckEnabled bool,
 	currentVersion string,
@@ -109,6 +110,16 @@ func InitDeployment(
 	// Lock the deployment directory with exclusive access
 	return withDeploymentExclusiveLock(ctx, deploymentDir,
 		func(deploymentDir string) error {
+			deploymentId, err := GenerateDeploymentId()
+			if err != nil {
+				return fmt.Errorf("failed to generate deployment id: %w", err)
+			}
+			clusterIdentity := ComputeClusterIdentity(
+				deploymentId,
+				infrastructurePreset,
+				installationPreset,
+			)
+
 			// Copy the presets into the deployment directory
 			err = extractPresets(infrastructurePreset, installationPreset, deploymentDir)
 			if err != nil {
@@ -123,7 +134,8 @@ func InitDeployment(
 				return fmt.Errorf("failed to read extracted infrastructure manifest: %w", err)
 			}
 			installDir := filepath.Join(deploymentDir, config.InstallationFilesDirectory)
-			if _, err := presets.ReadInstallManifestFromDir(installDir); err != nil {
+			installManifest, err := presets.ReadInstallManifestFromDir(installDir)
+			if err != nil {
 				return fmt.Errorf("failed to read extracted installation manifest: %w", err)
 			}
 
@@ -131,6 +143,10 @@ func InitDeployment(
 			// It tell the infrastructure preset where to write deployment artifacts fot the launcher
 			infraVars["infrastructure_artifact_dir"] = deploymentDir
 			infraVars["installation_preset_dir"] = installDir
+			// Launcher-governed identity values.
+			infraVars["deployment_id"] = deploymentId
+			infraVars["cluster_identity"] = clusterIdentity
+			infraVars["deployment_created_at"] = time.Now().UTC().Format(time.RFC3339)
 
 			// If tofu is configured for the infrastructure, perform tofu-specific initialization.
 			if infraManifest.Tofu != nil {
@@ -141,13 +157,33 @@ func InitDeployment(
 				}
 			}
 
+			if err := writeInstallationVariablesFile(
+				installDir,
+				installManifest.Variables,
+				clusterIdentity,
+				deploymentId,
+				installVars,
+			); err != nil {
+				return err
+			}
+
 			slog.Debug("Initializing deployment state")
 			if versionCheckEnabled {
-				if err := writeInitializedStateWithVersionChecks(deploymentDir, currentVersion); err != nil {
+				if err := writeInitializedStateWithVersionChecks(
+					deploymentDir,
+					currentVersion,
+					deploymentId,
+					clusterIdentity,
+				); err != nil {
 					return err
 				}
 			} else {
-				if err := writeInitializedStateWithoutVersionChecks(deploymentDir, currentVersion); err != nil {
+				if err := writeInitializedStateWithoutVersionChecks(
+					deploymentDir,
+					currentVersion,
+					deploymentId,
+					clusterIdentity,
+				); err != nil {
 					return err
 				}
 			}
@@ -244,8 +280,17 @@ func ensureDirectoryIsEmpty(deploymentDir string) error {
 	return nil
 }
 
-func writeInitializedStateWithVersionChecks(deploymentDir string, deploymentVersion string) error {
-	exasolState := newInitializedStateWithVersionChecks(deploymentVersion)
+func writeInitializedStateWithVersionChecks(
+	deploymentDir string,
+	deploymentVersion string,
+	deploymentId string,
+	clusterIdentity string,
+) error {
+	exasolState := newInitializedStateWithVersionChecks(
+		deploymentVersion,
+		deploymentId,
+		clusterIdentity,
+	)
 	err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deploymentDir)
 	if err != nil {
 		return err
@@ -257,8 +302,14 @@ func writeInitializedStateWithVersionChecks(deploymentDir string, deploymentVers
 func writeInitializedStateWithoutVersionChecks(
 	deploymentDir string,
 	deploymentVersion string,
+	deploymentId string,
+	clusterIdentity string,
 ) error {
-	exasolState := newInitializedStateWithoutVersionChecks(deploymentVersion)
+	exasolState := newInitializedStateWithoutVersionChecks(
+		deploymentVersion,
+		deploymentId,
+		clusterIdentity,
+	)
 	err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deploymentDir)
 	if err != nil {
 		return err
@@ -267,16 +318,28 @@ func writeInitializedStateWithoutVersionChecks(
 	return config.WriteDeploymentVersionMarker(deploymentDir, deploymentVersion)
 }
 
-func newInitializedStateWithVersionChecks(deploymentVersion string) *config.ExasolPersonalState {
+func newInitializedStateWithVersionChecks(
+	deploymentVersion string,
+	deploymentId string,
+	clusterIdentity string,
+) *config.ExasolPersonalState {
 	return &config.ExasolPersonalState{
+		DeploymentId:        deploymentId,
+		ClusterIdentity:     clusterIdentity,
 		DeploymentVersion:   deploymentVersion,
 		VersionCheckEnabled: true,
 		LastVersionCheck:    time.Now(),
 	}
 }
 
-func newInitializedStateWithoutVersionChecks(deploymentVersion string) *config.ExasolPersonalState {
+func newInitializedStateWithoutVersionChecks(
+	deploymentVersion string,
+	deploymentId string,
+	clusterIdentity string,
+) *config.ExasolPersonalState {
 	return &config.ExasolPersonalState{
+		DeploymentId:        deploymentId,
+		ClusterIdentity:     clusterIdentity,
 		DeploymentVersion:   deploymentVersion,
 		VersionCheckEnabled: false,
 		LastVersionCheck:    time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC),

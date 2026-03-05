@@ -1,11 +1,5 @@
-# Generate a unique ID for this deployment
-resource "random_id" "deployment_id" {
-  byte_length = 4
-  prefix      = "exasol-"
-}
-
 locals {
-  deployment_id = random_id.deployment_id.hex
+  deployment_id = "exasol-${var.deployment_id}"
 
   # Node configuration
   node_start_num = 11

@@ -9,6 +9,11 @@ import (
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
+const (
+	filterTypeInfra   = "infra"
+	filterTypeInstall = "install"
+)
+
 func normalizePresetTypeFilter(typeFilter string) string {
 	filter := strings.ToLower(strings.TrimSpace(typeFilter))
 	if filter == "all" {
@@ -16,9 +21,9 @@ func normalizePresetTypeFilter(typeFilter string) string {
 	}
 	// Keep CLI aliases stable.
 	switch filter {
-	case "infra":
+	case filterTypeInfra:
 		return presets.PresetTypeInfrastructure
-	case "install":
+	case filterTypeInstall:
 		return presets.PresetTypeInstallation
 	default:
 		return filter

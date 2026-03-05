@@ -26,6 +26,8 @@ var infraFlagToVarName = map[string]string{} // flag-name (hyphen) -> tofu var-n
 // It is used purely for rendering better help/usage output.
 const infraPresetLabelAnnotationKey = "exasol.infrastructurePresetLabel"
 
+const numberType = "number"
+
 // numberFlag is a pflag.Value implementation that validates numbers without
 // converting through float64 (to avoid precision loss).
 //
@@ -57,7 +59,7 @@ func (n *numberFlag) Set(str string) error {
 }
 
 func (*numberFlag) Type() string {
-	return "number"
+	return numberType
 }
 
 func resolveInfrastructureVariables(

@@ -61,6 +61,7 @@ func init() {
 
 	initCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		infraVars := collectInfrastructureVariableOverrides(cmd)
+		installVars := collectInstallationVariableOverrides(cmd)
 		infraPreset := presetRefFromArg(args[0])
 		installPreset := defaultedPresetRefFromOptionalArg(args, 1, defaultInstallationPresetRef())
 
@@ -71,6 +72,7 @@ func init() {
 			infraPreset,
 			installPreset,
 			infraVars,
+			installVars,
 			commonFlags.DeploymentDir,
 			!commonFlags.NoLauncherVersionCheck,
 			version,
