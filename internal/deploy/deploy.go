@@ -31,6 +31,20 @@ const (
 	TofuLockfileUpdate   = tofu.LockfileUpdate
 )
 
+const (
+	deployFailureResourceHint = "Deployment may have created cloud resources " +
+		"that can incur costs. " +
+		"Fix the problem and run `deploy` again, or run `destroy` to clean up."
+)
+
+func appendDeployFailureResourceHint(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	return fmt.Errorf("%w\n\n%s", err, deployFailureResourceHint)
+}
+
 //nolint:revive
 func Deploy(
 	ctx context.Context,
@@ -153,22 +167,34 @@ func deployFromManifests(
 			); err != nil {
 				unregister()
 
-				err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateDeploymentFailed{
-					Error: err.Error(),
-				}, deploymentDir)
+				deployErr := appendDeployFailureResourceHint(err)
+				if stateErr := exasolState.SetWorkflowStateAndWrite(
+					&config.WorkflowStateDeploymentFailed{
+						Error: deployErr.Error(),
+					},
+					deploymentDir,
+				); stateErr != nil {
+					slog.Warn("failed to persist deployment failure state", "error", stateErr)
+				}
 
-				return err
+				return deployErr
 			}
 
 			// Installation phase (remoteExec tasks)
 			if err := runInstallSteps(ctx, deploymentDir, installManifest,
 				externalCommandOutput, externalCommandOutput); err != nil {
 				unregister()
-				err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateDeploymentFailed{
-					Error: err.Error(),
-				}, deploymentDir)
+				deployErr := appendDeployFailureResourceHint(err)
+				if stateErr := exasolState.SetWorkflowStateAndWrite(
+					&config.WorkflowStateDeploymentFailed{
+						Error: deployErr.Error(),
+					},
+					deploymentDir,
+				); stateErr != nil {
+					slog.Warn("failed to persist deployment failure state", "error", stateErr)
+				}
 
-				return err
+				return deployErr
 			}
 
 			// Stop handling interrupts before committing success state
