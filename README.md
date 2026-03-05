@@ -192,7 +192,7 @@ If you have already deleted the deployment directory and the exasol binary, you 
 
 ## 🔜 Next steps
 
-Once the deployment process is complete, use `exasol info` for information about how to connect to your Exasol database. The credentials for connecting to the database from a client are stored in the file `secrets-exasol-<deployment id>.json` in the deployment directory.
+Once the deployment process is complete, use `exasol info` for information about how to connect to your Exasol database. The credentials for connecting to the database from a client are stored in the file `secrets.json` in the deployment directory.
 
 You can also use the built-in SQL client in Exasol Launcher to connect directly to the database from the command line:
 ```bash
@@ -207,7 +207,7 @@ See also...
 Exasol Admin is an easy-to-use web interface that you can use to administer your new Exasol database. Instructions for how to access Exasol Admin is shown in the terminal output at the end of the install process.
 
 - To find the Exasol Admin URL after the installation has completed, use `exasol info`.
-- The credentials for connecting to Exasol Admin are stored in the file `secrets-exasol-<deployment id>.json` in the deployment directory.
+- The credentials for connecting to Exasol Admin are stored in the file `secrets.json` in the deployment directory.
 
 Your browser may show a security warning when connecting to Exasol Admin because of the self-signed certificate. Accept this warning and continue.
 

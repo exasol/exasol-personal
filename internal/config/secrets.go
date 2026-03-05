@@ -9,7 +9,7 @@ import (
 )
 
 //nolint:gosec // gosec thinks this is a password
-const secretsGlob = "secrets-exasol-*.json"
+const secretsFileName = "secrets.json"
 
 type Secrets struct {
 	DbPassword      string `json:"dbPassword"`
@@ -17,9 +17,16 @@ type Secrets struct {
 }
 
 func GetSecretsFilePath(deploymentDir string) (string, error) {
-	filepath, err := findGlob(deploymentDir, secretsGlob)
+	filepath, exists, err := findExistingFile(deploymentDir, secretsFileName)
 	if err != nil {
 		return "", fmt.Errorf("failed to get the secrets file path: %w", err)
+	}
+	if !exists {
+		return "", fmt.Errorf(
+			"secrets file not found in deployment directory: expected %q in %s",
+			secretsFileName,
+			deploymentDir,
+		)
 	}
 
 	return filepath, nil

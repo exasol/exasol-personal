@@ -224,9 +224,9 @@ The deployment directory is the central artifact containing everything needed to
 - `installation/` - Installation preset assets used during installation on the nodes
 
 **Outputs:**
-- `deployment-exasol-<deploymentId>.json` - Deployment information (IPs, connection details)
-- `secrets-exasol-<deploymentId>.json` - Credentials required by the launcher (sensitive)
-- `<deploymentId>.pem` - SSH private key
+- `deployment.json` - Deployment information (IPs, connection details)
+- `secrets.json` - Credentials required by the launcher (sensitive)
+- `node_access.pem` - SSH private key
 
 **Key characteristics:**
 - Self-contained (portable to another machine if needed)

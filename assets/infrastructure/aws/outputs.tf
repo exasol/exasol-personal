@@ -6,7 +6,7 @@ data "aws_instance" "nodes" {
 
 locals {
   infrastructure_artifact_dir = abspath(var.infrastructure_artifact_dir)
-  key_file_name               = "${local.deployment_id}.pem"
+  key_file_name               = "node_access.pem"
   key_file_path               = "${local.infrastructure_artifact_dir}/${local.key_file_name}"
 
   deployment_info = {
@@ -85,13 +85,13 @@ output "available_zones_for_instance_type" {
 
 # Save deployment_info to a local JSON file (for consumption by the Exasol Launcher or other tool)
 resource "local_file" "deployment_info" {
-  filename = "${local.infrastructure_artifact_dir}/deployment-${local.deployment_id}.json"
+  filename = "${local.infrastructure_artifact_dir}/deployment.json"
   content  = jsonencode(local.deployment_info)
 }
 
 # Save deployment_secrets to a local JSON file (for secure storage)
 resource "local_file" "deployment_secrets" {
-  filename = "${local.infrastructure_artifact_dir}/secrets-${local.deployment_id}.json"
+  filename = "${local.infrastructure_artifact_dir}/secrets.json"
   content  = jsonencode(local.deployment_secrets)
 }
 

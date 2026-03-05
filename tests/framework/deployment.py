@@ -197,19 +197,16 @@ class Deployment:
         """
         logging.info("Getting admin UI credentials from secrets file")
 
-        secrets_glob = "secrets-exasol-*.json"
         deployment_dir_path = Path(self.deployment_dir.name)
 
-        # Find the secrets file
-        secrets_files = list(deployment_dir_path.glob(secrets_glob))
-        if not secrets_files:
+        secrets_file = deployment_dir_path / "secrets.json"
+        if not secrets_file.exists():
             msg = (
-                f"No secrets file matching {secrets_glob} found in "
+                "No secrets file found: expected 'secrets.json' in "
                 f"{self.deployment_dir.name}"
             )
             raise FileNotFoundError(msg)
 
-        secrets_file = secrets_files[0]
         logging.info("Reading secrets from: %s", secrets_file)
 
         with secrets_file.open() as f:
