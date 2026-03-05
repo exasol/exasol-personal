@@ -107,6 +107,55 @@ Most `exasol` commands must be run from the context of the deployment directory.
 
 To avoid having to prepend all exasol commands with the path to the binary, you can add the path to your PATH environment variable. For more information about how to set environment variables, refer to the documentation for your operating system.
 
+## 📊 Load Sample Data
+
+To get started quickly, Exasol provides two sample datasets hosted on S3 that you can import directly using SQL.
+
+Connect to your database (e.g. via `exasol connect` or any SQL client) and run:
+
+```sql
+CREATE OR REPLACE TABLE PRODUCTS (
+    PRODUCT_ID        DECIMAL(18,0),
+    PRODUCT_CATEGORY  VARCHAR(100),
+    PRODUCT_NAME      VARCHAR(2000000),
+    PRICE_USD         DOUBLE,
+    INVENTORY_COUNT   DECIMAL(10,0),
+    MARGIN            DOUBLE,
+    DISTRIBUTE BY PRODUCT_ID);
+
+IMPORT INTO PRODUCTS
+FROM PARQUET AT 'https://exasol-easy-data-access.s3.eu-central-1.amazonaws.com/sample-data/'
+FILE 'online_products.parquet';
+```
+
+```sql
+CREATE OR REPLACE TABLE PRODUCT_REVIEWS (
+    REVIEW_ID          DECIMAL(18,0),
+    PRODUCT_ID         DECIMAL(18,0),
+    PRODUCT_NAME       VARCHAR(2000000),
+    PRODUCT_CATEGORY   VARCHAR(100),
+    RATING             DECIMAL(2,0),
+    REVIEW_TEXT        VARCHAR(100000),
+    REVIEWER_NAME      VARCHAR(200),
+    REVIEWER_PERSONA   VARCHAR(100),
+    REVIEWER_AGE       DECIMAL(3,0),
+    REVIEWER_LOCATION  VARCHAR(200),
+    REVIEW_DATE        VARCHAR(200),
+    DISTRIBUTE BY PRODUCT_ID);
+
+IMPORT INTO PRODUCT_REVIEWS
+FROM PARQUET AT 'https://exasol-easy-data-access.s3.eu-central-1.amazonaws.com/sample-data/'
+FILE 'product_reviews.parquet';
+```
+
+| Table | Rows | Size |
+|---|---|---|
+| `PRODUCTS` | 1,000,000 | 27.3 MiB |
+| `PRODUCT_REVIEWS` | 1,822,007 | 154.5 MiB |
+
+Both tables are distributed by `PRODUCT_ID`, enabling efficient joins between them.
+
+
 ## ⚙️ Choosing cluster size and instance types
 
 The launcher will by default generate Terraform files to install one Exasol node on one Amazon EC2 instance of the type r6i.xlarge. To change the number of nodes and the EC2 instance type to use in the deployment, use the `--cluster-size` and `--instance-type` options:
