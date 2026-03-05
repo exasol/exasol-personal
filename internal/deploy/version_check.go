@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -38,8 +39,9 @@ type VersionCheckDetails struct {
 
 // GetVersionCheckDetails returns platform-specific version check details.
 // The version check URL can be overridden using the EXASOL_VERSION_CHECK_URL environment variable.
-// If deploymentDir is provided and contains a node details file,
-// uses the DeploymentId as cluster identity.
+// If deploymentDir is provided and contains a state file, uses its persisted ClusterIdentity.
+// If no valid state file exists (e.g. when called outside a deployment directory),
+// ClusterIdentity is left empty.
 func GetVersionCheckDetails(deploymentDir string) *VersionCheckDetails {
 	operatingSystem := runtime.GOOS
 	arch := runtime.GOARCH
@@ -66,17 +68,19 @@ func GetVersionCheckDetails(deploymentDir string) *VersionCheckDetails {
 		versionCheckURL = DefaultVersionCheckURL
 	}
 
-	// Try to get deployment-specific cluster identity
-	clusterIdentity := "exasol-personal"
+	// Determine cluster identity.
+	clusterIdentity := ""
 	if deploymentDir != "" {
-		nodeDetails, err := config.ReadNodeDetails(deploymentDir)
-		if err == nil && nodeDetails.DeploymentId != "" {
-			clusterIdentity += ";" + nodeDetails.DeploymentId
-			slog.Debug(
-				"using deployment ID as cluster identity",
-				"clusterIdentity",
-				clusterIdentity,
-			)
+		// Prefer the launcher-governed, persisted identity.
+		if exasolState, err := config.ReadExasolPersonalState(deploymentDir); err == nil {
+			if v := strings.TrimSpace(exasolState.ClusterIdentity); v != "" {
+				clusterIdentity = v
+				slog.Debug(
+					"using persisted cluster identity",
+					"clusterIdentity",
+					clusterIdentity,
+				)
+			}
 		}
 	}
 
@@ -135,7 +139,9 @@ func CheckLatestVersion(
 	params.Add("operatingSystem", details.OperatingSystem)
 	params.Add("architecture", details.Architecture)
 	params.Add("version", currentVersion)
-	params.Add("clusterIdentity", details.ClusterIdentity)
+	if strings.TrimSpace(details.ClusterIdentity) != "" {
+		params.Add("clusterIdentity", details.ClusterIdentity)
+	}
 
 	requestURL := fmt.Sprintf("%s?%s", details.URL, params.Encode())
 

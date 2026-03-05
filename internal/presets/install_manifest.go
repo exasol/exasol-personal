@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/exasol/exasol-personal/assets"
 	"gopkg.in/yaml.v3"
@@ -20,7 +21,88 @@ import (
 type InstallManifest struct {
 	Name        string       `yaml:"name"`
 	Description string       `yaml:"description"`
+	Variables   *Variables   `yaml:"variables"`
 	Install     InstallSteps `yaml:"install"`
+}
+
+// Variables defines installation-preset-owned variables.
+//
+// These variables are exposed as CLI flags by the launcher and materialized into
+// a resolved-values file whose path is defined by OutputFile.
+type Variables struct {
+	// OutputFile is a path relative to <deploymentDir>/installation/.
+	OutputFile string                  `yaml:"outputFile"`
+	Vars       map[string]*VariableDef `yaml:"vars"`
+}
+
+// VariableDef describes a single installation variable.
+//
+// Type is intentionally small (string/bool/number) to keep CLI parsing and JSON
+// materialization straightforward.
+type VariableDef struct {
+	Description string `yaml:"description"`
+	Type        string `yaml:"type"`
+	Default     any    `yaml:"default"`
+}
+
+var ErrInvalidInstallationVariable = errors.New("invalid installation variable")
+
+// DefaultScalar returns the default value and ensures it is a scalar type suitable for
+// CLI flags and JSON materialization.
+//
+// Design decision: installation variables intentionally support only primitive scalars.
+func (d *VariableDef) DefaultScalar() (any, error) {
+	if d == nil {
+		return nil, fmt.Errorf("%w: nil definition", ErrInvalidInstallationVariable)
+	}
+	if d.Default == nil {
+		return nil, fmt.Errorf("%w: missing default", ErrInvalidInstallationVariable)
+	}
+
+	switch d.Default.(type) {
+	case string, bool, int, int64, float64:
+		return d.Default, nil
+	default:
+		return nil, fmt.Errorf(
+			"%w: unsupported default type %T (only string/bool/number allowed)",
+			ErrInvalidInstallationVariable,
+			d.Default,
+		)
+	}
+}
+
+// EffectiveType returns the variable type used for CLI parsing.
+//
+// If the manifest provides an explicit type, we use it (and validate it's one of the
+// supported primitives). Otherwise we infer the type from the YAML default value.
+func (d *VariableDef) EffectiveType() (string, error) {
+	if d == nil {
+		return "", fmt.Errorf("%w: nil definition", ErrInvalidInstallationVariable)
+	}
+	if t := strings.TrimSpace(d.Type); t != "" {
+		switch t {
+		case "string", "bool", "number":
+			return t, nil
+		default:
+			return "", fmt.Errorf("%w: unsupported type %q", ErrInvalidInstallationVariable, t)
+		}
+	}
+
+	def, err := d.DefaultScalar()
+	if err != nil {
+		return "", err
+	}
+	switch def.(type) {
+	case bool:
+		return "bool", nil
+	case int, int64, float64:
+		return "number", nil
+	case string:
+		return "string", nil
+	default:
+		// DefaultScalar should have filtered this already.
+		return "", fmt.Errorf("%w: cannot infer type from %T", ErrInvalidInstallationVariable, def)
+	}
 }
 
 // InstallStep supports remoteExec tasks.

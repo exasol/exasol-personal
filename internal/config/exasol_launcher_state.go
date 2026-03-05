@@ -52,6 +52,14 @@ type WorkflowState struct {
 
 type ExasolPersonalState struct {
 	CurrentWorkflowState WorkflowState `json:"currentWorkflowState"`
+	// DeploymentId is a launcher-governed stable identifier for this deployment.
+	//
+	// It can be injected into infrastructure presets (e.g. for tagging) and is also
+	// used as a component of cluster identity for version checking.
+	DeploymentId string `json:"deploymentId,omitempty"`
+	// ClusterIdentity is a launcher-governed stable identity string for this deployment.
+	// Presets and scripts should treat it as opaque.
+	ClusterIdentity string `json:"clusterIdentity,omitempty"`
 	// DeploymentVersion is the launcher version that created this deployment directory.
 	//
 	// Note: the long-term, stable deployment-version marker used for compatibility

@@ -27,6 +27,7 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 		PresetRef{Name: presets.DefaultInfrastructure},
 		PresetRef{Name: presets.DefaultInstallation},
 		map[string]string{"cluster_size": "2"},
+		map[string]string{},
 		deploymentDir,
 		false,
 		"0.0.0",
@@ -46,6 +47,12 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 			"0.0.0",
 			state.DeploymentVersion,
 		)
+	}
+	if strings.TrimSpace(state.DeploymentId) == "" {
+		t.Fatal("expected deploymentId to be persisted, got empty")
+	}
+	if strings.TrimSpace(state.ClusterIdentity) == "" {
+		t.Fatal("expected clusterIdentity to be persisted, got empty")
 	}
 	if ver, ok, err := config.ReadDeploymentVersionMarker(deploymentDir); err != nil {
 		t.Fatalf("expected deployment version marker to be readable, got error: %v", err)
@@ -86,6 +93,27 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	if !strings.Contains(content, "installation_preset_dir") {
 		t.Fatalf("expected tfvars to contain installation_preset_dir, got: %s", content)
 	}
+
+	// Then: installation variables file exists at the manifest-defined path.
+	installVarsPath := filepath.Join(
+		deploymentDir,
+		config.InstallationFilesDirectory,
+		"files/etc/exasol_launcher/installation.json",
+	)
+	if _, err := os.Stat(installVarsPath); err != nil {
+		t.Fatalf("expected installation variables file %s to exist, got: %v", installVarsPath, err)
+	}
+	installData, err := os.ReadFile(installVarsPath)
+	if err != nil {
+		t.Fatalf("expected %s to exist, got read error: %v", installVarsPath, err)
+	}
+	installContent := string(installData)
+	if !strings.Contains(installContent, "\"deployment_id\"") {
+		t.Fatalf("expected installation vars to contain deployment_id, got: %s", installContent)
+	}
+	if !strings.Contains(installContent, "\"cluster_identity\"") {
+		t.Fatalf("expected installation vars to contain cluster_identity, got: %s", installContent)
+	}
 }
 
 func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {
@@ -103,6 +131,7 @@ func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {
 		context.Background(),
 		PresetRef{Name: presets.DefaultInfrastructure},
 		PresetRef{Name: presets.DefaultInstallation},
+		map[string]string{},
 		map[string]string{},
 		deploymentDir,
 		false,
