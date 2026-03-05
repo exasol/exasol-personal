@@ -18,6 +18,8 @@ updates:
       interval: "weekly"
     groups:
       python-weekly-patch-updates:
+        patterns:
+          - "*"
         update-types:
           - "patch"
     open-pull-requests-limit: 10
@@ -28,6 +30,8 @@ updates:
       interval: "weekly"
     groups:
       go-weekly-patch-updates:
+        patterns:
+          - "*"
         update-types:
           - "patch"
     open-pull-requests-limit: 10
