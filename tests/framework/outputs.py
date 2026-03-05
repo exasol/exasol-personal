@@ -8,7 +8,7 @@ from typing import Final
 
 from pydantic import BaseModel
 
-OUTPUTS_FILE_GLOB: Final = "deployment-exasol-*.json"
+OUTPUTS_FILE: Final = "deployment.json"
 
 
 class Database(BaseModel):
@@ -39,20 +39,15 @@ class Outputs(BaseModel):
 
 def _read_outputs(deployment_dir: str) -> str:
     deployment_dir_path = Path(deployment_dir)
-    outputs_raw = ""
 
-    for file in deployment_dir_path.glob(OUTPUTS_FILE_GLOB):
-        logging.info("Reading outputs file at: %s", file.name)
-
-        with file.open() as outputs_file:
-            outputs_raw = outputs_file.read()
-        break
-
-    if outputs_raw == "":
-        msg = f"couldn't read the outputs file {OUTPUTS_FILE_GLOB}"
+    outputs_filepath = deployment_dir_path / OUTPUTS_FILE
+    if not outputs_filepath.exists():
+        msg = f"couldn't read the outputs file {OUTPUTS_FILE}"
         raise RuntimeError(msg)
 
-    return outputs_raw
+    logging.info("Reading outputs file at: %s", outputs_filepath.name)
+    with outputs_filepath.open() as outputs_file:
+        return outputs_file.read()
 
 
 def get_outputs(deployment_dir: str) -> Outputs:

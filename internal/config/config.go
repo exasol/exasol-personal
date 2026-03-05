@@ -16,17 +16,21 @@ import (
 
 var ErrNoFileMatchedGlobPattern = errors.New("no file matched the pattern")
 
-func findGlob(dir string, pattern string) (string, error) {
-	globPath := filepath.Join(dir, pattern)
-	matches, err := filepath.Glob(globPath)
-	if err != nil {
-		return "", err
+// findExistingFile checks if a given filename exists in dir.
+//
+// It returns (fullPath, true, nil) if the file exists, (fullPath, false, nil)
+// if it does not exist, and ("", false, err) for unexpected errors.
+func findExistingFile(dir string, filename string) (string, bool, error) {
+	fullPath := filepath.Join(dir, filename)
+	_, err := os.Stat(fullPath)
+	if err == nil {
+		return fullPath, true, nil
 	}
-	if len(matches) > 0 {
-		return matches[0], nil
+	if errors.Is(err, os.ErrNotExist) {
+		return fullPath, false, nil
 	}
 
-	return "", fmt.Errorf("%w: %s", ErrNoFileMatchedGlobPattern, globPath)
+	return "", false, err
 }
 
 var ErrMissingConfigFile = errors.New("failed to load config file")

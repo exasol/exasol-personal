@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	nodeDetailsGlob       = "deployment-exasol-*.json"
+	nodeDetailsFileName   = "deployment.json"
 	ConnectionInstruction = "connection-instructions.txt"
 )
 
@@ -66,9 +66,16 @@ type SSHDetails struct {
 }
 
 func ReadNodeDetails(deploymentDir string) (*NodeDetails, error) {
-	filepath, err := findGlob(deploymentDir, nodeDetailsGlob)
+	filepath, exists, err := findExistingFile(deploymentDir, nodeDetailsFileName)
 	if err != nil {
 		return nil, err
+	}
+	if !exists {
+		return nil, fmt.Errorf(
+			"node details file not found in deployment directory: expected %q in %s",
+			nodeDetailsFileName,
+			deploymentDir,
+		)
 	}
 
 	slog.Debug("reading node details file", "file", filepath)

@@ -30,26 +30,28 @@ During `init`, the selected presets are extracted into the **deployment director
 
 The deployment directory layout matters because infrastructure code often references installation assets by *relative path*.
 
+In addition, during `init`/`install` the launcher resolves **installation preset variables** (from `installation.yaml`) and writes them to the path configured by `installation.yaml:variables:outputFile` (commonly `files/etc/exasol_launcher/installation.json`). Infrastructure presets that support unattended installation must ensure this file is copied onto the nodes (typically via the installation preset’s `files/**` overlay).
+
 ## Mandatory root-level deployment artifacts for Tofu deployments (written by infrastructure presets)
 
-In addition to the extracted preset directories, the launcher expects the **infrastructure preset** to write a small set of artifacts into the directory spefied by the Terraform variable `infrastructure_artifact_dir` - which is typically the root of deployment directory. These artifacts are consumed by commands like `exasol info`, `exasol connect`, and `exasol diag shell`.
+In addition to the extracted preset directories, the launcher expects the **infrastructure preset** to write a small set of artifacts into the directory specified by the Terraform variable `infrastructure_artifact_dir` - which is typically the root of the deployment directory. These artifacts are consumed by commands like `exasol info`, `exasol connect`, and `exasol diag shell`.
 
-The current launcher implementation discovers these files by glob pattern, so both the **location (deployment root typically)** and the **filename pattern** are part of the contract.
+The launcher discovers these files by **static filename**, so both the **location (deployment root typically)** and the **filenames** are part of the contract.
 
 Required artifacts:
 
-- `deployment-exasol-<deploymentId>.json`
+- `deployment.json`
   - Purpose: non-sensitive *node details* used by the launcher (IPs/DNS, SSH connection info, DB/Admin UI endpoints, TLS cert).
   - Minimal required content (high-level): a `deploymentId` plus a `nodes` map keyed by node name (e.g. `n11`) containing at least a reachable host (`dnsName` and/or `publicIp`), SSH details (user, port, key file), DB connection details (db port, UI port, URL), and the TLS certificate PEM used for fingerprinting.
 
-- `secrets-exasol-<deploymentId>.json`
+- `secrets.json`
   - Purpose: sensitive credentials used by the launcher.
   - Minimal required content: `dbPassword` and `adminUiPassword`.
   - Presets may include additional fields (for example usernames), but the launcher must be able to parse the required ones.
 
-- `<deploymentId>.pem`
+- `node_access.pem`
   - Purpose: SSH private key used for remote exec and diagnostic shell.
-  - Requirement: must be readable by the current user and typically needs mode `0600`. The `deployment-…json` should reference this key via `nodes[*].ssh.keyFile` (absolute or relative paths are supported; relative paths are resolved against the deployment directory).
+  - Requirement: must be readable by the current user and typically needs mode `0600`. `deployment.json` should reference this key via `nodes[*].ssh.keyFile` (absolute or relative paths are supported; relative paths are resolved against the deployment directory).
 
 Reference implementation:
 

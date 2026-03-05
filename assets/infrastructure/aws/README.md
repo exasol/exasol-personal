@@ -81,10 +81,10 @@ The following ports must be reachable from the operator’s network, controlled 
    - Public and private IPs, instance IDs, and DNS names per node.
    - SSH access info per node and the sensitive SSH private key.
    - Database access info per node (main port `8563`, Admin UI at `https://<dns>:8443`).
-    - Local files written to `var.infrastructure_artifact_dir` (the deployment directory root when used via the launcher):
-     - `deployment-<deployment_id>.json` — summary of nodes and access info
-       - `secrets-<deployment_id>.json` — generated credentials (sensitive)
-     - `<deployment_id>.pem` — SSH private key (mode `0600`)
+      - Local files written to `var.infrastructure_artifact_dir` (the deployment directory root when used via the launcher):
+      - `deployment.json` — summary of nodes and access info
+      - `secrets.json` — generated credentials (sensitive)
+       - `node_access.pem` — SSH private key (mode `0600`)
 
 ## Credentials
 - Exasol Database and Admin UI passwords are generated and injected; outputs are sensitive.
