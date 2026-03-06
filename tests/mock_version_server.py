@@ -76,16 +76,16 @@ class VersionServerHandler(BaseHTTPRequestHandler):
         operating_system = params.get("operatingSystem", [""])[0]
         architecture = params.get("architecture", [""])[0]
         version = params.get("version", [""])[0]
-        cluster_identity = params.get("clusterIdentity", [""])[0]
+        identity = params.get("identity", [""])[0]
 
         logger.info(
             "received version check request: category=%s operatingSystem=%s "
-            "architecture=%s version=%s clusterIdentity=%s",
+            "architecture=%s version=%s identity=%s",
             category,
             operating_system,
             architecture,
             version,
-            cluster_identity,
+            identity,
         )
 
         with data_lock:

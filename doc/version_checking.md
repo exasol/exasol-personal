@@ -50,7 +50,7 @@ The launcher sends the following query parameters:
 - `operatingSystem`
 - `architecture`
 - `version`
-- `clusterIdentity`
+- `identity`
 
 The response contains a `latestVersion` object with metadata for the newest available release on that platform (version, download URL, checksums, and platform).
 
@@ -101,8 +101,6 @@ For Exasol Personal deployments, installation sets a predictable `CCC_PLAY_CLUST
 The identity format is:
 
 `exasol-personal;<deployment-id>;<infra-preset-name>;<install-preset-name>`
-
-This identity is separate from the launcher’s own `clusterIdentity` parameter for launcher update checks.
 
 ## Host-side version check fallback (temporary)
 

@@ -71,7 +71,7 @@ if curl \
   --data-urlencode "operatingSystem=${VERSION_CHECK_OS}" \
   --data-urlencode "architecture=${VERSION_CHECK_ARCH}" \
   --data-urlencode "version=${exasol_version}" \
-  --data-urlencode "clusterIdentity=${cluster_identity}" \
+  --data-urlencode "identity=${cluster_identity}" \
   >/dev/null; then
   echo "host launcher version check completed"
 else

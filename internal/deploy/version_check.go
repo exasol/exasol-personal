@@ -144,7 +144,7 @@ func CheckLatestVersion(
 	params.Add("architecture", details.Architecture)
 	params.Add("version", currentVersion)
 	if strings.TrimSpace(details.ClusterIdentity) != "" {
-		params.Add("clusterIdentity", details.ClusterIdentity)
+		params.Add("identity", details.ClusterIdentity)
 	}
 
 	requestURL := fmt.Sprintf("%s?%s", details.URL, params.Encode())
