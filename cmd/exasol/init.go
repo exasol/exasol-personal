@@ -50,7 +50,7 @@ func init() {
 	// Init creates the deployment directory state; if a deployment directory already
 	// exists, the compatibility check protects against operating on an incompatible
 	// deployment.
-	requireDeploymentCompatibility(initCmd, minSupportedDeploymentVersionBaseline)
+	requireMinorVersionCompatibility(initCmd, minSupportedDeploymentVersionBaseline)
 
 	// Augment long help with embedded preset names so users know what they can pass.
 	initCmd.Long = strings.TrimRight(initCmdLongDesc, "\n") +
@@ -75,7 +75,7 @@ func init() {
 			installVars,
 			commonFlags.DeploymentDir,
 			!commonFlags.NoLauncherVersionCheck,
-			version,
+			CurrentLauncherVersion,
 		)
 	}
 

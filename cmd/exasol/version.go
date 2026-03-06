@@ -24,9 +24,9 @@ Example usage:
     exasol version --latest --json
 `
 
-// This variable must be named like this an remain in the main package,
-// because we inject it's value during the build process with -ldflags.
-var version = "0.0.0"
+// This variable must be named like this and remain in the main package,
+// because we inject it's true value during the build process with -ldflags.
+var CurrentLauncherVersion = "0.0.0"
 
 var versionCheckOpts = struct {
 	Latest bool
@@ -42,13 +42,13 @@ var versionCmd = &cobra.Command{
 		ctx := cmd.Context()
 
 		if !versionCheckOpts.Latest {
-			_, err := fmt.Fprintln(os.Stdout, semver.MustParse(version))
+			_, err := fmt.Fprintln(os.Stdout, semver.MustParse(CurrentLauncherVersion))
 			return err
 		}
 
 		response, err := deploy.FetchLatestVersion(
 			ctx,
-			version,
+			CurrentLauncherVersion,
 			commonFlags.DeploymentDir,
 		)
 		if err != nil {
@@ -61,7 +61,7 @@ var versionCmd = &cobra.Command{
 			return encoder.Encode(response)
 		}
 
-		return printLatestVersionText(version, response)
+		return printLatestVersionText(CurrentLauncherVersion, response)
 	},
 }
 

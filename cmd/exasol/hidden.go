@@ -37,7 +37,7 @@ var printConnectionInstructions = &cobra.Command{
 
 // nolint: gochecknoinits
 func init() {
-	requireDeploymentCompatibility(
+	requireMinorVersionCompatibility(
 		printConnectionInstructions,
 		minSupportedDeploymentVersionBaseline,
 	)

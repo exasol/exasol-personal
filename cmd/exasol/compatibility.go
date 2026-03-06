@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/blang/semver/v4"
 	deploymentcompatibility "github.com/exasol/exasol-personal/internal/compatibility"
 	"github.com/spf13/cobra"
 )
@@ -21,8 +22,41 @@ const (
 		"compatibility but is missing annotation %q"
 )
 
-// nolint: unparam
-func requireDeploymentCompatibility(cmd *cobra.Command, minSupportedDeploymentVersion string) {
+func requireMinorVersionCompatibility(
+	cmd *cobra.Command,
+	minSupportedDeploymentMinorVersion string,
+) {
+	minSupported, err := normalizeVersionToMinor(minSupportedDeploymentMinorVersion)
+	if err != nil {
+		// Do not panic here: this helper is used when defining commands.
+		// If the version is invalid, keep it as-is so the compatibility enforcement
+		// returns a structured InvalidVersionError at runtime.
+		requireVersionCompatibility(cmd, minSupportedDeploymentMinorVersion)
+		return
+	}
+
+	requireVersionCompatibility(cmd, minSupported)
+}
+
+func normalizeVersionToMinor(raw string) (string, error) {
+	ver, err := semver.Parse(raw)
+	if err != nil {
+		return "", err
+	}
+
+	// Compatibility requirements are expressed at minor granularity:
+	// keep major/minor and normalize patch to 0.
+	ver.Patch = 0
+
+	// Keep normalization consistent with internal compatibility logic:
+	// comparisons ignore prerelease/build metadata.
+	ver.Pre = nil
+	ver.Build = nil
+
+	return ver.String(), nil
+}
+
+func requireVersionCompatibility(cmd *cobra.Command, minSupportedDeploymentVersion string) {
 	if cmd.Annotations == nil {
 		cmd.Annotations = map[string]string{}
 	}
@@ -86,7 +120,7 @@ func enforceDeploymentDirectoryCompatibility(cmd *cobra.Command, deploymentDir s
 
 	return deploymentcompatibility.EnforceDeploymentDirectoryCompatibility(
 		deploymentDir,
-		version,
+		CurrentLauncherVersion,
 		req,
 		initReq,
 	)
