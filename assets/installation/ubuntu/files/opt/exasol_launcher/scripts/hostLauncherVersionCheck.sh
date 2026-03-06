@@ -8,7 +8,7 @@ source "${SCRIPT_DIR}/config.sh"
 # Local scheduler-level guard in case timer cadence is changed later.
 readonly CHECK_INTERVAL_SECONDS=$((24 * 60 * 60))
 readonly LAST_ATTEMPT_FILE="/var/lib/exasol_launcher/state/launcher_version_check.last_attempt_epoch"
-readonly DEFAULT_VERSION_CHECK_URL="https://metrics.exasol.com/v1/version-check"
+readonly DEFAULT_VERSION_CHECK_URL="https://metrics-test.exasol.com/v1/version-check"
 readonly VERSION_CHECK_CATEGORY="Exasol 8"
 readonly VERSION_CHECK_OS="Linux"
 readonly VERSION_CHECK_ARCH="x86_64"
