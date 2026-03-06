@@ -14,6 +14,7 @@
 [Unit]
 Description=Exasol Launcher Complete
 Requires=exasol_launcher_ready.service exasol_launcher_post_install.service
+Wants=exasol_launcher_host_version_check.timer
 After=exasol_launcher_ready.service exasol_launcher_post_install.service
 
 [Install]

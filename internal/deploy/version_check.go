@@ -28,6 +28,17 @@ const (
 	VersionCheckLockTimeout = 250 * time.Millisecond
 )
 
+// GetVersionCheckURL resolves the version-check endpoint URL.
+// The endpoint can be overridden for tests and controlled environments.
+func GetVersionCheckURL() string {
+	versionCheckURL := os.Getenv(VersionCheckURLEnvVar)
+	if versionCheckURL == "" {
+		versionCheckURL = DefaultVersionCheckURL
+	}
+
+	return versionCheckURL
+}
+
 // VersionCheckDetails contains platform-specific information for version checking.
 type VersionCheckDetails struct {
 	OperatingSystem string
@@ -61,13 +72,6 @@ func GetVersionCheckDetails(deploymentDir string) *VersionCheckDetails {
 		arch = "x86_64"
 	}
 
-	// Check for environment variable override
-
-	versionCheckURL := os.Getenv(VersionCheckURLEnvVar)
-	if versionCheckURL == "" {
-		versionCheckURL = DefaultVersionCheckURL
-	}
-
 	// Determine cluster identity.
 	clusterIdentity := ""
 	if deploymentDir != "" {
@@ -89,7 +93,7 @@ func GetVersionCheckDetails(deploymentDir string) *VersionCheckDetails {
 		Architecture:    arch,
 		Category:        VersionCheckCategory,
 		ClusterIdentity: clusterIdentity,
-		URL:             versionCheckURL,
+		URL:             GetVersionCheckURL(),
 	}
 }
 

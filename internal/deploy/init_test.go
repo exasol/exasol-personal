@@ -114,6 +114,9 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	if !strings.Contains(installContent, "\"cluster_identity\"") {
 		t.Fatalf("expected installation vars to contain cluster_identity, got: %s", installContent)
 	}
+	if !strings.Contains(installContent, "\"version_check_url\"") {
+		t.Fatalf("expected installation vars to contain version_check_url, got: %s", installContent)
+	}
 }
 
 func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {

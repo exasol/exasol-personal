@@ -24,6 +24,7 @@ func writeInstallationVariablesFile(
 	spec *presets.Variables,
 	clusterIdentity string,
 	deploymentId string,
+	versionCheckURL string,
 	overrides map[string]string,
 ) error {
 	if spec == nil {
@@ -49,6 +50,8 @@ func writeInstallationVariablesFile(
 	// Always include launcher-governed identity values.
 	resolved["deployment_id"] = deploymentId
 	resolved["cluster_identity"] = clusterIdentity
+	// Host-side scheduled checks reuse the same endpoint selection as launcher checks.
+	resolved["version_check_url"] = versionCheckURL
 
 	// Apply defaults from manifest.
 	for name, def := range spec.Vars {
@@ -110,7 +113,7 @@ func writeInstallationVariablesFile(
 
 func isReservedInstallationVariableName(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "deployment_id", "cluster_identity":
+	case "deployment_id", "cluster_identity", "version_check_url":
 		return true
 	default:
 		return false

@@ -2,10 +2,11 @@
 
 This document describes the **update-checking** features in Exasol Personal.
 
-There are two related (but independent) mechanisms:
+There are three related mechanisms:
 
 - **Launcher version check:** the Exasol Personal launcher checks whether a newer launcher release is available.
 - **Database version check:** during installation, the launcher can enable the Exasol database’s own daily version check.
+- **Host-side launcher version check:** a temporary fallback on the deployed host system can periodically check for newer launcher releases without requiring CLI usage.
 
 ## Launcher version check (launcher updates)
 
@@ -102,3 +103,36 @@ The identity format is:
 `exasol-personal;<deployment-id>;<infra-preset-name>;<install-preset-name>`
 
 This identity is separate from the launcher’s own `clusterIdentity` parameter for launcher update checks.
+
+## Host-side version check fallback (temporary)
+
+In addition to launcher-initiated checks, the deployed host system performs periodic version checks against the same version-check API endpoint.
+
+This mechanism exists as a backup for the database version check. It is intended for cases where the database-side daily check is unavailable or not used, so long-running deployments can still report update activity and receive launcher update information even when operators do not invoke the CLI regularly.
+
+Because it is only a fallback, it is expected to be temporary and may be removed once the database version check is the sole mechanism needed for scheduled update awareness.
+
+### Scope and activation
+
+- The scheduled check runs on the **access node** only, so each deployment performs the check from exactly one host.
+- It becomes active only after the database is reported as ready.
+- It is enabled only when the database version check is enabled for the deployment.
+- It is installed as part of the installation preset and runs on a host-local schedule managed by the operating system, with a `systemd` service and timer being the intended implementation vehicle.
+
+### Behavior and failure semantics
+
+The host-side check is intentionally **best-effort**:
+
+- It must not affect database availability or block normal deployment operations.
+- It uses the same endpoint base URL as launcher version checks (including launcher-side endpoint overrides).
+- It uses a database-compatible request profile (`category=Exasol 8`, `operatingSystem=Linux`, `architecture=x86_64`) and sends the configured Exasol version from installation variables.
+- It is rate limited so failures, including timeouts and temporary connectivity problems, do not create tight retry loops.
+- Failed attempts are still recorded for local bookkeeping so the next retry is deferred by the normal schedule rather than happening immediately.
+
+### Deployment identity
+
+The scheduled host-side check uses a stable deployment identity so the service can attribute requests to a deployment over time without relying on CLI activity.
+
+For Exasol Personal deployments, that identity is privacy-conscious: it is stable enough for per-deployment behavior and metrics, but it does not expose sensitive operator or environment data.
+
+The configured identity is the same `CCC_PLAY_CLUSTER_IDENTITY` value used for the database version check.

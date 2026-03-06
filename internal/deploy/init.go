@@ -162,6 +162,7 @@ func InitDeployment(
 				installManifest.Variables,
 				clusterIdentity,
 				deploymentId,
+				GetVersionCheckURL(),
 				installVars,
 			); err != nil {
 				return err

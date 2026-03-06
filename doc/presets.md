@@ -163,7 +163,7 @@ Therefore, installation presets declare **installation variables** in `installat
 
 The launcher writes the resolved values into the installation preset directory in the deployment directory (at the manifest-defined path). Infrastructure presets that support unattended installation must ensure that this path is deployed to the node filesystem (for example via a host file overlay mechanism).
 
-Installation scripts may read installation-owned configuration from that file when they are executed. In addition to explicitly declared installation variables, the launcher can include implicit core values (such as `deployment_id` and `cluster_identity`) so scripts do not need to reconstruct them.
+Installation scripts may read installation-owned configuration from that file when they are executed. In addition to explicitly declared installation variables, the launcher can include implicit core values (such as `deployment_id`, `cluster_identity`, and `version_check_url`) so scripts do not need to reconstruct them.
 
 Optional extensions used by some presets:
 
