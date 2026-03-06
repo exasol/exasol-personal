@@ -1,14 +1,5 @@
-# User Preparation Phase
-#
-# Purpose: Sets up SSH authentication between cluster nodes
-# Runs as: ubuntu user
-# Dependencies: Requires system preparation to complete first
-#
-# Tasks:
-# - Distributes admin SSH private key to all cluster nodes
-# - Enables password-less SSH between nodes for c4 orchestration
-#
-# Idempotency: Only runs if prepare_user.complete marker doesn't exist
+# User preparation phase for inter-node SSH.
+# Idempotent via prepare_user.complete marker.
 
 [Unit]
 Description=Exasol Launcher User Preparation

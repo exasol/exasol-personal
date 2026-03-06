@@ -14,18 +14,13 @@
 
 set -euo pipefail
 
-# ============================================================================
 # Setup and Dependencies
-# ============================================================================
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=./logging.sh
 source "${SCRIPT_DIR}/logging.sh"
 
-# ============================================================================
 # Cloud-Init Monitoring
-# ============================================================================
-
 readonly CLOUD_INIT_LOG="/var/log/cloud-init-output.log"
 readonly CLOUD_INIT_DONE_MARKER="/var/lib/exasol_launcher/state/cloud-init.complete"
 CLOUD_INIT_TAIL_PID=""
@@ -84,10 +79,7 @@ wait_for_cloud_init() {
   log_step_info "Cloud-init - bootstrap completed"    
 }
 
-# ============================================================================
 # Journal Monitoring
-# ============================================================================
-
 CURSOR_FILE="/var/lib/exasol_launcher/state/journal.cursor"
 JOURNAL_PID=""
 
@@ -145,12 +137,8 @@ start_journalctl_tail() {
   JOURNAL_PID=$!
 }
 
-# ============================================================================
 # Installation Status Monitoring
-# ============================================================================
-
 readonly SUCCESS_MARKER="/var/lib/exasol_launcher/state/post_install.complete"
-
 check_service_failure() {
   local service=$1
   local active_state
@@ -215,10 +203,7 @@ monitor_installation_status() {
   done
 }
 
-# ============================================================================
 # Cleanup and Signal Handling
-# ============================================================================
-
 cleanup() {
   stop_cloud_init_tail
   stop_journalctl_tail
@@ -226,10 +211,7 @@ cleanup() {
 
 trap cleanup EXIT
 
-# ============================================================================
 # Main Execution
-# ============================================================================
-
 main() {
   wait_for_cloud_init
   

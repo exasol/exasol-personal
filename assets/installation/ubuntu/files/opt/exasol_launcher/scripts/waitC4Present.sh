@@ -7,11 +7,7 @@ source "${SCRIPT_DIR}/logging.sh"
 
 log_substep_info "Waiting for local c4 to be installed"
 
-# Path to c4 executable
-# Needed to hardcode this because we need to use exactly this c4 from this path
-# It looks for its config in ../etc/c4.yaml or rather $HOME/.ccc/ccc/etc/c4.yaml
-# We use the synlink in $HOME/.local/bin here though instead to abstract from these internals.
-C4_PATH=$HOME/.local/bin/c4
+source "${SCRIPT_DIR}/shared_post_install.sh"
 
 FOUND=0
 # Wait up to ~10 minutes, downloading packages and getting them to all nodes

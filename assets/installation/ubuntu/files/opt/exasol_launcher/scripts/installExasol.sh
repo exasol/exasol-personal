@@ -13,7 +13,7 @@ log_step_info "Installing Exasol"
 log_substep_info "Setting up c4 config"
 
 if [[ ! -x ./c4 ]]; then
-  log_error "c4 binary not found. Please run /opt/exasol_launcher/scripts/prepare.sh first."
+  log_error "c4 binary not found."
   exit 1
 fi
 
@@ -30,7 +30,7 @@ host_external_addrs="$(infra_jq -er '.hostExternalAddrs')"
 db_password_b64="$(infra_jq -er '.dbPasswordB64')"
 adminui_password_b64="$(infra_jq -er '.adminUiPasswordB64')"
 
-# Optional installation-preset variables (launcher-generated).
+# Optional installation-preset variables.
 db_version_check_enabled="true"
 cluster_identity=""
 version_check_url=""
@@ -51,7 +51,6 @@ else
   exit 1
 fi
 
-# c4 expects a package/workcopy id, not a bare semantic version.
 exasol_working_copy="@exasol-${exasol_version}"
 
 cat << CONFEOF | tee ./config > /dev/null

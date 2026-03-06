@@ -12,9 +12,10 @@ source "${SCRIPT_DIR}/config.sh"
 
 log_step_info "Configuring TLS certificates..."
 
-# shared_post_install.sh provides C4_PATH and PLAY_ID
-log_substep_info "Looking up cluster PLAY_ID"
 source "${SCRIPT_DIR}/shared_post_install.sh"
+
+log_substep_info "Looking up cluster PLAY_ID"
+PLAY_ID="$("$C4_PATH" config -e .play.id)"
 
 log_substep_info "Uploading TLS certificate"
 # Doing this via stdin avoids a lot of quoting issues compared to passing commands to `c4 connect`

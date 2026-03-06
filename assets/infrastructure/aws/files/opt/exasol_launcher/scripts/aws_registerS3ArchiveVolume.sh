@@ -11,10 +11,10 @@ source "${SCRIPT_DIR}/logging.sh"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
 
-# shared_post_install.sh provides C4_PATH and PLAY_ID
 source "${SCRIPT_DIR}/shared_post_install.sh"
 
 log_substep_info "Looking up cluster PLAY_ID"
+PLAY_ID="$("$C4_PATH" config -e .play.id)"
 
 # Skip archive registration when disabled in deployment variables
 ARCHIVE_ENABLED="$(infra_jq -er '.aws.archive.enabled')"

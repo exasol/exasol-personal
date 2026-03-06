@@ -15,23 +15,13 @@ source "${SCRIPT_DIR}/logging.sh"
 
 log_substep_info "Waiting for Exasol to boot up"
 
-# Timeout for the waiting operation
-# 5 minutes should be enough typically
-TIMEOUT_SECONDS=300
+# 10 minutes should be enough typically
+TIMEOUT_SECONDS=600
 
-# Path to c4 executable for the DB
-# Needed to hardcode this because we need to use exactly this c4 from this path
-# It looks for its config in ../etc/c4.yaml or rather $HOME/.ccc/ccc/etc/c4.yaml
-# We use the synlink in $HOME/.local/bin here though instead to abstract from these internals.
-# Unfortunetedly, it appears the installation process doesn't update PATH in .bashrc
-# until some point later during the init (we should probly fix that)
-# Otherwise we could have simply sourced $HOME/.bashrc
-C4_PATH=$HOME/.local/bin/c4
+source "${SCRIPT_DIR}/shared_post_install.sh"
 
-# Play ID (or deployment ID)
-# Needed for subsequent c4 operations as most ops need to target a specific deployment
-# We have only one deployment here, but it is better to make this explicit
-PLAY_ID=$($C4_PATH config -e .play.id)
+log_substep_info "Looking up cluster PLAY_ID"
+PLAY_ID="$("$C4_PATH" config -e .play.id)"
 log_substep_info "Cluster PLAY_ID=$PLAY_ID"
 
 if CCC_CLOUD_ACTION_WAIT_TIMEOUT=3600 timeout "$TIMEOUT_SECONDS" $C4_PATH wait $PLAY_ID --stage d; then

@@ -1,8 +1,5 @@
-# Host-side launcher version check scheduler
-#
-# Purpose: Trigger the fallback launcher version check periodically.
-# Cadence: roughly once per day with jitter to avoid synchronized bursts.
-# Persistence: catch up one missed run after reboot.
+# Scheduler for host-side fallback version checks.
+# Daily cadence with jitter and persistent catch-up.
 
 [Unit]
 Description=Schedule Exasol Launcher Host Version Check
