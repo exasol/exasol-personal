@@ -14,6 +14,10 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
+    flags:
+      - -tags=official_release
+    ldflags:
+      - -X main.CurrentLauncherVersion={{ .Version }}
     targets:
       - darwin_arm64
       - darwin_amd64

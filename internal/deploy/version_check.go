@@ -21,9 +21,8 @@ import (
 )
 
 const (
-	DefaultVersionCheckURL = "https://metrics.exasol.com/v1/version-check"
-	VersionCheckURLEnvVar  = "EXASOL_VERSION_CHECK_URL"
-	VersionCheckCategory   = "Exasol Personal"
+	VersionCheckURLEnvVar = "EXASOL_VERSION_CHECK_URL"
+	VersionCheckCategory  = "Exasol Personal"
 
 	VersionCheckLockTimeout = 250 * time.Millisecond
 )
