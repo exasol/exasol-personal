@@ -1,15 +1,5 @@
-# Installation Completion Target
-#
-# Purpose: Represents successful completion of the entire installation workflow
-# Type: systemd target (aggregates service dependencies)
-#
-# Dependencies: Requires database readiness and post-installation to complete
-# Status: When this target becomes active, installation is complete
-#
-# Monitoring: The launcher polls this target's ActiveState to detect:
-# - active → Installation succeeded
-# - failed → Installation failed
-# - activating → Installation in progress
+# Exasol installation completion target.
+# Launcher monitors this target state as the workflow outcome.
 
 [Unit]
 Description=Exasol Launcher Complete

@@ -1,16 +1,5 @@
-# System Preparation Phase
-#
-# Purpose: Prepares the system for Exasol installation
-# Runs as: root (requires system configuration permissions)
-# Dependencies: None (first phase in installation workflow)
-#
-# Tasks:
-# - Downloads the c4 installer binary
-# - Configures udev rules for EBS volume access
-# - Runs c4 preplay to prepare system for rootless container execution
-#
-# Idempotency: Only runs if exasol_launcher_prepare.complete marker doesn't exist
-# Progress logging: Logs phase start/completion to journal for launcher monitoring
+# Root preparation phase (first in workflow).
+# Idempotent via exasol_launcher_prepare.complete marker.
 
 [Unit]
 Description=Exasol Launcher System Preparation

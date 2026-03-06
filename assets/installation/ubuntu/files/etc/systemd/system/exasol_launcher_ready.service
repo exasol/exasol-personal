@@ -1,15 +1,5 @@
-# Database Ready Wait Phase
-#
-# Purpose: Waits for Exasol to become fully operational
-# Runs as: ubuntu user
-# Dependencies: Requires installation to complete first
-#
-# Tasks:
-# - Waits for c4 process to be running
-# - Waits for Exasol to accept connections
-# - Waits for AdminUI (confd) to be accessible
-#
-# Idempotency: Only runs if ready.complete marker doesn't exist
+# DB readiness phase after install.
+# Idempotent via ready.complete marker.
 
 [Unit]
 Description=Exasol Launcher Ready

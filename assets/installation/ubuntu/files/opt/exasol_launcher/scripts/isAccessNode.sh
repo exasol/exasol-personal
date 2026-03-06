@@ -3,8 +3,6 @@
 #
 # Intended usage:
 #   - systemd ExecCondition= for services that must only run on the access node
-#
-# Contract:
 #   - exit 0 => this node is n11
 #   - exit 1 => this node is NOT n11
 #   - exit >1 => unexpected error (missing config, jq failure)

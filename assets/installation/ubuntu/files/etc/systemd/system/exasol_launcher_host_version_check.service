@@ -1,13 +1,5 @@
-# Host-side launcher version check
-#
-# Purpose: Best-effort fallback scheduled check for launcher updates
-# Runs as: ubuntu user
-# Runs on: Access node only, and only when DB version checks are enabled
-# Dependencies: Requires database readiness marker and network
-#
-# Failure semantics:
-# - Must never impact deployment availability.
-# - Script exits 0 even when request fails/timeouts.
+# Best-effort host-side fallback version check.
+# Runs only on the access node and only when DB checks are enabled.
 
 [Unit]
 Description=Exasol Launcher Host Version Check

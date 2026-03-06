@@ -19,14 +19,7 @@ log_substep_info "Waiting for confd to be ready ..."
 # 5 minutes should be enough typically
 TIMEOUT_SECONDS=300
 
-# Path to c4 executable for the DB
-# Needed to hardcode this because we need to use exactly this c4 from this path
-# It looks for its config in ../etc/c4.yaml or rather $HOME/.ccc/ccc/etc/c4.yaml
-# We use the synlink in $HOME/.local/bin here though instead to abstract from these internals.
-# Unfortunetedly, it appears the installation process doesn't update PATH in .bashrc
-# until some point later during the init (we should probly fix that)
-# Otherwise we could have simply sourced $HOME/.bashrc
-C4_PATH=$HOME/.local/bin/c4
+source "${SCRIPT_DIR}/shared_post_install.sh"
 
 CONFD_PORT=$($C4_PATH config -F -e .play.confd_port)
 

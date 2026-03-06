@@ -1,15 +1,5 @@
-# Post-Installation Configuration Phase
-#
-# Purpose: Performs final configuration after database is ready
-# Runs as: ubuntu user
-# Runs on: Primary node (n11) only
-# Dependencies: Requires both installation and readiness
-#
-# Tasks:
-# - Uploads TLS certificates to all nodes via confd API
-# - Executes optional infrastructure-specific post-install actions (declared in infrastructure.json)
-#
-# Idempotency: Only runs if post_install.complete marker doesn't exist
+# Post-install phase on n11 after DB readiness.
+# Idempotent via post_install.complete marker.
 
 [Unit]
 Description=Exasol Launcher Post-Install

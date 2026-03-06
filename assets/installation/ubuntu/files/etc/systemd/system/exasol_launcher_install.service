@@ -1,17 +1,5 @@
-# Installation Phase
-#
-# Purpose: Installs and initializes the Exasol cluster
-# Runs as: ubuntu user
-# Runs on: Primary node (n11) only - coordinates installation across all nodes
-# Dependencies: Requires preparation and node synchronization to complete first
-#
-# Tasks:
-# - Executes c4 host play to install across all cluster nodes
-# - Creates the database with configured passwords
-# - Starts AdminUI service
-#
-# Idempotency: Only runs if install.complete marker doesn't exist
-# Node-specific: ExecCondition checks node.json to ensure primary-only execution
+# Cluster install phase (access node only).
+# Idempotent via install.complete marker.
 
 [Unit]
 Description=Exasol Launcher Installation
