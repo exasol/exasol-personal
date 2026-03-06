@@ -46,7 +46,7 @@ var deployCmd = &cobra.Command{
 
 // nolint: gochecknoinits
 func init() {
-	requireDeploymentCompatibility(deployCmd, minSupportedDeploymentVersionBaseline)
+	requireMinorVersionCompatibility(deployCmd, CurrentLauncherVersion)
 	requireInitializedDeploymentDir(deployCmd)
 	registerDeploymentDirFlag(deployCmd, commonFlags)
 	registerVerboseFlag(deployCmd, commonFlags)

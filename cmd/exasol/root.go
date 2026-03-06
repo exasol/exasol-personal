@@ -74,7 +74,10 @@ var rootCmd = &cobra.Command{
 		// Best-effort version update hint (non-blocking; logs only when an update is available).
 		// Design decision: never block commands on this.
 		if cmd.Name() != "version" {
-			deploy.MaybeLogVersionUpdateHint(cmd.Context(), commonFlags.DeploymentDir, version)
+			deploy.MaybeLogVersionUpdateHint(
+				cmd.Context(), commonFlags.DeploymentDir,
+				CurrentLauncherVersion,
+			)
 		}
 
 		return nil

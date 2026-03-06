@@ -52,7 +52,7 @@ func registerConnectFlags() {
 
 // nolint: gochecknoinits
 func init() {
-	requireDeploymentCompatibility(connectCmd, minSupportedDeploymentVersionBaseline)
+	requireMinorVersionCompatibility(connectCmd, CurrentLauncherVersion)
 	requireInitializedDeploymentDir(connectCmd)
 	registerConnectFlags()
 	registerDeploymentDirFlag(connectCmd, commonFlags)

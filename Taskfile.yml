@@ -88,7 +88,7 @@ tasks:
       - |
         version=$(git describe --tags --abbrev=0) # First character is "v".
         go build -o {{.BUILD_DIR_NAME}}/{{.BINARY_NAME}} \
-          -ldflags "-X main.version=${version:1}" {{.MAIN_PATH_REL}}
+          -ldflags "-X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}
 
   build-windows:
     desc: Cross-compile the Windows binary (defaults to GOARCH=amd64)
@@ -105,7 +105,7 @@ tasks:
       - |
         version=$(git describe --tags --abbrev=0) # First character is "v".
         go build -o {{.BUILD_DIR_NAME}}/{{.OUTPUT_NAME}} \
-          -ldflags "-X main.version=${version:1}" {{.MAIN_PATH_REL}}
+          -ldflags "-X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}
 
 
   deps-update-golang:

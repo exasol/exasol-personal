@@ -34,4 +34,10 @@ const (
 	//	// minSupportedDeploymentVersion_<featureName> is the first deployment version
 	//	// that includes <featureName> changes (explain the incompatibility here).
 	//	minSupportedDeploymentVersion_<featureName> = "X.Y.Z"
+
+	// NOTE: use this once it is clear in which version this change was released:
+	// The deployment id now generated and owner by the launcher instead of the infra preset
+	// The deployment id is also removed from the file artifacts like `secrets.json`
+	// which are written as part of the contract between launcher and infra preset.
+	// minSupported_deploymentIdByLauncher = "1.3.0" ??
 )

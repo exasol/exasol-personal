@@ -42,8 +42,6 @@ var installCmd = &cobra.Command{
 // nolint: gochecknoinits
 func init() {
 	// Install creates (init) and then operates on (deploy) the deployment directory.
-	requireDeploymentCompatibility(installCmd, minSupportedDeploymentVersionBaseline)
-
 	installCmd.Long = strings.TrimRight(installCmd.Long, "\n") +
 		"\n\t" + presetNamesForHelp(presets.PresetTypeInfrastructure,
 		presets.ListEmbeddedInfrastructuresPresets()) +
@@ -68,7 +66,7 @@ func init() {
 			installVars,
 			commonFlags.DeploymentDir,
 			!commonFlags.NoLauncherVersionCheck,
-			version,
+			CurrentLauncherVersion,
 		); err != nil {
 			return fmt.Errorf("initialization failed: %w", err)
 		}
@@ -103,6 +101,7 @@ func init() {
 	// init runs in PreRunE, deploy runs in PersistentPostRunE
 	installCmd.RunE = func(_ *cobra.Command, _ []string) error { return nil }
 
+	requireMinorVersionCompatibility(installCmd, CurrentLauncherVersion)
 	registerDeploymentDirFlag(installCmd, commonFlags)
 	registerVerboseFlag(installCmd, commonFlags)
 	registerDeployFlags(installCmd, commonFlags)

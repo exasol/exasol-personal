@@ -36,7 +36,7 @@ var unlockCmd = &cobra.Command{
 
 // nolint: gochecknoinits
 func init() {
-	requireDeploymentCompatibility(unlockCmd, minSupportedDeploymentVersionBaseline)
+	requireMinorVersionCompatibility(unlockCmd, minSupportedDeploymentVersionBaseline)
 	requireInitializedDeploymentDir(unlockCmd)
 	registerDeploymentDirFlag(unlockCmd, commonFlags)
 	diagCmd.AddCommand(unlockCmd)
