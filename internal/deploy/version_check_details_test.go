@@ -10,6 +10,25 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 )
 
+func TestGetVersionCheckURL_DefaultWhenEnvMissing(t *testing.T) {
+	t.Setenv(VersionCheckURLEnvVar, "")
+
+	url := GetVersionCheckURL()
+	if url != DefaultVersionCheckURL {
+		t.Fatalf("expected default URL %q, got %q", DefaultVersionCheckURL, url)
+	}
+}
+
+func TestGetVersionCheckURL_UsesEnvOverride(t *testing.T) {
+	const expected = "https://example.com/custom-check"
+	t.Setenv(VersionCheckURLEnvVar, expected)
+
+	url := GetVersionCheckURL()
+	if url != expected {
+		t.Fatalf("expected env override URL %q, got %q", expected, url)
+	}
+}
+
 func TestGetVersionCheckDetails_EmptyClusterIdentityWhenNoDeploymentDir(t *testing.T) {
 	t.Parallel()
 
