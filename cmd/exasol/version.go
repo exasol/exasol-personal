@@ -82,7 +82,7 @@ func printLatestVersionText(
 
 	fmt.Fprintf(
 		os.Stdout,
-		"A new version of Exasol Personal is available: %s "+
+		"The latest official version of Exasol Personal available is: %s "+
 			"(you are using %s)\n",
 		response.LatestVersion.Version,
 		currentVersion,

@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# isDbVersionCheckEnabled.sh - Returns success (exit 0) iff DB version checks are enabled.
-#
-# Intended usage:
-#   - systemd ExecCondition= for optional host-side fallback behavior
+# isDbVersionCheckEnabled.sh - Returns success (exit 0) if DB version checks are enabled.
 #
 # Contract:
 #   - exit 0 => DB version checks enabled
@@ -20,7 +17,7 @@ if [[ ! -f "${INSTALL_JSON}" ]]; then
   exit 2
 fi
 
-no_db_version_check="$(install_jq -er '.no_db_version_check // false')"
+no_db_version_check="$(install_jq -er '.no_db_version_check // false' || echo false)"
 if [[ "${no_db_version_check}" == "true" ]]; then
   exit 1
 fi
