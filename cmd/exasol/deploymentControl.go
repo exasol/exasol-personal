@@ -85,6 +85,7 @@ func registerStartFlags() {
 func init() {
 	requireMinorVersionCompatibility(startCmd, CurrentLauncherVersion)
 	requireInitializedDeploymentDir(startCmd)
+	requireDeploymentFileLogging(startCmd)
 	registerStartFlags()
 	registerVerboseFlag(startCmd, commonFlags)
 	registerDeploymentDirFlag(startCmd, commonFlags)
@@ -92,6 +93,7 @@ func init() {
 
 	requireMinorVersionCompatibility(stopCmd, CurrentLauncherVersion)
 	requireInitializedDeploymentDir(stopCmd)
+	requireDeploymentFileLogging(stopCmd)
 	registerVerboseFlag(stopCmd, commonFlags)
 	registerDeploymentDirFlag(stopCmd, commonFlags)
 	rootCmd.AddCommand(stopCmd)

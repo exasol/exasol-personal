@@ -42,6 +42,8 @@ var installCmd = &cobra.Command{
 // nolint: gochecknoinits
 func init() {
 	// Install creates (init) and then operates on (deploy) the deployment directory.
+	requireDeploymentFileLogging(installCmd)
+
 	installCmd.Long = strings.TrimRight(installCmd.Long, "\n") +
 		"\n\t" + presetNamesForHelp(presets.PresetTypeInfrastructure,
 		presets.ListEmbeddedInfrastructuresPresets()) +
@@ -71,7 +73,7 @@ func init() {
 			return fmt.Errorf("initialization failed: %w", err)
 		}
 
-		return nil
+		return setupDeploymentLogSession(cmd, commonFlags.DeploymentDir)
 	}
 
 	// Perform deployment after initialization completes.
