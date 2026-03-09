@@ -71,6 +71,12 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
+		if !deploymentLogSessionStartsAfterInit(cmd) {
+			if err := setupDeploymentLogSession(cmd, commonFlags.DeploymentDir); err != nil {
+				return err
+			}
+		}
+
 		// Best-effort version update hint (non-blocking; logs only when an update is available).
 		// Design decision: never block commands on this.
 		if cmd.Name() != "version" {
@@ -85,25 +91,27 @@ var rootCmd = &cobra.Command{
 }
 
 func setupLogging() error {
-	var logger *slog.Logger
+	var terminalHandler slog.Handler
 
 	selectedLevel, ok := logLevelMap[commonFlags.LogLevel]
 	if !ok {
 		return fmt.Errorf("%w: \"%s\"", ErrInvalidLogLevel, commonFlags.LogLevel)
 	}
+
 	if term.IsTerminal(int(os.Stdout.Fd())) {
 		levelVar := slog.LevelVar{}
 		levelVar.Set(selectedLevel)
 		// Design decision: when attached to a terminal, prefer human-friendly logs.
-		logger = slog.New(tint.NewHandler(os.Stderr, &tint.Options{
+		terminalHandler = tint.NewHandler(os.Stderr, &tint.Options{
 			Level: &levelVar, TimeFormat: time.DateTime,
-		}))
+		})
 	} else {
-		logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		terminalHandler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 			Level: selectedLevel,
-		}))
+		})
 	}
-	slog.SetDefault(logger)
+
+	slog.SetDefault(slog.New(newRoutingHandler(terminalHandler, globalDeploymentFileSink)))
 
 	slog.Debug(
 		"using log level",
@@ -124,6 +132,8 @@ func addHelpFlag(cmd *cobra.Command) {
 }
 
 func Execute() error {
+	defer runDeploymentLogCleanup()
+
 	registerLogLevelFlag(rootCmd, commonFlags)
 
 	// Register infrastructure variable flags only for commands that need them.

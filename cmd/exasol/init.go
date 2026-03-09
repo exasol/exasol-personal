@@ -51,6 +51,7 @@ func init() {
 	// exists, the compatibility check protects against operating on an incompatible
 	// deployment.
 	requireMinorVersionCompatibility(initCmd, minSupportedDeploymentVersionBaseline)
+	requireDeploymentFileLogging(initCmd)
 
 	// Augment long help with embedded preset names so users know what they can pass.
 	initCmd.Long = strings.TrimRight(initCmdLongDesc, "\n") +
@@ -67,7 +68,7 @@ func init() {
 
 		safePrint(deploy.EulaNoticeText)
 
-		return deploy.InitDeployment(
+		err := deploy.InitDeployment(
 			cmd.Context(),
 			infraPreset,
 			installPreset,
@@ -77,6 +78,11 @@ func init() {
 			!commonFlags.NoLauncherVersionCheck,
 			CurrentLauncherVersion,
 		)
+		if err != nil {
+			return err
+		}
+
+		return setupDeploymentLogSession(cmd, commonFlags.DeploymentDir)
 	}
 
 	registerInitFlags(initCmd, commonFlags)
