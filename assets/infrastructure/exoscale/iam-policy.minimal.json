@@ -1,0 +1,64 @@
+{
+  "comment": "Minimal IAM policy for Exasol Personal deployments on Exoscale. Apply this policy to the IAM role used by your Terraform operator API key.",
+  "note": "Exoscale IAM policies are configured via the Portal or API (exoscale_iam_role resource). This JSON is provided as a reference for the required service permissions.",
+  "default-service-strategy": "deny",
+  "services": {
+    "compute-legacy": {
+      "type": "allow",
+      "rules": [
+        {
+          "expression": "operation in ['list-instances', 'get-instance', 'create-instance', 'update-instance', 'delete-instance', 'start-instance', 'stop-instance', 'reboot-instance']"
+        },
+        {
+          "expression": "operation in ['list-instance-types', 'get-instance-type']"
+        },
+        {
+          "expression": "operation in ['list-templates', 'get-template']"
+        },
+        {
+          "expression": "operation in ['list-ssh-keys', 'get-ssh-key', 'create-ssh-key', 'delete-ssh-key']"
+        },
+        {
+          "expression": "operation in ['list-security-groups', 'get-security-group', 'create-security-group', 'delete-security-group']"
+        },
+        {
+          "expression": "operation in ['list-security-group-rules', 'add-rule-to-security-group', 'delete-rule-from-security-group']"
+        },
+        {
+          "expression": "operation in ['list-private-networks', 'get-private-network', 'create-private-network', 'update-private-network', 'delete-private-network', 'attach-instance-to-private-network', 'detach-instance-from-private-network']"
+        }
+      ]
+    },
+    "block-storage": {
+      "type": "allow",
+      "rules": [
+        {
+          "expression": "operation in ['list-block-storage-volumes', 'get-block-storage-volume', 'create-block-storage-volume', 'update-block-storage-volume', 'delete-block-storage-volume', 'attach-block-storage-volume-to-instance', 'detach-block-storage-volume-from-instance']"
+        },
+        {
+          "expression": "operation in ['list-block-storage-snapshots', 'get-block-storage-snapshot', 'create-block-storage-snapshot', 'delete-block-storage-snapshot']"
+        }
+      ]
+    },
+    "sos": {
+      "type": "allow",
+      "rules": [
+        {
+          "expression": "operation in ['create-bucket', 'delete-bucket', 'list-buckets', 'get-bucket-acl', 'put-bucket-acl']",
+          "comment": "SOS bucket operations are performed via S3 API using the aws.sos provider; this grants the IAM key permission to use SOS"
+        }
+      ]
+    },
+    "iam": {
+      "type": "allow",
+      "rules": [
+        {
+          "expression": "operation in ['list-iam-roles', 'get-iam-role', 'create-iam-role', 'update-iam-role', 'delete-iam-role']"
+        },
+        {
+          "expression": "operation in ['list-iam-api-keys', 'get-iam-api-key', 'create-iam-api-key', 'revoke-iam-api-key']"
+        }
+      ]
+    }
+  }
+}
