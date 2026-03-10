@@ -66,7 +66,7 @@ locals {
 
     # Keep only fields currently consumed by host-side scripts.
     # This payload is delivered through cloud-init user-data and contributes
-    # directly to the 16KB AWS limit.
+    # directly to the 32KB Exoscale user-data limit.
     deploymentId = local.deployment_id
     numNodes     = length(local.nodes)
     n11Ip        = local.n11_ip
@@ -84,7 +84,7 @@ locals {
     preInstall = {
       # preInstall hooks run on *all* nodes
       root = {
-        scripts = ["/opt/exasol_launcher/scripts/aws_setup_data_disk.sh"]
+        scripts = []
       }
       user = {
         scripts = []
@@ -92,16 +92,19 @@ locals {
     }
     postInstall = {
       # postInstall hooks run on the *access node (n11) only*
-      scripts = var.s3_archive_enabled ? ["/opt/exasol_launcher/scripts/aws_registerS3ArchiveVolume.sh"] : []
+      scripts = var.s3_archive_enabled ? ["/opt/exasol_launcher/scripts/exoscale_registerSOSArchiveVolume.sh"] : []
     }
 
     # Cloud-provider specific values needed by optional infra hooks.
-    aws = {
-      region = data.aws_region.current.id
+    exoscale = {
+      zone = var.zone
       archive = {
         enabled    = var.s3_archive_enabled
         bucketId   = local.archive_bucket_id
         volumeName = "default_archive"
+        sosEndpoint = local.sos_endpoint
+        accessKey  = var.s3_archive_enabled ? exoscale_iam_api_key.archive_sos_key[0].key : ""
+        secretKey  = var.s3_archive_enabled ? exoscale_iam_api_key.archive_sos_key[0].secret : ""
       }
     }
   }
@@ -116,18 +119,18 @@ locals {
       # Exasol always uses the same final disk alias across providers.
       # The udev match clause identifies the data disk so prepareExasol.sh can
       # create a persistent udev rule with the /dev/exasol_data_01 alias.
-      # On AWS, the EBS volume ID is a stable identifier known at plan time.
+      # On Exoscale, virtio truncates UUIDs to 20 chars in ID_SERIAL.
       hostDatadisk      = "/dev/exasol_data_01"
-      hostDatadiskMatch = "ENV{ID_SERIAL_SHORT}==\"${replace(try(aws_ebs_volume.data_disks[n.name].id, ""), "-", "")}\""
+      hostDatadiskMatch = "ENV{ID_SERIAL}==\"${substr(try(exoscale_block_storage_volume.data_disks[n.name].id, ""), 0, 20)}\""
     }
   }
 }
 
 data "cloudinit_config" "cloud_config" {
   for_each = { for node in local.nodes : node.name => node }
-  # Keep payload size below AWS user-data limits as presets/scripts evolve.
-  # We pass rendered output into aws_instance.user_data_base64, so explicit
-  # base64+gzip here ensures a compressed transport representation.
+  # Keep payload size below Exoscale user-data limit (32KB) as presets/scripts evolve.
+  # gzip+base64 ensures a compressed transport representation that Exoscale's
+  # cloud-init agent handles natively.
   gzip          = true
   base64_encode = true
 
@@ -175,6 +178,29 @@ data "cloudinit_config" "cloud_config" {
           }
         ]
       )
+    })
+  }
+
+  part {
+    content_type = "text/cloud-config"
+    # Prepend Exoscale-specific network setup to installation preset's runcmd.
+    # The merge_how directive tells cloud-init to prepend this runcmd list to the
+    # existing one from the installation preset instead of replacing it.
+    filename = "99-exoscale-network.yaml"
+    content = yamlencode({
+      merge_how = [
+        {
+          name     = "list"
+          settings = ["prepend"]
+        },
+        {
+          name     = "dict"
+          settings = ["no_replace", "recurse_list"]
+        }
+      ]
+      runcmd = [
+        "dhclient eth1" # Obtain IP from Exoscale's managed private network DHCP
+      ]
     })
   }
 }

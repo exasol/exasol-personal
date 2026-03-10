@@ -3,9 +3,11 @@
 #
 # This script performs the following tasks:
 # 1. Downloads the c4 binary (Exasol installer tool)
-# 2. Configures udev rules for Exasol data disk permissions
-# 3. Runs c4 preplay to prepare the system environment
-# 4. Installs the c4 binary to the ubuntu user's home directory
+# 2. Runs c4 preplay to prepare the system environment
+# 3. Installs the c4 binary to the ubuntu user's home directory
+#
+# Note: Data disk permissions are configured by infrastructure-specific
+# preInstall hooks (see infrastructure preset files).
 #
 # This script runs during instance initialization and must be executed as root.
 

@@ -1,0 +1,6 @@
+name: Exasol on Exoscale with Ubuntu
+description: Provisioning on Exoscale. Ubuntu, SOS archive volume, public IPs.
+
+tofu:
+  variablesFile: variables_public.tf
+  varsOutputFile: vars.tfvars

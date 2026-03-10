@@ -1,0 +1,24 @@
+{
+  "comment": "Broad IAM policy for Exasol Personal development/testing on Exoscale. Grants full access to all required services.",
+  "note": "Exoscale IAM policies are configured via the Portal or API (exoscale_iam_role resource). This JSON is provided as a reference for the required service permissions.",
+  "warning": "This policy grants broad access. Use iam-policy.minimal.json for production deployments.",
+  "default-service-strategy": "deny",
+  "services": {
+    "compute-legacy": {
+      "type": "allow",
+      "comment": "Full access to compute instances, templates, SSH keys, security groups, and private networks"
+    },
+    "block-storage": {
+      "type": "allow",
+      "comment": "Full access to block storage volumes and snapshots"
+    },
+    "sos": {
+      "type": "allow",
+      "comment": "Full access to Simple Object Storage (SOS) for archive volumes"
+    },
+    "iam": {
+      "type": "allow",
+      "comment": "Full access to IAM roles and API keys"
+    }
+  }
+}
