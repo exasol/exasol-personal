@@ -66,7 +66,7 @@ locals {
 
     # Keep only fields currently consumed by host-side scripts.
     # This payload is delivered through cloud-init user-data and contributes
-    # directly to the 16KB AWS limit.
+    # directly to the 32KB Exoscale user-data limit.
     deploymentId = local.deployment_id
     numNodes     = length(local.nodes)
     n11Ip        = local.n11_ip
@@ -84,7 +84,7 @@ locals {
     preInstall = {
       # preInstall hooks run on *all* nodes
       root = {
-        scripts = ["/opt/exasol_launcher/scripts/aws_setup_data_disk.sh"]
+        scripts = ["/opt/exasol_launcher/scripts/exoscale_setup_data_disk.sh"]
       }
       user = {
         scripts = []
@@ -92,16 +92,19 @@ locals {
     }
     postInstall = {
       # postInstall hooks run on the *access node (n11) only*
-      scripts = var.s3_archive_enabled ? ["/opt/exasol_launcher/scripts/aws_registerS3ArchiveVolume.sh"] : []
+      scripts = var.s3_archive_enabled ? ["/opt/exasol_launcher/scripts/exoscale_registerSOSArchiveVolume.sh"] : []
     }
 
     # Cloud-provider specific values needed by optional infra hooks.
-    aws = {
-      region = data.aws_region.current.id
+    exoscale = {
+      zone = var.zone
       archive = {
         enabled    = var.s3_archive_enabled
         bucketId   = local.archive_bucket_id
         volumeName = "default_archive"
+        sosEndpoint = local.sos_endpoint
+        accessKey  = var.s3_archive_enabled ? exoscale_iam_api_key.archive_sos_key[0].key : ""
+        secretKey  = var.s3_archive_enabled ? exoscale_iam_api_key.archive_sos_key[0].secret : ""
       }
     }
   }
@@ -112,16 +115,16 @@ locals {
       name         = n.name
       privateIp    = n.ip
       myId         = n.name
-      hostDatadisk = try(aws_ebs_volume.data_disks[n.name].id, "")
+      hostDatadisk = try(exoscale_block_storage_volume.data_disks[n.name].id, "")
     }
   }
 }
 
 data "cloudinit_config" "cloud_config" {
   for_each = { for node in local.nodes : node.name => node }
-  # Keep payload size below AWS user-data limits as presets/scripts evolve.
-  # We pass rendered output into aws_instance.user_data_base64, so explicit
-  # base64+gzip here ensures a compressed transport representation.
+  # Keep payload size below Exoscale user-data limit (32KB) as presets/scripts evolve.
+  # gzip+base64 ensures a compressed transport representation that Exoscale's
+  # cloud-init agent handles natively.
   gzip          = true
   base64_encode = true
 
@@ -169,6 +172,24 @@ data "cloudinit_config" "cloud_config" {
           }
         ]
       )
+      # Cloud-init only uses the LAST runcmd from all parts. We must duplicate the
+      # installation preset's commands here and add dhclient eth1 at the start to
+      # obtain an IP from Exoscale's managed private network DHCP server before any
+      # services need private network connectivity.
+      runcmd = [
+        "dhclient eth1",
+        "echo 'EXASOL-INSTALL-SUBSTEP: System package installation and updates completed'",
+        "echo 'EXASOL-INSTALL-SUBSTEP: Installation scripts and systemd services deployed'",
+        "mkdir -p /etc/exasol_launcher",
+        "mkdir -p /var/lib/exasol_launcher/state",
+        "mkdir -p /var/lib/exasol_launcher/state/nodes",
+        "chown -R ubuntu: /var/lib/exasol_launcher",
+        "touch /var/lib/exasol_launcher/state/cloud-init.complete",
+        "echo 'EXASOL-INSTALL-SUBSTEP: Configuring systemd services...'",
+        "systemctl daemon-reload",
+        "systemctl enable --now --no-block exasol_launcher.target",
+        "echo 'EXASOL-INSTALL-SUBSTEP: Installation started in background'"
+      ]
     })
   }
 }

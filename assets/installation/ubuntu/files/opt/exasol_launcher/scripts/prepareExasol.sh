@@ -3,9 +3,11 @@
 #
 # This script performs the following tasks:
 # 1. Downloads the c4 binary (Exasol installer tool)
-# 2. Configures udev rules for Exasol data disk permissions
-# 3. Runs c4 preplay to prepare the system environment
-# 4. Installs the c4 binary to the ubuntu user's home directory
+# 2. Runs c4 preplay to prepare the system environment
+# 3. Installs the c4 binary to the ubuntu user's home directory
+#
+# Note: Data disk permissions are configured by infrastructure-specific
+# preInstall hooks (see infrastructure preset files).
 #
 # This script runs during instance initialization and must be executed as root.
 
@@ -29,16 +31,6 @@ if ! curl -fsSL -O "https://x-up.s3.amazonaws.com/releases/c4/linux/x86_64/${c4_
 fi
 
 chmod +x c4
-
-log_substep_info "Setting up disk permissions"
-
-data_volume_id="$(node_jq -er '.hostDatadisk')"
-cat <<EOF | tee /etc/udev/rules.d/90-exasol.rules
-SUBSYSTEM=="block", ENV{ID_SERIAL_SHORT}=="${data_volume_id/-/}", OWNER="ubuntu", MODE="0660"
-SUBSYSTEM=="block", ENV{ID_SERIAL_SHORT}=="${data_volume_id/-/}", SYMLINK+="exasol_data_01", MODE="0660"
-EOF
-udevadm control --reload-rules
-udevadm trigger
 
 log_substep_info "Running c4 preplay"
 
