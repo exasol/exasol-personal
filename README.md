@@ -215,6 +215,79 @@ Your browser may show a security warning when connecting to Exasol Admin because
 
 To connect with SSH to the EC2 instance that your Exasol database is running on, use `exasol diag shell`.
 
+## ☁️ Add Support for Additional Cloud Platforms
+
+Exasol Personal can be deployed on cloud platforms beyond AWS through **infrastructure presets**. A preset is a self-contained directory of templates and configuration files that the launcher uses to provision infrastructure and install Exasol on it. The launcher ships with built-in presets, and you can also point it at a preset directory on your local filesystem.
+
+### Two preset types
+
+Each deployment uses two presets together:
+
+- **Infrastructure preset** — provisions cloud resources (nodes, disks, network) and prepares node bootstrap data. The built-in `aws` preset uses OpenTofu templates to manage AWS resources.
+- **Installation preset** — defines how Exasol is installed and configured on the provisioned nodes. The built-in `ubuntu` installation preset is used by default and works with any infrastructure preset that follows the same conventions.
+
+### Using presets on the command line
+
+The `install` (and `init`) command takes the infrastructure preset as its first argument and an optional installation preset as its second argument:
+
+```
+exasol install <infra-preset> [install-preset]
+```
+
+**Built-in presets** are selected by name:
+
+```bash
+# Use the built-in AWS infrastructure preset with the default installation preset
+exasol install aws
+
+# Explicitly specify both presets by name
+exasol install aws ubuntu
+```
+
+**External presets** on your local filesystem are selected by path. Any argument that looks like a path (starts with `.`, `~`, or contains `/` or `\`) is treated as a directory path:
+
+```bash
+# Use a local infrastructure preset directory
+exasol install ./my-gcp-preset
+
+# Use local directories for both presets
+exasol install ./my-gcp-preset ./my-install-preset
+
+# Use a built-in installation preset with a local infrastructure preset
+exasol install /path/to/my-preset ubuntu
+```
+
+To see the list of available built-in presets, run:
+
+```bash
+exasol presets
+```
+
+### Where built-in presets live
+
+Built-in presets are embedded in the launcher binary and sourced from:
+
+- `assets/infrastructure/<preset>/` — infrastructure presets (OpenTofu templates + `infrastructure.yaml`)
+- `assets/installation/<preset>/` — installation presets (scripts, cloud-init fragments + `installation.yaml`)
+
+When you run `exasol install`, the selected presets are extracted into the deployment directory under `infrastructure/` and `installation/`.
+
+External presets can live in any folder that you choose.
+
+### Creating a new infrastructure preset
+
+To add support for a new cloud platform, create a preset directory with the following:
+
+1. **`infrastructure.yaml` manifest** — at minimum a `name`, `description`, and a `tofu` block pointing to your variables file.
+2. **OpenTofu templates** — to provision the required resources (compute instances, networking, storage).
+3. **Required deployment artifacts** written by the templates to the `infrastructure_artifact_dir` output directory:
+   - `deployment.json` — node details (IPs, SSH info, DB endpoints, TLS cert)
+   - `secrets.json` — credentials (`dbPassword`, `adminUiPassword`)
+   - `node_access.pem` — SSH private key for the launcher to use
+4. **Installation preset integration** — embed installation assets (from `installation/cloudconf/` and `installation/files/`) into your node bootstrap mechanism (e.g. cloud-init). The existing AWS preset at `assets/infrastructure/aws/` is the reference implementation.
+
+For a detailed description of the preset contract, manifest schemas, variable channels, and compatibility guidelines, see [doc/presets.md](doc/presets.md).
+
 ## ⚖️ Licensing
 
 The Exasol Launcher source code in this repository is open-source software licensed under the [MIT License](./LICENSE). You are free to use, modify, and distribute it. Contributions are made under the same terms.
