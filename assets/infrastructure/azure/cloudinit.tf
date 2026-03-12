@@ -11,12 +11,12 @@
 locals {
   # --- Path "constants" ---
   # Changing these paths will break the deployment processes as we use them to find the installation preset contents  
-  installation_cloudconf_dir = "${var.installation_preset_dir}/cloudconf"
-  installation_files_dir     = "${var.installation_preset_dir}/files"
+  installation_cloudconf_dir      = "${var.installation_preset_dir}/cloudconf"
+  installation_files_dir          = "${var.installation_preset_dir}/files"
 
   # Optional infrastructure-preset-provided host file overlay.
   # This is used for infrastructure-specific scripts or configs that should not live in provider-agnostic installation presets.
-  infrastructure_files_dir = "${path.module}/files"
+  infrastructure_files_dir        = "${path.module}/files"
 
   # Changing these paths will break the installation processes on the hosts as they look for these files  
   launcher_config_dir             = "/etc/exasol_launcher"
@@ -28,14 +28,14 @@ locals {
   # as its own cloud-init "part" (stable lexicographic order) to avoid Terraform-side YAML
   # merging logic and keep the behavior easy to understand.
   installation_cloudconf_files = sort(
-    fileset(local.installation_cloudconf_dir, "*")
+    fileset(local.installation_cloudconf_dir, "*")    
   )
 
   # Materialize metadata of files to be installed.
   installation_node_files = [
     for rel in fileset(local.installation_files_dir, "**") : {
-      src_path    = "${local.installation_files_dir}/${rel}"
-      dest_path   = "/${rel}"
+      src_path  = "${local.installation_files_dir}/${rel}"
+      dest_path = "/${rel}"
       permissions = endswith(rel, ".sh") ? "0755" : "0644"
     }
   ]
@@ -44,8 +44,8 @@ locals {
   # These are applied after installation preset files, so infra presets can override paths when necessary.
   infrastructure_node_files = [
     for rel in fileset(local.infrastructure_files_dir, "**") : {
-      src_path    = "${local.infrastructure_files_dir}/${rel}"
-      dest_path   = "/${rel}"
+      src_path  = "${local.infrastructure_files_dir}/${rel}"
+      dest_path = "/${rel}"
       permissions = endswith(rel, ".sh") ? "0755" : "0644"
     }
   ]
@@ -54,6 +54,14 @@ locals {
   node_ips           = [for n in local.nodes : n.ip]
   node_ips_space_sep = join(" ", local.node_ips)
   n11_ip             = one([for n in local.nodes : n.ip if n.name == "n11"])
+
+  # JSON-friendly node list (camelCase keys).
+  nodes_payload = [
+    for n in local.nodes : {
+      name      = n.name
+      privateIp = n.ip
+    }
+  ]
 
   # Deployment metadata written to disk.
   # Keep this focused: only include information that is plausibly useful on the node
@@ -64,13 +72,11 @@ locals {
   # NOTE: This includes sensitive material (SSH private key, DB/AdminUI passwords, TLS key).
   infrastructure_payload = {
 
-    # Keep only fields currently consumed by host-side scripts.
-    # This payload is delivered through cloud-init user-data and contributes
-    # directly to the 16KB AWS limit.
-    deploymentId = local.deployment_id
-    numNodes     = length(local.nodes)
-    n11Ip        = local.n11_ip
-
+    # Mandatory section. These values shall always be provided
+    deploymentId    = local.deployment_id
+    numNodes        = length(local.nodes)
+    n11Ip           = local.n11_ip
+        
     adminPrivateKey    = tls_private_key.ssh_key.private_key_pem
     hostAddrs          = local.node_ips_space_sep
     hostExternalAddrs  = local.node_ips_space_sep
@@ -79,6 +85,7 @@ locals {
     tlsKey             = tls_private_key.tls_key.private_key_pem
     tlsCa              = tls_self_signed_cert.tls_ca_cert.cert_pem
     tlsCert            = tls_locally_signed_cert.tls_cert.cert_pem
+    barrierPort       = "120"    
 
     # Optional infrastructure-specific hook scripts.      
     preInstall = {
@@ -92,16 +99,30 @@ locals {
     }
     postInstall = {
       # postInstall hooks run on the *access node (n11) only*
-      scripts = var.s3_archive_enabled ? ["/opt/exasol_launcher/scripts/aws_registerS3ArchiveVolume.sh"] : []
+      #scripts = var.s3_archive_enabled ? ["/opt/exasol_launcher/scripts/aws_registerS3ArchiveVolume.sh"] : []
+      scripts = []
     }
+        
+    azure = {
+      location     = var.location
+      instanceType = var.instance_type
 
-    # Cloud-provider specific values needed by optional infra hooks.
-    aws = {
-      region = data.aws_region.current.id
-      archive = {
-        enabled    = var.s3_archive_enabled
-        bucketId   = local.archive_bucket_id
-        volumeName = "default_archive"
+      image = {
+        publisher = var.image_publisher
+        offer     = var.image_offer
+        sku       = var.image_sku
+        version   = var.image_version
+      }
+
+      storage = {
+        diskSku          = var.disk_sku
+        osVolumeSizeGb   = var.os_volume_size
+        dataVolumeSizeGb = var.data_volume_size
+      }
+
+      network = {
+        vnetCidr   = var.vnet_cidr
+        subnetCidr = var.subnet_cidr
       }
     }
   }
@@ -114,22 +135,22 @@ locals {
       myId         = n.name
 
       # Exasol always uses the same final disk alias across providers.
-      # On AWS, the EBS volume ID is a stable identifier that prepareExasol.sh
-      # converts into the /dev/exasol_data_01 alias via udev.
+      # Azure disk paths under /dev can vary with guest/kernel/device presentation,
+      # so we store the attached LUN as the stable cloud-side identifier and let
+      # prepareExasol.sh resolve it to the actual device before creating
+      # /dev/exasol_data_01.
       hostDatadisk           = "/dev/exasol_data_01"
-      hostDatadiskSourceType = "aws-ebs-volume-id"
-      hostDatadiskSource     = try(aws_ebs_volume.data_disks[n.name].id, "")
+      hostDatadiskSourceType = "azure-lun"
+      hostDatadiskSource     = 0
     }
   }
 }
 
 data "cloudinit_config" "cloud_config" {
   for_each = { for node in local.nodes : node.name => node }
-  # Keep payload size below AWS user-data limits as presets/scripts evolve.
-  # We pass rendered output into aws_instance.user_data_base64, so explicit
-  # base64+gzip here ensures a compressed transport representation.
-  gzip          = true
-  base64_encode = true
+
+  gzip          = false
+  base64_encode = false
 
   dynamic "part" {
     for_each = local.installation_cloudconf_files
@@ -137,16 +158,16 @@ data "cloudinit_config" "cloud_config" {
     content {
       content_type = "text/cloud-config"
       # Numeric prefix makes ordering/precedence explicit when debugging multipart user-data.
-      filename = "10-cloudconf-${part.value}"
-      content  = file("${local.installation_cloudconf_dir}/${part.value}")
+      filename     = "10-cloudconf-${part.value}"
+      content      = file("${local.installation_cloudconf_dir}/${part.value}")
     }
   }
 
   part {
     content_type = "text/cloud-config"
     # Keep this last so it can intentionally override earlier preset cloud-config values.
-    filename = "99-write-files.yaml"
-    content = yamlencode({
+    filename     = "99-write-files.yaml"
+    content      = yamlencode({
       write_files = concat(
         [
           {

@@ -1,0 +1,6 @@
+name: Exasol in Azure on Ubuntu
+description: Provisioning in Azure. Ubuntu, managed disks, static public IP.
+
+tofu:
+  variablesFile: variables_public.tf
+  varsOutputFile: vars.tfvars

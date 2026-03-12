@@ -1,0 +1,18 @@
+{
+  "Name": "Exasol Personal Azure Broad",
+  "IsCustom": true,
+  "Description": "Broad access for Exasol Personal Azure infrastructure within assigned scopes.",
+  "Actions": [
+    "Microsoft.Resources/subscriptions/resourceGroups/*",
+    "Microsoft.Network/*",
+    "Microsoft.Compute/*",
+    "Microsoft.Authorization/*/read",
+    "Microsoft.Insights/*/read"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/<subscription-id>"
+  ]
+}
