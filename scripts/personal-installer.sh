@@ -69,9 +69,9 @@ Next steps:
 
 Where:
   <infra preset name-or-path>   Infrastructure preset to use (e.g., aws)
-  [install preset name-or-path] Optional installation preset (e.g., rootless)
+  [install preset name-or-path] Optional installation preset (e.g., ubuntu)
 
 Examples:
   ../exasol install aws
-  ../exasol install aws rootless
+  ../exasol install aws ubuntu
 EOF
