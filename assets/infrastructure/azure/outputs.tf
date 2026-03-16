@@ -1,7 +1,3 @@
-# ============
-# Azure
-# ============
-
 locals {
   infrastructure_artifact_dir = abspath(var.infrastructure_artifact_dir)
   key_file_name               = "node_access.pem"

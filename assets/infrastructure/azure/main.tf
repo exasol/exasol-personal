@@ -1,7 +1,3 @@
-# =======
-# Azure
-# =======
-
 locals {
   common_tags = {
     ManagedBy  = "opentofu"
@@ -29,7 +25,7 @@ locals {
 
 resource "azurerm_resource_group" "rg" {
   name     = local.rg_name
-  location = var.location
+  location = local.effective_location
   tags     = local.common_tags
 }
 
@@ -95,6 +91,7 @@ resource "azurerm_linux_virtual_machine" "nodes" {
     azurerm_network_interface.nodes[each.key].id
   ]
   disable_password_authentication = true
+
   tags                            = local.common_tags
 
   admin_ssh_key {
@@ -116,7 +113,7 @@ resource "azurerm_linux_virtual_machine" "nodes" {
     version   = var.image_version
   }
 
-  custom_data = base64encode(data.cloudinit_config.cloud_config[each.key].rendered)
+  custom_data = data.cloudinit_config.cloud_config[each.key].rendered
 }
 
 resource "azurerm_managed_disk" "data_disks" {

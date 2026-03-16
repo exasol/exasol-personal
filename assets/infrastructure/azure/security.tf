@@ -1,7 +1,3 @@
-# ===============
-# AZURE
-# ===============
-
 resource "azurerm_network_security_group" "exasol_instance" {
   name                = "${local.deployment_id}-nsg"
   location            = azurerm_resource_group.rg.location

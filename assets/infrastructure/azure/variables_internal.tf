@@ -13,6 +13,7 @@ variable "deployment_id" {
   type        = string
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "cluster_identity" {
   description = "Launcher-generated opaque cluster identity token"
   type        = string

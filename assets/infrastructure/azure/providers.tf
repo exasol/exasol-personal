@@ -1,7 +1,3 @@
-# =======
-# Azure
-# =======
-
 provider "azurerm" {
   features {}
 }
