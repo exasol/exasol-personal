@@ -55,14 +55,6 @@ locals {
   node_ips_space_sep = join(" ", local.node_ips)
   n11_ip             = one([for n in local.nodes : n.ip if n.name == "n11"])
 
-  # JSON-friendly node list (camelCase keys).
-  nodes_payload = [
-    for n in local.nodes : {
-      name      = n.name
-      privateIp = n.ip
-    }
-  ]
-
   # Deployment metadata written to disk.
   # Keep this focused: only include information that is plausibly useful on the node
   # at runtime or for diagnostics. Operator-only settings (e.g. desired power state) should
@@ -104,7 +96,7 @@ locals {
     }
         
     azure = {
-      location     = var.location
+      location     = local.effective_location
       instanceType = var.instance_type
 
       image = {
@@ -134,14 +126,16 @@ locals {
       privateIp    = n.ip
       myId         = n.name
 
-      # Exasol always uses the same final disk alias across providers.
-      # Azure disk paths under /dev can vary with guest/kernel/device presentation,
-      # so we store the attached LUN as the stable cloud-side identifier and let
-      # prepareExasol.sh resolve it to the actual device before creating
-      # /dev/exasol_data_01.
+      # Azure disk device names are not stable across reboots, so we cannot resolve
+      # the udev match at plan time. Instead we provide LUN-based symlink paths
+      # for runtime discovery by prepareExasol.sh
       hostDatadisk           = "/dev/exasol_data_01"
-      hostDatadiskSourceType = "azure-lun"
-      hostDatadiskSource     = 0
+      hostDatadiskMatch = {
+        discoveryPaths = [
+          "/dev/disk/azure/scsi1/lun0",
+          "/dev/disk/azure/data/by-lun/0",
+        ]
+      }
     }
   }
 }
@@ -149,8 +143,8 @@ locals {
 data "cloudinit_config" "cloud_config" {
   for_each = { for node in local.nodes : node.name => node }
 
-  gzip          = false
-  base64_encode = false
+  gzip          = true
+  base64_encode = true
 
   dynamic "part" {
     for_each = local.installation_cloudconf_files
@@ -161,6 +155,27 @@ data "cloudinit_config" "cloud_config" {
       filename     = "10-cloudconf-${part.value}"
       content      = file("${local.installation_cloudconf_dir}/${part.value}")
     }
+  }
+
+  # Azure VM start hang: Disable WA-Agent reprovisioning
+  # (Provisioning.Enabled=n) while keeping agent active
+  part {
+    content_type = "text/cloud-config"
+    filename     = "20-azure-waagent-config.yaml"
+    content      = yamlencode({
+      write_files = [
+        {
+          path        = "/etc/waagent.conf.d/10-exasol.conf"
+          permissions = "0644"
+          content     = join("\n", [
+            "Provisioning.Enabled=n",
+            "Provisioning.UseCloudInit=y",
+            "Provisioning.RegenerateSshHostKeyPair=n",
+            "ResourceDisk.Format=n",
+          ])
+        }
+      ]
+    })
   }
 
   part {

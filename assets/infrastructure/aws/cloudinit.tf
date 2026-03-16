@@ -117,8 +117,10 @@ locals {
       # On AWS, the EBS volume ID is a stable identifier that prepareExasol.sh
       # converts into the /dev/exasol_data_01 alias via udev.
       hostDatadisk           = "/dev/exasol_data_01"
-      hostDatadiskSourceType = "aws-ebs-volume-id"
-      hostDatadiskSource     = try(aws_ebs_volume.data_disks[n.name].id, "")
+      hostDatadiskMatch = {
+        udevKey   = "ID_SERIAL_SHORT"
+        udevValue = replace(try(aws_ebs_volume.data_disks[n.name].id, ""), "-", "")
+      }
     }
   }
 }

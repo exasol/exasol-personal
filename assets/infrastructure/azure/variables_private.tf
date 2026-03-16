@@ -1,11 +1,17 @@
-# ======
-# Azure
-# ======
-
 variable "location" {
   description = "Azure region for deployment"
   type        = string
-  default     = "eastus"
+  default     = ""
+}
+
+locals {
+  azure_config_path  = pathexpand("~/.azure/config")
+  azure_config_raw   = fileexists(local.azure_config_path) ? file(local.azure_config_path) : ""
+  effective_location = coalesce(
+    var.location,
+    try(regex("(?m)^\\s*location\\s*=\\s*(\\S+)", local.azure_config_raw)[0], ""),
+    "westeurope",
+  )
 }
 
 variable "resource_group_name" {
@@ -30,12 +36,6 @@ variable "allowed_cidr" {
   description = "CIDR block allowed to access the instance (e.g., your IP address)"
   type        = string
   default     = "0.0.0.0/0"
-}
-
-variable "ubuntu_version" {
-  description = "Ubuntu version label for metadata only"
-  type        = string
-  default     = "jammy"
 }
 
 variable "image_publisher" {

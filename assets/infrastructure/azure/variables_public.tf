@@ -46,8 +46,8 @@ variable "adminui_password" {
   sensitive   = true
 }
 
-variable "s3_archive_enabled" {
-  description = "Enable remote archive/backup integration: creates S3 bucket, IAM user/access keys, SSM params, and VPC S3 endpoint."
-  type        = bool
-  default     = true
-}
+#variable "s3_archive_enabled" {
+#  description = "Enable remote archive/backup integration: creates S3 bucket, IAM user/access keys, SSM params, and VPC S3 endpoint."
+#  type        = bool
+#  default     = true
+#}

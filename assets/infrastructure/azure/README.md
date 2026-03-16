@@ -73,7 +73,7 @@ The following inbound ports are opened from `var.allowed_cidr`:
 4. Local artifacts:
    - `deployment.json` - deployment summary
    - `secrets.json` - generated credentials
-   - `<deployment_id>.pem` - SSH private key
+   - `node_access.pem` - SSH private key
 
 ## Outputs
 - The preset exports deployment metadata and deployment secrets as Terraform outputs.
