@@ -18,7 +18,7 @@ locals {
         publicIp         = azurerm_public_ip.nodes[k].ip_address
         privateIp        = azurerm_network_interface.nodes[k].private_ip_address
         instanceId       = vm.id
-        dnsName          = azurerm_public_ip.nodes[k].ip_address
+        dnsName          = azurerm_public_ip.nodes[k].fqdn
         availabilityZone = ""
         ssh = {
           username = "ubuntu"

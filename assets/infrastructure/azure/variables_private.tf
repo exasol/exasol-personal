@@ -38,6 +38,18 @@ variable "allowed_cidr" {
   default     = "0.0.0.0/0"
 }
 
+variable "min_vcpus" {
+  description = "Minimum vCPU count required for the selected instance type"
+  type        = number
+  default     = 4
+}
+
+variable "min_ram_gb" {
+  description = "Minimum RAM in GB required for the selected instance type"
+  type        = number
+  default     = 16
+}
+
 variable "image_publisher" {
   description = "Azure image publisher"
   type        = string
