@@ -4,6 +4,7 @@ locals {
     Project    = "exasol-personal"
     Deployment = local.deployment_id
     CreatedAt  = var.deployment_created_at
+    Owner      = data.azuread_user.current.user_principal_name
   }
 
   deployment_id = "exasol-${var.deployment_id}"
@@ -21,6 +22,22 @@ locals {
   # Final passwords: prefer user-provided over generated
   db_password_final      = var.db_password != "" ? var.db_password : random_password.db.result
   adminui_password_final = var.adminui_password != "" ? var.adminui_password : random_password.adminui.result
+}
+
+# Fetch specs of specified VM size from Azure
+data "azapi_resource_list" "vm_sizes" {
+  type                   = "Microsoft.Compute/locations/vmSizes@2024-11-01"
+  parent_id              = "/subscriptions/${data.azurerm_subscription.current.subscription_id}/providers/Microsoft.Compute/locations/${local.effective_location}"
+  response_export_values = ["value"]
+}
+
+data "azurerm_subscription" "current" {}
+
+locals {
+  vm_sizes       = data.azapi_resource_list.vm_sizes.output.value
+  selected_vm    = one([for s in local.vm_sizes : s if s.name == var.instance_type])
+  instance_vcpus = local.selected_vm != null ? local.selected_vm.numberOfCores : 0
+  instance_ram_gb = local.selected_vm != null ? local.selected_vm.memoryInMB / 1024 : 0
 }
 
 resource "azurerm_resource_group" "rg" {
@@ -52,6 +69,7 @@ resource "azurerm_public_ip" "nodes" {
   resource_group_name = azurerm_resource_group.rg.name
   allocation_method   = "Static"
   sku                 = "Standard"
+  domain_name_label   = "${local.deployment_id}-${each.key}"
   tags                = local.common_tags
 }
 
@@ -81,6 +99,24 @@ resource "azurerm_network_interface_security_group_association" "nodes" {
 
 resource "azurerm_linux_virtual_machine" "nodes" {
   for_each = { for node in local.nodes : node.name => node }
+
+  lifecycle {
+    precondition {
+      condition     = local.selected_vm != null
+      error_message = "Instance type ${var.instance_type} is not available in region ${local.effective_location}. Please choose a different instance type or region."
+    }
+    precondition {
+      condition     = local.instance_vcpus >= var.min_vcpus && local.instance_ram_gb >= var.min_ram_gb
+      error_message = <<-EOT
+        Resource Spec Validation Failed:
+        Instance Type: ${var.instance_type}
+        vCPUs: ${local.instance_vcpus} (min required: ${var.min_vcpus})
+        RAM: ${local.instance_ram_gb}GB (min required: ${var.min_ram_gb}GB)
+
+        ${var.instance_type} has only ${local.instance_vcpus} vCPUs / ${local.instance_ram_gb}GB RAM. Use instance types which have at least ${var.min_vcpus} vCPUs / ${var.min_ram_gb}GB RAM or larger.
+      EOT
+    }
+  }
 
   name                = "${local.deployment_id}-${each.key}"
   location            = azurerm_resource_group.rg.location

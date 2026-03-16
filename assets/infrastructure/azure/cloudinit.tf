@@ -77,7 +77,6 @@ locals {
     tlsKey             = tls_private_key.tls_key.private_key_pem
     tlsCa              = tls_self_signed_cert.tls_ca_cert.cert_pem
     tlsCert            = tls_locally_signed_cert.tls_cert.cert_pem
-    barrierPort       = "120"    
 
     # Optional infrastructure-specific hook scripts.      
     preInstall = {
