@@ -1,6 +1,12 @@
 # Public variables exposed to the Exasol Personal launcher as command line interface flags
 # They are shown in the order in which they are declared here
 
+variable "location" {
+  description = "Azure region for deployment (e.g., westeurope, eastus)"
+  type        = string
+  default     = ""
+}
+
 variable "cluster_size" {
   description = "Number of nodes in the cluster (use 1 for single-node deployment)"
   type        = number
@@ -17,7 +23,7 @@ variable "instance_type" {
 variable "disk_sku" {
   description = "Azure managed disk SKU for OS and data disks"
   type        = string
-  default     = "StandardSSD_LRS"
+  default     = "Premium_LRS"
 }
 
 variable "os_volume_size" {

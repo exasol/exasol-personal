@@ -114,13 +114,11 @@ locals {
       myId         = n.name
 
       # Exasol always uses the same final disk alias across providers.
-      # On AWS, the EBS volume ID is a stable identifier that prepareExasol.sh
-      # converts into the /dev/exasol_data_01 alias via udev.
-      hostDatadisk           = "/dev/exasol_data_01"
-      hostDatadiskMatch = {
-        udevKey   = "ID_SERIAL_SHORT"
-        udevValue = replace(try(aws_ebs_volume.data_disks[n.name].id, ""), "-", "")
-      }
+      # The udev match clause identifies the data disk so prepareExasol.sh can
+      # create a persistent udev rule with the /dev/exasol_data_01 alias.
+      # On AWS, the EBS volume ID is a stable identifier known at plan time.
+      hostDatadisk      = "/dev/exasol_data_01"
+      hostDatadiskMatch = "ENV{ID_SERIAL_SHORT}==\"${replace(try(aws_ebs_volume.data_disks[n.name].id, ""), "-", "")}\""
     }
   }
 }
