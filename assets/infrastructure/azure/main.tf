@@ -9,6 +9,7 @@ locals {
 
   deployment_id = "exasol-${var.deployment_id}"
   rg_name       = var.resource_group_name != "" ? var.resource_group_name : "${local.deployment_id}-rg"
+  data_disk_lun = 0
 
   # Node configuration
   node_start_num = 11
@@ -27,7 +28,7 @@ locals {
 # Fetch specs of specified VM size from Azure
 data "azapi_resource_list" "vm_sizes" {
   type                   = "Microsoft.Compute/locations/vmSizes@2024-11-01"
-  parent_id              = "/subscriptions/${data.azurerm_subscription.current.subscription_id}/providers/Microsoft.Compute/locations/${local.effective_location}"
+  parent_id              = "/subscriptions/${data.azurerm_subscription.current.subscription_id}/providers/Microsoft.Compute/locations/${var.location}"
   response_export_values = ["value"]
 }
 
@@ -42,8 +43,15 @@ locals {
 
 resource "azurerm_resource_group" "rg" {
   name     = local.rg_name
-  location = local.effective_location
+  location = var.location
   tags     = local.common_tags
+
+  lifecycle {
+    precondition {
+      condition     = var.location != ""
+      error_message = "Azure region is required. Set it via --location (e.g., --location westeurope)."
+    }
+  }
 }
 
 resource "azurerm_virtual_network" "vnet" {
@@ -103,7 +111,7 @@ resource "azurerm_linux_virtual_machine" "nodes" {
   lifecycle {
     precondition {
       condition     = local.selected_vm != null
-      error_message = "Instance type ${var.instance_type} is not available in region ${local.effective_location}. Please choose a different instance type or region."
+      error_message = "Instance type ${var.instance_type} is not available in region ${var.location}. Please choose a different instance type or region."
     }
     precondition {
       condition     = local.instance_vcpus >= var.min_vcpus && local.instance_ram_gb >= var.min_ram_gb
@@ -169,7 +177,7 @@ resource "azurerm_virtual_machine_data_disk_attachment" "data_disks" {
 
   managed_disk_id    = each.value.id
   virtual_machine_id = azurerm_linux_virtual_machine.nodes[each.key].id
-  lun                = 0
+  lun                = local.data_disk_lun
   caching            = "ReadWrite"
 }
 

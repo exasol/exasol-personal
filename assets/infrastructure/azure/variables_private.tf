@@ -1,19 +1,3 @@
-variable "location" {
-  description = "Azure region for deployment"
-  type        = string
-  default     = ""
-}
-
-locals {
-  azure_config_path  = pathexpand("~/.azure/config")
-  azure_config_raw   = fileexists(local.azure_config_path) ? file(local.azure_config_path) : ""
-  effective_location = coalesce(
-    var.location,
-    try(regex("(?m)^\\s*location\\s*=\\s*(\\S+)", local.azure_config_raw)[0], ""),
-    "westeurope",
-  )
-}
-
 variable "resource_group_name" {
   description = "Optional resource group name. If empty, a deployment-based name is generated."
   type        = string

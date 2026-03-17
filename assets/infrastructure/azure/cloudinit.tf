@@ -95,7 +95,7 @@ locals {
     }
         
     azure = {
-      location     = local.effective_location
+      location     = var.location
       instanceType = var.instance_type
 
       image = {
@@ -125,16 +125,13 @@ locals {
       privateIp    = n.ip
       myId         = n.name
 
-      # Azure disk device names are not stable across reboots, so we cannot resolve
-      # the udev match at plan time. Instead we provide LUN-based symlink paths
-      # for runtime discovery by prepareExasol.sh
-      hostDatadisk           = "/dev/exasol_data_01"
-      hostDatadiskMatch = {
-        discoveryPaths = [
-          "/dev/disk/azure/scsi1/lun0",
-          "/dev/disk/azure/data/by-lun/0",
-        ]
-      }
+      # Azure disk device names (/dev/sdX) are not stable across reboots, but the
+      # LUN-based symlink path is deterministic and known at plan time. The udev match
+      # clause targets this symlink directly, so no runtime discovery is needed.
+      # When the disk appears (attachment may race with cloud-init), udev applies the
+      # rule automatically and creates the /dev/exasol_data_01 alias.
+      hostDatadisk      = "/dev/exasol_data_01"
+      hostDatadiskMatch = "ENV{DEVTYPE}==\"disk\", SYMLINK==\"disk/azure/data/by-lun/${local.data_disk_lun}\""
     }
   }
 }
