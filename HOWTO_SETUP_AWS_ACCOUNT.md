@@ -24,6 +24,7 @@ The AWS account must have the permissions and quota to launch large type instanc
    - `IAMReadOnlyAccess`
    - `IAMUserChangePassword`
    - `AmazonSSMFullAccess`
+   - `AmazonS3FullAccess`
 3. Generate AWS access keys for the user.
 
 If you want to use multi factor authentication (MFA) or other methods for authentication in your AWS account, additional steps may be required. For more information, refer to the AWS documentation: https://docs.aws.amazon.com/.
