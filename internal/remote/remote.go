@@ -14,6 +14,15 @@ type Remote interface {
 	// Returns ErrFailedToConnect on failure to connect.
 	Shell(ctx context.Context, out io.Writer, errOut io.Writer) error
 
+	// RunInteractiveCommand starts a remote command in a PTY using stdio as input.
+	// Returns ErrFailedToConnect on failure to connect.
+	RunInteractiveCommand(
+		ctx context.Context,
+		command string,
+		out io.Writer,
+		errOut io.Writer,
+	) error
+
 	// RunScript runs the script on the remote server.
 	// Returns ErrFailedToConnect on failure to connect.
 	RunScript(ctx context.Context, script io.Reader, out io.Writer, errOut io.Writer) error
