@@ -29,6 +29,13 @@ types-requests = "^2.31.0"
 log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s %(levelname)s %(funcName)s: %(message)s"
+markers = [
+    "launcher_tests: Tests that validate launcher CLI and behavioral contracts without real cloud deployment.",
+    "installation_e2e: End-to-end tests focused on installation-level behavior.",
+    "infrastructure_e2e: End-to-end tests focused on cloud infrastructure behavior.",
+    "provider_aws: Tests that assert AWS-specific behavior.",
+    "provider_azure: Tests that assert Azure-specific behavior.",
+]
 
 [tool.mypy]
 python_version = "3.13"

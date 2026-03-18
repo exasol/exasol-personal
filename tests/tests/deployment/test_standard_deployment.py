@@ -53,8 +53,9 @@ def _connect_worker(launcher_path: str, deployment_dir: str) -> None:
 
 
 @pytest.fixture(scope="session")
-def reusable_deployment(exasol_path: str) -> Deployment:  # type: ignore[misc]
-    config = DeploymentConfig(infra="aws", cluster_size=2)
+def reusable_deployment(exasol_path: str, infra: str) -> Deployment:  # type: ignore[misc]
+    cluster_size = 2 if infra == "aws" else 1
+    config = DeploymentConfig(infra=infra, cluster_size=cluster_size)
     deployment = Deployment(Launcher(exasol_path), config=config)
     try:
         deployment_proc = deployment.deploy_no_block()
@@ -83,7 +84,10 @@ def reusable_deployment(exasol_path: str) -> Deployment:  # type: ignore[misc]
 
         deploy_return_code = deployment_proc.wait(timeout=20 * 60)
         if deploy_return_code != 0:
-            msg = f"Deploy command failed with code {deploy_return_code}"
+            msg = (
+                f"Deploy command failed with code {deploy_return_code}\n"
+                f"deployment.log tail:\n{deployment.deployment_log_tail()}"
+            )
             raise RuntimeError(msg)
 
         logging.info("Checking status database available")
@@ -98,6 +102,7 @@ def reusable_deployment(exasol_path: str) -> Deployment:  # type: ignore[misc]
         deployment.cleanup()
 
 
+@pytest.mark.installation_e2e
 def test_connectable(reusable_deployment: Deployment) -> None:
     assert reusable_deployment.db_connectable()
 
@@ -110,6 +115,7 @@ def test_connectable(reusable_deployment: Deployment) -> None:
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
+@pytest.mark.installation_e2e
 def test_single_query(reusable_deployment: Deployment) -> None:
     query: Final = "SELECT * FROM Dual"
 
@@ -143,6 +149,7 @@ def test_single_query(reusable_deployment: Deployment) -> None:
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
+@pytest.mark.installation_e2e
 def test_exit_command(reusable_deployment: Deployment) -> None:
     queries: Final = [
         "exit",
@@ -160,6 +167,7 @@ def test_exit_command(reusable_deployment: Deployment) -> None:
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
+@pytest.mark.installation_e2e
 def test_multiple_queries(reusable_deployment: Deployment) -> None:
     queries: Final = [
         "CREATE SCHEMA test_multiple_queries;",
@@ -198,6 +206,7 @@ def test_multiple_queries(reusable_deployment: Deployment) -> None:
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
+@pytest.mark.installation_e2e
 def test_file_import(reusable_deployment: Deployment) -> None:
     people_csv_path: Final = Path(__file__).parent / Path("assets/people.csv")
 
@@ -241,6 +250,7 @@ def test_file_import(reusable_deployment: Deployment) -> None:
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
+@pytest.mark.installation_e2e
 def test_connect_table_width(reusable_deployment: Deployment) -> None:
     queries: Final = [
         "CREATE SCHEMA test_connect_table_width;",
@@ -303,6 +313,7 @@ def test_connect_table_width(reusable_deployment: Deployment) -> None:
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
+@pytest.mark.installation_e2e
 def test_license_session_limit(reusable_deployment: Deployment) -> None:
     # license_session_limit is the limit defined in Exasol Personal
     # license. This value should match it.
@@ -346,6 +357,7 @@ def test_license_session_limit(reusable_deployment: Deployment) -> None:
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
+@pytest.mark.infrastructure_e2e
 def test_stop_and_start(reusable_deployment: Deployment) -> None:
     # Using resuable_deployment fixture
     assert reusable_deployment.db_connectable()
@@ -395,6 +407,7 @@ def test_stop_and_start(reusable_deployment: Deployment) -> None:
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
+@pytest.mark.infrastructure_e2e
 def test_start_interrupt_sets_interrupted_state(
     reusable_deployment: Deployment,
 ) -> None:
@@ -453,8 +466,11 @@ def test_start_interrupt_sets_interrupted_state(
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
+@pytest.mark.infrastructure_e2e
+@pytest.mark.provider_aws
 def test_remote_archive_registered(
     reusable_deployment: Deployment,
+    infra: str,
 ) -> None:
     """Scenario: Verify that a remote archive volume is registered via Admin UI.
 
@@ -465,6 +481,9 @@ def test_remote_archive_registered(
     Then we should receive a successful response
     And the response should contain the 'default_archive' backup option
     """
+    if infra != "aws":
+        pytest.skip("Remote archive verification is only supported for AWS today")
+
     # ========== GIVEN ==========
     # Ensure deployment is running (previous tests may have stopped it)
     if not reusable_deployment.has_status(StatusDatabaseReady):

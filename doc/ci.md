@@ -41,7 +41,7 @@ This ensures multi-platform compatibility is validated on the main branch.
 
 ### Deployment Tests (`tests-deployment.yml`)
 
-Full end-to-end tests that provision real AWS infrastructure. These are expensive and slow, so they run only when needed:
+Full end-to-end tests that provision real cloud infrastructure. These are expensive and slow, so they run only when needed:
 
 **Trigger manually via:**
 - GitHub Actions UI: [tests-deployment.yml](https://github.com/exasol/exasol-personal/actions/workflows/tests-deployment.yml) → "Run workflow"
@@ -51,7 +51,11 @@ Security guards:
 - Uses OIDC and short-lived AWS credentials
 - Should be protected by an environment approval gate and ref restrictions in repository settings
 
-**Warning:** These tests create real AWS resources and incur costs.
+Workflow input:
+- `infra`: Infrastructure preset for deployment tests (`aws` or `azure`, default `aws`)
+- The current workflow includes credential bootstrap for AWS. Azure runs require Azure credentials to be available in the runner environment.
+
+**Warning:** These tests create real cloud resources and incur costs.
 
 ## AWS Identity Provider and IAM Role for Deployment Tests
 

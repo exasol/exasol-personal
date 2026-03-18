@@ -97,8 +97,17 @@ task tests-unit
 # Run Python integration tests
 task tests-integration
 
-# Run Python deployment tests (requires AWS credentials)
+# Run Python deployment tests (default: AWS)
 task tests-deployment
+
+# Run Python deployment tests with Azure preset
+task tests-deployment INFRA=azure
+
+# Run infrastructure-focused deployment tests
+task tests-deployment-infrastructure INFRA=aws
+
+# Run installation-focused end-to-end tests
+task tests-deployment-installation INFRA=aws
 ```
 
 #### From tests/ Directory
@@ -120,9 +129,18 @@ poetry run pytest --exasol-path=../bin/exasol tests/integration/test_cli.py::tes
 # Run with verbose output
 poetry run pytest --exasol-path=../bin/exasol tests/integration -v
 
-# Run deployment tests (requires AWS credentials)
+# Run deployment tests (default: AWS preset)
 export AWS_PROFILE=your-profile
 poetry run pytest --exasol-path=../bin/exasol tests/deployment
+
+# Run deployment tests with Azure preset
+poetry run pytest --exasol-path=../bin/exasol --infra=azure tests/deployment
+
+# Run only infrastructure-focused deployment tests
+poetry run pytest --exasol-path=../bin/exasol --infra=aws -m "infrastructure_e2e" tests/deployment
+
+# Run only installation-focused end-to-end tests
+poetry run pytest --exasol-path=../bin/exasol --infra=aws -m "installation_e2e" tests/deployment
 ```
 
 ## Continuous Integration
