@@ -74,6 +74,45 @@ func (s *SSHRemote) Shell(ctx context.Context, out io.Writer, errOut io.Writer) 
 	return nil
 }
 
+func (s *SSHRemote) RunInteractiveCommand(
+	ctx context.Context,
+	command string,
+	out io.Writer,
+	errOut io.Writer,
+) error {
+	session, err := startSSHSession(s.options)
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	restore, err := configureSSHSessionPty(session, out, errOut)
+	if err != nil {
+		return err
+	}
+	defer restore()
+
+	shellSessionCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		<-shellSessionCtx.Done()
+		session.Close() // nolint: gosec
+	}()
+
+	// Run command in an interactive PTY session so tools like c4 connect can
+	// provide a terminal-like UX.
+	if err := session.Run(command); err != nil {
+		if errors.Is(err, &ssh.ExitError{}) {
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
+}
+
 func (s *SSHRemote) RunScript(ctx context.Context, script io.Reader, out, errOut io.Writer) error {
 	// Normalize Windows CRLF to Unix LF to prevent Bash errors (remove carriage returns)
 	// Ensures scripts run correctly across all platforms
