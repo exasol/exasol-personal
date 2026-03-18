@@ -11,7 +11,7 @@ const diagCmdShortDesc = "Diagnostic tools for an active deployment"
 
 const diagCmdLongDesc = diagCmdShortDesc + `
 
-Includes subcommands for shell connections and deployment configuration inspection.
+Includes subcommands for deployment configuration inspection and recovery tooling.
 `
 
 var diagCmd = &cobra.Command{

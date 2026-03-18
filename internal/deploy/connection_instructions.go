@@ -114,7 +114,8 @@ To connect using the CLI:
 
 === SSH Connection Instructions ===
   Public IP: ` + connectionDetails.PublicIp + `
-  Preferred: exasol diag shell
+  Primary admin shell (COS): exasol shell container
+  Host shell (OS): exasol shell host
   Alternative: ` + connectionDetails.SSHCommand + `
 
 `
