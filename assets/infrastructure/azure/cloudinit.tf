@@ -90,7 +90,6 @@ locals {
     }
     postInstall = {
       # postInstall hooks run on the *access node (n11) only*
-      #scripts = var.s3_archive_enabled ? ["/opt/exasol_launcher/scripts/aws_registerS3ArchiveVolume.sh"] : []
       scripts = []
     }
         

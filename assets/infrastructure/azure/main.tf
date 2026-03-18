@@ -127,6 +127,7 @@ resource "azurerm_linux_virtual_machine" "nodes" {
   }
 
   name                = "${local.deployment_id}-${each.key}"
+  computer_name       = "ip-${replace(each.value.ip, ".", "-")}"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   size                = var.instance_type
