@@ -3,10 +3,11 @@
 
 import json
 import logging
+import secrets
 import tempfile
 import time
 from pathlib import Path
-from subprocess import CompletedProcess, Popen
+from subprocess import CalledProcessError, CompletedProcess, Popen
 from typing import Final, Unpack
 
 import websocket
@@ -26,6 +27,11 @@ StatusStopped = "stopped"
 
 class Deployment:
     DEPLOYMENT_DIR_PREFIX: Final = "exasol-launcher-"
+    AZURE_NIC_RESERVATION_ERROR: Final = "NicReservedForAnotherVm"
+    DESTROY_RETRY_MAX_ATTEMPTS: Final = 5
+    DESTROY_RETRY_INITIAL_DELAY_SECONDS: Final = 15.0
+    DESTROY_RETRY_MAX_DELAY_SECONDS: Final = 200.0
+    DESTROY_RETRY_JITTER_FACTOR: Final = 0.20
 
     def __init__(
         self,
@@ -79,20 +85,80 @@ class Deployment:
             self.deployment_dir.name,
         )
 
-        self.launcher.destroy(self.deployment_dir.name, "--auto-approve")
+        cleanup_error = self._destroy_with_retries()
 
-        if not self.launcher.has_status(self.deployment_dir.name, StatusInitialized):
-            msg = f"Expected status `{StatusInitialized}` after `destroy`"
-            raise RuntimeError(msg)
-
-        logging.info("Verifying deployment info after destroy")
-
-        if not self.has_no_deployment():
-            msg = """no file should exist and 'initialized but not yet completed'
-                    msg after `init`"""
-            raise RuntimeError(msg)
+        if cleanup_error is not None:
+            logging.error(
+                "Cleanup did not complete for deployment_dir=%s: %s\n"
+                "deployment.log tail:\n%s\n"
+                "Deployment directory is preserved for manual investigation/cleanup.",
+                self.deployment_dir.name,
+                cleanup_error,
+                self.deployment_log_tail(),
+            )
+            return
 
         self.deployment_dir.cleanup()
+
+    def _destroy_with_retries(self) -> str | None:
+        """Destroy the deployment with exponential backoff for retryable errors."""
+        delay_seconds = self.DESTROY_RETRY_INITIAL_DELAY_SECONDS
+
+        for attempt in range(1, self.DESTROY_RETRY_MAX_ATTEMPTS + 1):
+            attempt_error: str | None = None
+            try:
+                self.launcher.destroy(self.deployment_dir.name, "--auto-approve")
+
+                if not self.launcher.has_status(
+                    self.deployment_dir.name,
+                    StatusInitialized,
+                ):
+                    attempt_error = (
+                        f"Expected status `{StatusInitialized}` after `destroy`"
+                    )
+
+                logging.info("Verifying deployment info after destroy")
+
+                if attempt_error is None and not self.has_no_deployment():
+                    attempt_error = (
+                        "no file should exist and 'initialized but not yet completed' "
+                        "msg after `init`"
+                    )
+            except (CalledProcessError, RuntimeError) as exc:
+                attempt_error = str(exc)
+
+            if attempt_error is None:
+                return None
+
+            log_tail = self.deployment_log_tail()
+            retryable = self._is_retryable_destroy_error(log_tail)
+            if (not retryable) or (attempt == self.DESTROY_RETRY_MAX_ATTEMPTS):
+                return attempt_error
+
+            jitter = delay_seconds * self.DESTROY_RETRY_JITTER_FACTOR
+            jitter_fraction = secrets.randbelow(1001) / 1000.0
+            wait_seconds = delay_seconds + (jitter * jitter_fraction)
+            logging.warning(
+                "Retryable destroy failure for deployment_dir=%s "
+                "(attempt %s/%s). Waiting %.1fs before retry.\n"
+                "deployment.log tail:\n%s",
+                self.deployment_dir.name,
+                attempt,
+                self.DESTROY_RETRY_MAX_ATTEMPTS,
+                wait_seconds,
+                log_tail,
+            )
+            time.sleep(wait_seconds)
+            delay_seconds = min(
+                delay_seconds * 2.0,
+                self.DESTROY_RETRY_MAX_DELAY_SECONDS,
+            )
+
+        return "Destroy retries exhausted"
+
+    def _is_retryable_destroy_error(self, log_tail: str) -> bool:
+        """Return true when the destroy failure is considered transient."""
+        return self.AZURE_NIC_RESERVATION_ERROR in log_tail
 
     def deploy(self, *args: str) -> CompletedProcess[str]:
         return self.launcher.deploy(self.deployment_dir.name, *args)
@@ -254,3 +320,14 @@ class Deployment:
         status: str = json.loads(response)["status"]
 
         return status == "ok"
+
+    def deployment_log_tail(self, max_lines: int = 200) -> str:
+        """Return the tail of deployment.log for diagnostics."""
+        log_file = Path(self.deployment_dir.name) / "deployment.log"
+        if not log_file.exists():
+            return "<deployment.log not found>"
+
+        with log_file.open(encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+
+        return "".join(lines[-max_lines:]).strip()

@@ -177,9 +177,31 @@ tasks:
     desc: Run deployment tests
     deps: [tests-setup]
     dir: '{{.TESTS_DIR}}'
+    vars:
+      INFRA: '{{default "aws" .INFRA}}'
     cmds:
       - |
-        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
+        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
+
+  tests-deployment-infrastructure:
+    desc: Run infrastructure-focused deployment tests
+    deps: [tests-setup]
+    dir: '{{.TESTS_DIR}}'
+    vars:
+      INFRA: '{{default "aws" .INFRA}}'
+    cmds:
+      - |
+        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} -m "infrastructure_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
+
+  tests-deployment-installation:
+    desc: Run installation-focused end-to-end tests
+    deps: [tests-setup]
+    dir: '{{.TESTS_DIR}}'
+    vars:
+      INFRA: '{{default "aws" .INFRA}}'
+    cmds:
+      - |
+        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} -m "installation_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
 
   lint-ruff:
     desc: Run ruff check
