@@ -65,5 +65,13 @@ Next steps:
   2. Setup AWS Profile - Refer https://docs.exasol.com/db/latest/get_started/exasol_personal_aws_setup.htm
 
   3. Run the installer from the deployment directory:
-       ../exasol install
+       ../exasol install <infra preset name-or-path> [install preset name-or-path]
+
+Where:
+  <infra preset name-or-path>   Infrastructure preset to use (e.g., aws)
+  [install preset name-or-path] Optional installation preset (e.g., ubuntu)
+
+Examples:
+  ../exasol install aws
+  ../exasol install aws ubuntu
 EOF
