@@ -17,10 +17,10 @@ This document describes the Infrastructure as Code (IaC) implementation for Exas
 
 ### Storage
 - Each node gets a separate OS disk and a separate managed data disk.
-- - Both disks use the Azure managed disk SKU configured by `disk_sku` (default: `StandardSSD_LRS`).
+- Both disks use the Azure managed disk SKU configured by `disk_sku` (default: `Premium_LRS`).
 - The data disk is attached at LUN `0`.
 - The node metadata exposes a provider-neutral final disk alias `/dev/exasol_data_01`.
-- During node preparation, the installer resolves the Azure disk from its LUN and creates the `/dev/exasol_data_01` alias via `udev`, so Exasol can use the same final disk path across providers.
+- The udev match clause for the data disk is fully resolved at Terraform plan time using the deterministic LUN-based symlink path (`/dev/disk/azure/data/by-lun/<lun>`). During node preparation, a udev rule is written from this pre-built clause and udev creates the `/dev/exasol_data_01` alias automatically when the disk appears — no runtime discovery or polling is needed.
 - Remote archive integration is not currently implemented in this Azure preset.
 
 ### Networking
@@ -50,6 +50,7 @@ The following inbound ports are opened from `var.allowed_cidr`:
   - `Project = exasol-personal`
   - `Deployment = <deployment_id>`
   - `CreatedAt = <timestamp>`
+  - `Owner = <Azure user principal name>`
 
 ## Node Addressing Scheme
 - Nodes are named `n<NN>` starting at `n11`.
@@ -94,15 +95,15 @@ The following inbound ports are opened from `var.allowed_cidr`:
   - managed disks
 - For broad access, Azure built-in `Contributor` scoped to the target resource group is usually sufficient.
 - For least privilege, use a custom Azure RBAC role that covers the resource types above.
-- The checked-in policy examples in this directory should be treated as Azure RBAC role-definition examples for this preset.
+- The checked-in RBAC role examples in this directory can be used as custom Azure role definitions for this preset.
 - Recommended usage:
-  - `assets/infrastructure/azure/iam-policy.broad.json` for a broad custom role, or Azure built-in `Contributor`
-  - `assets/infrastructure/azure/iam-policy.minimal.json` for a least-privilege custom role scoped to the target resource group or subscription segment
+  - `assets/infrastructure/azure/rbac-role.broad.json` for a broad custom role, or Azure built-in `Contributor`
+  - `assets/infrastructure/azure/rbac-role.minimal.json` for a least-privilege custom role scoped to the target resource group or subscription segment
 - Assign these permissions at the smallest practical scope, preferably the resource group created for the deployment.
 
 ## Configuration Notes
-- `power_state` is currently informational only in this Azure preset.
-- `s3_archive_enabled` is currently not implemented for Azure and should be treated as reserved.
+- `power_state` controls the VM lifecycle: `running` starts VMs, `stopped` deallocates them (releases compute but preserves disks).
+- Remote archive integration is not currently implemented for Azure.
 - `availabilityZone` is currently empty in the generated deployment metadata.
 - `disk_sku` controls the Azure managed disk SKU used for both OS and data disks.
 

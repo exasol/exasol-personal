@@ -16,7 +16,6 @@ variable "cluster_size" {
 variable "instance_type" {
   description = "Azure virtual machine type"
   type        = string
-  #default     = "r6i.xlarge"  # Default to memory-optimized instance suitable for database
   default     = "Standard_E4s_v3"
 }
 
@@ -51,9 +50,3 @@ variable "adminui_password" {
   default     = ""
   sensitive   = true
 }
-
-#variable "s3_archive_enabled" {
-#  description = "Enable remote archive/backup integration: creates S3 bucket, IAM user/access keys, SSM params, and VPC S3 endpoint."
-#  type        = bool
-#  default     = true
-#}
