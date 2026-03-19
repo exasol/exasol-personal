@@ -25,6 +25,15 @@ locals {
   adminui_password_final = var.adminui_password != "" ? var.adminui_password : random_password.adminui.result
 }
 
+resource "random_string" "archive_storage_suffix" {
+  count   = var.blob_archive_enabled ? 1 : 0
+  length  = 6
+  upper   = false
+  lower   = true
+  numeric = true
+  special = false
+}
+
 # Fetch specs of specified VM size from Azure
 data "azapi_resource_list" "vm_sizes" {
   type                   = "Microsoft.Compute/locations/vmSizes@2024-11-01"
@@ -39,6 +48,11 @@ locals {
   selected_vm    = one([for s in local.vm_sizes : s if s.name == var.instance_type])
   instance_vcpus = local.selected_vm != null ? local.selected_vm.numberOfCores : 0
   instance_ram_gb = local.selected_vm != null ? local.selected_vm.memoryInMB / 1024 : 0
+
+  archive_storage_account_name = var.blob_archive_enabled ? "exa${var.deployment_id}${random_string.archive_storage_suffix[0].result}" : ""
+  archive_container_name       = "archive"
+  archive_container_url        = var.blob_archive_enabled ? "https://${local.archive_storage_account_name}.blob.core.windows.net/${local.archive_container_name}" : ""
+  archive_volume_name          = "default_archive"
 }
 
 resource "azurerm_resource_group" "rg" {
@@ -67,6 +81,38 @@ resource "azurerm_subnet" "subnet" {
   resource_group_name  = azurerm_resource_group.rg.name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = [var.subnet_cidr]
+  service_endpoints    = var.blob_archive_enabled ? ["Microsoft.Storage"] : []
+}
+
+resource "azurerm_storage_account" "remote_archive" {
+  count                    = var.blob_archive_enabled ? 1 : 0
+  name                     = local.archive_storage_account_name
+  resource_group_name      = azurerm_resource_group.rg.name
+  location                 = azurerm_resource_group.rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  account_kind             = "StorageV2"
+
+  https_traffic_only_enabled      = true
+  min_tls_version                 = "TLS1_2"
+  allow_nested_items_to_be_public = false
+  shared_access_key_enabled       = true
+  public_network_access_enabled   = true
+
+  network_rules {
+    default_action             = "Deny"
+    bypass                     = ["AzureServices"]
+    virtual_network_subnet_ids = [azurerm_subnet.subnet.id]
+  }
+
+  tags = local.common_tags
+}
+
+resource "azurerm_storage_container" "remote_archive" {
+  count                 = var.blob_archive_enabled ? 1 : 0
+  name                  = local.archive_container_name
+  storage_account_id    = azurerm_storage_account.remote_archive[0].id
+  container_access_type = "private"
 }
 
 resource "azurerm_public_ip" "nodes" {

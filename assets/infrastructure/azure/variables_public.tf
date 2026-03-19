@@ -50,3 +50,9 @@ variable "adminui_password" {
   default     = ""
   sensitive   = true
 }
+
+variable "blob_archive_enabled" {
+  description = "Enable remote archive/backup integration: creates Azure Blob Storage resources and registers a remote archive volume."
+  type        = bool
+  default     = true
+}

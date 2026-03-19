@@ -40,6 +40,14 @@
     "Microsoft.Compute/disks/write",
     "Microsoft.Compute/disks/delete",
 
+    "Microsoft.Storage/storageAccounts/read",
+    "Microsoft.Storage/storageAccounts/write",
+    "Microsoft.Storage/storageAccounts/delete",
+    "Microsoft.Storage/storageAccounts/listkeys/action",
+    "Microsoft.Storage/storageAccounts/blobServices/containers/read",
+    "Microsoft.Storage/storageAccounts/blobServices/containers/write",
+    "Microsoft.Storage/storageAccounts/blobServices/containers/delete",
+
     "Microsoft.Compute/locations/vmSizes/read",
     "Microsoft.Compute/locations/operations/read",
     "Microsoft.Network/locations/operations/read",

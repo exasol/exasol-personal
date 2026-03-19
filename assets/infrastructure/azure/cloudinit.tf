@@ -90,12 +90,22 @@ locals {
     }
     postInstall = {
       # postInstall hooks run on the *access node (n11) only*
-      scripts = []
+      scripts = var.blob_archive_enabled ? ["/opt/exasol_launcher/scripts/azure_registerBlobArchiveVolume.sh"] : []
     }
         
     azure = {
       location     = var.location
       instanceType = var.instance_type
+
+      archive = {
+        enabled            = var.blob_archive_enabled
+        storageAccountName = local.archive_storage_account_name
+        containerName      = local.archive_container_name
+        url                = local.archive_container_url
+        username           = local.archive_storage_account_name
+        password           = try(azurerm_storage_account.remote_archive[0].primary_access_key, "")
+        volumeName         = local.archive_volume_name
+      }
 
       image = {
         publisher = var.image_publisher
