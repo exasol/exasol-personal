@@ -10,7 +10,7 @@
 
 locals {
   # --- Path "constants" ---
-  # Changing these paths will break the deployment processes as we use them to find the installation preset contents  
+  # Changing these paths will break the deployment processes as we use them to find the installation preset contents
   installation_cloudconf_dir = "${var.installation_preset_dir}/cloudconf"
   installation_files_dir     = "${var.installation_preset_dir}/files"
 
@@ -18,7 +18,7 @@ locals {
   # This is used for infrastructure-specific scripts or configs that should not live in provider-agnostic installation presets.
   infrastructure_files_dir = "${path.module}/files"
 
-  # Changing these paths will break the installation processes on the hosts as they look for these files  
+  # Changing these paths will break the installation processes on the hosts as they look for these files
   launcher_config_dir             = "/etc/exasol_launcher"
   infrastructure_json_target_path = "${local.launcher_config_dir}/infrastructure.json"
   node_json_target_path           = "${local.launcher_config_dir}/node.json"
@@ -80,7 +80,7 @@ locals {
     tlsCa              = tls_self_signed_cert.tls_ca_cert.cert_pem
     tlsCert            = tls_locally_signed_cert.tls_cert.cert_pem
 
-    # Optional infrastructure-specific hook scripts.      
+    # Optional infrastructure-specific hook scripts.
     preInstall = {
       # preInstall hooks run on *all* nodes
       root = {
@@ -183,9 +183,8 @@ data "cloudinit_config" "cloud_config" {
 
   part {
     content_type = "text/cloud-config"
-    # Prepend Exoscale-specific network setup to installation preset's runcmd.
-    # The merge_how directive tells cloud-init to prepend this runcmd list to the
-    # existing one from the installation preset instead of replacing it.
+    # MUST prepend because the network needs to be configured BEFORE the installation
+    # preset starts
     filename = "99-exoscale-network.yaml"
     content = yamlencode({
       merge_how = [
@@ -199,7 +198,8 @@ data "cloudinit_config" "cloud_config" {
         }
       ]
       runcmd = [
-        "dhclient eth1" # Obtain IP from Exoscale's managed private network DHCP
+        "systemctl enable exoscale-private-network.service",
+        "systemctl start exoscale-private-network.service"
       ]
     })
   }

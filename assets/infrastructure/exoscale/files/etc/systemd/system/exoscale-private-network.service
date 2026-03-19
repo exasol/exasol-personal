@@ -1,0 +1,18 @@
+# Configure Exoscale private network on every boot.
+# The private network interface (eth1) requires DHCP to obtain its IP address
+# from Exoscale's managed DHCP server. This must run on every boot because
+# cloud-init runcmd only executes on first boot.
+
+[Unit]
+Description=Exoscale Private Network Configuration
+After=network.target
+Before=network-online.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/dhclient eth1
+RemainAfterExit=yes
+
+[Install]
+WantedBy=network-online.target
