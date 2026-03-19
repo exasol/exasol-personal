@@ -111,7 +111,13 @@ To avoid having to prepend all exasol commands with the path to the binary, you 
 
 To get started quickly, Exasol provides two sample datasets hosted on S3 that you can import directly using SQL.
 
-Connect to your database (e.g. via `exasol connect` or any SQL client) and run:
+You can load it directly by executing this command in the deployment directory:
+
+```bash
+exasol connect < sample.sql
+```
+
+Alternatively, connect with a SQL client of your choice and paste the statements below:
 
 ```sql
 CREATE OR REPLACE TABLE PRODUCTS (
