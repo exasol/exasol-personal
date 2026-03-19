@@ -21,7 +21,10 @@ This document describes the Infrastructure as Code (IaC) implementation for Exas
 - The data disk is attached at LUN `0`.
 - The node metadata exposes a provider-neutral final disk alias `/dev/exasol_data_01`.
 - The udev match clause for the data disk is fully resolved at Terraform plan time using the deterministic LUN-based symlink path (`/dev/disk/azure/data/by-lun/<lun>`). During node preparation, a udev rule is written from this pre-built clause and udev creates the `/dev/exasol_data_01` alias automatically when the disk appears — no runtime discovery or polling is needed.
-- Remote archive integration is not currently implemented in this Azure preset.
+- A remote archive volume on Azure Blob Storage is created and registered automatically when `blob_archive_enabled` is true (default).
+- The preset creates a per-deployment Storage Account and a private Blob container named `archive`.
+- The Storage Account keeps the standard blob endpoint enabled, but access is restricted with storage firewall rules to the deployment subnet.
+- Exasol currently uses the storage account name and an access key to authenticate the Azure remote archive volume.
 
 ### Networking
 - A single resource group contains the deployment resources.
@@ -63,6 +66,7 @@ The following inbound ports are opened from `var.allowed_cidr`:
 1. OpenTofu plan/apply:
    - generates a deployment ID
    - creates the resource group, network, NSG, public IPs, NICs, VMs, and managed data disks
+   - creates Azure Blob Storage resources for the remote archive volume when `blob_archive_enabled` is true
    - renders cloud-init for each node
 2. Cloud-init on each node:
    - writes deployment metadata and node metadata under `/etc/exasol_launcher/`
@@ -71,6 +75,7 @@ The following inbound ports are opened from `var.allowed_cidr`:
 3. Node initialization:
    - systemd runs the shared preparation and installation workflow
    - Exasol is installed using the common disk alias `/dev/exasol_data_01`
+   - the access node registers the Azure Blob container as the remote archive volume `default_archive`
 4. Local artifacts:
    - `deployment.json` - deployment summary
    - `secrets.json` - generated credentials
@@ -84,6 +89,7 @@ The following inbound ports are opened from `var.allowed_cidr`:
 ## Credentials
 - Database and Admin UI passwords are generated unless explicitly provided.
 - The generated SSH private key is written locally with mode `0600`.
+- Remote archive registration uses the Azure Storage Account name and access key generated for the deployment.
 
 ## Permissions
 - The operator identity running OpenTofu needs Azure permissions to manage:
@@ -93,6 +99,8 @@ The following inbound ports are opened from `var.allowed_cidr`:
   - NICs and NSGs
   - virtual machines
   - managed disks
+- Storage Accounts and Blob containers
+- The deployment identity must also be able to read storage account keys because Exasol's Azure remote archive integration uses shared-key authentication.
 - For broad access, Azure built-in `Contributor` scoped to the target resource group is usually sufficient.
 - For least privilege, use a custom Azure RBAC role that covers the resource types above.
 - The checked-in RBAC role examples in this directory can be used as custom Azure role definitions for this preset.
@@ -103,11 +111,10 @@ The following inbound ports are opened from `var.allowed_cidr`:
 
 ## Configuration Notes
 - `power_state` controls the VM lifecycle: `running` starts VMs, `stopped` deallocates them (releases compute but preserves disks).
-- Remote archive integration is not currently implemented for Azure.
+- `blob_archive_enabled` controls whether Azure Blob Storage resources are created and the remote archive volume is registered.
 - `availabilityZone` is currently empty in the generated deployment metadata.
 - `disk_sku` controls the Azure managed disk SKU used for both OS and data disks.
 
 ## Notes and Limitations
 - The preset currently relies on public IP connectivity for node access.
-- Archive storage integration is not yet implemented with Azure-native services.
 - The SSH private key is written as `node_access.pem`.
