@@ -5,7 +5,11 @@ provider "registry.opentofu.org/azure/azapi" {
   version     = "2.8.0"
   constraints = "~> 2.0"
   hashes = [
+    "h1:OHkG0B1rphuC9qxN4qXNshulMjM3gIqeJVPSvVcewcM=",
     "h1:T1HpMzwCr3VVt5rCJ2ntcZ75TXDB9boby48c4DPWi70=",
+    "h1:gJpLLWwcTgHPyyqDNaXZkCfFCAywGMAgVlqg7QHRRBk=",
+    "h1:kae045n1h3JpdHhYqozerPRTLgbkWyYxFFGV/ApFkLQ=",
+    "h1:lul5E1ZdNnYpsU28KFppv+MwDuTHpGudngJsHjiU+gg=",
     "zh:048fa67ba123c6da65a7af12453328e36e1783cac1dbecc905d44ee7a1daa41c",
     "zh:08dfb8c493a99aa54ea0c00f5d2e2389aac55d70b31bfc50a38e4ab61800aca8",
     "zh:0d5bf53f356864567bf0855eb90b0b9aa4619b60fd1469210461ad88c0508a6f",
@@ -25,7 +29,11 @@ provider "registry.opentofu.org/hashicorp/azuread" {
   version     = "3.8.0"
   constraints = "~> 3.0"
   hashes = [
+    "h1:34Ek67OR1KfxhVmqObawx4hkpXXib9SQNx9fDoqX9fw=",
+    "h1:M4ZLFH8ALoGyh+J8QQGHseyJNSV3bWTEESeKxv7Ip1k=",
     "h1:rqAjqkA5dloKFuETW2+/jaFrnUFIPKJkTAkpQFUFh6k=",
+    "h1:tpPnBAqjrOoEjI76CX9WNWA/JIvtnQEigNOWKvp8QbU=",
+    "h1:uKY1ayU2Hj1FnoGozP3r5gqtFH83wSFX0mqNyi3+ebc=",
     "zh:0cb139a86c05254ad19d6fe7e287758121300d85f6093e5da2fc4e5bc3905b1e",
     "zh:28a656a84534c5f954a0c77133737890a1923ff077cdde38a5c99073bffb5ec8",
     "zh:2944340622ec29f64e2a6425ef6ef954bba7ece30f1a0aa3782a5725cd6a6b72",
@@ -42,6 +50,10 @@ provider "registry.opentofu.org/hashicorp/azurerm" {
   version     = "4.63.0"
   constraints = "~> 4.0"
   hashes = [
+    "h1:TlXgwV2tMYvw2JexDynHoqAkaNk6m2EDvpQ8ZX7Uqpc=",
+    "h1:ir+/jHDSugXy6R1bLKTZsnc30EZ9URy0Tnop9mcakZE=",
+    "h1:jw3Vg8vjc5hktEpPvYtzQV3ozcAZjUBDUa2BfLeWvC8=",
+    "h1:ms8f+cQrFr3phTjUoaJu4oKnOaxkwyXt7ZJC+1c7Rgw=",
     "h1:sfLXKeoOzH21+gROzyuJE8BpYhQpouSI5bGvaXt4hdc=",
     "zh:02fca4bbd5288bb8ec53341cec6d4f0d3c75bdb79c7c6e283e259531e25efd5a",
     "zh:0aa23633bf8dd27bebb2a59b0791d1066ab9bb613594bc88c56a2ce54df902b1",
@@ -65,7 +77,11 @@ provider "registry.opentofu.org/hashicorp/cloudinit" {
   version     = "2.3.7"
   constraints = "~> 2.3"
   hashes = [
+    "h1:BxiQeWBP42+oBrrk+VU72so5vBUtVvtpHzt1UAUTTWk=",
+    "h1:El6cBCCiCPGwJsSSN0Z+EUWatjI45hie+kIDnTegV9A=",
+    "h1:HVIZkgZtxXE0nGjvmK58Jr8lBef+pE3JTFYKX+bLmtU=",
     "h1:dkGeAxGbAGgglocp0fl1OzvT6O4KKsJTEsCW0ixdQJs=",
+    "h1:yj6vfwdMF/OEWOsNRLOxjp3AazqvMHLNvaHPJ357NQ0=",
     "zh:2d48b8452eae9bac2e62273e8f535f73694d8cb05ea38f4b27ee735dcc38eed4",
     "zh:4add11b87e48d0e6ecd19243a06ecfc42fc07d0a3748fe568c2971d5f4767486",
     "zh:4c9c4e3319cf3328595ea2d68eba7c604325fbcba38cd443e39e982b0b4e29f2",
@@ -83,6 +99,10 @@ provider "registry.opentofu.org/hashicorp/local" {
   version     = "2.7.0"
   constraints = "~> 2.6"
   hashes = [
+    "h1:1A5Z42Wlqhd28AMOYuYjo3WtXx8bbfHOaD0Z1SXqlIw=",
+    "h1:UHBJIZrB2o6QNymPs6pTiLfRxqQ5UgdTFQ6IwxQvjLo=",
+    "h1:bKZhLyajpK7pEizfT3rOpfhUl+gLSQviaX7cYat3WB0=",
+    "h1:y4Z2q/vw3DUN+0KOunHUsptXPnO/7rDs9zSLdIdtwMk=",
     "h1:ztAhzyJDidK0Lo0MXxbjlI/0Zkgw4oQvlfZ0ggHi8p4=",
     "zh:39e037a963356e583d90d509d82f6dc19914ef5c66970fb166db414f035468f4",
     "zh:5292e51488d40d6c2b365daa9a406144c3fa3f769f1c03065adb4757d41c6ea0",
@@ -101,6 +121,10 @@ provider "registry.opentofu.org/hashicorp/random" {
   constraints = "~> 3.7"
   hashes = [
     "h1:EHn3jsqOKhWjbg0X+psk0Ww96yz3N7ASqEKKuFvDFwo=",
+    "h1:K/OIbLGX0YNiuoDXlpkerSWyv+bjS97Z6YGUCGePPAw=",
+    "h1:LsYuJLZcYl1RiH7Hd3w90Ra5+k5cNqfdRUQXItkTI8Y=",
+    "h1:nz02g0rqNAJ+KO1Lq5Krfp3qJCuhA4bJuV8jtUw99ss=",
+    "h1:tZP70yQDl6mKnTsDtx6tS6GReVb1lgb7WnlIIneXsHY=",
     "zh:25c458c7c676f15705e872202dad7dcd0982e4a48e7ea1800afa5fc64e77f4c8",
     "zh:2edeaf6f1b20435b2f81855ad98a2e70956d473be9e52a5fdf57ccd0098ba476",
     "zh:44becb9d5f75d55e36dfed0c5beabaf4c92e0a2bc61a3814d698271c646d48e7",
@@ -117,7 +141,11 @@ provider "registry.opentofu.org/hashicorp/time" {
   version     = "0.13.1"
   constraints = "~> 0.13"
   hashes = [
+    "h1:3X1jTAlLJV6G9AylC+BgX7WrKFcZYHqA+Z4JwB+v7as=",
+    "h1:3gEXjZJTiotJAofPFswhJYnlSM8+O4OFxC8L6DrVmdY=",
     "h1:ueilLAoXlZPufdJYuPFeqznwP39ZwLsRcQtqow+NUiI=",
+    "h1:wuRUDd/TqWU++kXU+jf8v0xVhAF+KqcSD/sjY/Y+1Yw=",
+    "h1:zAffsOrhHE9rzKhFnw4VyIIRODmtjh08kmQTscUZgsE=",
     "zh:10f32af8b544a039f19abd546e345d056a55cb7bdd69d5bbd7322cbc86883848",
     "zh:35dd5beb34a9f73de8d0fed332814c69acae69397c9c065ce63ccd8315442bef",
     "zh:56545d1dd5f2e7262e0c0c124264974229ec9cc234d0d7a0e36e14b869590f4a",
@@ -135,7 +163,11 @@ provider "registry.opentofu.org/hashicorp/tls" {
   version     = "4.2.1"
   constraints = "~> 4.1"
   hashes = [
+    "h1:ALyauaoiauOEgiDjFt8gFHyvzs8JLBcHAEtIqDsE3Rg=",
     "h1:ApZvTsHD9LJxRJiTlZnXCRTGQ92YUCDXUxNwaVbsQyQ=",
+    "h1:RZDD1y8qrxf7+gdnfFcGP0G6GDe/kv4zNDNdg1HpuSQ=",
+    "h1:ZT6bZoEZh729x6ax/Xe5eEcBbXZ5HGv2i7ijIh5k74I=",
+    "h1:ZilRQg3gaNxvWpwnrjV3ZyU4dXI0yQfgsxu2swX9E14=",
     "zh:0435b85c1aa6ac9892e88d99eaae0b1712764b236bf469c114c6ff4377b113d6",
     "zh:3413d6c61a6a1db2466200832e1d86b2992b81866683b1b946e7e25d99e8daf9",
     "zh:4e7610d4c05fee00994b851bc5ade704ae103d56f28b84dedae7ccab2148cc3f",
