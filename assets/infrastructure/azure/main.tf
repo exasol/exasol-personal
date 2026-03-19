@@ -94,9 +94,19 @@ resource "azurerm_storage_account" "remote_archive" {
   account_kind             = "StorageV2"
 
   https_traffic_only_enabled      = true
+
+  # Enforce a modern transport baseline for archive access.
   min_tls_version                 = "TLS1_2"
+
+  # Prevent anonymous public access to blobs in this storage account.
   allow_nested_items_to_be_public = false
+
+  # Exasol currently authenticates Azure remote archive volumes with the
+  # storage account name and an access key, so shared key auth must stay enabled.
   shared_access_key_enabled       = true
+
+  # Keep the standard blob endpoint reachable and rely on network_rules below
+  # to restrict access to the deployment subnet.
   public_network_access_enabled   = true
 
   network_rules {
