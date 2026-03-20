@@ -1,32 +1,17 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package cleanup
+package shared
 
 import "time"
 
 // ResourceType enumerates supported AWS resource classes for cleanup ordering.
 type ResourceType string
 
-const (
-	ResourceEC2Instance ResourceType = "ec2-instance"
-	ResourceEBSVolume   ResourceType = "ebs-volume"
-	ResourceEC2KeyPair  ResourceType = "ec2-key-pair"
-	ResourceVPCEndpoint ResourceType = "vpc-endpoint"
-	ResourceInternetGW  ResourceType = "internet-gateway"
-	ResourceRouteTable  ResourceType = "route-table"
-	ResourceSecurityGrp ResourceType = "security-group"
-	ResourceSubnet      ResourceType = "subnet"
-	ResourceVPC         ResourceType = "vpc"
-	ResourceSSMParam    ResourceType = "ssm-parameter"
-	ResourceS3Bucket    ResourceType = "s3-bucket"
-	ResourceIAMRole     ResourceType = "iam-role"
-	ResourceIAMInstProf ResourceType = "iam-instance-profile"
-)
-
 // DeploymentSummary is a high-level view of a tagged deployment.
 type DeploymentSummary struct {
 	ID        string    `json:"id"`
+	Provider  string    `json:"provider"` // e.g. aws|exoscale
 	Region    string    `json:"region"`
 	Owner     string    `json:"owner"`
 	CreatedAt time.Time `json:"createdAt"`

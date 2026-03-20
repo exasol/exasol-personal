@@ -1,7 +1,7 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package cleanup
+package aws
 
 import (
 	"context"
@@ -21,6 +21,17 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+)
+
+// Constants from shared package
+const (
+	StateActive       = shared.StateActive
+	StateProvisioning = shared.StateProvisioning
+	StateStopped      = shared.StateStopped
+	StateTerminated   = shared.StateTerminated
+	StateUnknown      = shared.StateUnknown
 )
 
 // UpdateCreatedAtFromTag prefers the CreatedAt tag value (RFC3339) if present.
@@ -72,6 +83,7 @@ func CollectDeploymentDetails(
 	details := &DeploymentDetails{
 		Summary: DeploymentSummary{
 			ID:        deploymentID,
+			Provider:  "aws",
 			Region:    region,
 			Owner:     "",
 			CreatedAt: time.Time{},
@@ -436,6 +448,7 @@ func CollectDeploymentSummaries(
 				if sum == nil {
 					sum = &DeploymentSummary{
 						ID:        deploymentID,
+						Provider:  "aws",
 						Region:    reg,
 						Owner:     ownerTag,
 						CreatedAt: time.Time{},
