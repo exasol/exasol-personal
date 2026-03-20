@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 //nolint:gci,gofumpt // formatting of small constants block is acceptable and consistent.
-package cleanup
+package aws
 
 import "time"
 

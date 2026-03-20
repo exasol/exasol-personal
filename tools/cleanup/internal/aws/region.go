@@ -1,10 +1,12 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package cleanup
+package aws
 
 import (
 	"os"
+
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 )
 
 // ResolveRegion returns the explicit region if provided, otherwise falls back to
@@ -20,5 +22,5 @@ func ResolveRegion(explicit string) (string, error) {
 		return v, nil
 	}
 
-	return "", ErrRegionRequired
+	return "", shared.ErrRegionRequired
 }
