@@ -4,8 +4,6 @@ vars:
   COMMAND_NAME: exasol-cleanup
   BINARY_SUFFIX:
     sh: test "$(go env GOOS)" = "windows" && echo ".exe" || true
-  BINARY_NAME: "{{.COMMAND_NAME}}{{.BINARY_SUFFIX}}"
-  MAIN_PATH_REL: "./cmd"
   BUILD_DIR_NAME: "bin"
 
 tasks:
@@ -18,7 +16,7 @@ tasks:
     desc: Build the cleanup binary
     cmds:
       - |
-        go build -o {{.BUILD_DIR_NAME}}/{{.BINARY_NAME}} {{.MAIN_PATH_REL}}
+        go build -o {{.BUILD_DIR_NAME}}/{{.COMMAND_NAME}}{{.BINARY_SUFFIX}} ./cmd/cleanup
 
   tests-unit:
     desc: Run unit tests
