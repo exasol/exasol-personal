@@ -8,43 +8,49 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const shellCmdShortDesc = "Establish a secure shell connection to a node"
+const diagShellCmdShortDesc = "Establish a secure shell connection to a node"
 
-const shellCmdLongDesc = shellCmdShortDesc + `
+const diagShellCmdLongDesc = diagShellCmdShortDesc + `
 
 Creates a secure shell connection to a node in the active deployment.
 If no specific node is specified, connects to the first node available.
 `
 
-var shellCmdOpts = struct {
+var diagShellCmdOpts = struct {
 	Node string
 }{
 	Node: "",
 }
 
-var shellCmd = &cobra.Command{
-	Use:   "shell",
-	Short: shellCmdShortDesc,
-	Long:  shellCmdLongDesc,
-	Args:  cobra.NoArgs,
+var diagShellCmd = &cobra.Command{
+	Use:        "shell",
+	Short:      diagShellCmdShortDesc,
+	Long:       diagShellCmdLongDesc,
+	Args:       cobra.NoArgs,
+	Hidden:     true,
+	Deprecated: "use 'exasol shell host' instead",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		return deploy.Shell(cmd.Context(), commonFlags.DeploymentDir, shellCmdOpts.Node)
+		return deploy.OpenHostShell(
+			cmd.Context(),
+			commonFlags.DeploymentDir,
+			diagShellCmdOpts.Node,
+		)
 	},
 }
 
-func registerShellFlags() {
-	shellCmd.Flags().StringVarP(
-		&shellCmdOpts.Node, "node", "n", "",
+func registerDiagShellFlags() {
+	diagShellCmd.Flags().StringVarP(
+		&diagShellCmdOpts.Node, "node", "n", "",
 		"Name of the node to connect to. Connects to the first available node if not specified",
 	)
 }
 
 // nolint: gochecknoinits
 func init() {
-	requireMinorVersionCompatibility(shellCmd, CurrentLauncherVersion)
-	requireInitializedDeploymentDir(shellCmd)
-	registerShellFlags()
-	registerDeploymentDirFlag(shellCmd, commonFlags)
-	diagCmd.AddCommand(shellCmd)
+	requireMinorVersionCompatibility(diagShellCmd, CurrentLauncherVersion)
+	requireInitializedDeploymentDir(diagShellCmd)
+	registerDiagShellFlags()
+	registerDeploymentDirFlag(diagShellCmd, commonFlags)
+	diagCmd.AddCommand(diagShellCmd)
 }

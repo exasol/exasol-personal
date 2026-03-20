@@ -314,6 +314,55 @@ def test_connect_table_width(reusable_deployment: Deployment) -> None:
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.installation_e2e
+def test_diag_cos_runs_confd_client(reusable_deployment: Deployment) -> None:
+    # Given: A running deployment and a PTY for an interactive container shell session.
+    launcher_path = reusable_deployment.launcher.launcher_path
+    deployment_dir = reusable_deployment.deployment_dir.name
+    master_fd, slave_fd = os.openpty()
+
+    proc = subprocess.Popen(
+        [launcher_path, "shell", "container", "--deployment-dir", deployment_dir],
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+    )
+
+    try:
+        # When: We run a COS-only command and then exit the session.
+        os.write(master_fd, b"confd_client db_list --json\n")
+        os.write(master_fd, b"echo COS_DB_LIST_RC:$?\n")
+        os.write(master_fd, b"exit\n")
+        os.write(master_fd, b"exit\n")
+
+        return_code = proc.wait(timeout=120)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+        os.close(slave_fd)
+
+    # Read all output from the PTY.
+    output_raw = b""
+    try:
+        while chunk := os.read(master_fd, 1024):
+            output_raw += chunk
+    except OSError:
+        pass
+    finally:
+        os.close(master_fd)
+
+    output = output_raw.decode("utf-8", errors="replace")
+
+    # Then: The command succeeded from COS and the session exited cleanly.
+    assert return_code == 0
+    assert "COS_DB_LIST_RC:0" in output
+    assert "command not found" not in output.lower()
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.installation_e2e
 def test_license_session_limit(reusable_deployment: Deployment) -> None:
     # license_session_limit is the limit defined in Exasol Personal
     # license. This value should match it.
