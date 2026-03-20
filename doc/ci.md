@@ -52,8 +52,17 @@ Security guards:
 - Should be protected by an environment approval gate and ref restrictions in repository settings
 
 Workflow input:
-- `infra`: Infrastructure preset for deployment tests (`aws` or `azure`, default `aws`)
-- The current workflow includes credential bootstrap for AWS. Azure runs require Azure credentials to be available in the runner environment.
+- `os`: OS selector for the deployment matrix (`all`, `ubuntu-latest`, `windows-latest`, `macos-latest`; default `all`)
+- The workflow uses a declarative test plan (provider/OS/task rows) and filters rows before matrix expansion, so non-selected OS jobs are not created.
+- Current enabled rows:
+  - AWS runs `tests-deployment` (installation + infrastructure lanes)
+  - Azure runs `tests-deployment-infrastructure`
+  - Exoscale rows are currently disabled in the test plan and can be re-enabled by toggling the plan entries.
+- Credential bootstrap:
+  - AWS via OIDC role assumption
+  - Azure via OIDC (`azure/login`)
+  - Exoscale via `EXOSCALE_API_KEY` / `EXOSCALE_API_SECRET` secrets
+  - Azure identifiers are sourced from GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
 
 **Warning:** These tests create real cloud resources and incur costs.
 

@@ -1,5 +1,14 @@
 name: tests-deployment
 description: Run Deployment Tests
+inputs:
+  infra:
+    description: Infrastructure preset for deployment tests.
+    required: false
+    default: aws
+  task:
+    description: Taskfile target to execute for deployment tests.
+    required: false
+    default: tests-deployment
 runs:
   using: "composite"
   steps:
@@ -7,4 +16,4 @@ runs:
       uses: ./.github/actions/setup-python
     - name: Run Deployment Tests
       shell: bash
-      run: task tests-deployment
+      run: task ${{ inputs.task }} INFRA=${{ inputs.infra }}
