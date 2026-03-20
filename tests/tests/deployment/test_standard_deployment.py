@@ -517,6 +517,7 @@ def test_start_interrupt_sets_interrupted_state(
 )
 @pytest.mark.infrastructure_e2e
 @pytest.mark.provider_aws
+@pytest.mark.provider_azure
 def test_remote_archive_registered(
     reusable_deployment: Deployment,
     infra: str,
@@ -530,8 +531,8 @@ def test_remote_archive_registered(
     Then we should receive a successful response
     And the response should contain the 'default_archive' backup option
     """
-    if infra != "aws":
-        pytest.skip("Remote archive verification is only supported for AWS today")
+    if infra not in {"aws", "azure"}:
+        pytest.skip("Remote archive verification is only supported for AWS/Azure today")
 
     # ========== GIVEN ==========
     # Ensure deployment is running (previous tests may have stopped it)

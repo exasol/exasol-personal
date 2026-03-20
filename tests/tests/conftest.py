@@ -19,7 +19,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         required=False,
         action="store",
         default="aws",
-        choices=["aws", "azure"],
+        choices=["aws", "azure", "exoscale"],
         help="Infrastructure preset to use for deployment tests",
     )
 

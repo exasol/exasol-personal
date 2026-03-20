@@ -3,6 +3,7 @@
 
 import json
 import logging
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,7 @@ class DeploymentConfig:
     data_volume_size: int | None = None
     db_password: str | None = None
     adminui_password: str | None = None
+    location: str | None = None
 
 
 class Launcher:
@@ -98,6 +100,12 @@ class Launcher:
             init_args.extend(["--db-password", config.db_password])
         if config.adminui_password is not None:
             init_args.extend(["--adminui-password", config.adminui_password])
+        if config.infra == "azure":
+            location = config.location
+            if location is None:
+                location = os.getenv("TF_VAR_LOCATION") or os.getenv("AZURE_LOCATION")
+            if location is not None and location.strip() != "":
+                init_args.extend(["--location", location])
 
         return self.run_command(
             "init",
