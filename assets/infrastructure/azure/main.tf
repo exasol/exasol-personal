@@ -4,7 +4,7 @@ locals {
     Project    = "exasol-personal"
     Deployment = local.deployment_id
     CreatedAt  = var.deployment_created_at
-    Owner      = data.azuread_user.current.user_principal_name
+    Owner      = data.azurerm_client_config.current.object_id
   }
 
   deployment_id = "exasol-${var.deployment_id}"

@@ -35,8 +35,13 @@ def custom_deployment(
     test_pw: Final = """$x\n${y}\nunbalanced quote: ' another one: " $(echo test)"""
     test_admin_pw: Final = "MyAdminUI!Pass123"
 
-    if instance_type is None and infra == "aws":
-        instance_type = "t3.xlarge"
+    if instance_type is None:
+        if infra == "aws":
+            instance_type = "t3.xlarge"
+        elif infra == "exoscale":
+            # Use a non-default Exoscale instance type in custom deployment tests
+            # to validate instance-type customization works.
+            instance_type = "standard.large"
 
     config = DeploymentConfig(
         infra=infra,
@@ -120,9 +125,13 @@ def test_custom_deployment_rejects_small_instance_types(
 )
 def test_custom_deployment_success(
     custom_deployment: tuple[Deployment, DeploymentConfig],
+    infra: str,
 ) -> None:
     deployment, config = custom_deployment
     query: Final = "SELECT * FROM Dual"
+
+    if infra == "exoscale":
+        assert config.instance_type == "standard.large"
 
     assert config.db_password is not None
     for p in [(), ("--password", config.db_password)]:
