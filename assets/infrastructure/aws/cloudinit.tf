@@ -84,7 +84,7 @@ locals {
     preInstall = {
       # preInstall hooks run on *all* nodes
       root = {
-        scripts = ["/opt/exasol_launcher/scripts/aws_setup_data_disk.sh"]
+        scripts = []
       }
       user = {
         scripts = []
