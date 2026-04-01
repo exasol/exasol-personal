@@ -2,27 +2,25 @@
 name = "tests"
 version = "0.1.0"
 description = "Integration tests for the Exasol launcher tool"
-authors = [
-    {name = "Exasol", email = "entwicklung@exasol.com"}
-]
+authors = [{ name = "Exasol", email = "entwicklung@exasol.com" }]
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "pytest (>=8.4.1,<9.0.0)",
-    "websocket-client (>=1.8.0,<2.0.0)",
-    "pydantic (>=2.12.0,<3.0.0)",
-    "semver (>=3.0.4,<4.0.0)",
-    "requests (>=2.31.0,<3.0.0)",
+  "pytest (>=8.4.1,<9.0.0)",
+  "websocket-client (>=1.8.0,<2.0.0)",
+  "pydantic (>=2.12.0,<3.0.0)",
+  "semver (>=3.0.4,<4.0.0)",
+  "requests (>=2.31.0,<3.0.0)",
 ]
 
 [tool.poetry]
-packages = [{include = "tests"}]
+packages = [{ include = "tests" }]
 
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.20.0"
-ruff = "^0.15.7"
-pydantic = {extras = ["mypy"], version = "^2.11.7"}
+ruff = "^0.15.8"
+pydantic = { extras = ["mypy"], version = "^2.11.7" }
 types-requests = "^2.33.0"
 
 [tool.pytest.ini_options]
@@ -30,11 +28,11 @@ log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s %(levelname)s %(funcName)s: %(message)s"
 markers = [
-    "launcher_tests: Tests that validate launcher CLI and behavioral contracts without real cloud deployment.",
-    "installation_e2e: End-to-end tests focused on installation-level behavior.",
-    "infrastructure_e2e: End-to-end tests focused on cloud infrastructure behavior.",
-    "provider_aws: Tests that assert AWS-specific behavior.",
-    "provider_azure: Tests that assert Azure-specific behavior.",
+  "launcher_tests: Tests that validate launcher CLI and behavioral contracts without real cloud deployment.",
+  "installation_e2e: End-to-end tests focused on installation-level behavior.",
+  "infrastructure_e2e: End-to-end tests focused on cloud infrastructure behavior.",
+  "provider_aws: Tests that assert AWS-specific behavior.",
+  "provider_azure: Tests that assert Azure-specific behavior.",
 ]
 
 [tool.mypy]
@@ -60,9 +58,7 @@ disallow_any_unimported = true
 disallow_any_decorated = true
 disallow_subclassing_any = true
 
-plugins = [
-    "pydantic.mypy",
-]
+plugins = ["pydantic.mypy"]
 
 [tool.ruff]
 target-version = "py313"
@@ -70,25 +66,25 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    # These force us to document every
-    # single function and module.
-    "D100",
-    "D101",
-    "D102",
-    "D103",
-    "D104",
-    "D107",
+  # These force us to document every
+  # single function and module.
+  "D100",
+  "D101",
+  "D102",
+  "D103",
+  "D104",
+  "D107",
 
-    # Conflicting rules
-    "D203", # `incorrect-blank-line-before-class` (D203) and `no-blank-line-before-class` (D211) are incompatible.
-    "D213", # `multi-line-summary-first-line` (D212) and `multi-line-summary-second-line` (D213) are incompatible.
+  # Conflicting rules
+  "D203", # `incorrect-blank-line-before-class` (D203) and `no-blank-line-before-class` (D211) are incompatible.
+  "D213", # `multi-line-summary-first-line` (D212) and `multi-line-summary-second-line` (D213) are incompatible.
 
-    "S603", # Frequent false positives
-    "S101", # Forbids asserts that we need
-    "LOG015", # Forbids usage of the global logger
+  "S603",   # Frequent false positives
+  "S101",   # Forbids asserts that we need
+  "LOG015", # Forbids usage of the global logger
 
-    # Conflicts with formatter
-    "COM812", # The following rules may cause conflicts when used with the formatter: `COM812`
+  # Conflicts with formatter
+  "COM812", # The following rules may cause conflicts when used with the formatter: `COM812`
 ]
 
 [build-system]
