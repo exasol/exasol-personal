@@ -19,12 +19,7 @@ The AWS account must have the permissions and quota to launch large type instanc
 ### 🔐 In the AWS IAM console, do the following:
 
 1. Create a new user for the Exasol instance.
-2. Attach the following IAM policies to the Exasol user:
-   - `AmazonEC2FullAccess`
-   - `IAMReadOnlyAccess`
-   - `IAMUserChangePassword`
-   - `AmazonSSMFullAccess`
-   - `AmazonS3FullAccess`
+2. Attach [this](./assets/infrastructure/aws/iam-policy.broad.json) security policy to the Exasol user.
 3. Generate AWS access keys for the user.
 
 If you want to use multi factor authentication (MFA) or other methods for authentication in your AWS account, additional steps may be required. For more information, refer to the AWS documentation: https://docs.aws.amazon.com/.
