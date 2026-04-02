@@ -40,7 +40,7 @@ var cleanupDiscoverCmd = &cobra.Command{
 		var collectors []shared.ProviderCollector
 		
 		// AWS Collector - default owner to caller identity
-		if cleanupOpts.Region != "" {
+		if cleanupOpts.AWSRegion != "" {
 			awsOwnerFilter := cleanupDiscoverOpts.OwnerFilter
 			
 			// AWS-specific default: use caller identity if no filter provided
@@ -57,7 +57,7 @@ var cleanupDiscoverCmd = &cobra.Command{
 			}
 			
 			collectors = append(collectors,
-				aws.NewCollector(cleanupOpts.Region, awsOwnerFilter, cleanupDiscoverOpts.Legacy))
+				aws.NewCollector(cleanupOpts.AWSRegion, awsOwnerFilter, cleanupDiscoverOpts.Legacy))
 		}
 		
 		// Exoscale Collector - use provided owner filter or empty for all
@@ -228,7 +228,7 @@ var cleanupDiscoverCmd = &cobra.Command{
 		if cleanupDiscoverOpts.Legacy {
 			mode = "legacy"
 		}
-		regionDisplay := cleanupOpts.Region
+		regionDisplay := cleanupOpts.AWSRegion
 		if regionDisplay == "" {
 			regionDisplay = "(default)"
 		}

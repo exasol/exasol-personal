@@ -24,7 +24,7 @@ var cleanupProvidersCmd = &cobra.Command{
 		cmd.SilenceUsage = true
 
 		// Always check both providers with sensible defaults
-		awsRegion := cleanupOpts.Region
+		awsRegion := cleanupOpts.AWSRegion
 		if awsRegion == "" {
 			awsRegion = "us-east-1" // Default region for availability check
 		}

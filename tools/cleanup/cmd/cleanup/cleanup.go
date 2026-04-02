@@ -8,7 +8,7 @@ import (
 )
 
 var cleanupOpts = struct {
-	Region       string
+	AWSRegion    string
 	ExoscaleZone string
 	Verbose      bool
 }{}
@@ -17,7 +17,7 @@ var cleanupOpts = struct {
 // subcommands (discover, show, run) without an intermediate "cleanup" group.
 func registerRootFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().
-		StringVar(&cleanupOpts.Region, "region", "",
+		StringVar(&cleanupOpts.AWSRegion, "aws-region", "",
 			"AWS region containing the deployment resources")
 	cmd.PersistentFlags().
 		StringVar(&cleanupOpts.ExoscaleZone, "exoscale-zone", "ch-gva-2",

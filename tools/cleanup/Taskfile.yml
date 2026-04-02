@@ -23,6 +23,26 @@ tasks:
     cmds:
       - go test -v ./...
 
+  lint-golang:
+    desc: Run golangci-lint linters
+    cmds:
+      - go tool golangci-lint run ./...
+
+  lint-golang-fix:
+    desc: Run golangci-lint linters and apply automatic fixes
+    cmds:
+      - go tool golangci-lint run ./... --fix
+
+  lint:
+    desc: Run all linters
+    cmds:
+      - task: lint-golang
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - task: lint-golang-fix
+
   clean:
     desc: Clean build artifacts
     cmds:

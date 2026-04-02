@@ -34,7 +34,7 @@ var cleanupShowCmd = &cobra.Command{
 		var collectors []shared.ProviderCollector
 
 		// AWS Collector - default owner to caller identity
-		if cleanupOpts.Region != "" {
+		if cleanupOpts.AWSRegion != "" {
 			awsOwnerFilter := ""
 			cfg, err := config.LoadDefaultConfig(cmd.Context())
 			if err == nil {
@@ -46,7 +46,7 @@ var cleanupShowCmd = &cobra.Command{
 			}
 
 			collectors = append(collectors,
-				aws.NewCollector(cleanupOpts.Region, awsOwnerFilter, false))
+				aws.NewCollector(cleanupOpts.AWSRegion, awsOwnerFilter, false))
 		}
 
 		// Exoscale Collector
