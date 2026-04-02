@@ -1,12 +1,19 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package cleanup
+package aws
 
 import (
 	"context"
 	"errors"
 	"log/slog"
+
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+)
+
+// Constants from shared package
+const (
+	OpSkip = shared.OpSkip
 )
 
 var ErrNoResourcesPlanned = errors.New("no resources found to plan cleanup")

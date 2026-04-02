@@ -8,7 +8,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/cleanup"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 	"github.com/spf13/cobra"
 )
 
@@ -28,22 +32,54 @@ var cleanupRunCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
 		deploymentID := args[0]
-		region := cleanupOpts.Region
-		details, err := cleanup.CollectDeploymentDetails(cmd.Context(), region, deploymentID)
+
+		var collectors []shared.ProviderCollector
+
+		// AWS Collector - default owner to caller identity
+		if cleanupOpts.AWSRegion != "" {
+			awsOwnerFilter := ""
+			cfg, err := config.LoadDefaultConfig(cmd.Context())
+			if err == nil {
+				stsClient := sts.NewFromConfig(cfg)
+				idOut, err := stsClient.GetCallerIdentity(cmd.Context(), &sts.GetCallerIdentityInput{})
+				if err == nil && idOut.Arn != nil && *idOut.Arn != "" {
+					awsOwnerFilter = *idOut.Arn
+				}
+			}
+
+			collectors = append(collectors,
+				aws.NewCollector(cleanupOpts.AWSRegion, awsOwnerFilter, false))
+		}
+
+		// Exoscale Collector
+		if cleanupOpts.ExoscaleZone != "" {
+			collectors = append(collectors,
+				exoscale.NewCollector(cleanupOpts.ExoscaleZone, "", false))
+		}
+
+		// Find which provider has this deployment
+		collector, err := shared.FindDeployment(cmd.Context(), collectors, deploymentID)
 		if err != nil {
 			return err
 		}
+
+		// Use the found collector to get details
+		details, err := collector.CollectDeploymentDetails(cmd.Context(), deploymentID)
+		if err != nil {
+			return err
+		}
+
 		// Use resolved region from details to avoid empty display
-		region = details.Summary.Region
-		var typeFilter []cleanup.ResourceType
+		region := details.Summary.Region
+		var typeFilter []shared.ResourceType
 		for _, t := range cleanupRunOpts.Types {
-			typeFilter = append(typeFilter, cleanup.ResourceType(t))
+			typeFilter = append(typeFilter, shared.ResourceType(t))
 		}
-		actions, err := cleanup.PlanActions(details, typeFilter)
+		actions, err := collector.PlanActions(details, typeFilter)
 		if err != nil {
 			return err
 		}
-		results, err := cleanup.ExecuteActions(cmd.Context(), actions, cleanupRunOpts.Execute)
+		results, err := collector.ExecuteActions(cmd.Context(), actions, cleanupRunOpts.Execute)
 		if err != nil {
 			return err
 		}
@@ -91,7 +127,7 @@ var cleanupRunCmd = &cobra.Command{
 				},
 			)
 		}
-		cleanup.RenderTable(
+		shared.RenderTable(
 			cmd.OutOrStdout(),
 			[]string{"type", "id", "op", "status", "reason"},
 			[]int{20, 25, 8, 10, 20},

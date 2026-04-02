@@ -8,7 +8,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/cleanup"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 	"github.com/spf13/cobra"
 )
 
@@ -26,12 +30,43 @@ var cleanupShowCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
 		deploymentID := args[0]
-		region := cleanupOpts.Region
-		// Use shared collector for details
-		details, err := cleanup.CollectDeploymentDetails(cmd.Context(), region, deploymentID)
+
+		var collectors []shared.ProviderCollector
+
+		// AWS Collector - default owner to caller identity
+		if cleanupOpts.AWSRegion != "" {
+			awsOwnerFilter := ""
+			cfg, err := config.LoadDefaultConfig(cmd.Context())
+			if err == nil {
+				stsClient := sts.NewFromConfig(cfg)
+				idOut, err := stsClient.GetCallerIdentity(cmd.Context(), &sts.GetCallerIdentityInput{})
+				if err == nil && idOut.Arn != nil && *idOut.Arn != "" {
+					awsOwnerFilter = *idOut.Arn
+				}
+			}
+
+			collectors = append(collectors,
+				aws.NewCollector(cleanupOpts.AWSRegion, awsOwnerFilter, false))
+		}
+
+		// Exoscale Collector
+		if cleanupOpts.ExoscaleZone != "" {
+			collectors = append(collectors,
+				exoscale.NewCollector(cleanupOpts.ExoscaleZone, "", false))
+		}
+
+		// Find which provider has this deployment
+		collector, err := shared.FindDeployment(cmd.Context(), collectors, deploymentID)
 		if err != nil {
 			return err
 		}
+
+		// Use the found collector to get details
+		details, err := collector.CollectDeploymentDetails(cmd.Context(), deploymentID)
+		if err != nil {
+			return err
+		}
+
 		if cleanupShowOpts.JSON {
 			enc := json.NewEncoder(cmd.OutOrStdout())
 			enc.SetIndent("", "  ")
@@ -76,7 +111,7 @@ var cleanupShowCmd = &cobra.Command{
 			)
 		}
 		if len(rows) > 0 {
-			cleanup.RenderTable(
+			shared.RenderTable(
 				cmd.OutOrStdout(),
 				[]string{"type", "id", "owner", "created", "state", "arn"},
 				[]int{15, 25, 50, 22, 10, 90},
@@ -89,16 +124,13 @@ var cleanupShowCmd = &cobra.Command{
 		if !details.Summary.CreatedAt.IsZero() {
 			created = details.Summary.CreatedAt.Format("2006-01-02 15:04")
 		}
-		regionDisplay := cleanupOpts.Region
-		if regionDisplay == "" {
-			regionDisplay = "(default)"
-		}
 		if _, err := fmt.Fprintf(
 			cmd.OutOrStdout(),
-			"Summary: deployment=%s, owner=%s, region=%s, created=%s, state=%s, resources=%d\n",
+			"Summary: deployment=%s, owner=%s, provider=%s, region=%s, created=%s, state=%s, resources=%d\n",
 			details.Summary.ID,
 			details.Summary.Owner,
-			regionDisplay,
+			details.Summary.Provider,
+			details.Summary.Region,
 			created,
 			details.Summary.State,
 			details.Summary.Resources,
