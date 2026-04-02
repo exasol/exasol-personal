@@ -33,3 +33,12 @@ const (
 	ResourceIAMAPIKey        ResourceType = "exoscale-iam-api-key"
 	ResourceSOSBucket        ResourceType = "sos-bucket"
 )
+
+// Organization represents an Exoscale organization from the API
+type Organization struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Address string `json:"address"`
+	City    string `json:"city"`
+	Country string `json:"country"`
+}

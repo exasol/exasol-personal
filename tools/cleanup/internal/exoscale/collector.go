@@ -5,6 +5,7 @@ package exoscale
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
@@ -36,6 +37,25 @@ func (c *Collector) IsAvailable(ctx context.Context) bool {
 	apiKey := os.Getenv("EXOSCALE_API_KEY")
 	apiSecret := os.Getenv("EXOSCALE_API_SECRET")
 	return apiKey != "" && apiSecret != ""
+}
+
+func (c *Collector) GetAccountInfo(ctx context.Context) (string, error) {
+	client, err := newAPIClient(c.zone)
+	if err != nil {
+		return "", fmt.Errorf("failed to create API client: %w", err)
+	}
+
+	// Try to get organization - provides both ID and Name
+	org, err := client.getOrganization(ctx)
+	if err == nil {
+		// Return Organization ID (UUID) - the stable account identifier
+		// This is what Exoscale uses internally to identify accounts
+		return org.ID, nil
+	}
+
+	// If we cannot access organization endpoint (restricted API key),
+	// we cannot determine the account ID, but we can still indicate connection
+	return "[restricted]", nil
 }
 
 func (c *Collector) CollectDeploymentSummaries(ctx context.Context) ([]shared.DeploymentSummary, error) {

@@ -208,3 +208,18 @@ func (c *apiClient) listIAMAPIKeys(ctx context.Context) ([]IAMAPIKey, error) {
 	
 	return response.APIKeys, nil
 }
+
+// getOrganization retrieves organization information
+func (c *apiClient) getOrganization(ctx context.Context) (*Organization, error) {
+	respBody, err := c.doRequest(ctx, "GET", "/organization", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var org Organization
+	if err := json.Unmarshal(respBody, &org); err != nil {
+		return nil, fmt.Errorf("failed to parse organization response: %w", err)
+	}
+
+	return &org, nil
+}

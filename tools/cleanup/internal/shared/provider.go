@@ -24,6 +24,10 @@ type ProviderCollector interface {
 	// Returns false if credentials are missing or invalid.
 	IsAvailable(ctx context.Context) bool
 
+	// GetAccountInfo returns human-readable account information for the connected provider.
+	// Returns empty string and error if not connected or unable to retrieve.
+	GetAccountInfo(ctx context.Context) (string, error)
+
 	// CollectDeploymentDetails retrieves detailed resource information for a specific deployment.
 	CollectDeploymentDetails(ctx context.Context, deploymentID string) (*DeploymentDetails, error)
 

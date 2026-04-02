@@ -5,8 +5,10 @@ package aws
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 )
 
@@ -35,6 +37,25 @@ func (c *Collector) IsAvailable(ctx context.Context) bool {
 	// Check if AWS credentials are configured
 	_, err := config.LoadDefaultConfig(ctx, config.WithRegion(c.region))
 	return err == nil
+}
+
+func (c *Collector) GetAccountInfo(ctx context.Context) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(c.region))
+	if err != nil {
+		return "", fmt.Errorf("failed to load AWS config: %w", err)
+	}
+
+	stsClient := sts.NewFromConfig(cfg)
+	idOut, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get caller identity: %w", err)
+	}
+
+	if idOut.Account == nil {
+		return "", fmt.Errorf("account ID not available")
+	}
+
+	return *idOut.Account, nil
 }
 
 func (c *Collector) CollectDeploymentSummaries(ctx context.Context) ([]shared.DeploymentSummary, error) {
