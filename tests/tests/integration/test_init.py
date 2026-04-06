@@ -85,6 +85,30 @@ def test_init_succeeds(exasol_path: str, tmp_path: Path) -> None:
     assert "exasol.com" in combined_output.lower()
 
 
+def test_init_creates_deployment_dir(exasol_path: str, tmp_path: Path) -> None:
+    # Given an deployment directory path
+    deployment_dir = tmp_path / "deployment"
+
+    # Given an infrastructure preset ID
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+
+    # When `exasol init` is invoked
+    result = run_command(
+        [
+            exasol_path,
+            "init",
+            infra_id,
+            "--deployment-dir",
+            str(deployment_dir),
+        ]
+    )
+
+    # Then the command succeeds
+    assert result.returncode == 0
+    assert "successfully initialized deployment" in result.stderr.lower()
+    assert deployment_dir.exists()
+
+
 def test_init_allows_deployment_dir_flag_before_preset_arg(
     exasol_path: str, tmp_path: Path
 ) -> None:
