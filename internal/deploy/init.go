@@ -102,7 +102,11 @@ func InitDeployment(
 		return nil
 	}
 
-	// Make sure the directory is empty
+	// Make sure the directory exists and is empty
+	if err = util.EnsureDir(deploymentDir); err != nil {
+		return err
+	}
+
 	if err = ensureDirectoryIsEmpty(deploymentDir); err != nil {
 		return err
 	}

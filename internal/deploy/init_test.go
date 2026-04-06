@@ -119,6 +119,35 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	}
 }
 
+func TestInitDeployment_CreatesDeploymentDir(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	root := t.TempDir()
+	deploymentDir := filepath.Join(root, "deployment")
+
+	// When
+	err := InitDeployment(
+		context.Background(),
+		PresetRef{Name: presets.DefaultInfrastructure},
+		PresetRef{Name: presets.DefaultInstallation},
+		map[string]string{},
+		map[string]string{},
+		deploymentDir,
+		false,
+		"",
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("InitDeployment failed: %v", err)
+	}
+
+	info, _ := os.Stat(deploymentDir)
+	if !info.IsDir() {
+		t.Fatal("Deployment directory does not exist")
+	}
+}
+
 func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {
 	t.Parallel()
 
