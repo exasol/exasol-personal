@@ -53,7 +53,7 @@ The following inbound ports are opened from `var.allowed_cidr`:
   - `Project = exasol-personal`
   - `Deployment = <deployment_id>`
   - `CreatedAt = <timestamp>`
-  - `Owner = <Azure user principal name>`
+  - `Owner = <Azure AD identity name>` (user principal name for users, display name for service principals)
 
 ## Node Addressing Scheme
 - Nodes are named `n<NN>` starting at `n11`.
@@ -66,6 +66,7 @@ The following inbound ports are opened from `var.allowed_cidr`:
 1. OpenTofu plan/apply:
    - generates a deployment ID
    - creates the resource group, network, NSG, public IPs, NICs, VMs, and managed data disks
+   - creates an Azure Key Vault with an access policy and stores the SSH private key as a secret
    - creates Azure Blob Storage resources for the remote archive volume when `blob_archive_enabled` is true
    - renders cloud-init for each node
 2. Cloud-init on each node:
@@ -88,7 +89,7 @@ The following inbound ports are opened from `var.allowed_cidr`:
 
 ## Credentials
 - Database and Admin UI passwords are generated unless explicitly provided.
-- The generated SSH private key is written locally with mode `0600`.
+- The generated SSH private key is written locally with mode `0600` and stored in Azure Key Vault at `ssh-private-key`.
 - Remote archive registration uses the Azure Storage Account name and access key generated for the deployment.
 
 ## Permissions
@@ -99,6 +100,7 @@ The following inbound ports are opened from `var.allowed_cidr`:
   - NICs and NSGs
   - virtual machines
   - managed disks
+  - Key Vaults (with access policies)
 - Storage Accounts and Blob containers
 - The deployment identity must also be able to read storage account keys because Exasol's Azure remote archive integration uses shared-key authentication.
 - For broad access, Azure built-in `Contributor` scoped to the target resource group is usually sufficient.
