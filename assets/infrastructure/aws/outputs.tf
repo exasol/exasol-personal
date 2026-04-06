@@ -6,7 +6,9 @@ data "aws_instance" "nodes" {
 
 locals {
   infrastructure_artifact_dir = abspath(var.infrastructure_artifact_dir)
+  installation_preset_dir     = abspath(var.installation_preset_dir)
   key_file_name               = "node_access.pem"
+  key_file_relative_path      = local.key_file_name
   key_file_path               = "${local.infrastructure_artifact_dir}/${local.key_file_name}"
 
   deployment_info = {
@@ -29,9 +31,9 @@ locals {
         ssh = {
           username = "ubuntu"
           keyName  = local.ssh_key_name
-          keyFile  = local.key_file_path
+          keyFile  = local.key_file_relative_path
           port     = "22"
-          command  = "ssh -i ${local.key_file_path} ubuntu@${node.public_dns} -p 22"
+          command  = "ssh -i ${local.key_file_relative_path} ubuntu@${node.public_dns} -p 22"
         }
         tlsCert = tls_locally_signed_cert.tls_cert.cert_pem
         database = {

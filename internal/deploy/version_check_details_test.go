@@ -32,7 +32,7 @@ func TestGetVersionCheckURL_UsesEnvOverride(t *testing.T) {
 func TestGetVersionCheckDetails_EmptyClusterIdentityWhenNoDeploymentDir(t *testing.T) {
 	t.Parallel()
 
-	details := GetVersionCheckDetails("")
+	details := GetVersionCheckDetails(config.NewDeploymentDir(""))
 	if details.ClusterIdentity != "" {
 		t.Fatalf("expected empty cluster identity, got %q", details.ClusterIdentity)
 	}
@@ -52,11 +52,11 @@ func TestGetVersionCheckDetails_UsesPersistedClusterIdentityFromState(t *testing
 		LastVersionCheck:     time.Time{},
 		VersionCheckEnabled:  true,
 	}
-	if err := config.WriteExasolPersonalState(state, dir); err != nil {
+	if err := config.WriteExasolPersonalState(state, config.NewDeploymentDir(dir)); err != nil {
 		t.Fatalf("failed to write state: %v", err)
 	}
 
-	details := GetVersionCheckDetails(dir)
+	details := GetVersionCheckDetails(config.NewDeploymentDir(dir))
 	if details.ClusterIdentity != expected {
 		t.Fatalf(
 			"expected persisted cluster identity %q, got %q",
@@ -80,11 +80,11 @@ func TestGetVersionCheckDetails_EmptyClusterIdentityWhenStateHasNoClusterIdentit
 		LastVersionCheck:     time.Time{},
 		VersionCheckEnabled:  true,
 	}
-	if err := config.WriteExasolPersonalState(state, dir); err != nil {
+	if err := config.WriteExasolPersonalState(state, config.NewDeploymentDir(dir)); err != nil {
 		t.Fatalf("failed to write state: %v", err)
 	}
 
-	details := GetVersionCheckDetails(dir)
+	details := GetVersionCheckDetails(config.NewDeploymentDir(dir))
 	if details.ClusterIdentity != "" {
 		t.Fatalf(
 			"expected empty cluster identity when state value is missing, got %q",

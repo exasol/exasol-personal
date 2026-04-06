@@ -26,6 +26,7 @@ var deployCmd = &cobra.Command{
 	GroupID: rootCmdGroupEssential,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
+		deployment := commonFlags.Deployment()
 		lockfileMode := deploy.TofuLockfileReadonly
 		if commonFlags.DeployTofuUpdateLockfile {
 			lockfileMode = deploy.TofuLockfileUpdate
@@ -33,14 +34,14 @@ var deployCmd = &cobra.Command{
 
 		if err := deploy.Deploy(
 			cmd.Context(),
-			commonFlags.DeploymentDir,
+			deployment,
 			commonFlags.DeployVerbose,
 			lockfileMode,
 		); err != nil {
 			return err
 		}
 
-		return printConnectionInstructionsFromFile(commonFlags.DeploymentDir, os.Stdout)
+		return printConnectionInstructionsFromFile(deployment, os.Stdout)
 	},
 }
 

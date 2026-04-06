@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -40,14 +41,14 @@ func deploymentFileLoggingIsRequired(cmd *cobra.Command) bool {
 var startDeploymentLogSession = func(
 	_ context.Context,
 	commandName string,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 ) (func(), error) {
-	logFilePath := deploymentLogFilePath(deploymentDir)
+	logFilePath := deploymentLogFilePath(deployment)
 	logDir := filepath.Dir(logFilePath)
 	if err := os.MkdirAll(logDir, deploymentLogsDirPermissions); err != nil {
 		slog.Warn(
 			"failed to enable deployment file logging; continuing without deployment file logging",
-			"deployment_dir", deploymentDir,
+			"deployment_dir", deployment.Root(),
 			"error", err.Error(),
 		)
 
@@ -70,7 +71,7 @@ var startDeploymentLogSession = func(
 	}
 
 	globalDeploymentFileSink.Set(file, slog.LevelDebug)
-	writeDeploymentLogBootstrap(file, commandName, deploymentDir)
+	writeDeploymentLogBootstrap(file, commandName, deployment)
 
 	slog.Info("deployment log file", "status", "started", "path", logFilePath)
 
@@ -99,7 +100,7 @@ func runDeploymentLogCleanup() {
 	deploymentLogCleanup = func() {}
 }
 
-func setupDeploymentLogSession(cmd *cobra.Command, deploymentDir string) error {
+func setupDeploymentLogSession(cmd *cobra.Command, deployment config.DeploymentDir) error {
 	// Default cleanup is always a no-op, so Execute() can always defer cleanup once.
 	setDeploymentLogCleanup(func() {})
 
@@ -107,7 +108,7 @@ func setupDeploymentLogSession(cmd *cobra.Command, deploymentDir string) error {
 		return nil
 	}
 
-	cleanup, err := startDeploymentLogSession(cmd.Context(), cmd.Name(), deploymentDir)
+	cleanup, err := startDeploymentLogSession(cmd.Context(), cmd.Name(), deployment)
 	setDeploymentLogCleanup(cleanup)
 
 	if err != nil {
@@ -128,18 +129,18 @@ func deploymentLogSessionStartsAfterInit(cmd *cobra.Command) bool {
 	}
 }
 
-func deploymentLogFilePath(deploymentDir string) string {
-	return filepath.Join(deploymentDir, deploymentLogFileName)
+func deploymentLogFilePath(deployment config.DeploymentDir) string {
+	return deployment.Resolve(deploymentLogFileName)
 }
 
 func writeDeploymentLogBootstrap(
 	file *os.File,
 	commandName string,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 ) {
 	writeBootstrapRecord(file, "deployment log session started",
 		slog.String("command", commandName),
-		slog.String("deployment_dir", deploymentDir),
+		slog.String("deployment_dir", deployment.Root()),
 	)
 	writeBootstrapRecord(file, "system information",
 		slog.String("os", runtime.GOOS),

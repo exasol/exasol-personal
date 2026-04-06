@@ -41,6 +41,7 @@ func TestWorkflowState(t *testing.T) {
 	t.Run("Write error (non-writable dir)", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
+		deployment := NewDeploymentDir(dir)
 		//nolint:gosec // remove write bit to force writeConfig error
 		if err := os.Chmod(dir, 0o600); err != nil {
 			t.Fatalf("chmod dir failed: %v", err)
@@ -49,18 +50,19 @@ func TestWorkflowState(t *testing.T) {
 		defer os.Chmod(dir, 0o700)
 
 		exasolState := &ExasolPersonalState{}
-		expectErr(t, WriteExasolPersonalState(exasolState, dir))
+		expectErr(t, WriteExasolPersonalState(exasolState, deployment))
 	})
 
 	t.Run("Initialized", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
+		deployment := NewDeploymentDir(dir)
 
 		exasolState := &ExasolPersonalState{}
 		//nolint:errcheck,gosec // error checked in subsequent read
-		exasolState.SetWorkflowStateAndWrite(&WorkflowStateInitialized{}, dir)
+		exasolState.SetWorkflowStateAndWrite(&WorkflowStateInitialized{}, NewDeploymentDir(dir))
 
-		newExasolState, err := ReadExasolPersonalState(dir)
+		newExasolState, err := ReadExasolPersonalState(deployment)
 		if err != nil {
 			t.Fatalf("failed to read exasol personal state: %v", err)
 		}
@@ -76,12 +78,16 @@ func TestWorkflowState(t *testing.T) {
 	t.Run("OperationInProgress", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
+		deployment := NewDeploymentDir(dir)
 
 		exasolState := &ExasolPersonalState{}
 		//nolint:errcheck,gosec // error checked in subsequent read
-		exasolState.SetWorkflowStateAndWrite(&WorkflowStateOperationInProgress{}, dir)
+		exasolState.SetWorkflowStateAndWrite(
+			&WorkflowStateOperationInProgress{},
+			deployment,
+		)
 
-		newExasolState, err := ReadExasolPersonalState(dir)
+		newExasolState, err := ReadExasolPersonalState(deployment)
 		if err != nil {
 			t.Fatalf("failed to read exasol personal state: %v", err)
 		}
@@ -97,12 +103,16 @@ func TestWorkflowState(t *testing.T) {
 	t.Run("Running", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
+		deployment := NewDeploymentDir(dir)
 
 		exasolState := &ExasolPersonalState{}
 		//nolint:errcheck,gosec // error checked in subsequent read
-		exasolState.SetWorkflowStateAndWrite(&WorkflowStateRunning{}, dir)
+		exasolState.SetWorkflowStateAndWrite(
+			&WorkflowStateRunning{},
+			deployment,
+		)
 
-		newExasolState, err := ReadExasolPersonalState(dir)
+		newExasolState, err := ReadExasolPersonalState(deployment)
 		if err != nil {
 			t.Fatalf("failed to read exasol personal state: %v", err)
 		}
@@ -118,12 +128,13 @@ func TestWorkflowState(t *testing.T) {
 	t.Run("Stopped", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
+		deployment := NewDeploymentDir(dir)
 
 		exasolState := &ExasolPersonalState{}
 		//nolint:errcheck,gosec // error checked in subsequent read
-		exasolState.SetWorkflowStateAndWrite(&WorkflowStateStopped{}, dir)
+		exasolState.SetWorkflowStateAndWrite(&WorkflowStateStopped{}, NewDeploymentDir(dir))
 
-		newExasolState, err := ReadExasolPersonalState(dir)
+		newExasolState, err := ReadExasolPersonalState(deployment)
 		if err != nil {
 			t.Fatalf("failed to read exasol personal state: %v", err)
 		}
@@ -139,15 +150,16 @@ func TestWorkflowState(t *testing.T) {
 	t.Run("Interrupted", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
+		deployment := NewDeploymentDir(dir)
 
 		exasolState := &ExasolPersonalState{}
 		//nolint:errcheck,gosec // error checked in subsequent read
 		exasolState.SetWorkflowStateAndWrite(&WorkflowStateInterrupted{
 			Error:                      "e",
 			InterruptedDuringOperation: StopOperation,
-		}, dir)
+		}, NewDeploymentDir(dir))
 
-		newExasolState, err := ReadExasolPersonalState(dir)
+		newExasolState, err := ReadExasolPersonalState(deployment)
 		if err != nil {
 			t.Fatalf("failed to read exasol personal state: %v", err)
 		}
@@ -163,14 +175,15 @@ func TestWorkflowState(t *testing.T) {
 	t.Run("DeploymentFailed", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
+		deployment := NewDeploymentDir(dir)
 
 		exasolState := &ExasolPersonalState{}
 		//nolint:errcheck,gosec // error checked in subsequent read
 		exasolState.SetWorkflowStateAndWrite(&WorkflowStateDeploymentFailed{
 			Error: "f",
-		}, dir)
+		}, NewDeploymentDir(dir))
 
-		newExasolState, err := ReadExasolPersonalState(dir)
+		newExasolState, err := ReadExasolPersonalState(deployment)
 		if err != nil {
 			t.Fatalf("failed to read exasol personal state: %v", err)
 		}
@@ -186,19 +199,20 @@ func TestWorkflowState(t *testing.T) {
 	t.Run("Missing file returns error", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		_, err := ReadExasolPersonalState(dir)
+		_, err := ReadExasolPersonalState(NewDeploymentDir(dir))
 		expectErr(t, err)
 	})
 
 	t.Run("No field set returns ErrNoWorkflowStateSet", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
+		deployment := NewDeploymentDir(dir)
 
 		exasolState := &ExasolPersonalState{}
 		//nolint:errcheck,gosec // error checked in subsequent read
-		WriteExasolPersonalState(exasolState, dir)
+		WriteExasolPersonalState(exasolState, deployment)
 
-		newExasolState, err := ReadExasolPersonalState(dir)
+		newExasolState, err := ReadExasolPersonalState(deployment)
 		if err != nil {
 			t.Fatalf("failed to read exasol personal state: %v", err)
 		}

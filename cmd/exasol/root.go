@@ -55,6 +55,7 @@ var rootCmd = &cobra.Command{
 	Example:       rootCmdExample,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+		deployment := commonFlags.Deployment()
 		// Root-level pre-run is the single place where we enforce cross-cutting concerns.
 		// Design decision: keep this centralized so individual commands don't have to
 		// remember to repeat it (and so user-visible behavior stays consistent).
@@ -64,13 +65,13 @@ var rootCmd = &cobra.Command{
 
 		// Deployment-directory compatibility is enforced centrally and only for commands
 		// that declare it via annotations.
-		err := enforceDeploymentDirectoryCompatibility(cmd, commonFlags.DeploymentDir)
+		err := enforceDeploymentDirectoryCompatibility(cmd, deployment)
 		if err != nil {
 			return err
 		}
 
 		if !deploymentLogSessionStartsAfterInit(cmd) {
-			if err := setupDeploymentLogSession(cmd, commonFlags.DeploymentDir); err != nil {
+			if err := setupDeploymentLogSession(cmd, deployment); err != nil {
 				return err
 			}
 		}
@@ -79,7 +80,7 @@ var rootCmd = &cobra.Command{
 		// Design decision: never block commands on this.
 		if cmd.Name() != "version" {
 			deploy.MaybeLogVersionUpdateHint(
-				cmd.Context(), commonFlags.DeploymentDir,
+				cmd.Context(), deployment,
 				CurrentLauncherVersion,
 			)
 		}

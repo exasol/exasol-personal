@@ -11,8 +11,8 @@
 locals {
   # --- Path "constants" ---
   # Changing these paths will break the deployment processes as we use them to find the installation preset contents
-  installation_cloudconf_dir = "${var.installation_preset_dir}/cloudconf"
-  installation_files_dir     = "${var.installation_preset_dir}/files"
+  installation_cloudconf_dir = "${local.installation_preset_dir}/cloudconf"
+  installation_files_dir     = "${local.installation_preset_dir}/files"
 
   # Optional infrastructure-preset-provided host file overlay.
   # This is used for infrastructure-specific scripts or configs that should not live in provider-agnostic installation presets.
@@ -99,12 +99,12 @@ locals {
     exoscale = {
       zone = var.zone
       archive = {
-        enabled    = var.s3_archive_enabled
-        bucketId   = local.archive_bucket_id
-        volumeName = "default_archive"
+        enabled     = var.s3_archive_enabled
+        bucketId    = local.archive_bucket_id
+        volumeName  = "default_archive"
         sosEndpoint = local.sos_endpoint
-        accessKey  = var.s3_archive_enabled ? exoscale_iam_api_key.archive_sos_key[0].key : ""
-        secretKey  = var.s3_archive_enabled ? exoscale_iam_api_key.archive_sos_key[0].secret : ""
+        accessKey   = var.s3_archive_enabled ? exoscale_iam_api_key.archive_sos_key[0].key : ""
+        secretKey   = var.s3_archive_enabled ? exoscale_iam_api_key.archive_sos_key[0].secret : ""
       }
     }
   }
@@ -112,9 +112,9 @@ locals {
   # Per-node metadata written to disk (separate from infrastructure.json for clarity).
   node_payload_by_name = {
     for n in local.nodes : n.name => {
-      name         = n.name
-      privateIp    = n.ip
-      myId         = n.name
+      name      = n.name
+      privateIp = n.ip
+      myId      = n.name
 
       # Exasol always uses the same final disk alias across providers.
       # The udev match clause identifies the data disk so prepareExasol.sh can

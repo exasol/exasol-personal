@@ -23,7 +23,7 @@ var printConnectionInstructions = &cobra.Command{
 		cmd.SilenceUsage = true
 		content, err := deploy.GetConnectionInstructionsText(
 			cmd.Context(),
-			commonFlags.DeploymentDir,
+			commonFlags.Deployment(),
 		)
 		if err != nil {
 			return err

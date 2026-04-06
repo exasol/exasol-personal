@@ -6,7 +6,6 @@ package config
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -21,8 +20,8 @@ const deploymentVersionMarkerFileMode = 0o600
 
 // ReadDeploymentVersionMarker reads the deployment version marker from the deployment directory.
 // It returns (version, true, nil) if the marker exists, ("", false, nil) if it does not exist.
-func ReadDeploymentVersionMarker(deploymentDir string) (string, bool, error) {
-	path := filepath.Join(deploymentDir, DeploymentVersionMarkerFileName)
+func ReadDeploymentVersionMarker(deployment DeploymentDir) (string, bool, error) {
+	path := deployment.DeploymentVersionMarkerPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -36,8 +35,8 @@ func ReadDeploymentVersionMarker(deploymentDir string) (string, bool, error) {
 }
 
 // WriteDeploymentVersionMarker writes the plain-text deployment version marker.
-func WriteDeploymentVersionMarker(deploymentDir string, deploymentVersion string) error {
-	path := filepath.Join(deploymentDir, DeploymentVersionMarkerFileName)
+func WriteDeploymentVersionMarker(deployment DeploymentDir, deploymentVersion string) error {
+	path := deployment.DeploymentVersionMarkerPath()
 
 	// Assumption: this file is written during init (under the deployment directory lock)
 	// and only read afterwards. We keep the implementation intentionally simple.

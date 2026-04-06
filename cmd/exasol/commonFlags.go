@@ -4,6 +4,7 @@
 package main
 
 import (
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +34,10 @@ type CommonFlags struct {
 // commonFlags is the default runtime instance used by the actual CLI commands.
 // Unit tests should generally create their own FlagState instead of mutating this.
 var commonFlags = &CommonFlags{}
+
+func (state *CommonFlags) Deployment() config.DeploymentDir {
+	return config.NewDeploymentDir(state.DeploymentDir)
+}
 
 func registerLogLevelFlag(root *cobra.Command, state *CommonFlags) {
 	root.PersistentFlags().StringVar(

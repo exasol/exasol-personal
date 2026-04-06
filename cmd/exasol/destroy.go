@@ -50,7 +50,7 @@ var destroyCmd = &cobra.Command{
 		if response {
 			return deploy.Destroy(
 				cmd.Context(),
-				commonFlags.DeploymentDir, commonFlags.DeployVerbose,
+				commonFlags.Deployment(), commonFlags.DeployVerbose,
 			)
 		}
 

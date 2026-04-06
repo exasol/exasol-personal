@@ -11,10 +11,10 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/remote"
 	"github.com/exasol/exasol-personal/internal/util"
@@ -23,7 +23,7 @@ import (
 func (s *TaskRunnerImpl) runTaskRemoteExec(
 	ctx context.Context,
 	remoteExec *presets.RemoteExecTask,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	out, outErr io.Writer,
 ) error {
 	if remoteExec.Description != "" {
@@ -45,7 +45,7 @@ func (s *TaskRunnerImpl) runTaskRemoteExec(
 
 	slog.Debug("running script against remote nodes", "nodes", nodes, "script", remoteExec.Filename)
 
-	scriptFilePath := filepath.Join(deploymentDir, remoteExec.Filename)
+	scriptFilePath := deployment.Resolve(remoteExec.Filename)
 
 	scriptFile, err := os.ReadFile(scriptFilePath)
 	if err != nil {

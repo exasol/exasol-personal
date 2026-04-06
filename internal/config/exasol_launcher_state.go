@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -72,8 +71,8 @@ type ExasolPersonalState struct {
 }
 
 // DirectoryExasolPersonalStatefile.
-func IsDirectoryContainingStateFile(directory string) (bool, error) {
-	path := filepath.Join(directory, ExasolPersonalStateFileName)
+func HasExasolPersonalStateFile(deployment DeploymentDir) (bool, error) {
+	path := deployment.ExasolPersonalStatePath()
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -93,19 +92,17 @@ func IsDirectoryContainingStateFile(directory string) (bool, error) {
 }
 
 // SetExasolPersonalState writes a new exasol personal state to permanent storage.
-func WriteExasolPersonalState(state *ExasolPersonalState, deploymentDir string) error {
-	return writeConfig(state,
-		filepath.Join(deploymentDir, ExasolPersonalStateFileName),
-		"exasol personal state")
+func WriteExasolPersonalState(state *ExasolPersonalState, deployment DeploymentDir) error {
+	return writeConfig(state, deployment.ExasolPersonalStatePath(), "exasol personal state")
 }
 
 var ErrNoExasolPersonalStateSet = errors.New("no exasol-personal state is set")
 
 // GetExasolPersonalState returns the deployment state of the deployment directory.
-func ReadExasolPersonalState(deploymentDir string) (*ExasolPersonalState, error) {
+func ReadExasolPersonalState(deployment DeploymentDir) (*ExasolPersonalState, error) {
 	slog.Debug("reading exasol personal state")
 	state, err := readConfig[ExasolPersonalState](
-		filepath.Join(deploymentDir, ExasolPersonalStateFileName),
+		deployment.ExasolPersonalStatePath(),
 		"exasol personal state")
 	if err != nil {
 		return nil, err
@@ -139,14 +136,14 @@ func (exasolState *ExasolPersonalState) SetWorkflowState(anyState any) error {
 
 func (exasolState *ExasolPersonalState) SetWorkflowStateAndWrite(
 	anyState any,
-	deploymentDir string,
+	deployment DeploymentDir,
 ) error {
 	err := exasolState.SetWorkflowState(anyState)
 	if err != nil {
 		return err
 	}
 
-	err = WriteExasolPersonalState(exasolState, deploymentDir)
+	err = WriteExasolPersonalState(exasolState, deployment)
 	if err != nil {
 		return err
 	}

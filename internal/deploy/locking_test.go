@@ -22,6 +22,7 @@ func TestWithDeploymentExclusiveLockReturnsOperationInProgressMessage(t *testing
 
 	// Given
 	deploymentDir := t.TempDir()
+	deployment := config.NewDeploymentDir(deploymentDir)
 	writeWorkflowState(t, deploymentDir, &config.WorkflowStateOperationInProgress{
 		Operation: config.DeployOperation,
 	})
@@ -38,9 +39,13 @@ func TestWithDeploymentExclusiveLockReturnsOperationInProgressMessage(t *testing
 	})
 
 	// When
-	err = withDeploymentExclusiveLock(context.Background(), deploymentDir, func(string) error {
-		return nil
-	})
+	err = withDeploymentExclusiveLock(
+		context.Background(),
+		deployment,
+		func(config.DeploymentDir) error {
+			return nil
+		},
+	)
 
 	// Then
 	if err == nil {
@@ -56,6 +61,7 @@ func TestWithDeploymentSharedLockReturnsGenericMessageWhenStatusNotInProgress(t 
 
 	// Given
 	deploymentDir := t.TempDir()
+	deployment := config.NewDeploymentDir(deploymentDir)
 	mutex, err := directorymutex.New(deploymentDir)
 	if err != nil {
 		t.Fatalf("new mutex: %v", err)
@@ -68,9 +74,13 @@ func TestWithDeploymentSharedLockReturnsGenericMessageWhenStatusNotInProgress(t 
 	})
 
 	// When
-	err = withDeploymentSharedLock(context.Background(), deploymentDir, func(string) error {
-		return nil
-	})
+	err = withDeploymentSharedLock(
+		context.Background(),
+		deployment,
+		func(config.DeploymentDir) error {
+			return nil
+		},
+	)
 
 	// Then
 	if err == nil {
@@ -86,11 +96,12 @@ func TestWithDeploymentSharedLockPreservesContextCancellation(t *testing.T) {
 
 	// Given
 	deploymentDir := t.TempDir()
+	deployment := config.NewDeploymentDir(deploymentDir)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	// When
-	err := withDeploymentSharedLock(ctx, deploymentDir, func(string) error {
+	err := withDeploymentSharedLock(ctx, deployment, func(config.DeploymentDir) error {
 		return nil
 	})
 
@@ -112,6 +123,7 @@ func TestWithDeploymentExclusiveLockReleasesOnSignal(t *testing.T) {
 	util.StartSignalHandlerWithChannel(signalChannel, func(os.Signal) {})
 
 	deploymentDir := t.TempDir()
+	deployment := config.NewDeploymentDir(deploymentDir)
 	mutex, err := directorymutex.New(deploymentDir)
 	if err != nil {
 		t.Fatalf("new mutex: %v", err)
@@ -124,8 +136,8 @@ func TestWithDeploymentExclusiveLockReleasesOnSignal(t *testing.T) {
 	go func() {
 		lockDone <- withDeploymentExclusiveLock(
 			context.Background(),
-			deploymentDir,
-			func(string) error {
+			deployment,
+			func(config.DeploymentDir) error {
 				close(acquired)
 				<-releaseCallback
 
@@ -152,7 +164,8 @@ func writeWorkflowState(t *testing.T, deploymentDir string, workflowState any) {
 	t.Helper()
 
 	exasolState := &config.ExasolPersonalState{}
-	if err := exasolState.SetWorkflowStateAndWrite(workflowState, deploymentDir); err != nil {
+	deployment := config.NewDeploymentDir(deploymentDir)
+	if err := exasolState.SetWorkflowStateAndWrite(workflowState, deployment); err != nil {
 		t.Fatalf("write workflow state: %v", err)
 	}
 }

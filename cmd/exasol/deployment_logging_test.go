@@ -47,15 +47,16 @@ func TestStartDeploymentLogSession_CreatesDeploymentLogWithoutState(t *testing.T
 
 	// Given
 	deploymentDir := t.TempDir()
+	deployment := config.NewDeploymentDir(deploymentDir)
 
 	// When
-	cleanup, err := startDeploymentLogSession(context.Background(), "deploy", deploymentDir)
+	cleanup, err := startDeploymentLogSession(context.Background(), "deploy", deployment)
 	if err != nil {
 		t.Fatalf("unexpected setup error: %v", err)
 	}
 	t.Cleanup(cleanup)
 
-	logFilePath := deploymentLogFilePath(deploymentDir)
+	logFilePath := deploymentLogFilePath(deployment)
 
 	// Then
 	if _, err := os.Stat(logFilePath); err != nil {
@@ -86,16 +87,17 @@ func TestStartDeploymentLogSession_CreatesLogFileWhenDeploymentDirectoryDoesNotE
 	// Given
 	parentDir := t.TempDir()
 	deploymentDir := filepath.Join(parentDir, "deployment")
+	deployment := config.NewDeploymentDir(deploymentDir)
 
 	// When
-	cleanup, err := startDeploymentLogSession(context.Background(), "init", deploymentDir)
+	cleanup, err := startDeploymentLogSession(context.Background(), "init", deployment)
 	if err != nil {
 		t.Fatalf("unexpected setup error: %v", err)
 	}
 	t.Cleanup(cleanup)
 
 	// Then
-	if _, err := os.Stat(deploymentLogFilePath(deploymentDir)); err != nil {
+	if _, err := os.Stat(deploymentLogFilePath(deployment)); err != nil {
 		t.Fatalf("expected log file to be created, got err=%v", err)
 	}
 }

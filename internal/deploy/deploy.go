@@ -48,19 +48,19 @@ func appendDeployFailureResourceHint(err error) error {
 //nolint:revive
 func Deploy(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	verbose bool,
 	tofuLockfileMode TofuLockfileMode,
 ) error {
 	slog.Debug("Running deploy")
 
 	// Execute according to infrastructure/installation manifests instead of exasolConfig.yaml
-	return deployFromManifests(ctx, deploymentDir, verbose, tofuLockfileMode)
+	return deployFromManifests(ctx, deployment, verbose, tofuLockfileMode)
 }
 
 func WorkflowStatePermitsDeploy(
 	exasolState *config.ExasolPersonalState,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 ) error {
 	// Check we are in state init, inprogress or deploymentInterrupted.
 	// - We are allowed to retry deployment when in the interrupted state, because
@@ -91,7 +91,7 @@ func WorkflowStatePermitsDeploy(
 		}
 	}
 
-	LogDeploymentStatus(deploymentDir)
+	LogDeploymentStatus(deployment)
 
 	return ErrUnexpectedDeploymentStatus
 }
@@ -100,26 +100,26 @@ func WorkflowStatePermitsDeploy(
 //nolint:revive
 func deployFromManifests(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	verbose bool,
 	tofuLockfileMode TofuLockfileMode,
 ) error {
-	return withDeploymentExclusiveLock(ctx, deploymentDir,
-		func(deploymentDir string) error {
-			exasolState, err := config.ReadExasolPersonalState(deploymentDir)
+	return withDeploymentExclusiveLock(ctx, deployment,
+		func(deployment config.DeploymentDir) error {
+			exasolState, err := config.ReadExasolPersonalState(deployment)
 			if err != nil {
 				slog.Error("failed to read exasol personal state")
 				return err
 			}
 
-			if err := WorkflowStatePermitsDeploy(exasolState, deploymentDir); err != nil {
+			if err := WorkflowStatePermitsDeploy(exasolState, deployment); err != nil {
 				return util.LoggedError(err, "run `status` for more information")
 			}
 
 			// Set the workflowstate to deployment in-progress
 			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
 				Operation: config.DeployOperation,
-			}, deploymentDir)
+			}, deployment)
 			if err != nil {
 				slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 			}
@@ -131,7 +131,7 @@ func deployFromManifests(
 				err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
 					Error:                      "Deployment interrupted via signal",
 					InterruptedDuringOperation: config.DeployOperation,
-				}, deploymentDir)
+				}, deployment)
 				if err != nil {
 					slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 				}
@@ -141,12 +141,12 @@ func deployFromManifests(
 			defer unregister()
 
 			// Manifest-driven execution
-			infrastructureManifest, err := config.ReadInfrastructureManifest(deploymentDir)
+			infrastructureManifest, err := config.ReadInfrastructureManifest(deployment)
 			if err != nil {
 				return err
 			}
 
-			installManifest, err := config.ReadInstallManifest(deploymentDir)
+			installManifest, err := config.ReadInstallManifest(deployment)
 			if err != nil {
 				return err
 			}
@@ -159,7 +159,7 @@ func deployFromManifests(
 			// Provision infrastructure via tofu when declared in infrastructure manifest
 			if err := runInfrastructureProvision(
 				ctx,
-				deploymentDir,
+				deployment,
 				infrastructureManifest,
 				externalCommandOutput,
 				externalCommandOutput,
@@ -172,7 +172,7 @@ func deployFromManifests(
 					&config.WorkflowStateDeploymentFailed{
 						Error: deployErr.Error(),
 					},
-					deploymentDir,
+					deployment,
 				); stateErr != nil {
 					slog.Warn("failed to persist deployment failure state", "error", stateErr)
 				}
@@ -181,7 +181,7 @@ func deployFromManifests(
 			}
 
 			// Installation phase (remoteExec tasks)
-			if err := runInstallSteps(ctx, deploymentDir, installManifest,
+			if err := runInstallSteps(ctx, deployment, installManifest,
 				externalCommandOutput, externalCommandOutput); err != nil {
 				unregister()
 				deployErr := appendDeployFailureResourceHint(err)
@@ -189,7 +189,7 @@ func deployFromManifests(
 					&config.WorkflowStateDeploymentFailed{
 						Error: deployErr.Error(),
 					},
-					deploymentDir,
+					deployment,
 				); stateErr != nil {
 					slog.Warn("failed to persist deployment failure state", "error", stateErr)
 				}
@@ -202,19 +202,19 @@ func deployFromManifests(
 
 			err = exasolState.SetWorkflowStateAndWrite(
 				&config.WorkflowStateRunning{},
-				deploymentDir,
+				deployment,
 			)
 			if err != nil {
 				slog.Error("failed to write workflow state")
 				return err
 			}
 
-			connectionInstructions, err := getConnectionInstructionsTextUnsafe(ctx, deploymentDir)
+			connectionInstructions, err := getConnectionInstructionsTextUnsafe(ctx, deployment)
 			if err != nil {
 				slog.Error("failed to collect connection instructions")
 				return err
 			}
-			if err := writeConnectionInstructionsFile(deploymentDir, connectionInstructions); err != nil {
+			if err := writeConnectionInstructionsFile(deployment, connectionInstructions); err != nil {
 				slog.Error("failed to write connection instructions")
 				return err
 			}
@@ -226,21 +226,21 @@ func deployFromManifests(
 }
 
 type nodeLookupImpl struct {
-	deploymentDir string
+	deployment config.DeploymentDir
 }
 
 var _ task_runner.NodeLookup = &nodeLookupImpl{}
 
-func NewNodeLookup(deploymentDir string) task_runner.NodeLookup {
+func NewNodeLookup(deployment config.DeploymentDir) task_runner.NodeLookup {
 	return &nodeLookupImpl{
-		deploymentDir: deploymentDir,
+		deployment: deployment,
 	}
 }
 
 func (s *nodeLookupImpl) Find(
 	nodeNameGlob string,
 ) ([]task_runner.RunScriptNode, error) {
-	nodeListBuilder, err := newNodeListBuilder(s.deploymentDir)
+	nodeListBuilder, err := newNodeListBuilder(s.deployment)
 	if err != nil {
 		return nil, util.LoggedError(err, "failed to create node list builder")
 	}
@@ -254,23 +254,19 @@ func (s *nodeLookupImpl) Find(
 }
 
 type nodeListBuilder struct {
-	deploymentDir string
-	nodeDetails   *config.NodeDetails
+	deployment  config.DeploymentDir
+	nodeDetails *config.NodeDetails
 }
 
-func newNodeListBuilder(deploymentDir string) (*nodeListBuilder, error) {
-	absDeploymentDir, err := filepath.Abs(deploymentDir)
-	if err != nil {
-		return nil, err
-	}
-	nodeDetails, err := config.ReadNodeDetails(absDeploymentDir)
+func newNodeListBuilder(deployment config.DeploymentDir) (*nodeListBuilder, error) {
+	nodeDetails, err := config.ReadNodeDetails(deployment)
 	if err != nil {
 		return nil, err
 	}
 
 	return &nodeListBuilder{
-		deploymentDir: absDeploymentDir,
-		nodeDetails:   nodeDetails,
+		deployment:  deployment,
+		nodeDetails: nodeDetails,
 	}, nil
 }
 
@@ -302,16 +298,12 @@ func (builder *nodeListBuilder) BuildForNodeGlob(
 }
 
 func (builder *nodeListBuilder) getRemote(node string) (*remote.SSHConnectionOptions, error) {
-	sshDetails, err := builder.nodeDetails.GetSSHDetails(node)
+	sshDetails, err := builder.nodeDetails.GetSSHDetails(node, builder.deployment)
 	if err != nil {
 		return nil, err
 	}
 
 	keyFilePath := sshDetails.KeyFile
-	if !filepath.IsAbs(keyFilePath) {
-		keyFilePath = filepath.Join(builder.deploymentDir, keyFilePath)
-	}
-
 	keyData, err := os.ReadFile(keyFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: could not read SSH key file %s", err, keyFilePath)
@@ -329,7 +321,7 @@ func (builder *nodeListBuilder) getRemote(node string) (*remote.SSHConnectionOpt
 
 func runInfrastructureProvision(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	manifest *presets.InfrastructureManifest,
 	out, outErr io.Writer,
 	tofuLockfileMode TofuLockfileMode,
@@ -341,7 +333,7 @@ func runInfrastructureProvision(
 
 	slog.Info("beginning deployment with tofu")
 
-	tofuCfg := tofu.NewTofuConfigFromDeployment(deploymentDir, *manifest.Tofu)
+	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
 	logBuffer := task_runner.NewLogBuffer()
 	stdOutWriter := util.CombineWriters(logBuffer, out)
 	stdErrWriter := util.CombineWriters(logBuffer, outErr)
@@ -375,7 +367,7 @@ func runInfrastructureProvision(
 
 func runInstallSteps(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	im *presets.InstallManifest,
 	out, outErr io.Writer,
 ) error {
@@ -400,6 +392,6 @@ func runInstallSteps(
 	return task_runner.NewTaskRunner(
 		&task_runner.LocalCommandRunnerImpl{},
 		&task_runner.RemoteScriptRunnerImpl{},
-		NewNodeLookup(deploymentDir),
-	).RunTasks(ctx, tasks, deploymentDir, out, outErr)
+		NewNodeLookup(deployment),
+	).RunTasks(ctx, tasks, deployment, out, outErr)
 }

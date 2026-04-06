@@ -11,14 +11,18 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 )
 
-func DumpDeploymentInfo(ctx context.Context, deploymentDir string, writer io.Writer) error {
-	return withDeploymentSharedLock(ctx, deploymentDir, func(dir string) error {
-		return dumpDeploymentInfoUnsafe(dir, writer)
+func DumpDeploymentInfo(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	writer io.Writer,
+) error {
+	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
+		return dumpDeploymentInfoUnsafe(deployment, writer)
 	})
 }
 
-func dumpDeploymentInfoUnsafe(deploymentDir string, writer io.Writer) error {
-	details, err := config.ReadNodeDetails(deploymentDir)
+func dumpDeploymentInfoUnsafe(deployment config.DeploymentDir, writer io.Writer) error {
+	details, err := config.ReadNodeDetails(deployment)
 	if err != nil {
 		return err
 	}

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -33,18 +32,18 @@ Example usage:
 
 func fetchDeploymentInfoJSON(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	writer io.Writer,
 ) error {
-	return deploy.PrintConnectionInsInJson(ctx, deploymentDir, writer)
+	return deploy.PrintConnectionInsInJson(ctx, deployment, writer)
 }
 
 func fetchDeploymentInfoText(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	writer io.Writer,
 ) error {
-	content, err := deploy.GetConnectionInstructionsText(ctx, deploymentDir)
+	content, err := deploy.GetConnectionInstructionsText(ctx, deployment)
 	if err != nil {
 		return err
 	}
@@ -54,8 +53,8 @@ func fetchDeploymentInfoText(
 	return err
 }
 
-func printConnectionInstructionsFromFile(deploymentDir string, writer io.Writer) error {
-	content, err := os.ReadFile(filepath.Join(deploymentDir, config.ConnectionInstruction))
+func printConnectionInstructionsFromFile(deployment config.DeploymentDir, writer io.Writer) error {
+	content, err := os.ReadFile(deployment.ConnectionInstructionsPath())
 	if err != nil {
 		return err
 	}
@@ -73,11 +72,12 @@ var deploymentInfoCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 		ctx := cmd.Context()
+		deployment := commonFlags.Deployment()
 		if commonFlags.OutputJson {
-			return fetchDeploymentInfoJSON(ctx, commonFlags.DeploymentDir, os.Stdout)
+			return fetchDeploymentInfoJSON(ctx, deployment, os.Stdout)
 		}
 
-		return fetchDeploymentInfoText(ctx, commonFlags.DeploymentDir, os.Stdout)
+		return fetchDeploymentInfoText(ctx, deployment, os.Stdout)
 	},
 }
 

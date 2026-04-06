@@ -40,19 +40,20 @@ var startCmd = &cobra.Command{
 	GroupID: rootCmdGroupLifecycle,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
+		deployment := commonFlags.Deployment()
 		waitTimeout := time.Duration(startOpts.WaitTimeoutMin) * time.Minute
 		waitTimeoutSeconds := int(waitTimeout.Seconds())
 
 		if err := deploy.Start(
 			cmd.Context(),
-			commonFlags.DeploymentDir,
+			deployment,
 			commonFlags.DeployVerbose,
 			waitTimeoutSeconds,
 		); err != nil {
 			return err
 		}
 
-		return printConnectionInstructionsFromFile(commonFlags.DeploymentDir, os.Stdout)
+		return printConnectionInstructionsFromFile(deployment, os.Stdout)
 	},
 }
 
@@ -64,9 +65,11 @@ var stopCmd = &cobra.Command{
 	GroupID: rootCmdGroupLifecycle,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
+		deployment := commonFlags.Deployment()
+
 		return deploy.Stop(
 			cmd.Context(),
-			commonFlags.DeploymentDir,
+			deployment,
 			commonFlags.DeployVerbose,
 		)
 	},

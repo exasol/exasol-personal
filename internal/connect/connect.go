@@ -26,20 +26,20 @@ type Opts struct {
 
 //nolint:revive
 func NewExasolConnection(
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	username string,
 	password string,
 	insecureSkipCertValidation bool,
 ) (generaltypes.Databaser, error) {
 	if password == "" {
-		secrets, err := config.ReadSecrets(deploymentDir)
+		secrets, err := config.ReadSecrets(deployment)
 		if err != nil {
 			return nil, fmt.Errorf("reading secrets: %w", err)
 		}
 		password = secrets.DbPassword
 	}
 
-	nodeDetails, err := config.ReadNodeDetails(deploymentDir)
+	nodeDetails, err := config.ReadNodeDetails(deployment)
 	if err != nil {
 		return nil, fmt.Errorf("reading node details: %w", err)
 	}
@@ -74,11 +74,11 @@ func NewExasolConnection(
 	return database, nil
 }
 
-func Connect(ctx context.Context, opts *Opts, deploymentDir string) error {
+func Connect(ctx context.Context, opts *Opts, deployment config.DeploymentDir) error {
 	slog.Debug("running connect")
 
 	database, err := NewExasolConnection(
-		deploymentDir, opts.Username, opts.Password, opts.InsecureSkipCertValidation)
+		deployment, opts.Username, opts.Password, opts.InsecureSkipCertValidation)
 	if err != nil {
 		return err
 	}

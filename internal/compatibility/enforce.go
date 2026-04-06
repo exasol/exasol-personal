@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
 )
@@ -53,20 +52,20 @@ const (
 // empty/uninitialized directories (for commands like init/install), but still
 // fails on known legacy layouts.
 func EnforceDeploymentDirectoryCompatibility(
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	launcherVersion string,
 	req Requirement,
 	initReq DeploymentDirInitializationRequirement,
 ) error {
-	initialized, err := config.IsDirectoryContainingStateFile(deploymentDir)
+	initialized, err := config.HasExasolPersonalStateFile(deployment)
 	if err != nil {
 		return err
 	}
 	if !initialized {
-		return handleUninitializedDeploymentDir(req.CommandName, deploymentDir, initReq)
+		return handleUninitializedDeploymentDir(req.CommandName, deployment, initReq)
 	}
 
-	deploymentVersion, err := readDeploymentVersionMarker(deploymentDir)
+	deploymentVersion, err := readDeploymentVersionMarker(deployment)
 	if err != nil {
 		return err
 	}
@@ -83,10 +82,10 @@ func EnforceDeploymentDirectoryCompatibility(
 
 func handleUninitializedDeploymentDir(
 	commandName string,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	initReq DeploymentDirInitializationRequirement,
 ) error {
-	legacy, err := legacyWorkflowStateExists(deploymentDir)
+	legacy, err := legacyWorkflowStateExists(deployment)
 	if err != nil {
 		return err
 	}
@@ -100,7 +99,7 @@ func handleUninitializedDeploymentDir(
 		slog.Warn(
 			"legacy deployment directory detected",
 			"command", commandName,
-			"deployment_dir", deploymentDir,
+			"deployment_dir", deployment.Root(),
 		)
 
 		return err
@@ -113,19 +112,19 @@ func handleUninitializedDeploymentDir(
 	err = fmt.Errorf(
 		errDeploymentNotInitializedFmt,
 		config.ExasolPersonalStateFileName,
-		deploymentDir,
+		deployment.Root(),
 	)
 	slog.Error(
 		"deployment directory is not initialized",
 		"command", commandName,
-		"deployment_dir", deploymentDir,
+		"deployment_dir", deployment.Root(),
 	)
 
 	return err
 }
 
-func legacyWorkflowStateExists(deploymentDir string) (bool, error) {
-	_, err := os.Stat(filepath.Join(deploymentDir, legacyWorkflowStateFileName))
+func legacyWorkflowStateExists(deployment config.DeploymentDir) (bool, error) {
+	_, err := os.Stat(deployment.Resolve(legacyWorkflowStateFileName))
 	if err == nil {
 		return true, nil
 	}
@@ -136,8 +135,8 @@ func legacyWorkflowStateExists(deploymentDir string) (bool, error) {
 	return false, err
 }
 
-func readDeploymentVersionMarker(deploymentDir string) (string, error) {
-	ver, ok, err := config.ReadDeploymentVersionMarker(deploymentDir)
+func readDeploymentVersionMarker(deployment config.DeploymentDir) (string, error) {
+	ver, ok, err := config.ReadDeploymentVersionMarker(deployment)
 	if err != nil {
 		return "", err
 	}
@@ -145,11 +144,11 @@ func readDeploymentVersionMarker(deploymentDir string) (string, error) {
 		err := fmt.Errorf(
 			errDeploymentVersionMarkerMissingFmt,
 			config.DeploymentVersionMarkerFileName,
-			deploymentDir,
+			deployment.Root(),
 		)
 		slog.Error(
 			"deployment version marker missing",
-			"deployment_dir", deploymentDir,
+			"deployment_dir", deployment.Root(),
 			"marker", config.DeploymentVersionMarkerFileName,
 			"error", err.Error(),
 		)
@@ -160,11 +159,11 @@ func readDeploymentVersionMarker(deploymentDir string) (string, error) {
 		err := fmt.Errorf(
 			errDeploymentVersionMarkerEmptyFmt,
 			config.DeploymentVersionMarkerFileName,
-			deploymentDir,
+			deployment.Root(),
 		)
 		slog.Error(
 			"deployment version marker empty",
-			"deployment_dir", deploymentDir,
+			"deployment_dir", deployment.Root(),
 			"marker", config.DeploymentVersionMarkerFileName,
 			"error", err.Error(),
 		)

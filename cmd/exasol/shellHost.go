@@ -29,7 +29,7 @@ var shellHostCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		return deploy.OpenHostShell(cmd.Context(), commonFlags.DeploymentDir, shellHostCmdOpts.Node)
+		return deploy.OpenHostShell(cmd.Context(), commonFlags.Deployment(), shellHostCmdOpts.Node)
 	},
 }
 
