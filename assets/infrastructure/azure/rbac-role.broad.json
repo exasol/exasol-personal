@@ -6,6 +6,7 @@
     "Microsoft.Resources/subscriptions/resourceGroups/*",
     "Microsoft.Network/*",
     "Microsoft.Compute/*",
+    "Microsoft.KeyVault/*",
     "Microsoft.Storage/*",
     "Microsoft.Authorization/*/read",
     "Microsoft.Insights/*/read"
