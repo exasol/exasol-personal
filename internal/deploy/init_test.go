@@ -13,6 +13,8 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/tofu"
+	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/zclconf/go-cty/cty"
 )
 
 func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
@@ -86,12 +88,41 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 		t.Fatalf("expected tfvars to contain cluster_size, got: %s", content)
 	}
 
-	if !strings.Contains(content, "infrastructure_artifact_dir") {
-		t.Fatalf("expected tfvars to contain infrastructure_artifact_dir, got: %s", content)
-	}
-
 	if !strings.Contains(content, "installation_preset_dir") {
 		t.Fatalf("expected tfvars to contain installation_preset_dir, got: %s", content)
+	}
+
+	parsedVars, err := parseTFVarsFile(data, tfvarsPath)
+	if err != nil {
+		t.Fatalf("expected tfvars to be parseable, got error: %v", err)
+	}
+	artifactDir, ok := parsedVars["infrastructure_artifact_dir"]
+	if !ok {
+		t.Fatalf("expected tfvars to contain infrastructure_artifact_dir, got: %s", content)
+	}
+	if artifactDir != config.RelativeInfrastructureArtifactDir() {
+		t.Fatalf(
+			"expected infrastructure_artifact_dir to be %q, got %q",
+			config.RelativeInfrastructureArtifactDir(),
+			artifactDir,
+		)
+	}
+	if filepath.IsAbs(artifactDir) {
+		t.Fatalf("expected infrastructure_artifact_dir to stay relative, got %q", artifactDir)
+	}
+	installDir, ok := parsedVars["installation_preset_dir"]
+	if !ok {
+		t.Fatalf("expected tfvars to contain installation_preset_dir value, got: %s", content)
+	}
+	if installDir != config.RelativeInstallationPresetDir() {
+		t.Fatalf(
+			"expected installation_preset_dir to be %q, got %q",
+			config.RelativeInstallationPresetDir(),
+			installDir,
+		)
+	}
+	if filepath.IsAbs(installDir) {
+		t.Fatalf("expected installation_preset_dir to stay relative, got %q", installDir)
 	}
 
 	// Then: installation variables file exists at the manifest-defined path.
@@ -146,6 +177,32 @@ func TestInitDeployment_CreatesDeploymentDir(t *testing.T) {
 	if !info.IsDir() {
 		t.Fatal("Deployment directory does not exist")
 	}
+}
+
+func parseTFVarsFile(tfvars []byte, filename string) (map[string]string, error) {
+	parser := hclparse.NewParser()
+	file, diags := parser.ParseHCL(tfvars, filename)
+	if diags.HasErrors() {
+		return nil, diags
+	}
+
+	attrs, diags := file.Body.JustAttributes()
+	if diags.HasErrors() {
+		return nil, diags
+	}
+
+	result := make(map[string]string, len(attrs))
+	for name, attr := range attrs {
+		value, diags := attr.Expr.Value(nil)
+		if diags.HasErrors() {
+			return nil, diags
+		}
+		if value.Type() == cty.String {
+			result[name] = value.AsString()
+		}
+	}
+
+	return result, nil
 }
 
 func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {

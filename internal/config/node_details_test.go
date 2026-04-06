@@ -4,10 +4,108 @@
 package config
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestReadNodeDetails_PreservesPresetRenderedSSHCommand(t *testing.T) {
+	t.Parallel()
+
+	deploymentDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(deploymentDir, nodeDetailsFileName), []byte(`{
+		"deploymentId": "dep-1",
+		"region": "test-region",
+		"availabilityZone": "test-az",
+		"clusterSize": 1,
+		"clusterState": "running",
+		"instanceType": "test-type",
+		"vpcId": "vpc-1",
+		"subnetId": "subnet-1",
+		"nodes": {
+			"n11": {
+				"publicIp": "1.2.3.4",
+				"privateIp": "10.0.0.1",
+				"dnsName": "db.example.local",
+				"instanceId": "i-1",
+				"availabilityZone": "test-az",
+				"ssh": {
+					"username": "ubuntu",
+					"keyName": "node-access",
+					"keyFile": "node_access.pem",
+					"port": "22",
+					"command": "ssh -i node_access.pem ubuntu@db.example.local -p 22"
+				},
+				"tlsCert": "ignored",
+				"database": {
+					"dbPort": "8563",
+					"uiPort": "8443",
+					"url": "https://db.example.local:8443"
+				}
+			}
+		}
+	}`), 0o600)
+	require.NoError(t, err)
+
+	nodeDetails, err := ReadNodeDetails(deploymentDir)
+	require.NoError(t, err)
+
+	node := nodeDetails.Nodes["n11"]
+	require.Equal(t, NodeAccessKeyFileName, node.Ssh.KeyFile)
+	require.Equal(t, "ssh -i node_access.pem ubuntu@db.example.local -p 22", node.Ssh.Command)
+}
+
+func TestGetSSHDetails_AllowsAbsoluteLegacyKeyPath(t *testing.T) {
+	t.Parallel()
+
+	deploymentDir := t.TempDir()
+	absoluteKeyPath := filepath.Join(t.TempDir(), NodeAccessKeyFileName)
+	err := os.WriteFile(filepath.Join(deploymentDir, nodeDetailsFileName), []byte(fmt.Sprintf(`{
+		"deploymentId": "dep-1",
+		"region": "test-region",
+		"availabilityZone": "test-az",
+		"clusterSize": 1,
+		"clusterState": "running",
+		"instanceType": "test-type",
+		"vpcId": "vpc-1",
+		"subnetId": "subnet-1",
+		"nodes": {
+			"n11": {
+				"publicIp": "1.2.3.4",
+				"privateIp": "10.0.0.1",
+				"dnsName": "db.example.local",
+				"instanceId": "i-1",
+				"availabilityZone": "test-az",
+				"ssh": {
+					"username": "ubuntu",
+					"keyName": "node-access",
+					"keyFile": %q,
+					"port": "22",
+					"command": %q
+				},
+				"tlsCert": "ignored",
+				"database": {
+					"dbPort": "8563",
+					"uiPort": "8443",
+					"url": "https://db.example.local:8443"
+				}
+			}
+		}
+	}`, absoluteKeyPath, "ssh -i "+absoluteKeyPath+" ubuntu@db.example.local -p 22")), 0o600)
+	require.NoError(t, err)
+
+	nodeDetails, err := ReadNodeDetails(deploymentDir)
+	require.NoError(t, err)
+
+	sshDetails, err := nodeDetails.GetSSHDetails("n11")
+	require.NoError(t, err)
+	require.Equal(t, absoluteKeyPath, ResolveDeploymentPath(
+		sshDetails.KeyFile,
+		"/different/deployment/dir"))
+}
 
 func TestGetDeploymentHostPort_NoNodes(t *testing.T) {
 	t.Parallel()
