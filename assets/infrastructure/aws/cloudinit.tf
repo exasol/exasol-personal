@@ -10,15 +10,15 @@
 
 locals {
   # --- Path "constants" ---
-  # Changing these paths will break the deployment processes as we use them to find the installation preset contents  
-  installation_cloudconf_dir = "${var.installation_preset_dir}/cloudconf"
-  installation_files_dir     = "${var.installation_preset_dir}/files"
+  # Changing these paths will break the deployment processes as we use them to find the installation preset contents
+  installation_cloudconf_dir = "${local.installation_preset_dir}/cloudconf"
+  installation_files_dir     = "${local.installation_preset_dir}/files"
 
   # Optional infrastructure-preset-provided host file overlay.
   # This is used for infrastructure-specific scripts or configs that should not live in provider-agnostic installation presets.
   infrastructure_files_dir = "${path.module}/files"
 
-  # Changing these paths will break the installation processes on the hosts as they look for these files  
+  # Changing these paths will break the installation processes on the hosts as they look for these files
   launcher_config_dir             = "/etc/exasol_launcher"
   infrastructure_json_target_path = "${local.launcher_config_dir}/infrastructure.json"
   node_json_target_path           = "${local.launcher_config_dir}/node.json"
@@ -80,7 +80,7 @@ locals {
     tlsCa              = tls_self_signed_cert.tls_ca_cert.cert_pem
     tlsCert            = tls_locally_signed_cert.tls_cert.cert_pem
 
-    # Optional infrastructure-specific hook scripts.      
+    # Optional infrastructure-specific hook scripts.
     preInstall = {
       # preInstall hooks run on *all* nodes
       root = {
@@ -109,9 +109,9 @@ locals {
   # Per-node metadata written to disk (separate from infrastructure.json for clarity).
   node_payload_by_name = {
     for n in local.nodes : n.name => {
-      name         = n.name
-      privateIp    = n.ip
-      myId         = n.name
+      name      = n.name
+      privateIp = n.ip
+      myId      = n.name
 
       # Exasol always uses the same final disk alias across providers.
       # The udev match clause identifies the data disk so prepareExasol.sh can

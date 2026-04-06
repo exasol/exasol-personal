@@ -114,6 +114,7 @@ func ApplyPlan(
 func ApplyAction(
 	ctx context.Context,
 	cfg Config,
+	deploymentDir string,
 	action string,
 	out, outErr io.Writer,
 ) error {
@@ -123,7 +124,7 @@ func ApplyAction(
 
 	applyOpts := ApplyOptions{
 		// Cannot use plan file
-		VarArgs: []string{action},
+		VarArgs: []string{action, "infrastructure_artifact_dir=" + deploymentDir},
 		// Must use Vars file
 		VarsFilePath:  cfg.VarsOutputFile(),
 		StateFilePath: cfg.StateFile(),

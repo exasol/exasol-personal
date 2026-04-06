@@ -6,6 +6,7 @@ data "aws_instance" "nodes" {
 
 locals {
   infrastructure_artifact_dir = abspath(var.infrastructure_artifact_dir)
+  installation_preset_dir     = "${local.infrastructure_artifact_dir}/${var.installation_preset_dir}"
   key_file_name               = "node_access.pem"
   key_file_path               = "${local.infrastructure_artifact_dir}/${local.key_file_name}"
 

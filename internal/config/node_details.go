@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/exasol/exasol-personal/internal/util"
 )
 
 const (
@@ -51,18 +53,18 @@ type nodeDetailsNodesDatabase struct {
 }
 
 type nodeDetailsNodesSsh struct {
-	Command  string `json:"command"`
-	KeyFile  string `json:"keyFile"`
-	KeyName  string `json:"keyName"`
-	Port     string `json:"port"`
-	Username string `json:"username"`
+	Command  string              `json:"command"`
+	KeyFile  util.DeploymentPath `json:"keyFile"`
+	KeyName  string              `json:"keyName"`
+	Port     string              `json:"port"`
+	Username string              `json:"username"`
 }
 
 type SSHDetails struct {
 	Host    string
 	Port    string
 	User    string
-	KeyFile string
+	KeyFile util.DeploymentPath
 }
 
 func ReadNodeDetails(deploymentDir string) (*NodeDetails, error) {
