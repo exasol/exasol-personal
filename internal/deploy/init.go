@@ -73,13 +73,13 @@ func InitDeployment(
 	installationPreset PresetRef,
 	infraVars map[string]string,
 	installVars map[string]string,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	versionCheckEnabled bool,
 	currentVersion string,
 ) error {
 	// Do an initial update version check if permitted
 	if versionCheckEnabled {
-		_, _, _ = CheckLatestVersionUpdate(ctx, currentVersion, deploymentDir)
+		_, _, _ = CheckLatestVersionUpdate(ctx, currentVersion, deployment)
 	}
 
 	// Proactively validate the preset selection to produce friendly errors.
@@ -93,7 +93,7 @@ func InitDeployment(
 
 	// If the directory is already an initialized deployment directory,
 	// we skip everything and regard this as a success
-	initialized, err := config.IsDirectoryContainingStateFile(deploymentDir)
+	initialized, err := config.HasExasolPersonalStateFile(deployment)
 	if err != nil {
 		slog.Error("failed to check deployment directory initialization")
 		return err
@@ -103,17 +103,17 @@ func InitDeployment(
 	}
 
 	// Make sure the directory exists and is empty
-	if err = util.EnsureDir(deploymentDir); err != nil {
+	if err = util.EnsureDir(deployment.Root()); err != nil {
 		return err
 	}
 
-	if err = ensureDirectoryIsEmpty(deploymentDir); err != nil {
+	if err = ensureDirectoryIsEmpty(deployment); err != nil {
 		return err
 	}
 
 	// Lock the deployment directory with exclusive access
-	return withDeploymentExclusiveLock(ctx, deploymentDir,
-		func(deploymentDir string) error {
+	return withDeploymentExclusiveLock(ctx, deployment,
+		func(deployment config.DeploymentDir) error {
 			deploymentId, err := GenerateDeploymentId()
 			if err != nil {
 				return fmt.Errorf("failed to generate deployment id: %w", err)
@@ -125,28 +125,30 @@ func InitDeployment(
 			)
 
 			// Copy the presets into the deployment directory
-			err = extractPresets(infrastructurePreset, installationPreset, deploymentDir)
+			err = extractPresets(infrastructurePreset, installationPreset, deployment)
 			if err != nil {
 				return err
 			}
 
 			// Load manifests from the extracted presets (the deployment directory is the source of truth).
 			slog.Debug("loading preset manifests")
-			infraDir := filepath.Join(deploymentDir, config.InfrastructureFilesDirectory)
+			infraDir := deployment.InfrastructureDir()
 			infraManifest, err := presets.ReadInfrastructureManifestFromDir(infraDir)
 			if err != nil {
 				return fmt.Errorf("failed to read extracted infrastructure manifest: %w", err)
 			}
-			installDir := filepath.Join(deploymentDir, config.InstallationFilesDirectory)
+			installDir := deployment.InstallationDir()
 			installManifest, err := presets.ReadInstallManifestFromDir(installDir)
 			if err != nil {
 				return fmt.Errorf("failed to read extracted installation manifest: %w", err)
 			}
 
-			// These values should always be part of the infra vars per contract
-			// It tell the infrastructure preset where to write deployment artifacts fot the launcher
-			infraVars["infrastructure_artifact_dir"] = deploymentDir
-			infraVars["installation_preset_dir"] = installDir
+			// These values should always be part of the infra vars per contract.
+			// They are expressed relative to the extracted infrastructure preset
+			// directory, which keeps the deployment directory movable while
+			// preserving a single launcher-owned layout SSOT.
+			infraVars["infrastructure_artifact_dir"] = deployment.RelativeInfrastructureArtifactDir()
+			infraVars["installation_preset_dir"] = deployment.RelativeInstallationPresetDir()
 			// Launcher-governed identity values.
 			infraVars["deployment_id"] = deploymentId
 			infraVars["cluster_identity"] = clusterIdentity
@@ -154,7 +156,7 @@ func InitDeployment(
 
 			// If tofu is configured for the infrastructure, perform tofu-specific initialization.
 			if infraManifest.Tofu != nil {
-				tofuCfg := tofu.NewTofuConfigFromDeployment(deploymentDir, *infraManifest.Tofu)
+				tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *infraManifest.Tofu)
 				slog.Info("preparing tofu workspace", "workdir", tofuCfg.WorkDir())
 				if err := tofu.Prepare(tofuCfg, infraVars); err != nil {
 					return err
@@ -175,7 +177,7 @@ func InitDeployment(
 			slog.Debug("Initializing deployment state")
 			if versionCheckEnabled {
 				if err := writeInitializedStateWithVersionChecks(
-					deploymentDir,
+					deployment,
 					currentVersion,
 					deploymentId,
 					clusterIdentity,
@@ -184,7 +186,7 @@ func InitDeployment(
 				}
 			} else {
 				if err := writeInitializedStateWithoutVersionChecks(
-					deploymentDir,
+					deployment,
 					currentVersion,
 					deploymentId,
 					clusterIdentity,
@@ -210,23 +212,23 @@ func InitDeployment(
 func extractPresets(
 	infrastructurePreset PresetRef,
 	installationPreset PresetRef,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 ) error {
 	slog.Info("extracting preset files",
 		"infrastructure", infrastructurePreset,
 		"installation", installationPreset)
 
-	infrastructureDir := filepath.Join(deploymentDir, config.InfrastructureFilesDirectory)
-	installationDir := filepath.Join(deploymentDir, config.InstallationFilesDirectory)
+	infrastructureDir := deployment.InfrastructureDir()
+	installationDir := deployment.InstallationDir()
 
 	// Write shared assets
 	slog.Debug("writing shared files to deployment directory", "dest", ".")
-	err := presets.WriteSharedDir(deploymentDir)
+	err := presets.WriteSharedDir(deployment.Root())
 	if err != nil {
 		slog.Error(
 			"Failed to write shared assets",
 			"err", err,
-			"dir", util.AbsPathNoFail(deploymentDir),
+			"dir", util.AbsPathNoFail(deployment.Root()),
 		)
 
 		return err
@@ -267,16 +269,16 @@ func extractPresets(
 	return nil
 }
 
-func ensureDirectoryIsEmpty(deploymentDir string) error {
+func ensureDirectoryIsEmpty(deployment config.DeploymentDir) error {
 	// When init is called, the deployment dir must be empty.
 	slog.Debug("testing if deployment directory is empty")
-	entries, err := util.ListDir(deploymentDir, 1)
+	entries, err := os.ReadDir(deployment.Root())
 	if err != nil {
 		return err
 	}
 
 	if len(entries) != 0 {
-		badFile := filepath.Join(deploymentDir, entries[0])
+		badFile := filepath.Join(deployment.Root(), entries[0].Name())
 		slog.Error(ErrDeploymentDirectoryNotEmpty.Error(), "file", util.AbsPathNoFail(badFile))
 
 		return fmt.Errorf("%w: file: \"%s\"", ErrDeploymentDirectoryNotEmpty, badFile)
@@ -286,7 +288,7 @@ func ensureDirectoryIsEmpty(deploymentDir string) error {
 }
 
 func writeInitializedStateWithVersionChecks(
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	deploymentVersion string,
 	deploymentId string,
 	clusterIdentity string,
@@ -296,16 +298,16 @@ func writeInitializedStateWithVersionChecks(
 		deploymentId,
 		clusterIdentity,
 	)
-	err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deploymentDir)
+	err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deployment)
 	if err != nil {
 		return err
 	}
 
-	return config.WriteDeploymentVersionMarker(deploymentDir, deploymentVersion)
+	return config.WriteDeploymentVersionMarker(deployment, deploymentVersion)
 }
 
 func writeInitializedStateWithoutVersionChecks(
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	deploymentVersion string,
 	deploymentId string,
 	clusterIdentity string,
@@ -315,12 +317,12 @@ func writeInitializedStateWithoutVersionChecks(
 		deploymentId,
 		clusterIdentity,
 	)
-	err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deploymentDir)
+	err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deployment)
 	if err != nil {
 		return err
 	}
 
-	return config.WriteDeploymentVersionMarker(deploymentDir, deploymentVersion)
+	return config.WriteDeploymentVersionMarker(deployment, deploymentVersion)
 }
 
 func newInitializedStateWithVersionChecks(

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/presets"
 	"gopkg.in/yaml.v3"
@@ -24,9 +23,8 @@ var (
 	)
 )
 
-func ReadInfrastructureManifest(deploymentDir string) (*presets.InfrastructureManifest, error) {
-	path := filepath.Join(deploymentDir, InfrastructureFilesDirectory,
-		presets.InfrastructureManifestFilename)
+func ReadInfrastructureManifest(deployment DeploymentDir) (*presets.InfrastructureManifest, error) {
+	path := deployment.InfrastructureManifestPath()
 
 	slog.Debug("reading infrastructure manifest", "path", path)
 
@@ -49,9 +47,8 @@ func ReadInfrastructureManifest(deploymentDir string) (*presets.InfrastructureMa
 	return &manifest, nil
 }
 
-func ReadInstallManifest(deploymentDir string) (*presets.InstallManifest, error) {
-	path := filepath.Join(deploymentDir, InstallationFilesDirectory,
-		presets.InstallationManifestFilename)
+func ReadInstallManifest(deployment DeploymentDir) (*presets.InstallManifest, error) {
+	path := deployment.InstallManifestPath()
 
 	slog.Debug("reading installation manifest", "path", path)
 

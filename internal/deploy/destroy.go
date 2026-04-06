@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/task_runner"
@@ -18,12 +17,12 @@ import (
 )
 
 //nolint:revive
-func Destroy(ctx context.Context, deploymentDir string, verbose bool) error {
-	return withDeploymentExclusiveLock(ctx, deploymentDir,
-		func(deploymentDir string) error {
+func Destroy(ctx context.Context, deployment config.DeploymentDir, verbose bool) error {
+	return withDeploymentExclusiveLock(ctx, deployment,
+		func(deployment config.DeploymentDir) error {
 			slog.Info("Destroying deployment and releasing all resources")
 
-			exasolState, err := config.ReadExasolPersonalState(deploymentDir)
+			exasolState, err := config.ReadExasolPersonalState(deployment)
 			if err != nil {
 				return err
 			}
@@ -31,7 +30,7 @@ func Destroy(ctx context.Context, deploymentDir string, verbose bool) error {
 			// Set the workflowstate to destroy in-progress
 			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
 				Operation: config.DestroyOperation,
-			}, deploymentDir)
+			}, deployment)
 			if err != nil {
 				slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 			}
@@ -43,12 +42,12 @@ func Destroy(ctx context.Context, deploymentDir string, verbose bool) error {
 				_ = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
 					Error:                      "Destroy interrupted via signal",
 					InterruptedDuringOperation: config.DestroyOperation,
-				}, deploymentDir)
+				}, deployment)
 			})
 
 			defer unregister()
 
-			manifest, err := config.ReadInfrastructureManifest(deploymentDir)
+			manifest, err := config.ReadInfrastructureManifest(deployment)
 			if err != nil {
 				return err
 			}
@@ -63,7 +62,7 @@ func Destroy(ctx context.Context, deploymentDir string, verbose bool) error {
 			}
 
 			if manifest.Tofu != nil {
-				tofuCfg := tofu.NewTofuConfigFromDeployment(deploymentDir, *manifest.Tofu)
+				tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
 				logBuffer := task_runner.NewLogBuffer()
 				err = tofu.Destroy(
 					ctx,
@@ -85,13 +84,13 @@ func Destroy(ctx context.Context, deploymentDir string, verbose bool) error {
 			// Returning to the initialized state is required so that `deploy` can be run again.
 			err = exasolState.SetWorkflowStateAndWrite(
 				&config.WorkflowStateInitialized{},
-				deploymentDir,
+				deployment,
 			)
 			if err != nil {
 				return err
 			}
 
-			err = os.Remove(filepath.Join(deploymentDir, config.ConnectionInstruction))
+			err = os.Remove(deployment.ConnectionInstructionsPath())
 			if err != nil {
 				slog.Debug(fmt.Sprintf("failed to remove connection instructions file: %v", err))
 			}

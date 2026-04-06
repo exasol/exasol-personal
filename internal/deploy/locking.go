@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/directorymutex"
 	"github.com/exasol/exasol-personal/internal/util"
 )
@@ -34,32 +35,32 @@ func (*deploymentDirectoryLockedError) Is(target error) bool {
 
 func withDeploymentSharedLock(
 	ctx context.Context,
-	deploymentDir string,
-	function func(dir string) error,
+	deployment config.DeploymentDir,
+	function func(deployment config.DeploymentDir) error,
 ) error {
-	return withDeploymentLock(ctx, deploymentDir, false, function)
+	return withDeploymentLock(ctx, deployment, false, function)
 }
 
 func withDeploymentExclusiveLock(
 	ctx context.Context,
-	deploymentDir string,
-	function func(dir string) error,
+	deployment config.DeploymentDir,
+	function func(deployment config.DeploymentDir) error,
 ) error {
-	return withDeploymentLock(ctx, deploymentDir, true, function)
+	return withDeploymentLock(ctx, deployment, true, function)
 }
 
 // nolint: revive
 func withDeploymentLock(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	exclusive bool,
-	function func(dir string) error,
+	function func(deployment config.DeploymentDir) error,
 ) error {
 	if ctx == nil {
 		return ErrMissingContext
 	}
 
-	mutex, err := directorymutex.New(deploymentDir)
+	mutex, err := directorymutex.New(deployment.Root())
 	if err != nil {
 		return err
 	}
@@ -71,7 +72,7 @@ func withDeploymentLock(
 	}
 
 	if err != nil {
-		return mapLockAcquireError(ctx, deploymentDir, err)
+		return mapLockAcquireError(ctx, deployment, err)
 	}
 
 	releaseCtx := context.WithoutCancel(ctx)
@@ -97,12 +98,12 @@ func withDeploymentLock(
 		callbackErr = errors.Join(callbackErr, releaseErr)
 	}()
 
-	callbackErr = callWithPanicSafetyError(function, deploymentDir)
+	callbackErr = callWithPanicSafetyError(function, deployment)
 
 	return callbackErr
 }
 
-func mapLockAcquireError(ctx context.Context, deploymentDir string, err error) error {
+func mapLockAcquireError(ctx context.Context, deployment config.DeploymentDir, err error) error {
 	if errors.Is(err, context.Canceled) {
 		return err
 	}
@@ -114,7 +115,7 @@ func mapLockAcquireError(ctx context.Context, deploymentDir string, err error) e
 	}
 
 	statusCtx := context.WithoutCancel(ctx)
-	status, statusErr := GetStatus(statusCtx, deploymentDir, false)
+	status, statusErr := GetStatus(statusCtx, deployment, false)
 	if statusErr != nil {
 		return &deploymentDirectoryLockedError{message: lockUnavailableMessage}
 	}
@@ -125,14 +126,17 @@ func mapLockAcquireError(ctx context.Context, deploymentDir string, err error) e
 	return &deploymentDirectoryLockedError{message: lockUnavailableMessage}
 }
 
-func callWithPanicSafetyError(function func(dir string) error, dir string) error {
+func callWithPanicSafetyError(
+	function func(deployment config.DeploymentDir) error,
+	deployment config.DeploymentDir,
+) error {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			panic(recovered)
 		}
 	}()
 
-	return function(dir)
+	return function(deployment)
 }
 
 func releaseOnInterruptOnce(release func() error) func() error {

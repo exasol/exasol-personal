@@ -19,7 +19,7 @@ type TaskRunner interface {
 	RunTasks(
 		ctx context.Context,
 		tasks []config.Task,
-		deploymentDir string,
+		deployment config.DeploymentDir,
 		out, outErr io.Writer,
 	) error
 }
@@ -56,7 +56,7 @@ type TaskRunnerImpl struct {
 func (s *TaskRunnerImpl) RunTasks(
 	ctx context.Context,
 	tasks []config.Task,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	out, outErr io.Writer,
 ) error {
 	slog.Debug("running post-deploy scripts", "scriptCount", len(tasks))
@@ -73,10 +73,10 @@ func (s *TaskRunnerImpl) RunTasks(
 		logBuffer.Clear()
 
 		if script.LocalCommand != nil {
-			err = s.runLocalCommand(ctx, script.LocalCommand, deploymentDir, taskOut, taskOutErr)
+			err = s.runLocalCommand(ctx, script.LocalCommand, deployment, taskOut, taskOutErr)
 			taskDesc = script.LocalCommand.Description
 		} else if script.RemoteExec != nil {
-			err = s.runTaskRemoteExec(ctx, script.RemoteExec, deploymentDir, taskOut, taskOutErr)
+			err = s.runTaskRemoteExec(ctx, script.RemoteExec, deployment, taskOut, taskOutErr)
 			taskDesc = script.RemoteExec.Description
 		}
 

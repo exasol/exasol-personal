@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/remote"
@@ -17,9 +16,13 @@ import (
 var ErrNoNodesFound = errors.New("no nodes found in the active deployment")
 
 // OpenHostShell starts an interactive shell using stdin stdout & stderr.
-func OpenHostShell(ctx context.Context, deploymentDir string, selectedNode string) error {
-	return withDeploymentSharedLock(ctx, deploymentDir, func(dir string) error {
-		sshRemote, err := sshRemoteForNodeUnsafe(dir, selectedNode)
+func OpenHostShell(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	selectedNode string,
+) error {
+	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
+		sshRemote, err := sshRemoteForNodeUnsafe(deployment, selectedNode)
 		if err != nil {
 			return err
 		}
@@ -29,9 +32,9 @@ func OpenHostShell(ctx context.Context, deploymentDir string, selectedNode strin
 }
 
 // OpenCOSShell opens an interactive COS session via the access node (n11).
-func OpenCOSShell(ctx context.Context, deploymentDir string) error {
-	return withDeploymentSharedLock(ctx, deploymentDir, func(dir string) error {
-		sshRemote, err := sshRemoteForNodeUnsafe(dir, "n11")
+func OpenCOSShell(ctx context.Context, deployment config.DeploymentDir) error {
+	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
+		sshRemote, err := sshRemoteForNodeUnsafe(deployment, "n11")
 		if err != nil {
 			return err
 		}
@@ -42,8 +45,11 @@ func OpenCOSShell(ctx context.Context, deploymentDir string) error {
 	})
 }
 
-func sshRemoteForNodeUnsafe(deploymentDir string, selectedNode string) (*remote.SSHRemote, error) {
-	nodeDetails, err := config.ReadNodeDetails(deploymentDir)
+func sshRemoteForNodeUnsafe(
+	deployment config.DeploymentDir,
+	selectedNode string,
+) (*remote.SSHRemote, error) {
+	nodeDetails, err := config.ReadNodeDetails(deployment)
 	if err != nil {
 		return nil, err
 	}
@@ -58,16 +64,12 @@ func sshRemoteForNodeUnsafe(deploymentDir string, selectedNode string) (*remote.
 		selectedNode = nodes[0]
 	}
 
-	sshDetails, err := nodeDetails.GetSSHDetails(selectedNode)
+	sshDetails, err := nodeDetails.GetSSHDetails(selectedNode, deployment)
 	if err != nil {
 		return nil, err
 	}
 
 	keyFilePath := sshDetails.KeyFile
-	if !filepath.IsAbs(keyFilePath) {
-		keyFilePath = filepath.Join(deploymentDir, keyFilePath)
-	}
-
 	keyData, err := os.ReadFile(keyFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: could not read SSH key file %s", err, keyFilePath)

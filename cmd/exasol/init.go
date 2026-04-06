@@ -61,6 +61,7 @@ func init() {
 		presets.ListEmbeddedInstallationsPresets())
 
 	initCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		deployment := commonFlags.Deployment()
 		infraVars := collectInfrastructureVariableOverrides(cmd)
 		installVars := collectInstallationVariableOverrides(cmd)
 		infraPreset := presetRefFromArg(args[0])
@@ -74,7 +75,7 @@ func init() {
 			installPreset,
 			infraVars,
 			installVars,
-			commonFlags.DeploymentDir,
+			deployment,
 			!commonFlags.NoLauncherVersionCheck,
 			CurrentLauncherVersion,
 		)
@@ -82,7 +83,7 @@ func init() {
 			return err
 		}
 
-		return setupDeploymentLogSession(cmd, commonFlags.DeploymentDir)
+		return setupDeploymentLogSession(cmd, deployment)
 	}
 
 	registerInitFlags(initCmd, commonFlags)

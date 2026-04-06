@@ -8,6 +8,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	deploymentcompatibility "github.com/exasol/exasol-personal/internal/compatibility"
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -94,7 +95,10 @@ func deploymentDirMustBeInitialized(cmd *cobra.Command) bool {
 //
 // It interprets command annotations (cmd-layer concern) and delegates the actual
 // compatibility enforcement (including logging) to internal packages.
-func enforceDeploymentDirectoryCompatibility(cmd *cobra.Command, deploymentDir string) error {
+func enforceDeploymentDirectoryCompatibility(
+	cmd *cobra.Command,
+	deployment config.DeploymentDir,
+) error {
 	if !deploymentCompatibilityIsRequired(cmd) {
 		return nil
 	}
@@ -119,7 +123,7 @@ func enforceDeploymentDirectoryCompatibility(cmd *cobra.Command, deploymentDir s
 	}
 
 	return deploymentcompatibility.EnforceDeploymentDirectoryCompatibility(
-		deploymentDir,
+		deployment,
 		CurrentLauncherVersion,
 		req,
 		initReq,

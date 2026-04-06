@@ -18,7 +18,7 @@ import (
 
 func WorkflowStatePermitsStart(
 	exasolState *config.ExasolPersonalState,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 ) error {
 	workflowState, err := exasolState.GetWorkflowState()
 	if err != nil {
@@ -48,30 +48,36 @@ func WorkflowStatePermitsStart(
 		}
 	}
 
-	LogDeploymentStatus(deploymentDir)
+	LogDeploymentStatus(deployment)
 
 	return ErrUnexpectedDeploymentStatus
 }
 
+//
 //nolint:revive
-func Start(ctx context.Context, deploymentDir string, verbose bool, waitTimeoutSeconds int) error {
-	return withDeploymentExclusiveLock(ctx, deploymentDir,
-		func(deploymentDir string) error {
+func Start(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	verbose bool,
+	waitTimeoutSeconds int,
+) error {
+	return withDeploymentExclusiveLock(ctx, deployment,
+		func(deployment config.DeploymentDir) error {
 			slog.Info("starting deployment. this may take a few minutes")
 
-			exasolState, err := config.ReadExasolPersonalState(deploymentDir)
+			exasolState, err := config.ReadExasolPersonalState(deployment)
 			if err != nil {
 				return err
 			}
 
-			if err := WorkflowStatePermitsStart(exasolState, deploymentDir); err != nil {
+			if err := WorkflowStatePermitsStart(exasolState, deployment); err != nil {
 				return util.LoggedError(err, "run `status` for more information")
 			}
 
 			// Set the workflowstate to start operation in-progress
 			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
 				Operation: config.StartOperation,
-			}, deploymentDir)
+			}, deployment)
 			if err != nil {
 				slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 			}
@@ -83,7 +89,7 @@ func Start(ctx context.Context, deploymentDir string, verbose bool, waitTimeoutS
 				_ = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
 					Error:                      "Start Operation interrupted via signal",
 					InterruptedDuringOperation: config.StartOperation,
-				}, deploymentDir)
+				}, deployment)
 			})
 
 			// Fallback cleanup
@@ -98,7 +104,7 @@ func Start(ctx context.Context, deploymentDir string, verbose bool, waitTimeoutS
 
 			err = applyAction(
 				ctx,
-				deploymentDir,
+				deployment,
 				"power_state=running",
 				util.CombineWriters(logBuffer, externalCommandOutput),
 				util.CombineWriters(logBuffer, externalCommandOutput),
@@ -112,7 +118,7 @@ func Start(ctx context.Context, deploymentDir string, verbose bool, waitTimeoutS
 
 			// Attempt to refresh config/infrastructure
 			instPollCond := func(ctx context.Context) (bool, error) {
-				n11Details, err := Getn11Details(deploymentDir)
+				n11Details, err := Getn11Details(deployment)
 				if err != nil {
 					return false, err
 				}
@@ -122,7 +128,7 @@ func Start(ctx context.Context, deploymentDir string, verbose bool, waitTimeoutS
 				}
 				err = applyAction(
 					ctx,
-					deploymentDir,
+					deployment,
 					"", // No Arg needed for refresh
 					util.CombineWriters(logBuffer, externalCommandOutput),
 					util.CombineWriters(logBuffer, externalCommandOutput),
@@ -165,7 +171,7 @@ func Start(ctx context.Context, deploymentDir string, verbose bool, waitTimeoutS
 			)
 			defer cancel()
 
-			if err := WaitForDatabaseStarted(waitCtx, deploymentDir); err != nil {
+			if err := WaitForDatabaseStarted(waitCtx, deployment); err != nil {
 				slog.Error("database did not become operational with timeout", "error", err.Error())
 				return err
 			}
@@ -174,7 +180,7 @@ func Start(ctx context.Context, deploymentDir string, verbose bool, waitTimeoutS
 			unregister()
 
 			err = exasolState.SetWorkflowStateAndWrite(
-				&config.WorkflowStateRunning{}, deploymentDir,
+				&config.WorkflowStateRunning{}, deployment,
 			)
 			if err != nil {
 				slog.Error("failed to set workflow state", "error", err.Error())
@@ -187,16 +193,19 @@ func Start(ctx context.Context, deploymentDir string, verbose bool, waitTimeoutS
 					"Printing the connection instructions",
 			)
 
-			connectionInstructions, err := getConnectionInstructionsTextUnsafe(ctx, deploymentDir)
+			connectionInstructions, err := getConnectionInstructionsTextUnsafe(ctx, deployment)
 			if err != nil {
 				return err
 			}
 
-			return writeConnectionInstructionsFile(deploymentDir, connectionInstructions)
+			return writeConnectionInstructionsFile(deployment, connectionInstructions)
 		})
 }
 
-func WorkflowStatePermitsStop(exasolState *config.ExasolPersonalState, deploymentDir string) error {
+func WorkflowStatePermitsStop(
+	exasolState *config.ExasolPersonalState,
+	deployment config.DeploymentDir,
+) error {
 	workflowState, err := exasolState.GetWorkflowState()
 	if err != nil {
 		slog.Error("failed to read workflow state")
@@ -226,30 +235,30 @@ func WorkflowStatePermitsStop(exasolState *config.ExasolPersonalState, deploymen
 		}
 	}
 
-	LogDeploymentStatus(deploymentDir)
+	LogDeploymentStatus(deployment)
 
 	return ErrUnexpectedDeploymentStatus
 }
 
 //nolint:revive
-func Stop(ctx context.Context, deploymentDir string, verbose bool) error {
-	return withDeploymentExclusiveLock(ctx, deploymentDir,
-		func(dir string) error {
+func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) error {
+	return withDeploymentExclusiveLock(ctx, deployment,
+		func(deployment config.DeploymentDir) error {
 			slog.Info("stopping deployment. this may take a few minutes")
 
-			exasolState, err := config.ReadExasolPersonalState(dir)
+			exasolState, err := config.ReadExasolPersonalState(deployment)
 			if err != nil {
 				return err
 			}
 
-			if err = WorkflowStatePermitsStop(exasolState, dir); err != nil {
+			if err = WorkflowStatePermitsStop(exasolState, deployment); err != nil {
 				return util.LoggedError(err, "run `status` for more information")
 			}
 
 			// Set the workflowstate to stop in-progress
 			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
 				Operation: config.StopOperation,
-			}, dir)
+			}, deployment)
 			if err != nil {
 				slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 			}
@@ -261,7 +270,7 @@ func Stop(ctx context.Context, deploymentDir string, verbose bool) error {
 				_ = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
 					Error:                      "Stop Operation interrupted via signal",
 					InterruptedDuringOperation: config.StopOperation,
-				}, dir)
+				}, deployment)
 			})
 
 			// Fallback cleanup
@@ -276,7 +285,7 @@ func Stop(ctx context.Context, deploymentDir string, verbose bool) error {
 
 			err = applyAction(
 				ctx,
-				dir,
+				deployment,
 				"power_state=stopped",
 				util.CombineWriters(logBuffer, externalCommandOutput),
 				util.CombineWriters(logBuffer, externalCommandOutput),
@@ -291,7 +300,7 @@ func Stop(ctx context.Context, deploymentDir string, verbose bool) error {
 			// Stop handling interrupts before committing final stopped state
 			unregister()
 
-			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateStopped{}, dir)
+			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateStopped{}, deployment)
 			if err != nil {
 				slog.Error("failed to set workflow state", "error", err.Error())
 			}
@@ -304,11 +313,11 @@ func Stop(ctx context.Context, deploymentDir string, verbose bool) error {
 
 func applyAction(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	startStopArg string,
 	out, outErr io.Writer,
 ) error {
-	manifest, err := config.ReadInfrastructureManifest(deploymentDir)
+	manifest, err := config.ReadInfrastructureManifest(deployment)
 	if err != nil {
 		return err
 	}
@@ -317,7 +326,7 @@ func applyAction(
 		return nil
 	}
 
-	tofuCfg := tofu.NewTofuConfigFromDeployment(deploymentDir, *manifest.Tofu)
+	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
 	if err := tofu.ApplyAction(
 		ctx,
 		*tofuCfg,

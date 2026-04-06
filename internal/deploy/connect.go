@@ -19,11 +19,11 @@ type Output struct {
 	Keyfile  string `yaml:"keyfile"`
 }
 
-func WorkflowStatePermitsConnect(deploymentDir string) error {
+func WorkflowStatePermitsConnect(deployment config.DeploymentDir) error {
 	// Check we are in state init or deploymentInterrupted.
 	// - We are allowed to retry deployment when in the interrupted state, because
 	//   tofu apply is idempotent
-	exasolState, err := config.ReadExasolPersonalState(deploymentDir)
+	exasolState, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {
 		slog.Error("failed to read exasol personal state")
 		return err
@@ -39,21 +39,21 @@ func WorkflowStatePermitsConnect(deploymentDir string) error {
 		return nil
 	}
 
-	LogDeploymentStatus(deploymentDir)
+	LogDeploymentStatus(deployment)
 
 	return ErrUnexpectedDeploymentStatus
 }
 
-func Connect(ctx context.Context, opts *connect.Opts, deploymentDir string) error {
-	err := withDeploymentSharedLock(ctx, deploymentDir,
-		func(dir string) error {
+func Connect(ctx context.Context, opts *connect.Opts, deployment config.DeploymentDir) error {
+	err := withDeploymentSharedLock(ctx, deployment,
+		func(deployment config.DeploymentDir) error {
 			slog.Debug("establishing connection to Exaol DB")
 
-			if err := WorkflowStatePermitsConnect(dir); err != nil {
+			if err := WorkflowStatePermitsConnect(deployment); err != nil {
 				return util.LoggedError(err, "run `status` for more information")
 			}
 
-			return connect.Connect(ctx, opts, dir)
+			return connect.Connect(ctx, opts, deployment)
 		})
 
 	return err

@@ -53,32 +53,36 @@ func StatusTextFormatter(status StatusOutput) (string, error) {
 
 type StatusFormatter func(status StatusOutput) (string, error)
 
-func Status(ctx context.Context, deploymentDir string, formatter StatusFormatter) (string, error) {
-	return statusWithFormatter(ctx, deploymentDir, GetStatusWithLock, formatter)
+func Status(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	formatter StatusFormatter,
+) (string, error) {
+	return statusWithFormatter(ctx, deployment, GetStatusWithLock, formatter)
 }
 
 func StatusUnsafe(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	formatter StatusFormatter,
 ) (string, error) {
-	return statusWithFormatter(ctx, deploymentDir, GetStatus, formatter)
+	return statusWithFormatter(ctx, deployment, GetStatus, formatter)
 }
 
 type statusGetter func(ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	checkConnection bool,
 ) (*StatusOutput, error)
 
 func statusWithFormatter(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	getStatus statusGetter,
 	format StatusFormatter,
 ) (string, error) {
 	slog.Debug("reading deployment status")
 
-	status, err := getStatus(ctx, deploymentDir, true)
+	status, err := getStatus(ctx, deployment, true)
 	if err != nil || status == nil {
 		return "", err
 	}
@@ -87,8 +91,8 @@ func statusWithFormatter(
 }
 
 //nolint:contextcheck
-func LogDeploymentStatus(deploymentDir string) {
-	status, err := GetStatus(context.Background(), deploymentDir, true)
+func LogDeploymentStatus(deployment config.DeploymentDir) {
+	status, err := GetStatus(context.Background(), deployment, true)
 	if err != nil {
 		slog.Error("failed to get status", "error", err.Error())
 	}
@@ -97,13 +101,13 @@ func LogDeploymentStatus(deploymentDir string) {
 
 func GetStatusWithLock(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	checkConnection bool,
 ) (*StatusOutput, error) {
 	var status *StatusOutput
-	err := withDeploymentSharedLock(ctx, deploymentDir, func(dir string) error {
+	err := withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
 		var getErr error
-		status, getErr = GetStatus(ctx, dir, checkConnection)
+		status, getErr = GetStatus(ctx, deployment, checkConnection)
 
 		return getErr
 	})
@@ -132,10 +136,10 @@ func GetStatusWithLock(
 // nolint: revive
 func GetStatus(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	checkConnection bool,
 ) (*StatusOutput, error) {
-	exasolState, err := config.ReadExasolPersonalState(deploymentDir)
+	exasolState, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +211,7 @@ func GetStatus(
 		if checkConnection {
 			slog.Debug("Testing database connection")
 
-			err = verifyDatabaseConnection(ctx, deploymentDir)
+			err = verifyDatabaseConnection(ctx, deployment)
 			if err != nil {
 				slog.Debug("Database connection verification failed")
 

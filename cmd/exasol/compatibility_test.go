@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	deploymentcompatibility "github.com/exasol/exasol-personal/internal/compatibility"
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +26,7 @@ func TestEnforceDeploymentDirectoryCompatibility_FailsEarlyWhenNotInitialized(t 
 	requireInitializedDeploymentDir(cmd)
 
 	// When: compatibility enforcement runs.
-	err := enforceDeploymentDirectoryCompatibility(cmd, tmp)
+	err := enforceDeploymentDirectoryCompatibility(cmd, config.NewDeploymentDir(tmp))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -59,7 +60,7 @@ func TestEnforceDeploymentDirectoryCompatibility_HintsLegacyWorkflowStateLayout(
 	requireVersionCompatibility(cmd, minSupportedDeploymentVersionBaseline)
 
 	// When: compatibility enforcement runs.
-	err = enforceDeploymentDirectoryCompatibility(cmd, tmp)
+	err = enforceDeploymentDirectoryCompatibility(cmd, config.NewDeploymentDir(tmp))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

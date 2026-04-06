@@ -6,6 +6,8 @@ package deploy
 import (
 	"context"
 	"log/slog"
+
+	"github.com/exasol/exasol-personal/internal/config"
 )
 
 // MaybeLogVersionUpdateHint performs a best-effort silent version check and logs a
@@ -14,8 +16,12 @@ import (
 // Design decision: this lives in the deploy package because it relies on the
 // version-checking mechanism and its locking semantics. The cmd layer should not
 // need to understand those details.
-func MaybeLogVersionUpdateHint(ctx context.Context, deploymentDir string, currentVersion string) {
-	result, err := PerformSilentVersionCheck(ctx, deploymentDir, currentVersion)
+func MaybeLogVersionUpdateHint(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	currentVersion string,
+) {
+	result, err := PerformSilentVersionCheck(ctx, deployment, currentVersion)
 	if err != nil {
 		slog.Debug("launcher version update check failed", "error", err)
 		return

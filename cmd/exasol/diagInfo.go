@@ -24,7 +24,7 @@ var infoCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		return deploy.DumpDeploymentInfo(cmd.Context(), commonFlags.DeploymentDir, os.Stdout)
+		return deploy.DumpDeploymentInfo(cmd.Context(), commonFlags.Deployment(), os.Stdout)
 	},
 }
 

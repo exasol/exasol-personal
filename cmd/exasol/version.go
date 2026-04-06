@@ -49,7 +49,7 @@ var versionCmd = &cobra.Command{
 		response, err := deploy.FetchLatestVersion(
 			ctx,
 			CurrentLauncherVersion,
-			commonFlags.DeploymentDir,
+			commonFlags.Deployment(),
 		)
 		if err != nil {
 			return err

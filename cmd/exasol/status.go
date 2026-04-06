@@ -38,6 +38,7 @@ var statusCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
+		deployment := commonFlags.Deployment()
 		var output string
 		var err error
 		formatter := deploy.StatusTextFormatter
@@ -47,10 +48,10 @@ var statusCmd = &cobra.Command{
 
 		if statusOpts.unsafe {
 			slog.Debug("acquiring deployment status without lock")
-			output, err = deploy.StatusUnsafe(cmd.Context(), commonFlags.DeploymentDir, formatter)
+			output, err = deploy.StatusUnsafe(cmd.Context(), deployment, formatter)
 		} else {
 			slog.Debug("acquiring deployment status with lock")
-			output, err = deploy.Status(cmd.Context(), commonFlags.DeploymentDir, formatter)
+			output, err = deploy.Status(cmd.Context(), deployment, formatter)
 		}
 		if err != nil {
 			return err

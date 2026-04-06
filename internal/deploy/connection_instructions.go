@@ -11,15 +11,16 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/exasol/exasol-personal/internal/config"
 )
 
 const (
-	SQLClientsDocURL = "https://docs.exasol.com/db/latest/connect_exasol/sql_clients.htm"
-	ProductDocURL    = "https://docs.exasol.com/"
+	SQLClientsDocURL = "https://docs.exasol.com/db/latest/connect_exasol/" +
+		"sql_clients.htm"
+	ProductDocURL                  = "https://docs.exasol.com/"
+	connectionInstructionsFileMode = 0o600
 )
 
 type ConnectionDetails struct {
@@ -50,8 +51,8 @@ type Details struct {
 	Documentation   []DocumentationLink `json:"documentation"`
 }
 
-func getConnectionDetails(deploymentDir string) (*ConnectionDetails, error) {
-	nodeDetails, err := config.ReadNodeDetails(deploymentDir)
+func getConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails, error) {
+	nodeDetails, err := config.ReadNodeDetails(deployment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node details: %w", err)
 	}
@@ -67,7 +68,7 @@ func getConnectionDetails(deploymentDir string) (*ConnectionDetails, error) {
 	}
 	mainNode := nodeDetails.Nodes[nodes[0]]
 
-	secretsFilePath, err := config.GetSecretsFilePath(deploymentDir)
+	secretsFilePath, err := config.SecretsFilePath(deployment)
 	if err != nil {
 		return nil, err
 	}
@@ -140,11 +141,14 @@ Cluster State: ` + connectionDetails.ClusterState + `
 `
 }
 
-func GetConnectionInstructionsText(ctx context.Context, deploymentDir string) (string, error) {
+func GetConnectionInstructionsText(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+) (string, error) {
 	var content string
-	err := withDeploymentSharedLock(ctx, deploymentDir, func(dir string) error {
+	err := withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
 		var getErr error
-		content, getErr = getConnectionInstructionsTextUnsafe(ctx, dir)
+		content, getErr = getConnectionInstructionsTextUnsafe(ctx, deployment)
 
 		return getErr
 	})
@@ -157,9 +161,9 @@ func GetConnectionInstructionsText(ctx context.Context, deploymentDir string) (s
 
 func getConnectionInstructionsTextUnsafe(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 ) (string, error) {
-	deploymentStatus, err := GetStatus(ctx, deploymentDir, false)
+	deploymentStatus, err := GetStatus(ctx, deployment, false)
 	if err != nil {
 		return "", fmt.Errorf("failed to get status: %w", err)
 	}
@@ -168,7 +172,7 @@ func getConnectionInstructionsTextUnsafe(
 
 	switch wfState {
 	case StatusRunning:
-		connectionDetails, err := getConnectionDetails(deploymentDir)
+		connectionDetails, err := getConnectionDetails(deployment)
 		if err != nil {
 			return "", err
 		}
@@ -181,7 +185,7 @@ func getConnectionInstructionsTextUnsafe(
 
 		return content, nil
 	case StatusStopped:
-		connectionDetails, err := getConnectionDetails(deploymentDir)
+		connectionDetails, err := getConnectionDetails(deployment)
 		if err != nil {
 			return "", err
 		}
@@ -193,15 +197,12 @@ func getConnectionInstructionsTextUnsafe(
 	}
 }
 
-func writeConnectionInstructionsFile(deploymentDir string, content string) error {
-	connInsFile, err := os.Create(filepath.Join(deploymentDir, config.ConnectionInstruction))
-	if err != nil {
-		return fmt.Errorf("failed to create instructions file: %w", err)
-	}
-
-	defer connInsFile.Close()
-
-	_, err = connInsFile.WriteString(content)
+func writeConnectionInstructionsFile(deployment config.DeploymentDir, content string) error {
+	err := os.WriteFile(
+		deployment.ConnectionInstructionsPath(),
+		[]byte(content),
+		connectionInstructionsFileMode,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to write instructions to file: %w", err)
 	}
@@ -209,18 +210,22 @@ func writeConnectionInstructionsFile(deploymentDir string, content string) error
 	return nil
 }
 
-func PrintConnectionInsInJson(ctx context.Context, deploymentDir string, writer io.Writer) error {
-	return withDeploymentSharedLock(ctx, deploymentDir, func(dir string) error {
-		return printConnectionInsInJSONUnsafe(ctx, dir, writer)
+func PrintConnectionInsInJson(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	writer io.Writer,
+) error {
+	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
+		return printConnectionInsInJSONUnsafe(ctx, deployment, writer)
 	})
 }
 
 func printConnectionInsInJSONUnsafe(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	writer io.Writer,
 ) error {
-	deploymentStatus, err := GetStatus(ctx, deploymentDir, false)
+	deploymentStatus, err := GetStatus(ctx, deployment, false)
 	if err != nil {
 		return fmt.Errorf("failed to get status: %w", err)
 	}
@@ -245,7 +250,7 @@ func printConnectionInsInJSONUnsafe(
 
 	switch wfState {
 	case StatusRunning:
-		nodeDetails, err := config.ReadNodeDetails(deploymentDir)
+		nodeDetails, err := config.ReadNodeDetails(deployment)
 		nodeDetails.DeploymentState = wfState
 		if err != nil {
 			return err
@@ -253,7 +258,7 @@ func printConnectionInsInJSONUnsafe(
 
 		return encoder.Encode(nodeDetails)
 	case StatusStopped:
-		connectionDetails, err := getConnectionDetails(deploymentDir)
+		connectionDetails, err := getConnectionDetails(deployment)
 		if err != nil {
 			return err
 		}

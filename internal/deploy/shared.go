@@ -40,8 +40,8 @@ const (
 	StartedMaxBackoff              = 60
 )
 
-func Getn11Details(dir string) (*config.SSHDetails, error) {
-	nodeDetails, err := config.ReadNodeDetails(dir)
+func Getn11Details(deployment config.DeploymentDir) (*config.SSHDetails, error) {
+	nodeDetails, err := config.ReadNodeDetails(deployment)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func Getn11Details(dir string) (*config.SSHDetails, error) {
 		return nil, ErrNoNodesFound
 	}
 
-	sshDetails, err := nodeDetails.GetSSHDetails(nodes[0])
+	sshDetails, err := nodeDetails.GetSSHDetails(nodes[0], deployment)
 	if err != nil {
 		return nil, err
 	}

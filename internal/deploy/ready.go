@@ -10,17 +10,18 @@ import (
 	"strings"
 
 	exasolerrors "github.com/exasol/exasol-driver-go/pkg/errors"
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/connect"
 )
 
 // verifyDatabaseConnection checks if the database service is accepting connections
 // by attempting a connection with invalid credentials and expecting an authentication error.
-func verifyDatabaseConnection(ctx context.Context, deploymentDir string) error {
+func verifyDatabaseConnection(ctx context.Context, deployment config.DeploymentDir) error {
 	var dbErr error
 	// Suppress driver noise only for this probe (invalid creds, transient failures expected).
 	probeErr := connect.WithSilencedDriverErrors(func() error {
 		database, err := connect.NewExasolConnection(
-			deploymentDir, "invalid username", "invalid password", true)
+			deployment, "invalid username", "invalid password", true)
 		if err != nil {
 			return err
 		}
@@ -58,11 +59,11 @@ func verifyDatabaseConnection(ctx context.Context, deploymentDir string) error {
 // until it succeeds or the timeout elapses. Provides periodic progress logs.
 func WaitForDatabaseStarted(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 ) error {
 	return waitForDatabaseState(
 		ctx,
-		deploymentDir,
+		deployment,
 		WaitParams{
 			InitialBackoff: StartedInitialBackoff,
 			MaxBackoff:     StartedMaxBackoff,
@@ -75,11 +76,11 @@ func WaitForDatabaseStarted(
 // waitForDatabaseState consolidates the polling logic for ready & stopped states.
 func waitForDatabaseState(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	params WaitParams,
 ) error {
 	return PollWithBackoff(ctx, func(ctx context.Context) (bool, error) {
-		err := verifyDatabaseConnection(ctx, deploymentDir)
+		err := verifyDatabaseConnection(ctx, deployment)
 		conditionMet := (params.ReadyMode && err == nil) || (!params.ReadyMode && err != nil)
 
 		return conditionMet, err

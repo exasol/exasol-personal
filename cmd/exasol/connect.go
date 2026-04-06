@@ -27,7 +27,7 @@ var connectCmd = &cobra.Command{
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return deploy.Connect(cmd.Context(), &connectOpts, commonFlags.DeploymentDir)
+		return deploy.Connect(cmd.Context(), &connectOpts, commonFlags.Deployment())
 	},
 }
 

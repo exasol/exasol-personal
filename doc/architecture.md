@@ -226,7 +226,7 @@ The deployment directory is the central artifact containing everything needed to
 **Outputs:**
 - `deployment.json` - Deployment information (IPs, connection details)
 - `secrets.json` - Credentials required by the launcher (sensitive)
-- `node_access.pem` - SSH private key
+- SSH private key referenced by `deployment.json:nodes[*].ssh.keyFile` (current presets use `node_access.pem`)
 
 **Key characteristics:**
 - Self-contained (portable to another machine if needed)

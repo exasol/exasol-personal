@@ -13,6 +13,8 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/tofu"
+	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/zclconf/go-cty/cty"
 )
 
 func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
@@ -20,6 +22,7 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 
 	// Given a deployment directory
 	deploymentDir := t.TempDir()
+	deployment := config.NewDeploymentDir(deploymentDir)
 
 	// When the deployment is intialized
 	err := InitDeployment(
@@ -28,7 +31,7 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 		PresetRef{Name: presets.DefaultInstallation},
 		map[string]string{"cluster_size": "2"},
 		map[string]string{},
-		deploymentDir,
+		deployment,
 		false,
 		"0.0.0",
 	)
@@ -37,7 +40,7 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	}
 
 	// Then: workflow state exists and is readable
-	state, err := config.ReadExasolPersonalState(deploymentDir)
+	state, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {
 		t.Fatalf("expected workflow state to be readable, got error: %v", err)
 	}
@@ -54,7 +57,7 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	if strings.TrimSpace(state.ClusterIdentity) == "" {
 		t.Fatal("expected clusterIdentity to be persisted, got empty")
 	}
-	if ver, ok, err := config.ReadDeploymentVersionMarker(deploymentDir); err != nil {
+	if ver, ok, err := config.ReadDeploymentVersionMarker(deployment); err != nil {
 		t.Fatalf("expected deployment version marker to be readable, got error: %v", err)
 	} else if !ok {
 		t.Fatalf("expected deployment version marker %q to exist",
@@ -71,11 +74,7 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	}
 
 	// Then: tfvars file exists at default path (per manifest)
-	tfvarsPath := filepath.Join(
-		deploymentDir,
-		config.InfrastructureFilesDirectory,
-		tofu.DefaultVarsOutput,
-	)
+	tfvarsPath := filepath.Join(deployment.InfrastructureDir(), tofu.DefaultVarsOutput)
 	data, err := os.ReadFile(tfvarsPath)
 	if err != nil {
 		t.Fatalf("expected %s to exist, got read error: %v", tfvarsPath, err)
@@ -86,19 +85,49 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 		t.Fatalf("expected tfvars to contain cluster_size, got: %s", content)
 	}
 
-	if !strings.Contains(content, "infrastructure_artifact_dir") {
-		t.Fatalf("expected tfvars to contain infrastructure_artifact_dir, got: %s", content)
-	}
-
 	if !strings.Contains(content, "installation_preset_dir") {
 		t.Fatalf("expected tfvars to contain installation_preset_dir, got: %s", content)
 	}
 
+	parsedVars, err := parseTFVarsFile(data, tfvarsPath)
+	if err != nil {
+		t.Fatalf("expected tfvars to be parseable, got error: %v", err)
+	}
+	artifactDir, ok := parsedVars["infrastructure_artifact_dir"]
+	if !ok {
+		t.Fatalf("expected tfvars to contain infrastructure_artifact_dir, got: %s", content)
+	}
+	if artifactDir != deployment.RelativeInfrastructureArtifactDir() {
+		t.Fatalf(
+			"expected infrastructure_artifact_dir to be %q, got %q",
+			deployment.RelativeInfrastructureArtifactDir(),
+			artifactDir,
+		)
+	}
+	if filepath.IsAbs(artifactDir) {
+		t.Fatalf("expected infrastructure_artifact_dir to stay relative, got %q", artifactDir)
+	}
+	installDir, ok := parsedVars["installation_preset_dir"]
+	if !ok {
+		t.Fatalf("expected tfvars to contain installation_preset_dir value, got: %s", content)
+	}
+	if installDir != deployment.RelativeInstallationPresetDir() {
+		t.Fatalf(
+			"expected installation_preset_dir to be %q, got %q",
+			deployment.RelativeInstallationPresetDir(),
+			installDir,
+		)
+	}
+	if filepath.IsAbs(installDir) {
+		t.Fatalf("expected installation_preset_dir to stay relative, got %q", installDir)
+	}
+
 	// Then: installation variables file exists at the manifest-defined path.
+	const installationVarsRelPath = "files/etc/exasol_launcher/installation.json"
+
 	installVarsPath := filepath.Join(
-		deploymentDir,
-		config.InstallationFilesDirectory,
-		"files/etc/exasol_launcher/installation.json",
+		deployment.InstallationDir(),
+		installationVarsRelPath,
 	)
 	if _, err := os.Stat(installVarsPath); err != nil {
 		t.Fatalf("expected installation variables file %s to exist, got: %v", installVarsPath, err)
@@ -125,6 +154,7 @@ func TestInitDeployment_CreatesDeploymentDir(t *testing.T) {
 	// Given
 	root := t.TempDir()
 	deploymentDir := filepath.Join(root, "deployment")
+	deployment := config.NewDeploymentDir(deploymentDir)
 
 	// When
 	err := InitDeployment(
@@ -133,7 +163,7 @@ func TestInitDeployment_CreatesDeploymentDir(t *testing.T) {
 		PresetRef{Name: presets.DefaultInstallation},
 		map[string]string{},
 		map[string]string{},
-		deploymentDir,
+		deployment,
 		false,
 		"",
 	)
@@ -148,11 +178,38 @@ func TestInitDeployment_CreatesDeploymentDir(t *testing.T) {
 	}
 }
 
+func parseTFVarsFile(tfvars []byte, filename string) (map[string]string, error) {
+	parser := hclparse.NewParser()
+	file, diags := parser.ParseHCL(tfvars, filename)
+	if diags.HasErrors() {
+		return nil, diags
+	}
+
+	attrs, diags := file.Body.JustAttributes()
+	if diags.HasErrors() {
+		return nil, diags
+	}
+
+	result := make(map[string]string, len(attrs))
+	for name, attr := range attrs {
+		value, diags := attr.Expr.Value(nil)
+		if diags.HasErrors() {
+			return nil, diags
+		}
+		if value.Type() == cty.String {
+			result[name] = value.AsString()
+		}
+	}
+
+	return result, nil
+}
+
 func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {
 	t.Parallel()
 
 	// Given
 	deploymentDir := t.TempDir()
+	deployment := config.NewDeploymentDir(deploymentDir)
 	nonEmptyPath := filepath.Join(deploymentDir, "not-empty")
 	if err := os.WriteFile(nonEmptyPath, []byte("x"), 0o600); err != nil {
 		t.Fatalf("write preexisting file failed: %v", err)
@@ -165,7 +222,7 @@ func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {
 		PresetRef{Name: presets.DefaultInstallation},
 		map[string]string{},
 		map[string]string{},
-		deploymentDir,
+		deployment,
 		false,
 		"",
 	)

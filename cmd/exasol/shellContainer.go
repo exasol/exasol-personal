@@ -23,7 +23,7 @@ var shellContainerCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		return deploy.OpenCOSShell(cmd.Context(), commonFlags.DeploymentDir)
+		return deploy.OpenCOSShell(cmd.Context(), commonFlags.Deployment())
 	},
 }
 

@@ -52,6 +52,7 @@ func init() {
 
 	// Run initialization
 	installCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		deployment := commonFlags.Deployment()
 		infraVars := collectInfrastructureVariableOverrides(cmd)
 		installVars := collectInstallationVariableOverrides(cmd)
 		infraPreset := presetRefFromArg(args[0])
@@ -66,32 +67,33 @@ func init() {
 			installPreset,
 			infraVars,
 			installVars,
-			commonFlags.DeploymentDir,
+			deployment,
 			!commonFlags.NoLauncherVersionCheck,
 			CurrentLauncherVersion,
 		); err != nil {
 			return fmt.Errorf("initialization failed: %w", err)
 		}
 
-		return setupDeploymentLogSession(cmd, commonFlags.DeploymentDir)
+		return setupDeploymentLogSession(cmd, deployment)
 	}
 
 	// Perform deployment after initialization completes.
 	installCmd.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
+		deployment := commonFlags.Deployment()
 		lockfileMode := deploy.TofuLockfileReadonly
 		if commonFlags.DeployTofuUpdateLockfile {
 			lockfileMode = deploy.TofuLockfileUpdate
 		}
 		if err := deploy.Deploy(
 			cmd.Context(),
-			commonFlags.DeploymentDir,
+			deployment,
 			commonFlags.DeployVerbose,
 			lockfileMode,
 		); err != nil {
 			return fmt.Errorf("deployment failed: %w", err)
 		}
 
-		err := printConnectionInstructionsFromFile(commonFlags.DeploymentDir, os.Stdout)
+		err := printConnectionInstructionsFromFile(deployment, os.Stdout)
 		if err != nil {
 			return fmt.Errorf("failed to print deployment info: %w", err)
 		}

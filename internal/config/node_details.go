@@ -65,8 +65,8 @@ type SSHDetails struct {
 	KeyFile string
 }
 
-func ReadNodeDetails(deploymentDir string) (*NodeDetails, error) {
-	filepath, exists, err := findExistingFile(deploymentDir, nodeDetailsFileName)
+func ReadNodeDetails(deployment DeploymentDir) (*NodeDetails, error) {
+	filepath, exists, err := findExistingFile(deployment.Root(), nodeDetailsFileName)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func ReadNodeDetails(deploymentDir string) (*NodeDetails, error) {
 		return nil, fmt.Errorf(
 			"node details file not found in deployment directory: expected %q in %s",
 			nodeDetailsFileName,
-			deploymentDir,
+			deployment.Root(),
 		)
 	}
 
@@ -99,7 +99,10 @@ func (s *NodeDetails) ListNodes() []string {
 
 var ErrUnknownNodeName = errors.New("unknown node name")
 
-func (s *NodeDetails) GetSSHDetails(nodeName string) (*SSHDetails, error) {
+func (s *NodeDetails) GetSSHDetails(
+	nodeName string,
+	deployment DeploymentDir,
+) (*SSHDetails, error) {
 	entry, exists := s.Nodes[nodeName]
 	if !exists {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownNodeName, nodeName)
@@ -108,7 +111,7 @@ func (s *NodeDetails) GetSSHDetails(nodeName string) (*SSHDetails, error) {
 	return &SSHDetails{
 		Host:    entry.PublicIp,
 		User:    entry.Ssh.Username,
-		KeyFile: entry.Ssh.KeyFile,
+		KeyFile: deployment.Resolve(entry.Ssh.KeyFile),
 		Port:    entry.Ssh.Port,
 	}, nil
 }

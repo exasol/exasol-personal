@@ -33,7 +33,7 @@ var diagShellCmd = &cobra.Command{
 		cmd.SilenceUsage = true
 		return deploy.OpenHostShell(
 			cmd.Context(),
-			commonFlags.DeploymentDir,
+			commonFlags.Deployment(),
 			diagShellCmdOpts.Node,
 		)
 	},

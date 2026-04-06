@@ -52,7 +52,7 @@ type VersionCheckDetails struct {
 // If deploymentDir is provided and contains a state file, uses its persisted ClusterIdentity.
 // If no valid state file exists (e.g. when called outside a deployment directory),
 // ClusterIdentity is left empty.
-func GetVersionCheckDetails(deploymentDir string) *VersionCheckDetails {
+func GetVersionCheckDetails(deployment config.DeploymentDir) *VersionCheckDetails {
 	operatingSystem := runtime.GOOS
 	arch := runtime.GOARCH
 
@@ -73,9 +73,9 @@ func GetVersionCheckDetails(deploymentDir string) *VersionCheckDetails {
 
 	// Determine cluster identity.
 	clusterIdentity := ""
-	if deploymentDir != "" {
+	if deployment.Root() != "" {
 		// Prefer the launcher-governed, persisted identity.
-		if exasolState, err := config.ReadExasolPersonalState(deploymentDir); err == nil {
+		if exasolState, err := config.ReadExasolPersonalState(deployment); err == nil {
 			if v := strings.TrimSpace(exasolState.ClusterIdentity); v != "" {
 				clusterIdentity = v
 				slog.Debug(
@@ -189,9 +189,9 @@ func CheckLatestVersion(
 func FetchLatestVersion(
 	ctx context.Context,
 	currentVersion string,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 ) (*VersionCheckResponse, error) {
-	details := GetVersionCheckDetails(deploymentDir)
+	details := GetVersionCheckDetails(deployment)
 	return CheckLatestVersion(ctx, details, currentVersion)
 }
 
@@ -222,9 +222,9 @@ func MustDoVersionCheck(exasolState *config.ExasolPersonalState) bool {
 func CheckLatestVersionUpdate(
 	ctx context.Context,
 	currentVersion string,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 ) (bool, string, error) {
-	response, err := FetchLatestVersion(ctx, currentVersion, deploymentDir)
+	response, err := FetchLatestVersion(ctx, currentVersion, deployment)
 	if err != nil {
 		return false, "", err
 	}
@@ -240,7 +240,7 @@ func CheckLatestVersionUpdate(
 // It returns whether a check was performed and whether an update is available.
 func PerformSilentVersionCheck(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	currentVersion string,
 ) (SilentVersionCheckResult, error) {
 	slog.Debug("begin version update check")
@@ -249,35 +249,39 @@ func PerformSilentVersionCheck(
 
 	lockCtx, cancel := context.WithTimeout(ctx, VersionCheckLockTimeout)
 	defer cancel()
-	err := withDeploymentExclusiveLock(lockCtx, deploymentDir, func(dir string) error {
-		exasolState, readErr := config.ReadExasolPersonalState(dir)
-		if readErr != nil {
-			return readErr
-		}
+	err := withDeploymentExclusiveLock(
+		lockCtx,
+		deployment,
+		func(deployment config.DeploymentDir) error {
+			exasolState, readErr := config.ReadExasolPersonalState(deployment)
+			if readErr != nil {
+				return readErr
+			}
 
-		if !MustDoVersionCheck(exasolState) {
-			slog.Debug("launcher version update check disabled")
+			if !MustDoVersionCheck(exasolState) {
+				slog.Debug("launcher version update check disabled")
+				return nil
+			}
+
+			available, latest, checkErr := CheckLatestVersionUpdate(ctx, currentVersion, deployment)
+			defer func() {
+				// Treat all attempts as a check for throttling purposes.
+				exasolState.LastVersionCheck = time.Now()
+				_ = config.WriteExasolPersonalState(exasolState, deployment)
+			}()
+
+			if checkErr != nil {
+				slog.Debug("launcher version update check failed")
+				return checkErr
+			}
+
+			result.Checked = true
+			result.UpdateAvailable = available
+			result.LatestVersion = latest
+
 			return nil
-		}
-
-		available, latest, checkErr := CheckLatestVersionUpdate(ctx, currentVersion, dir)
-		defer func() {
-			// Treat all attempts as a check for throttling purposes.
-			exasolState.LastVersionCheck = time.Now()
-			_ = config.WriteExasolPersonalState(exasolState, dir)
-		}()
-
-		if checkErr != nil {
-			slog.Debug("launcher version update check failed")
-			return checkErr
-		}
-
-		result.Checked = true
-		result.UpdateAvailable = available
-		result.LatestVersion = latest
-
-		return nil
-	})
+		},
+	)
 	if err != nil {
 		// If the state is locked by another process (or acquisition timed out), silently skip.
 		if errors.Is(err, ErrDeploymentDirectoryLocked) || errors.Is(err, context.Canceled) {

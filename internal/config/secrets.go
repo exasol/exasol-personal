@@ -16,8 +16,8 @@ type Secrets struct {
 	AdminUiPassword string `json:"adminUiPassword"`
 }
 
-func GetSecretsFilePath(deploymentDir string) (string, error) {
-	filepath, exists, err := findExistingFile(deploymentDir, secretsFileName)
+func SecretsFilePath(deployment DeploymentDir) (string, error) {
+	filepath, exists, err := findExistingFile(deployment.Root(), secretsFileName)
 	if err != nil {
 		return "", fmt.Errorf("failed to get the secrets file path: %w", err)
 	}
@@ -25,15 +25,15 @@ func GetSecretsFilePath(deploymentDir string) (string, error) {
 		return "", fmt.Errorf(
 			"secrets file not found in deployment directory: expected %q in %s",
 			secretsFileName,
-			deploymentDir,
+			deployment.Root(),
 		)
 	}
 
 	return filepath, nil
 }
 
-func ReadSecrets(deploymentDir string) (*Secrets, error) {
-	filepath, err := GetSecretsFilePath(deploymentDir)
+func ReadSecrets(deployment DeploymentDir) (*Secrets, error) {
+	filepath, err := SecretsFilePath(deployment)
 	if err != nil {
 		return nil, err
 	}

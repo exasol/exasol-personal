@@ -23,6 +23,7 @@ func TestRunLocalCommand(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	fakeDeploymentDir := t.TempDir()
+	deployment := config.NewDeploymentDir(fakeDeploymentDir)
 
 	nodeLookupMock := mocks.NewNodeLookupMock(mocks.NewNodeLookupDirectory(5))
 
@@ -85,7 +86,7 @@ func TestRunLocalCommand(t *testing.T) {
 		err := taskRunner.RunTasks(
 			t.Context(),
 			testCase.tasks,
-			fakeDeploymentDir,
+			deployment,
 			&stdOutBuff,
 			&stdErrBuff,
 		)
@@ -129,6 +130,7 @@ func TestRunRemoteScript(t *testing.T) {
 		fakeDeploymentDir := t.TempDir()
 		scriptFilePath := filepath.Join(fakeDeploymentDir, "script.sh")
 		mocks.NewUniqueFile(scriptFilePath)
+		deployment := config.NewDeploymentDir(fakeDeploymentDir)
 
 		tasks := []config.Task{
 			{
@@ -142,7 +144,7 @@ func TestRunRemoteScript(t *testing.T) {
 		}
 
 		slog.Debug("pre availableNodes", "nodes", nodeLookupMock.Directory)
-		err := taskRunner.RunTasks(t.Context(), tasks, "", nil, nil)
+		err := taskRunner.RunTasks(t.Context(), tasks, deployment, nil, nil)
 
 		require.NoError(t, err, "RunTasks should succeed")
 

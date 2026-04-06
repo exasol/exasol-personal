@@ -25,7 +25,7 @@ var unlockCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		mutex, err := directorymutex.New(commonFlags.DeploymentDir)
+		mutex, err := directorymutex.New(commonFlags.Deployment().Root())
 		if err != nil {
 			return err
 		}

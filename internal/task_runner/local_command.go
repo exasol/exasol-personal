@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/exasol/exasol-personal/internal/util"
@@ -18,12 +19,12 @@ func (*TaskRunnerImpl) runLocalCommandForNode(
 	ctx context.Context,
 	templatedCommand []string,
 	nodeName string,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	out, outErr io.Writer,
 ) error {
 	command := make([]string, len(templatedCommand))
 
-	tofuConfig := tofu.NewTofuConfigFromDeployment(deploymentDir, presets.InfrastructureTofu{})
+	tofuConfig := tofu.NewTofuConfigFromDeployment(deployment.Root(), presets.InfrastructureTofu{})
 
 	for idx, part := range templatedCommand {
 		slog.Debug("parsing command part", "part", part)
@@ -43,7 +44,7 @@ func (*TaskRunnerImpl) runLocalCommandForNode(
 
 	slog.Debug("running command", "command", command)
 
-	return (&LocalCommandRunnerImpl{}).Run(ctx, command, deploymentDir, out, outErr)
+	return (&LocalCommandRunnerImpl{}).Run(ctx, command, deployment.Root(), out, outErr)
 }
 
 var ErrNoMatchingNodesFound = errors.New("no matching nodes found")
@@ -51,7 +52,7 @@ var ErrNoMatchingNodesFound = errors.New("no matching nodes found")
 func (s *TaskRunnerImpl) runLocalCommand(
 	ctx context.Context,
 	localCommand *presets.LocalCommandTask,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	out, outErr io.Writer,
 ) error {
 	if localCommand.Description != "" {
@@ -70,7 +71,7 @@ func (s *TaskRunnerImpl) runLocalCommand(
 			ctx,
 			localCommand.Command,
 			"",
-			deploymentDir,
+			deployment,
 			taskOut,
 			taskOutErr,
 		)
@@ -95,7 +96,7 @@ func (s *TaskRunnerImpl) runLocalCommand(
 			ctx,
 			localCommand.Command,
 			node.Name,
-			deploymentDir,
+			deployment,
 			taskOut,
 			taskOutErr,
 		)
