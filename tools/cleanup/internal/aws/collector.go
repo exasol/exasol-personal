@@ -12,6 +12,9 @@ import (
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 )
 
+// ProviderName is the identifier for the AWS provider
+const ProviderName = "aws"
+
 // Collector implements shared.ProviderCollector for AWS.
 type Collector struct {
 	region      string
@@ -30,7 +33,7 @@ func NewCollector(region, ownerFilter string, legacy bool) *Collector {
 }
 
 func (c *Collector) Name() string {
-	return "aws"
+	return ProviderName
 }
 
 func (c *Collector) IsAvailable(ctx context.Context) bool {

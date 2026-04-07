@@ -23,20 +23,24 @@ var cleanupProvidersCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 
-		// Always check both providers with sensible defaults
-		awsRegion := cleanupOpts.AWSRegion
-		if awsRegion == "" {
-			awsRegion = "us-east-1" // Default region for availability check
+		var collectors []shared.ProviderCollector
+
+		// AWS provider
+		if shouldUseProvider(aws.ProviderName) {
+			awsRegion := cleanupOpts.AWSRegion
+			if awsRegion == "" {
+				awsRegion = "us-east-1" // Default region for availability check
+			}
+			collectors = append(collectors, aws.NewCollector(awsRegion, "", false))
 		}
 
-		exoscaleZone := cleanupOpts.ExoscaleZone
-		if exoscaleZone == "" {
-			exoscaleZone = "ch-gva-2" // Already has default, but be explicit
-		}
-
-		collectors := []shared.ProviderCollector{
-			aws.NewCollector(awsRegion, "", false),
-			exoscale.NewCollector(exoscaleZone, "", false),
+		// Exoscale provider
+		if shouldUseProvider(exoscale.ProviderName) {
+			exoscaleZone := cleanupOpts.ExoscaleZone
+			if exoscaleZone == "" {
+				exoscaleZone = "ch-gva-2" // Already has default, but be explicit
+			}
+			collectors = append(collectors, exoscale.NewCollector(exoscaleZone, "", false))
 		}
 
 		for _, collector := range collectors {

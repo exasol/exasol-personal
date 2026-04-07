@@ -40,7 +40,12 @@ var cleanupDiscoverCmd = &cobra.Command{
 		var collectors []shared.ProviderCollector
 		
 		// AWS Collector - default owner to caller identity
-		if cleanupOpts.AWSRegion != "" {
+		if shouldUseProvider(aws.ProviderName) {
+			awsRegion := cleanupOpts.AWSRegion
+			if awsRegion == "" {
+				awsRegion = "us-east-1" // Default region
+			}
+			
 			awsOwnerFilter := cleanupDiscoverOpts.OwnerFilter
 			
 			// AWS-specific default: use caller identity if no filter provided
@@ -57,11 +62,11 @@ var cleanupDiscoverCmd = &cobra.Command{
 			}
 			
 			collectors = append(collectors,
-				aws.NewCollector(cleanupOpts.AWSRegion, awsOwnerFilter, cleanupDiscoverOpts.Legacy))
+				aws.NewCollector(awsRegion, awsOwnerFilter, cleanupDiscoverOpts.Legacy))
 		}
 		
 		// Exoscale Collector - use provided owner filter or empty for all
-		if cleanupOpts.ExoscaleZone != "" {
+		if shouldUseProvider(exoscale.ProviderName) {
 			exoOwnerFilter := cleanupDiscoverOpts.OwnerFilter
 			// Exoscale default: empty means all deployments (no caller identity equivalent)
 			

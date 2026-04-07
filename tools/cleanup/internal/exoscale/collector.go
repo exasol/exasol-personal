@@ -11,6 +11,9 @@ import (
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 )
 
+// ProviderName is the identifier for the Exoscale provider
+const ProviderName = "exoscale"
+
 // Collector implements shared.ProviderCollector for Exoscale.
 type Collector struct {
 	zone        string
@@ -29,7 +32,7 @@ func NewCollector(zone, ownerFilter string, legacy bool) *Collector {
 }
 
 func (c *Collector) Name() string {
-	return "exoscale"
+	return ProviderName
 }
 
 func (c *Collector) IsAvailable(ctx context.Context) bool {

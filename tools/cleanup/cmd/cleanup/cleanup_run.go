@@ -36,7 +36,12 @@ var cleanupRunCmd = &cobra.Command{
 		var collectors []shared.ProviderCollector
 
 		// AWS Collector - default owner to caller identity
-		if cleanupOpts.AWSRegion != "" {
+		if shouldUseProvider(aws.ProviderName) {
+			awsRegion := cleanupOpts.AWSRegion
+			if awsRegion == "" {
+				awsRegion = "us-east-1" // Default region
+			}
+			
 			awsOwnerFilter := ""
 			cfg, err := config.LoadDefaultConfig(cmd.Context())
 			if err == nil {
@@ -48,11 +53,11 @@ var cleanupRunCmd = &cobra.Command{
 			}
 
 			collectors = append(collectors,
-				aws.NewCollector(cleanupOpts.AWSRegion, awsOwnerFilter, false))
+				aws.NewCollector(awsRegion, awsOwnerFilter, false))
 		}
 
 		// Exoscale Collector
-		if cleanupOpts.ExoscaleZone != "" {
+		if shouldUseProvider(exoscale.ProviderName) {
 			collectors = append(collectors,
 				exoscale.NewCollector(cleanupOpts.ExoscaleZone, "", false))
 		}
