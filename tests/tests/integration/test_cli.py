@@ -13,7 +13,7 @@ def test_help_flag(exasol_path: str) -> None:
     # Then the expected help and usage output is produced
     output = result.stdout.strip()
     for text in [
-        "Exasol Personal Launcher",
+        "Exasol Personal",
         "Usage:",
         "Additional Commands:",
         "Essential Commands:",
