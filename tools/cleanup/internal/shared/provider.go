@@ -40,19 +40,22 @@ type ProviderCollector interface {
 
 // CollectAllProviders queries all available providers and merges results.
 // It continues on errors from individual providers, collecting all available data.
+// Returns an error if no providers are authenticated.
 func CollectAllProviders(
 	ctx context.Context,
 	collectors []ProviderCollector,
 ) ([]DeploymentSummary, error) {
 	var allSummaries []DeploymentSummary
+	availableCount := 0
 
 	for _, collector := range collectors {
 		// Skip providers without valid credentials
 		if !collector.IsAvailable(ctx) {
-			slog.Debug("provider unavailable, skipping", "provider", collector.Name())
+			slog.Info("provider not authenticated, skipping", "provider", collector.Name())
 			continue
 		}
 
+		availableCount++
 		summaries, err := collector.CollectDeploymentSummaries(ctx)
 		if err != nil {
 			slog.Warn("provider discovery failed",
@@ -68,23 +71,31 @@ func CollectAllProviders(
 		allSummaries = append(allSummaries, summaries...)
 	}
 
+	if availableCount == 0 {
+		return nil, fmt.Errorf("no providers are authenticated")
+	}
+
 	return allSummaries, nil
 }
 
 // FindDeployment discovers which provider and region contains the deployment.
 // Returns the matching collector, or error if not found.
+// Returns an error if no providers are authenticated.
 func FindDeployment(
 	ctx context.Context,
 	collectors []ProviderCollector,
 	deploymentID string,
 ) (ProviderCollector, error) {
+	availableCount := 0
+
 	for _, collector := range collectors {
 		// Skip providers without valid credentials
 		if !collector.IsAvailable(ctx) {
-			slog.Debug("provider unavailable, skipping", "provider", collector.Name())
+			slog.Info("provider not authenticated, skipping", "provider", collector.Name())
 			continue
 		}
 
+		availableCount++
 		summaries, err := collector.CollectDeploymentSummaries(ctx)
 		if err != nil {
 			slog.Warn("provider discovery failed during FindDeployment",
@@ -102,6 +113,10 @@ func FindDeployment(
 				return collector, nil
 			}
 		}
+	}
+
+	if availableCount == 0 {
+		return nil, fmt.Errorf("no providers are authenticated")
 	}
 
 	return nil, fmt.Errorf("deployment %s not found in any available provider", deploymentID)

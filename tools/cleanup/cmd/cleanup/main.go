@@ -4,20 +4,27 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
 )
 
+const shortDescription = "Exasol Personal cleanup tool"
+
+const description = shortDescription + `
+Specific providers can be targeted using the --aws and --exoscale flags. If no provider flags are set, all providers will be used.
+`
+
 var rootCmd = &cobra.Command{
 	Use:   "exasol-cleanup",
-	Short: "Exasol Personal cleanup tool",
+	Short: shortDescription,
+	Long:  description,
 }
 
+
 func configureLogger() {
-	level := slog.LevelError
+	level := slog.LevelInfo
 	if cleanupOpts.Verbose {
 		level = slog.LevelDebug
 	}
@@ -27,7 +34,7 @@ func configureLogger() {
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
+		slog.Error("command execution failed", "error", err)
 		os.Exit(1)
 	}
 }
