@@ -40,13 +40,14 @@ type ProviderCollector interface {
 
 // CollectAllProviders queries all available providers and merges results.
 // It continues on errors from individual providers, collecting all available data.
-// Returns an error if no providers are authenticated.
+// Returns an error if no providers are authenticated or if all authenticated providers fail.
 func CollectAllProviders(
 	ctx context.Context,
 	collectors []ProviderCollector,
 ) ([]DeploymentSummary, error) {
 	var allSummaries []DeploymentSummary
 	availableCount := 0
+	successCount := 0
 
 	for _, collector := range collectors {
 		// Skip providers without valid credentials
@@ -64,6 +65,7 @@ func CollectAllProviders(
 			continue // Continue with other providers
 		}
 
+		successCount++
 		slog.Debug("provider discovery succeeded",
 			"provider", collector.Name(),
 			"count", len(summaries))
@@ -75,18 +77,23 @@ func CollectAllProviders(
 		return nil, fmt.Errorf("no providers are authenticated")
 	}
 
+	if successCount == 0 {
+		return nil, fmt.Errorf("all provider discovery attempts failed")
+	}
+
 	return allSummaries, nil
 }
 
 // FindDeployment discovers which provider and region contains the deployment.
 // Returns the matching collector, or error if not found.
-// Returns an error if no providers are authenticated.
+// Returns an error if no providers are authenticated or if all authenticated providers fail.
 func FindDeployment(
 	ctx context.Context,
 	collectors []ProviderCollector,
 	deploymentID string,
 ) (ProviderCollector, error) {
 	availableCount := 0
+	successCount := 0
 
 	for _, collector := range collectors {
 		// Skip providers without valid credentials
@@ -104,6 +111,7 @@ func FindDeployment(
 			continue
 		}
 
+		successCount++
 		for _, summary := range summaries {
 			if summary.ID == deploymentID {
 				slog.Debug("deployment found",
@@ -117,6 +125,10 @@ func FindDeployment(
 
 	if availableCount == 0 {
 		return nil, fmt.Errorf("no providers are authenticated")
+	}
+
+	if successCount == 0 {
+		return nil, fmt.Errorf("all provider discovery attempts failed")
 	}
 
 	return nil, fmt.Errorf("deployment %s not found in any available provider", deploymentID)

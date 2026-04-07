@@ -6,8 +6,11 @@ package main
 import (
 	"log/slog"
 	"os"
+	"time"
 
+	"github.com/lmittmann/tint"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 const shortDescription = "Exasol Personal cleanup tool"
@@ -28,7 +31,21 @@ func configureLogger() {
 	if cleanupOpts.Verbose {
 		level = slog.LevelDebug
 	}
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	
+	var handler slog.Handler
+	if term.IsTerminal(int(os.Stderr.Fd())) {
+		// When attached to a terminal, use human-friendly colored logs
+		handler = tint.NewHandler(os.Stderr, &tint.Options{
+			Level:      level,
+			TimeFormat: time.DateTime,
+		})
+	} else {
+		// When redirected/piped, use JSON for machine parsing
+		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+			Level: level,
+		})
+	}
+	
 	slog.SetDefault(slog.New(handler))
 }
 
