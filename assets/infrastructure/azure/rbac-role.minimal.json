@@ -48,6 +48,12 @@
     "Microsoft.Storage/storageAccounts/blobServices/containers/write",
     "Microsoft.Storage/storageAccounts/blobServices/containers/delete",
 
+    "Microsoft.KeyVault/vaults/read",
+    "Microsoft.KeyVault/vaults/write",
+    "Microsoft.KeyVault/vaults/delete",
+    "Microsoft.KeyVault/vaults/accessPolicies/write",
+    "Microsoft.KeyVault/locations/deletedVaults/purge/action",
+
     "Microsoft.Compute/locations/vmSizes/read",
     "Microsoft.Compute/locations/operations/read",
     "Microsoft.Network/locations/operations/read",

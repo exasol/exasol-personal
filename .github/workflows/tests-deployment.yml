@@ -2,21 +2,69 @@ name: Deployment Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      os:
+        description: Operating system selector
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
 
 permissions: {}
 
 env:
   STATUS_DESC: "Deployment tests testing Exasol launcher end to end"
-  JOB_NAME: tests-deployment
 
 jobs:
+  plan-tests-deployment:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        shell: bash
+        run: |
+          selected_os="${{ inputs.os }}"
+          if [ -z "${selected_os}" ]; then
+            selected_os="all"
+          fi
+
+          # Declarative test plan. Toggle rows via "enabled" and route by "task".
+          full_plan_json='[
+            {"enabled": true,   "infra": "aws",      "os": "ubuntu-latest",  "task": "tests-deployment"},
+            {"enabled": false,  "infra": "aws",      "os": "windows-latest", "task": "tests-deployment"},
+            {"enabled": false,  "infra": "aws",      "os": "macos-latest",   "task": "tests-deployment"},
+            {"enabled": false,  "infra": "azure",    "os": "ubuntu-latest",  "task": "tests-deployment-infrastructure"},
+            {"enabled": true,   "infra": "azure",    "os": "windows-latest", "task": "tests-deployment-infrastructure"},
+            {"enabled": false,  "infra": "azure",    "os": "macos-latest",   "task": "tests-deployment-infrastructure"},
+            {"enabled": false,  "infra": "exoscale", "os": "ubuntu-latest",  "task": "tests-deployment-infrastructure"},
+            {"enabled": false,  "infra": "exoscale", "os": "windows-latest", "task": "tests-deployment-infrastructure"},
+            {"enabled": true,   "infra": "exoscale", "os": "macos-latest",   "task": "tests-deployment-infrastructure"}
+          ]'
+
+          filtered_plan_json="$(jq -c --arg os "${selected_os}" '
+            map(select(.enabled == true))
+            | if $os == "all" then . else map(select(.os == $os)) end
+            | map(del(.enabled))
+          ' <<< "${full_plan_json}")"
+
+          echo "matrix=${filtered_plan_json}" >> "${GITHUB_OUTPUT}"
+
   tests-deployment:
+    needs: plan-tests-deployment
+    environment:
+      name: deployment-tests
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include: ${{ fromJSON(needs.plan-tests-deployment.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     permissions:
-      id-token: write # Required for AWS credentials setup
+      id-token: write # Required for cloud OIDC auth
       contents: read # Required for actions/checkout
       statuses: write # Required for status updates
     steps:
@@ -26,15 +74,53 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/status-set
         with:
-          context: ${{ env.JOB_NAME }}
+          context: tests-deployment-${{ matrix.infra }}-${{ matrix.os }}
           status: pending
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - uses: ./.github/actions/setup-aws
+        if: ${{ matrix.infra == 'aws' }}
         with:
           aws-ci-role: ${{ vars.AWS_CI_ROLE_PLATFORM }}
           aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Azure credentials
+        if: ${{ matrix.infra == 'azure' }}
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate Azure location input
+        if: ${{ matrix.infra == 'azure' }}
+        shell: bash
+        run: |
+          location="${{ vars.AZURE_LOCATION }}"
+          source="vars.AZURE_LOCATION"
+          if [ -z "${location}" ]; then
+            location="${{ secrets.AZURE_LOCATION }}"
+            source="secrets.AZURE_LOCATION"
+          fi
+
+          if [ -z "${location}" ]; then
+            echo "AZURE_LOCATION is required for Azure deployment tests (set vars.AZURE_LOCATION or secrets.AZURE_LOCATION, e.g. westeurope)."
+            exit 1
+          fi
+
+          echo "Using Azure location from ${source}"
+          echo "TF_VAR_location=${location}" >> "$GITHUB_ENV"
+
+      - name: Setup Exoscale credentials
+        if: ${{ matrix.infra == 'exoscale' }}
+        shell: bash
+        run: |
+          echo "EXOSCALE_API_KEY=${{ secrets.EXOSCALE_API_KEY }}" >> "$GITHUB_ENV"
+          echo "EXOSCALE_API_SECRET=${{ secrets.EXOSCALE_API_SECRET }}" >> "$GITHUB_ENV"
+          # The Exoscale preset uses an aliased AWS provider for SOS endpoint resources.
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.EXOSCALE_API_KEY }}" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.EXOSCALE_API_SECRET }}" >> "$GITHUB_ENV"
 
       # Doing a second build here again. In theory, we could
       # upload the build artifact from the ci.yml workflow
@@ -42,11 +128,19 @@ jobs:
       # is short and we can afford building it a second time.
       - uses: ./.github/actions/build
       - uses: ./.github/actions/tests-deployment
+        env:
+          ARM_USE_OIDC: ${{ matrix.infra == 'azure' && 'true' || '' }}
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        with:
+          infra: ${{ matrix.infra }}
+          task: ${{ matrix.task }}
 
       - uses: ./.github/actions/status-set
         if: always()
         with:
-          context: ${{ env.JOB_NAME }}
+          context: tests-deployment-${{ matrix.infra }}-${{ matrix.os }}
           status: ${{ job.status }}
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
