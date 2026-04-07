@@ -15,7 +15,8 @@ import (
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	egoscale "github.com/exoscale/egoscale/v2"
+	v3 "github.com/exoscale/egoscale/v3"
+	"github.com/exoscale/egoscale/v3/credentials"
 
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 )
@@ -30,7 +31,7 @@ const (
 )
 
 // createExoscaleClient creates an Exoscale client using environment credentials
-func createExoscaleClient(ctx context.Context, zone string) (*egoscale.Client, error) {
+func createExoscaleClient(ctx context.Context, zone string) (*v3.Client, error) {
 	apiKey := os.Getenv("EXOSCALE_API_KEY")
 	apiSecret := os.Getenv("EXOSCALE_API_SECRET")
 	
@@ -38,16 +39,42 @@ func createExoscaleClient(ctx context.Context, zone string) (*egoscale.Client, e
 		return nil, fmt.Errorf("EXOSCALE_API_KEY and EXOSCALE_API_SECRET environment variables are required")
 	}
 
-	client, err := egoscale.NewClient(
-		apiKey,
-		apiSecret,
-		egoscale.ClientOptWithAPIEndpoint(fmt.Sprintf("https://api-%s.exoscale.com/v2", zone)),
-	)
+	creds := credentials.NewStaticCredentials(apiKey, apiSecret)
+	
+	// Get the zone endpoint
+	endpoint, err := getZoneEndpoint(zone)
+	if err != nil {
+		return nil, err
+	}
+	
+	client, err := v3.NewClient(creds, v3.ClientOptWithEndpoint(endpoint))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Exoscale client: %w", err)
 	}
 
 	return client, nil
+}
+
+// getZoneEndpoint returns the appropriate API endpoint for a zone
+func getZoneEndpoint(zone string) (v3.Endpoint, error) {
+	switch zone {
+	case "ch-gva-2":
+		return v3.CHGva2, nil
+	case "ch-dk-2":
+		return v3.CHDk2, nil
+	case "de-fra-1":
+		return v3.DEFra1, nil
+	case "de-muc-1":
+		return v3.DEMuc1, nil
+	case "at-vie-1":
+		return v3.ATVie1, nil
+	case "at-vie-2":
+		return v3.ATVie2, nil
+	case "bg-sof-1":
+		return v3.BGSof1, nil
+	default:
+		return "", fmt.Errorf("unsupported zone: %s", zone)
+	}
 }
 
 // CollectDeploymentDetails enumerates resources for a single deployment in Exoscale
@@ -78,217 +105,268 @@ func CollectDeploymentDetails(
 	hasStopped := false
 
 	// Discover compute instances by label
-	instances, err := client.ListInstances(ctx, zone)
+	instancesResp, err := client.ListInstances(ctx)
 	if err != nil {
 		slog.Debug("list instances failed", "error", err)
-	} else {
-		for _, inst := range instances {
-			if matchesDeployment(inst.Name, derefLabels(inst.Labels), deploymentID) {
-				hasInstances = true
-				state := instanceStateToSimple(inst.State)
-				
-				meta := ResourceMeta{
-					Ref: ResourceRef{
-						ARN:    instanceARN(zone, ptrString(inst.ID)),
-						Type:   ResourceComputeInstance,
-						Region: zone,
-						ID:     ptrString(inst.ID),
-					},
-					Tags: derefLabels(inst.Labels),
-					Attr: map[string]any{
-						"name":  ptrString(inst.Name),
-						"state": state,
-						"type":  ptrString(inst.InstanceTypeID),
-					},
-				}
-				
-				if inst.CreatedAt != nil {
-					meta.Attr["createdAt"] = *inst.CreatedAt
-					earliest = preferEarlier(earliest, inst.CreatedAt)
-				}
-				
-				labels := derefLabels(inst.Labels)
-				if owner, ok := labels["owner"]; ok && owner != "" {
-					if details.Summary.Owner == "" {
-						details.Summary.Owner = owner
-					}
-				}
-				
-				details.Resources = append(details.Resources, meta)
-				
-				switch state {
-				case StateActive:
-					hasActive = true
-				case StateStopped:
-					hasStopped = true
-				}
+	} else if instancesResp != nil && instancesResp.Instances != nil {
+		for _, inst := range instancesResp.Instances {
+			// inst.ID is v3.UUID which is a string type
+			if inst.ID == "" {
+				continue
+			}
+			instID := inst.ID
+			
+			// Get full instance to access all fields
+			fullInst, err := client.GetInstance(ctx, instID)
+			if err != nil {
+				slog.Debug("failed to get instance details", "error", err)
+				continue
+			}
+			
+			nameStr := fullInst.Name
+			labels := fullInst.Labels
+			
+			if !matchesDeployment(&nameStr, labels, deploymentID) {
+				continue
+			}
+			
+			hasInstances = true
+			stateStr := string(fullInst.State)
+			state := instanceStateToSimple(&stateStr)
+			
+			typeID := ""
+			if fullInst.InstanceType != nil {
+				typeID = string(fullInst.InstanceType.ID)
+			}
+			
+			instIDStr := string(instID)
+			
+			meta := ResourceMeta{
+				Ref: ResourceRef{
+					ARN:    instanceARN(zone, instIDStr),
+					Type:   ResourceComputeInstance,
+					Region: zone,
+					ID:     instIDStr,
+				},
+				Tags: labels,
+				Attr: map[string]any{
+					"name":  nameStr,
+					"state": state,
+					"type":  typeID,
+				},
+			}
+			
+			if !fullInst.CreatedAT.IsZero() {
+				meta.Attr["createdAt"] = fullInst.CreatedAT
+				earliest = preferEarlier(earliest, &fullInst.CreatedAT)
+			}
+			
+			if owner, ok := labels["owner"]; ok && owner != "" {
+				details.Summary.Owner = owner
+			}
+			
+			switch state {
+			case StateActive:
+				hasActive = true
+			case StateStopped:
+				hasStopped = true
 			}
 		}
 	}
 
-	// Block storage volumes - use direct API client
-	apiCli, err := newAPIClient(zone)
-	if err == nil {
-		volumes, err := apiCli.listBlockStorageVolumes(ctx)
-		if err != nil {
-			slog.Debug("list block storage volumes failed", "error", err)
-		} else {
-			for _, vol := range volumes {
-				if matchesDeploymentLabels(vol.Labels, deploymentID) {
-					state := blockStorageStateToSimple(vol.State)
-					
-					meta := ResourceMeta{
-						Ref: ResourceRef{
-							ARN:    volumeARN(zone, vol.ID),
-							Type:   ResourceBlockVolume,
-							Region: zone,
-							ID:     vol.ID,
-						},
-						Tags: vol.Labels,
-						Attr: map[string]any{
-							"name":  vol.Name,
-							"state": state,
-							"size":  vol.Size,
-						},
-					}
-					
-					if vol.CreatedAt != "" {
-						if createdAt, err := time.Parse(time.RFC3339, vol.CreatedAt); err == nil {
-							meta.Attr["createdAt"] = createdAt
-							earliest = preferEarlier(earliest, &createdAt)
-						}
-					}
-					
-					details.Resources = append(details.Resources, meta)
-				}
+	// Block storage volumes
+	volumesResp, err := client.ListBlockStorageVolumes(ctx)
+	if err != nil {
+		slog.Debug("list block storage volumes failed", "error", err)
+	} else if volumesResp != nil && volumesResp.BlockStorageVolumes != nil {
+		for _, vol := range volumesResp.BlockStorageVolumes {
+			labels := vol.Labels
+			
+			if !matchesDeploymentLabels(labels, deploymentID) {
+				continue
 			}
+			
+			volID := string(vol.ID)
+			volName := vol.Name
+			stateStr := string(vol.State)
+			state := blockStorageStateToSimple(stateStr)
+			
+			meta := ResourceMeta{
+				Ref: ResourceRef{
+					ARN:    volumeARN(zone, volID),
+					Type:   ResourceBlockVolume,
+					Region: zone,
+					ID:     volID,
+				},
+				Tags: labels,
+				Attr: map[string]any{
+					"name":  volName,
+					"state": state,
+					"size":  vol.Size,
+				},
+			}
+			
+			if !vol.CreatedAT.IsZero() {
+				meta.Attr["createdAt"] = vol.CreatedAT
+				earliest = preferEarlier(earliest, &vol.CreatedAT)
+			}
+			
+			details.Resources = append(details.Resources, meta)
 		}
 	}
 
 	// Discover private networks by label
-	networks, err := client.ListPrivateNetworks(ctx, zone)
+	networksResp, err := client.ListPrivateNetworks(ctx)
 	if err != nil {
 		slog.Debug("list private networks failed", "error", err)
-	} else {
-		for _, net := range networks {
-			if matchesDeployment(net.Name, derefLabels(net.Labels), deploymentID) {
-				meta := ResourceMeta{
-					Ref: ResourceRef{
-						ARN:    networkARN(zone, ptrString(net.ID)),
-						Type:   ResourcePrivateNetwork,
-						Region: zone,
-						ID:     ptrString(net.ID),
-					},
-					Tags: derefLabels(net.Labels),
-					Attr: map[string]any{
-						"name": ptrString(net.Name),
-					},
-				}
-				
-				details.Resources = append(details.Resources, meta)
+	} else if networksResp != nil && networksResp.PrivateNetworks != nil {
+		for _, net := range networksResp.PrivateNetworks {
+			nameStr := net.Name
+			labels := net.Labels
+			
+			if !matchesDeployment(&nameStr, labels, deploymentID) {
+				continue
 			}
+			
+			netID := string(net.ID)
+			
+			meta := ResourceMeta{
+				Ref: ResourceRef{
+					ARN:    networkARN(zone, netID),
+					Type:   ResourcePrivateNetwork,
+					Region: zone,
+					ID:     netID,
+				},
+				Tags: labels,
+				Attr: map[string]any{
+					"name": nameStr,
+				},
+			}
+			
+			details.Resources = append(details.Resources, meta)
 		}
 	}
 
 	// Discover security groups by name pattern
-	securityGroups, err := client.ListSecurityGroups(ctx, zone)
+	securityGroupsResp, err := client.ListSecurityGroups(ctx)
 	if err != nil {
 		slog.Debug("list security groups failed", "error", err)
-	} else {
-		for _, sg := range securityGroups {
-			if matchesDeploymentName(sg.Name, deploymentID) {
-				meta := ResourceMeta{
-					Ref: ResourceRef{
-						ARN:    securityGroupARN(zone, ptrString(sg.ID)),
-						Type:   ResourceSecurityGroup,
-						Region: zone,
-						ID:     ptrString(sg.ID),
-					},
-					Tags: map[string]string{},
-					Attr: map[string]any{
-						"name": ptrString(sg.Name),
-					},
-				}
-				
-				details.Resources = append(details.Resources, meta)
+	} else if securityGroupsResp != nil && securityGroupsResp.SecurityGroups != nil {
+		for _, sg := range securityGroupsResp.SecurityGroups {
+			nameStr := sg.Name
+			
+			if !matchesDeploymentName(&nameStr, deploymentID) {
+				continue
 			}
+			
+			sgID := string(sg.ID)
+			
+			meta := ResourceMeta{
+				Ref: ResourceRef{
+					ARN:    securityGroupARN(zone, sgID),
+					Type:   ResourceSecurityGroup,
+					Region: zone,
+					ID:     sgID,
+				},
+				Tags: map[string]string{},
+				Attr: map[string]any{
+					"name": nameStr,
+				},
+			}
+			
+			details.Resources = append(details.Resources, meta)
 		}
 	}
 
 	// Discover SSH keys by name pattern
-	sshKeys, err := client.ListSSHKeys(ctx, zone)
+	sshKeysResp, err := client.ListSSHKeys(ctx)
 	if err != nil {
 		slog.Debug("list ssh keys failed", "error", err)
-	} else {
-		for _, key := range sshKeys {
-			if matchesDeploymentName(key.Name, deploymentID) {
-				meta := ResourceMeta{
-					Ref: ResourceRef{
-						ARN:    sshKeyARN(zone, ptrString(key.Name)),
-						Type:   ResourceSSHKey,
-						Region: zone,
-						ID:     ptrString(key.Name),
-					},
-					Tags: map[string]string{},
-					Attr: map[string]any{
-						"name": ptrString(key.Name),
-					},
-				}
-				
-				details.Resources = append(details.Resources, meta)
+	} else if sshKeysResp != nil && sshKeysResp.SSHKeys != nil {
+		for _, key := range sshKeysResp.SSHKeys {
+			nameStr := key.Name
+			
+			if !matchesDeploymentName(&nameStr, deploymentID) {
+				continue
 			}
+			
+			meta := ResourceMeta{
+				Ref: ResourceRef{
+					ARN:    sshKeyARN(zone, nameStr),
+					Type:   ResourceSSHKey,
+					Region: zone,
+					ID:     nameStr,
+				},
+				Tags: map[string]string{},
+				Attr: map[string]any{
+					"name": nameStr,
+				},
+			}
+			
+			details.Resources = append(details.Resources, meta)
 		}
 	}
 
 	// Discover IAM roles by label
-	iamRoles, err := client.ListIAMRoles(ctx, zone)
+	iamRolesResp, err := client.ListIAMRoles(ctx)
 	if err != nil {
 		slog.Debug("list iam roles failed", "error", err)
-	} else {
-		for _, role := range iamRoles {
-			if matchesDeployment(role.Name, role.Labels, deploymentID) {
-				meta := ResourceMeta{
-					Ref: ResourceRef{
-						ARN:    iamRoleARN(ptrString(role.ID)),
-						Type:   ResourceIAMRole,
-						Region: zone,
-						ID:     ptrString(role.ID),
-					},
-					Tags: role.Labels,
-					Attr: map[string]any{
-						"name": ptrString(role.Name),
-					},
-				}
-				
-				details.Resources = append(details.Resources, meta)
+	} else if iamRolesResp != nil && iamRolesResp.IAMRoles != nil {
+		for _, role := range iamRolesResp.IAMRoles {
+			nameStr := role.Name
+			labels := role.Labels
+			
+			if !matchesDeployment(&nameStr, labels, deploymentID) {
+				continue
 			}
+			
+			roleID := string(role.ID)
+			
+			meta := ResourceMeta{
+				Ref: ResourceRef{
+					ARN:    iamRoleARN(roleID),
+					Type:   ResourceIAMRole,
+					Region: zone,
+					ID:     roleID,
+				},
+				Tags: labels,
+				Attr: map[string]any{
+					"name": nameStr,
+				},
+			}
+			
+			details.Resources = append(details.Resources, meta)
 		}
 	}
 
-	// Discover IAM API keys - use direct API client
-	if apiCli != nil {
-		apiKeys, err := apiCli.listIAMAPIKeys(ctx)
-		if err != nil {
-			slog.Debug("list iam api keys failed", "error", err)
-		} else {
-			for _, key := range apiKeys {
-				if matchesDeploymentName(&key.Name, deploymentID) {
-					meta := ResourceMeta{
-						Ref: ResourceRef{
-							ARN:    iamAPIKeyARN(key.Key),
-							Type:   ResourceIAMAPIKey,
-							Region: zone,
-							ID:     key.Key,
-						},
-						Tags: map[string]string{},
-						Attr: map[string]any{
-							"name": key.Name,
-						},
-					}
-					
-					details.Resources = append(details.Resources, meta)
-				}
+	// Discover IAM API keys
+	apiKeysResp, err := client.ListAPIKeys(ctx)
+	if err != nil {
+		slog.Debug("list iam api keys failed", "error", err)
+	} else if apiKeysResp != nil && apiKeysResp.APIKeys != nil {
+		for _, key := range apiKeysResp.APIKeys {
+			nameStr := key.Name
+			
+			if !matchesDeploymentName(&nameStr, deploymentID) {
+				continue
 			}
+			
+			keyStr := key.Key
+			
+			meta := ResourceMeta{
+				Ref: ResourceRef{
+					ARN:    iamAPIKeyARN(keyStr),
+					Type:   ResourceIAMAPIKey,
+					Region: zone,
+					ID:     keyStr,
+				},
+				Tags: map[string]string{},
+				Attr: map[string]any{
+					"name": nameStr,
+				},
+			}
+			
+			details.Resources = append(details.Resources, meta)
 		}
 	}
 
@@ -358,61 +436,62 @@ func CollectDeploymentSummaries(
 	deploymentIDRegex := regexp.MustCompile(`^exasol-[a-f0-9]{8}$`)
 
 	// Discover deployments via compute instances (primary resource)
-	instances, err := client.ListInstances(ctx, zone)
+	instancesResp, err := client.ListInstances(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list instances: %w", err)
 	}
 
-	for _, inst := range instances {
-		depID := extractDeploymentID(inst.Name, derefLabels(inst.Labels), deploymentIDRegex)
-		if depID == "" {
-			continue
-		}
-
-		labels := derefLabels(inst.Labels)
-		owner := labels["owner"]
-
-		if !ownerMatchesFilter(owner, ownerFilter) {
-			continue
-		}
-
-		sum := summaries[depID]
-		if sum == nil {
-			sum = &DeploymentSummary{
-				ID:        depID,
-				Provider:  "exoscale",
-				Region:    zone,
-				Owner:     owner,
-				CreatedAt: time.Time{},
-				State:     StateUnknown,
+	if instancesResp != nil && instancesResp.Instances != nil {
+		for _, inst := range instancesResp.Instances {
+			depID := extractDeploymentID(&inst.Name, inst.Labels, deploymentIDRegex)
+			if depID == "" {
+				continue
 			}
-			summaries[depID] = sum
-		}
 
-		sum.Resources++
+			owner := inst.Labels["owner"]
 
-		if inst.CreatedAt != nil && (sum.CreatedAt.IsZero() || inst.CreatedAt.Before(sum.CreatedAt)) {
-			sum.CreatedAt = *inst.CreatedAt
-		}
-
-		state := instanceStateToSimple(inst.State)
-		switch state {
-		case StateActive:
-			if sum.State != StateActive {
-				sum.State = StateActive
+			if !ownerMatchesFilter(owner, ownerFilter) {
+				continue
 			}
-		case StateStopped:
-			if sum.State != StateActive {
-				sum.State = StateStopped
+
+			sum := summaries[depID]
+			if sum == nil {
+				sum = &DeploymentSummary{
+					ID:        depID,
+					Provider:  "exoscale",
+					Region:    zone,
+					Owner:     owner,
+					CreatedAt: time.Time{},
+					State:     StateUnknown,
+				}
+				summaries[depID] = sum
+			}
+
+			sum.Resources++
+
+			if !inst.CreatedAT.IsZero() && (sum.CreatedAt.IsZero() || inst.CreatedAT.Before(sum.CreatedAt)) {
+				sum.CreatedAt = inst.CreatedAT
+			}
+
+			stateStr := string(inst.State)
+			state := instanceStateToSimple(&stateStr)
+			switch state {
+			case StateActive:
+				if sum.State != StateActive {
+					sum.State = StateActive
+				}
+			case StateStopped:
+				if sum.State != StateActive {
+					sum.State = StateStopped
+				}
 			}
 		}
 	}
 
-	// Block storage volumes - use direct API client
-	apiCli, _ := newAPIClient(zone)
-	if apiCli != nil {
-		volumes, _ := apiCli.listBlockStorageVolumes(ctx)
-		for _, vol := range volumes {
+	// Block storage volumes
+	volumesResp, _ := client.ListBlockStorageVolumes(ctx)
+	if volumesResp != nil && volumesResp.BlockStorageVolumes != nil {
+		for _, vol := range volumesResp.BlockStorageVolumes {
 			depID := extractDeploymentIDFromLabels(vol.Labels, deploymentIDRegex)
 			if sum, ok := summaries[depID]; ok {
 				sum.Resources++
@@ -421,41 +500,49 @@ func CollectDeploymentSummaries(
 	}
 	
 	// Count other resources for each deployment
-	networks, _ := client.ListPrivateNetworks(ctx, zone)
-	for _, net := range networks {
-		depID := extractDeploymentID(net.Name, derefLabels(net.Labels), deploymentIDRegex)
-		if sum, ok := summaries[depID]; ok {
-			sum.Resources++
+	networksResp, _ := client.ListPrivateNetworks(ctx)
+	if networksResp != nil && networksResp.PrivateNetworks != nil {
+		for _, net := range networksResp.PrivateNetworks {
+			depID := extractDeploymentID(&net.Name, net.Labels, deploymentIDRegex)
+			if sum, ok := summaries[depID]; ok {
+				sum.Resources++
+			}
 		}
 	}
 
-	securityGroups, _ := client.ListSecurityGroups(ctx, zone)
-	for _, sg := range securityGroups {
-		depID := extractDeploymentIDFromName(sg.Name, deploymentIDRegex)
-		if sum, ok := summaries[depID]; ok {
-			sum.Resources++
+	securityGroupsResp, _ := client.ListSecurityGroups(ctx)
+	if securityGroupsResp != nil && securityGroupsResp.SecurityGroups != nil {
+		for _, sg := range securityGroupsResp.SecurityGroups {
+			depID := extractDeploymentIDFromName(&sg.Name, deploymentIDRegex)
+			if sum, ok := summaries[depID]; ok {
+				sum.Resources++
+			}
 		}
 	}
 
-	sshKeys, _ := client.ListSSHKeys(ctx, zone)
-	for _, key := range sshKeys {
-		depID := extractDeploymentIDFromName(key.Name, deploymentIDRegex)
-		if sum, ok := summaries[depID]; ok {
-			sum.Resources++
+	sshKeysResp, _ := client.ListSSHKeys(ctx)
+	if sshKeysResp != nil && sshKeysResp.SSHKeys != nil {
+		for _, key := range sshKeysResp.SSHKeys {
+			depID := extractDeploymentIDFromName(&key.Name, deploymentIDRegex)
+			if sum, ok := summaries[depID]; ok {
+				sum.Resources++
+			}
 		}
 	}
 
-	iamRoles, _ := client.ListIAMRoles(ctx, zone)
-	for _, role := range iamRoles {
-		depID := extractDeploymentID(role.Name, role.Labels, deploymentIDRegex)
-		if sum, ok := summaries[depID]; ok {
-			sum.Resources++
+	iamRolesResp, _ := client.ListIAMRoles(ctx)
+	if iamRolesResp != nil && iamRolesResp.IAMRoles != nil {
+		for _, role := range iamRolesResp.IAMRoles {
+			depID := extractDeploymentID(&role.Name, role.Labels, deploymentIDRegex)
+			if sum, ok := summaries[depID]; ok {
+				sum.Resources++
+			}
 		}
 	}
 
-	if apiCli != nil {
-		apiKeys, _ := apiCli.listIAMAPIKeys(ctx)
-		for _, key := range apiKeys {
+	apiKeysResp, _ := client.ListAPIKeys(ctx)
+	if apiKeysResp != nil && apiKeysResp.APIKeys != nil {
+		for _, key := range apiKeysResp.APIKeys {
 			depID := extractDeploymentIDFromName(&key.Name, deploymentIDRegex)
 			if sum, ok := summaries[depID]; ok {
 				sum.Resources++
@@ -659,12 +746,6 @@ func iamAPIKeyARN(key string) string {
 
 func sosBucketARN(zone, bucket string) string {
 	return fmt.Sprintf("exoscale:%s:sos-bucket:%s", zone, bucket)
-}
-
-// listIAMAPIKeys is deprecated - use apiClient.listIAMAPIKeys instead
-// Keeping this stub for backward compatibility
-func listIAMAPIKeys(ctx context.Context, client *egoscale.Client) ([]IAMAPIKey, error) {
-	return []IAMAPIKey{}, nil
 }
 
 // listSOSBuckets lists SOS buckets matching the deployment pattern

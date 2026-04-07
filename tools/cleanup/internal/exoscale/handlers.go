@@ -13,7 +13,7 @@ import (
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	egoscale "github.com/exoscale/egoscale/v2"
+	v3 "github.com/exoscale/egoscale/v3"
 )
 
 // Handler defines deletion behavior for a resource type.
@@ -37,19 +37,14 @@ func initHandlers(ctx context.Context, zone string) error {
 		return fmt.Errorf("failed to create Exoscale client: %w", err)
 	}
 	
-	apiCli, err := newAPIClient(zone)
-	if err != nil {
-		return fmt.Errorf("failed to create API client: %w", err)
-	}
-	
 	// Initialize handlers
 	registry[ResourceComputeInstance] = &computeInstanceHandler{client: client, zone: zone}
-	registry[ResourceBlockVolume] = &blockStorageVolumeHandler{apiClient: apiCli, zone: zone}
+	registry[ResourceBlockVolume] = &blockStorageVolumeHandler{client: client, zone: zone}
 	registry[ResourcePrivateNetwork] = &privateNetworkHandler{client: client, zone: zone}
 	registry[ResourceSecurityGroup] = &securityGroupHandler{client: client, zone: zone}
 	registry[ResourceSSHKey] = &sshKeyHandler{client: client, zone: zone}
-	registry[ResourceIAMRole] = &iamRoleHandler{client: client, zone: zone}
-	registry[ResourceIAMAPIKey] = &iamAPIKeyHandler{apiClient: apiCli}
+	registry[ResourceIAMRole] = &iamRoleHandler{client: client}
+	registry[ResourceIAMAPIKey] = &iamAPIKeyHandler{client: client}
 	registry[ResourceSOSBucket] = &sosBucketHandler{zone: zone}
 
 	return nil
@@ -69,17 +64,18 @@ func deleteResource(ctx context.Context, zone string, ref ResourceRef) error {
 
 // Compute Instance Handler
 type computeInstanceHandler struct {
-	client *egoscale.Client
+	client *v3.Client
 	zone   string
 }
 
 func (h *computeInstanceHandler) Delete(ctx context.Context, ref ResourceRef) error {
-	// Create instance struct with just the ID
-	instance := &egoscale.Instance{
-		ID: &ref.ID,
+	// Parse UUID from ID string
+	uuid, err := v3.ParseUUID(ref.ID)
+	if err != nil {
+		return fmt.Errorf("invalid instance ID: %w", err)
 	}
 	
-	err := h.client.DeleteInstance(ctx, h.zone, instance)
+	op, err := h.client.DeleteInstance(ctx, uuid)
 	if err != nil {
 		// Treat not found as success for idempotent cleanup
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
@@ -88,45 +84,50 @@ func (h *computeInstanceHandler) Delete(ctx context.Context, ref ResourceRef) er
 		return fmt.Errorf("failed to delete instance: %w", err)
 	}
 	
+	// Wait for operation to complete
+	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
+	if err != nil {
+		return fmt.Errorf("failed to wait for instance deletion: %w", err)
+	}
+	
 	return nil
 }
 
-// Block Storage Volume Handler (uses direct API)
+// Block Storage Volume Handler
 type blockStorageVolumeHandler struct {
-	apiClient *apiClient
-	zone      string
+	client *v3.Client
+	zone   string
 }
 
 func (h *blockStorageVolumeHandler) Delete(ctx context.Context, ref ResourceRef) error {
+	// Parse UUID from ID string
+	uuid, err := v3.ParseUUID(ref.ID)
+	if err != nil {
+		return fmt.Errorf("invalid volume ID: %w", err)
+	}
+	
 	// Wait for volume to be detached before deleting
 	maxWaits := 60 // 60 seconds max
 	for i := 0; i < maxWaits; i++ {
-		volumes, err := h.apiClient.listBlockStorageVolumes(ctx)
+		vol, err := h.client.GetBlockStorageVolume(ctx, uuid)
 		if err != nil {
+			// Volume not found is OK
+			if strings.Contains(err.Error(), "404") {
+				return nil
+			}
 			return fmt.Errorf("failed to check volume status: %w", err)
 		}
 		
-		found := false
-		for _, vol := range volumes {
-			if vol.ID == ref.ID {
-				found = true
-				if vol.State == "detached" || vol.State == "available" {
-					goto readyToDelete
-				}
-				break
-			}
-		}
-		
-		if !found {
-			// Volume already deleted
-			return nil
+		if vol.State == v3.BlockStorageVolumeStateDetached || 
+			vol.State == "available" {
+			goto readyToDelete
 		}
 		
 		time.Sleep(1 * time.Second)
 	}
 	
 readyToDelete:
-	respBody, err := h.apiClient.doRequest(ctx, "DELETE", "/block-storage/"+ref.ID, nil, nil)
+	op, err := h.client.DeleteBlockStorageVolume(ctx, uuid)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") {
 			return nil
@@ -134,24 +135,28 @@ readyToDelete:
 		return fmt.Errorf("failed to delete volume: %w", err)
 	}
 	
-	// Response is an operation object, we don't wait for it to complete
-	_ = respBody
+	// Wait for operation to complete
+	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
+	if err != nil {
+		return fmt.Errorf("failed to wait for volume deletion: %w", err)
+	}
 	
 	return nil
 }
 
 // Private Network Handler
 type privateNetworkHandler struct {
-	client *egoscale.Client
+	client *v3.Client
 	zone   string
 }
 
 func (h *privateNetworkHandler) Delete(ctx context.Context, ref ResourceRef) error {
-	network := &egoscale.PrivateNetwork{
-		ID: &ref.ID,
+	uuid, err := v3.ParseUUID(ref.ID)
+	if err != nil {
+		return fmt.Errorf("invalid network ID: %w", err)
 	}
 	
-	err := h.client.DeletePrivateNetwork(ctx, h.zone, network)
+	op, err := h.client.DeletePrivateNetwork(ctx, uuid)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
 			return nil
@@ -159,21 +164,27 @@ func (h *privateNetworkHandler) Delete(ctx context.Context, ref ResourceRef) err
 		return fmt.Errorf("failed to delete private network: %w", err)
 	}
 	
+	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
+	if err != nil {
+		return fmt.Errorf("failed to wait for network deletion: %w", err)
+	}
+	
 	return nil
 }
 
 // Security Group Handler
 type securityGroupHandler struct {
-	client *egoscale.Client
+	client *v3.Client
 	zone   string
 }
 
 func (h *securityGroupHandler) Delete(ctx context.Context, ref ResourceRef) error {
-	securityGroup := &egoscale.SecurityGroup{
-		ID: &ref.ID,
+	uuid, err := v3.ParseUUID(ref.ID)
+	if err != nil {
+		return fmt.Errorf("invalid security group ID: %w", err)
 	}
 	
-	err := h.client.DeleteSecurityGroup(ctx, h.zone, securityGroup)
+	op, err := h.client.DeleteSecurityGroup(ctx, uuid)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
 			return nil
@@ -181,21 +192,23 @@ func (h *securityGroupHandler) Delete(ctx context.Context, ref ResourceRef) erro
 		return fmt.Errorf("failed to delete security group: %w", err)
 	}
 	
+	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
+	if err != nil {
+		return fmt.Errorf("failed to wait for security group deletion: %w", err)
+	}
+	
 	return nil
 }
 
 // SSH Key Handler
 type sshKeyHandler struct {
-	client *egoscale.Client
+	client *v3.Client
 	zone   string
 }
 
 func (h *sshKeyHandler) Delete(ctx context.Context, ref ResourceRef) error {
-	sshKey := &egoscale.SSHKey{
-		Name: &ref.ID, // SSH keys use name as ID
-	}
-	
-	err := h.client.DeleteSSHKey(ctx, h.zone, sshKey)
+	// SSH keys use name as ID in v3
+	op, err := h.client.DeleteSSHKey(ctx, ref.ID)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
 			return nil
@@ -203,21 +216,26 @@ func (h *sshKeyHandler) Delete(ctx context.Context, ref ResourceRef) error {
 		return fmt.Errorf("failed to delete SSH key: %w", err)
 	}
 	
+	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
+	if err != nil {
+		return fmt.Errorf("failed to wait for SSH key deletion: %w", err)
+	}
+	
 	return nil
 }
 
 // IAM Role Handler
 type iamRoleHandler struct {
-	client *egoscale.Client
-	zone   string
+	client *v3.Client
 }
 
 func (h *iamRoleHandler) Delete(ctx context.Context, ref ResourceRef) error {
-	iamRole := &egoscale.IAMRole{
-		ID: &ref.ID,
+	uuid, err := v3.ParseUUID(ref.ID)
+	if err != nil {
+		return fmt.Errorf("invalid IAM role ID: %w", err)
 	}
 	
-	err := h.client.DeleteIAMRole(ctx, h.zone, iamRole)
+	op, err := h.client.DeleteIAMRole(ctx, uuid)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
 			return nil
@@ -225,16 +243,22 @@ func (h *iamRoleHandler) Delete(ctx context.Context, ref ResourceRef) error {
 		return fmt.Errorf("failed to delete IAM role: %w", err)
 	}
 	
+	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
+	if err != nil {
+		return fmt.Errorf("failed to wait for IAM role deletion: %w", err)
+	}
+	
 	return nil
 }
 
-// IAM API Key Handler (uses direct API)
+// IAM API Key Handler
 type iamAPIKeyHandler struct {
-	apiClient *apiClient
+	client *v3.Client
 }
 
 func (h *iamAPIKeyHandler) Delete(ctx context.Context, ref ResourceRef) error {
-	respBody, err := h.apiClient.doRequest(ctx, "DELETE", "/api-key/"+ref.ID, nil, nil)
+	// API keys use the key string as ID
+	op, err := h.client.DeleteAPIKey(ctx, ref.ID)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") {
 			return nil
@@ -242,8 +266,10 @@ func (h *iamAPIKeyHandler) Delete(ctx context.Context, ref ResourceRef) error {
 		return fmt.Errorf("failed to delete API key: %w", err)
 	}
 	
-	// Response is an operation object, we don't wait for it to complete
-	_ = respBody
+	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
+	if err != nil {
+		return fmt.Errorf("failed to wait for API key deletion: %w", err)
+	}
 	
 	return nil
 }

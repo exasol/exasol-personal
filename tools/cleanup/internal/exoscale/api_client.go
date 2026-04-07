@@ -153,62 +153,6 @@ func (c *apiClient) doRequest(ctx context.Context, method, path string, body []b
 	return respBody, nil
 }
 
-// BlockStorageVolume represents a block storage volume from the API
-type BlockStorageVolume struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	State     string            `json:"state"`
-	Size      int64             `json:"size"`
-	CreatedAt string            `json:"created-at"`
-	Labels    map[string]string `json:"labels"`
-	Instance  *struct {
-		ID string `json:"id"`
-	} `json:"instance"`
-}
-
-// listBlockStorageVolumes lists all block storage volumes in the zone
-func (c *apiClient) listBlockStorageVolumes(ctx context.Context) ([]BlockStorageVolume, error) {
-	respBody, err := c.doRequest(ctx, "GET", "/block-storage", nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	
-	var response struct {
-		BlockStorageVolumes []BlockStorageVolume `json:"block-storage-volumes"`
-	}
-	
-	if err := json.Unmarshal(respBody, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-	
-	return response.BlockStorageVolumes, nil
-}
-
-// IAMAPIKey represents an IAM API key from the API
-type IAMAPIKey struct {
-	Key    string `json:"key"`
-	Name   string `json:"name"`
-	RoleID string `json:"role-id"`
-}
-
-// listIAMAPIKeys lists all IAM API keys
-func (c *apiClient) listIAMAPIKeys(ctx context.Context) ([]IAMAPIKey, error) {
-	respBody, err := c.doRequest(ctx, "GET", "/api-key", nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	
-	var response struct {
-		APIKeys []IAMAPIKey `json:"api-keys"`
-	}
-	
-	if err := json.Unmarshal(respBody, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-	
-	return response.APIKeys, nil
-}
-
 // getOrganization retrieves organization information
 func (c *apiClient) getOrganization(ctx context.Context) (*Organization, error) {
 	respBody, err := c.doRequest(ctx, "GET", "/organization", nil, nil)
