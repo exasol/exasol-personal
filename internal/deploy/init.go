@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -151,6 +152,8 @@ func InitDeployment(
 			infraVars["deployment_id"] = deploymentId
 			infraVars["cluster_identity"] = clusterIdentity
 			infraVars["deployment_created_at"] = time.Now().UTC().Format(time.RFC3339)
+			infraVars["os"] = runtime.GOOS
+			infraVars["arch"] = runtime.GOARCH
 
 			// If tofu is configured for the infrastructure, perform tofu-specific initialization.
 			if infraManifest.Tofu != nil {

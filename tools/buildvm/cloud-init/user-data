@@ -10,9 +10,74 @@ users:
       - SSH_PUBLIC_KEY_PLACEHOLDER
 
 packages:
+  - fuse3
+  - iptables
   - openssh
+  - podman
+  - util-linux
+
+write_files:
+  - path: /usr/local/bin/mount-hostshare.sh
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+
+      MNT=/mnt/host
+      TAG=hostshare
+
+      mkdir -p "$MNT"
+
+      mount -t virtiofs "$TAG" "$MNT" && exit 0
+      echo "virtiofs failed, trying 9p..." >&2
+      mount -t 9p -o trans=virtio,version=9p2000.L "$TAG" "$MNT"
+
+  - path: /usr/local/bin/create-service.sh
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -e
+
+      podman rm -f service 2>/dev/null || true
+
+      podman create \
+        --name service \
+        --restart=always \
+        -p 5678:5678 \
+        hashicorp/http-echo -text="hello world"
+
+  - path: /etc/init.d/service
+    permissions: "0755"
+    content: |
+      #!/sbin/openrc-run
+
+      name="service"
+      description="Podman container service"
+
+      command="/usr/bin/podman"
+      command_args="start -a service"
+      pidfile="/run/service.pid"
+
+      depend() {
+        need net
+        need localmount
+      }
+
+      start_pre() {
+        # Ensure container exists before starting
+        /usr/local/bin/create-service.sh
+      }
+
+      stop() {
+        /usr/bin/podman stop -t 10 service || true
+      }
+
+
+bootcmd:
+  - /usr/local/bin/mount-hostshare.sh
 
 runcmd:
   - rc-update add sshd default
-  - service sshd start
+  - rc-update add service default
+  - rc-service sshd start
+  - rc-service service start
   - touch /tmp/cloud-init-complete

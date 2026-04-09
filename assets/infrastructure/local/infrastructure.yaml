@@ -1,0 +1,6 @@
+name: Exasol Local
+description: Provisioning locally in VM.
+
+tofu:
+  variablesFile: variables_public.tf
+  varsOutputFile: vars.tfvars
