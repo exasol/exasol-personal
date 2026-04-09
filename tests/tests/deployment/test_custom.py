@@ -11,7 +11,6 @@ from collections.abc import Iterator
 from typing import Final
 
 import pytest
-import semver
 
 from framework.deployment import Deployment
 from framework.launcher import DeploymentConfig, Launcher
@@ -139,16 +138,7 @@ def test_custom_deployment_success(
         stderr = proc.stderr.strip()
         stdout = proc.stdout.strip()
 
-        lines = stderr.splitlines()
-        version_line, exit_hint_lint = lines[0], lines[1]
-
-        assert exit_hint_lint.strip() == 'Type "exit" to exit the shell'
-
-        # Check the Exasol version that is printed as the first line
-        exasol_name, exasol_version = version_line.split(" ")
-
-        assert exasol_name == "Exasol"
-        assert semver.VersionInfo.is_valid(exasol_version)
+        assert stderr == ""
 
         # Check the query output.
         expected = textwrap.dedent("""

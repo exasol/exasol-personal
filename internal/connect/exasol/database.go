@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"regexp"
@@ -16,6 +17,7 @@ import (
 	exasoltypes "github.com/exasol/exasol-driver-go/pkg/types"
 	"github.com/exasol/exasol-personal/internal/connect/exasol/types"
 	generaltypes "github.com/exasol/exasol-personal/internal/connect/types"
+	"github.com/exasol/exasol-personal/internal/util"
 )
 
 var ErrNoVersion = errors.New("the database didn't return version when queried")
@@ -115,9 +117,11 @@ func (db *Database) Connect(ctx context.Context) error {
 		return nil
 	}
 
-	_, err = fmt.Fprintln(os.Stderr, "Exasol", version)
+	if util.IsInteractiveStdin() {
+		return printVersion(os.Stderr, version)
+	}
 
-	return err
+	return nil
 }
 
 func (db *Database) Close() error {
@@ -199,4 +203,10 @@ func parseQueryResult(result json.RawMessage) (*exasoltypes.SqlQueryResponseResu
 	}
 
 	return &resultSet, nil
+}
+
+func printVersion(output io.Writer, version string) error {
+	_, err := fmt.Fprintln(output, "Exasol", version)
+
+	return err
 }
