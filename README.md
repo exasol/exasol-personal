@@ -34,6 +34,7 @@
 - An AWS user with enough permissions to create resources such as EC2 instances.
 
 To learn how to set up an AWS account with an instance profile and configure your local environment to use that profile when installing Exasol Personal, see [Set up an AWS account for Exasol Personal](./HOWTO_SETUP_AWS_ACCOUNT.md).
+To learn how to set up an Azure account and local authentication for the Azure preset, see [Set up an Azure account for Exasol Personal](./HOWTO_SETUP_AZURE_ACCOUNT.md).
 
 
 ## 🏎️ Quick Start for macOS 🍎 and Linux 🐧

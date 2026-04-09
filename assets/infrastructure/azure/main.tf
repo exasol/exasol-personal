@@ -4,7 +4,7 @@ locals {
     Project    = "exasol-personal"
     Deployment = local.deployment_id
     CreatedAt  = var.deployment_created_at
-    Owner      = data.azurerm_client_config.current.object_id
+    Owner      = coalesce(try(data.azuread_user.current[0].user_principal_name, null), try(data.azuread_service_principal.current[0].display_name, null), data.azurerm_client_config.current.object_id)
   }
 
   deployment_id = "exasol-${var.deployment_id}"
@@ -42,6 +42,20 @@ data "azapi_resource_list" "vm_sizes" {
 }
 
 data "azurerm_subscription" "current" {}
+
+data "azuread_directory_object" "current" {
+  object_id = data.azurerm_client_config.current.object_id
+}
+
+data "azuread_user" "current" {
+  count     = data.azuread_directory_object.current.type == "User" ? 1 : 0
+  object_id = data.azurerm_client_config.current.object_id
+}
+
+data "azuread_service_principal" "current" {
+  count     = data.azuread_directory_object.current.type == "ServicePrincipal" ? 1 : 0
+  object_id = data.azurerm_client_config.current.object_id
+}
 
 locals {
   vm_sizes       = data.azapi_resource_list.vm_sizes.output.value

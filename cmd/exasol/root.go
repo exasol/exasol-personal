@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	rootCmdShortDesc = `Exasol Personal Launcher`
+	rootCmdShortDesc = `Exasol Personal: https://github.com/exasol/exasol-personal`
 
 	rootCmdLongDesc = rootCmdShortDesc + `
 
@@ -25,16 +25,14 @@ Getting Started:
   Begin by creating a deployment directory, e.g., with "mkdir deployment", and then change
   into that directory, e.g., with "cd deployment".
 
-  To create and run an Exasol deployment, use the "exasol install" command.
+  To create and run an Exasol deployment, run "exasol install <infra preset name-or-path>".
   This single command initializes your deployment directory, provisions cloud infrastructure,
-  and installs the database.
-
-  Alternatively, use "exasol init" to set up the deployment directory with configuration
-  and then "exasol deploy" to provision infrastructure and install Exasol into it.
+  and installs the database. It uses either a built-in infrastructure preset or a custom preset 
+  at a path you provide. Built-in presets are: aws, azure, and exoscale.
 
   Note: Ensure your cloud provider credentials are configured in your environment before running.`
 
-	rootCmdExample = `  exasol install aws --deployment-dir ./my-exasol`
+	rootCmdExample = `  exasol install aws`
 
 	rootCmdGroupEssential = "essential"
 	rootCmdGroupLifecycle = "lifecycle"
