@@ -307,11 +307,7 @@ func (builder *nodeListBuilder) getRemote(node string) (*remote.SSHConnectionOpt
 		return nil, err
 	}
 
-	keyFilePath := sshDetails.KeyFile
-	if !filepath.IsAbs(keyFilePath) {
-		keyFilePath = filepath.Join(builder.deploymentDir, keyFilePath)
-	}
-
+	keyFilePath := sshDetails.KeyFile.Abs(builder.deploymentDir)
 	keyData, err := os.ReadFile(keyFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: could not read SSH key file %s", err, keyFilePath)

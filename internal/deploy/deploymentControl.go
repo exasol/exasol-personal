@@ -321,6 +321,7 @@ func applyAction(
 	if err := tofu.ApplyAction(
 		ctx,
 		*tofuCfg,
+		deploymentDir,
 		startStopArg,
 		out,
 		outErr,

@@ -10,15 +10,15 @@
 
 locals {
   # --- Path "constants" ---
-  # Changing these paths will break the deployment processes as we use them to find the installation preset contents  
-  installation_cloudconf_dir      = "${var.installation_preset_dir}/cloudconf"
-  installation_files_dir          = "${var.installation_preset_dir}/files"
+  # Changing these paths will break the deployment processes as we use them to find the installation preset contents
+  installation_cloudconf_dir = "${local.installation_preset_dir}/cloudconf"
+  installation_files_dir     = "${local.installation_preset_dir}/files"
 
   # Optional infrastructure-preset-provided host file overlay.
   # This is used for infrastructure-specific scripts or configs that should not live in provider-agnostic installation presets.
-  infrastructure_files_dir        = "${path.module}/files"
+  infrastructure_files_dir = "${path.module}/files"
 
-  # Changing these paths will break the installation processes on the hosts as they look for these files  
+  # Changing these paths will break the installation processes on the hosts as they look for these files
   launcher_config_dir             = "/etc/exasol_launcher"
   infrastructure_json_target_path = "${local.launcher_config_dir}/infrastructure.json"
   node_json_target_path           = "${local.launcher_config_dir}/node.json"
@@ -28,14 +28,14 @@ locals {
   # as its own cloud-init "part" (stable lexicographic order) to avoid Terraform-side YAML
   # merging logic and keep the behavior easy to understand.
   installation_cloudconf_files = sort(
-    fileset(local.installation_cloudconf_dir, "*")    
+    fileset(local.installation_cloudconf_dir, "*")
   )
 
   # Materialize metadata of files to be installed.
   installation_node_files = [
     for rel in fileset(local.installation_files_dir, "**") : {
-      src_path  = "${local.installation_files_dir}/${rel}"
-      dest_path = "/${rel}"
+      src_path    = "${local.installation_files_dir}/${rel}"
+      dest_path   = "/${rel}"
       permissions = endswith(rel, ".sh") ? "0755" : "0644"
     }
   ]
@@ -44,8 +44,8 @@ locals {
   # These are applied after installation preset files, so infra presets can override paths when necessary.
   infrastructure_node_files = [
     for rel in fileset(local.infrastructure_files_dir, "**") : {
-      src_path  = "${local.infrastructure_files_dir}/${rel}"
-      dest_path = "/${rel}"
+      src_path    = "${local.infrastructure_files_dir}/${rel}"
+      dest_path   = "/${rel}"
       permissions = endswith(rel, ".sh") ? "0755" : "0644"
     }
   ]
@@ -65,10 +65,10 @@ locals {
   infrastructure_payload = {
 
     # Mandatory section. These values shall always be provided
-    deploymentId    = local.deployment_id
-    numNodes        = length(local.nodes)
-    n11Ip           = local.n11_ip
-        
+    deploymentId = local.deployment_id
+    numNodes     = length(local.nodes)
+    n11Ip        = local.n11_ip
+
     adminPrivateKey    = tls_private_key.ssh_key.private_key_pem
     hostAddrs          = local.node_ips_space_sep
     hostExternalAddrs  = local.node_ips_space_sep
@@ -78,7 +78,7 @@ locals {
     tlsCa              = tls_self_signed_cert.tls_ca_cert.cert_pem
     tlsCert            = tls_locally_signed_cert.tls_cert.cert_pem
 
-    # Optional infrastructure-specific hook scripts.      
+    # Optional infrastructure-specific hook scripts.
     preInstall = {
       # preInstall hooks run on *all* nodes
       root = {
@@ -92,7 +92,7 @@ locals {
       # postInstall hooks run on the *access node (n11) only*
       scripts = var.blob_archive_enabled ? ["/opt/exasol_launcher/scripts/azure_registerBlobArchiveVolume.sh"] : []
     }
-        
+
     azure = {
       location     = var.location
       instanceType = var.instance_type
@@ -130,9 +130,9 @@ locals {
   # Per-node metadata written to disk (separate from infrastructure.json for clarity).
   node_payload_by_name = {
     for n in local.nodes : n.name => {
-      name         = n.name
-      privateIp    = n.ip
-      myId         = n.name
+      name      = n.name
+      privateIp = n.ip
+      myId      = n.name
 
       # Azure disk device names (/dev/sdX) are not stable across reboots, but the
       # LUN-based symlink path is deterministic and known at plan time. The udev match
@@ -157,8 +157,8 @@ data "cloudinit_config" "cloud_config" {
     content {
       content_type = "text/cloud-config"
       # Numeric prefix makes ordering/precedence explicit when debugging multipart user-data.
-      filename     = "10-cloudconf-${part.value}"
-      content      = file("${local.installation_cloudconf_dir}/${part.value}")
+      filename = "10-cloudconf-${part.value}"
+      content  = file("${local.installation_cloudconf_dir}/${part.value}")
     }
   }
 
@@ -167,12 +167,12 @@ data "cloudinit_config" "cloud_config" {
   part {
     content_type = "text/cloud-config"
     filename     = "20-azure-waagent-config.yaml"
-    content      = yamlencode({
+    content = yamlencode({
       write_files = [
         {
           path        = "/etc/waagent.conf.d/10-exasol.conf"
           permissions = "0644"
-          content     = join("\n", [
+          content = join("\n", [
             "Provisioning.Enabled=n",
             "Provisioning.UseCloudInit=y",
             "Provisioning.RegenerateSshHostKeyPair=n",
@@ -186,8 +186,8 @@ data "cloudinit_config" "cloud_config" {
   part {
     content_type = "text/cloud-config"
     # Keep this last so it can intentionally override earlier preset cloud-config values.
-    filename     = "99-write-files.yaml"
-    content      = yamlencode({
+    filename = "99-write-files.yaml"
+    content = yamlencode({
       write_files = concat(
         [
           {

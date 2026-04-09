@@ -86,10 +86,6 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 		t.Fatalf("expected tfvars to contain cluster_size, got: %s", content)
 	}
 
-	if !strings.Contains(content, "infrastructure_artifact_dir") {
-		t.Fatalf("expected tfvars to contain infrastructure_artifact_dir, got: %s", content)
-	}
-
 	if !strings.Contains(content, "installation_preset_dir") {
 		t.Fatalf("expected tfvars to contain installation_preset_dir, got: %s", content)
 	}

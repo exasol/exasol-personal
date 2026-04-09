@@ -144,9 +144,8 @@ func InitDeployment(
 			}
 
 			// These values should always be part of the infra vars per contract
-			// It tell the infrastructure preset where to write deployment artifacts fot the launcher
-			infraVars["infrastructure_artifact_dir"] = deploymentDir
-			infraVars["installation_preset_dir"] = installDir
+			// It tell the infrastructure preset where to write deployment artifacts for the launcher
+			infraVars["installation_preset_dir"] = config.InstallationFilesDirectory
 			// Launcher-governed identity values.
 			infraVars["deployment_id"] = deploymentId
 			infraVars["cluster_identity"] = clusterIdentity

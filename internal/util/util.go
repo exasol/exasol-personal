@@ -72,6 +72,40 @@ func AbsPathNoFail(path string) string {
 	return absPath
 }
 
+type DeploymentPath struct {
+	path string
+}
+
+func NewDeploymentPath(path string, deploymentDir string) DeploymentPath {
+	if filepath.IsAbs(path) {
+		relPath, err := filepath.Rel(deploymentDir, path)
+		if err != nil {
+			panic("Path not in deployment directory")
+		}
+
+		return DeploymentPath{relPath}
+	}
+
+	return DeploymentPath{path}
+}
+
+func (o *DeploymentPath) Abs(deploymentDir string) string {
+	return filepath.Join(deploymentDir, o.path)
+}
+
+func (o *DeploymentPath) String() string {
+	return o.path
+}
+
+func (o *DeploymentPath) MarshalText() ([]byte, error) {
+	return []byte(o.path), nil
+}
+
+func (o *DeploymentPath) UnmarshalText(text []byte) error {
+	o.path = string(text)
+	return nil
+}
+
 type Optional[T any] struct {
 	value   T
 	present bool
