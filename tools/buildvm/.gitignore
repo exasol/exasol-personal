@@ -1,0 +1,9 @@
+installer.iso
+disk.img
+alpine-cloud.qcow2
+*.qcow2
+cloud-init.iso
+vm-key
+vm-key.pub
+qemu.pid
+uefi-vars.fd
