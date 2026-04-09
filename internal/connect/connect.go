@@ -6,6 +6,7 @@ package connect
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 
@@ -86,9 +87,10 @@ func Connect(ctx context.Context, opts *Opts, deploymentDir string) error {
 
 	defer database.Close()
 
-	_, err = fmt.Fprintln(os.Stderr, "Type \"exit\" to exit the shell")
-	if err != nil {
-		return err
+	if isInteractiveStdin() {
+		if err := printExitHint(os.Stderr); err != nil {
+			return err
+		}
 	}
 
 	return RunShell(func(input string) error {
@@ -104,6 +106,21 @@ func Connect(ctx context.Context, opts *Opts, deploymentDir string) error {
 
 		return printResult(queryResult)
 	})
+}
+
+func isInteractiveStdin() bool {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+
+	return (stat.Mode() & os.ModeCharDevice) != 0
+}
+
+func printExitHint(output io.Writer) error {
+	_, err := fmt.Fprintln(output, "Type \"exit\" to exit the shell")
+
+	return err
 }
 
 func printResult(queryResult generaltypes.QueryResulter) error {

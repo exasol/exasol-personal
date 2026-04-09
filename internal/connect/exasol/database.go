@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"regexp"
@@ -115,9 +116,11 @@ func (db *Database) Connect(ctx context.Context) error {
 		return nil
 	}
 
-	_, err = fmt.Fprintln(os.Stderr, "Exasol", version)
+	if !isInteractiveStdin() {
+		return nil
+	}
 
-	return err
+	return printVersion(os.Stderr, version)
 }
 
 func (db *Database) Close() error {
@@ -199,4 +202,19 @@ func parseQueryResult(result json.RawMessage) (*exasoltypes.SqlQueryResponseResu
 	}
 
 	return &resultSet, nil
+}
+
+func isInteractiveStdin() bool {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+
+	return (stat.Mode() & os.ModeCharDevice) != 0
+}
+
+func printVersion(output io.Writer, version string) error {
+	_, err := fmt.Fprintln(output, "Exasol", version)
+
+	return err
 }
