@@ -123,16 +123,7 @@ def test_single_query(reusable_deployment: Deployment) -> None:
     stderr = proc.stderr.strip()
     stdout = proc.stdout.strip()
 
-    lines = stderr.splitlines()
-    version_line, exit_hint_lint = lines[0], lines[1]
-
-    assert exit_hint_lint.strip() == 'Type "exit" to exit the shell'
-
-    # Check the Exasol version that is printed as the first line
-    exasol_name, exasol_version = version_line.split(" ")
-
-    assert exasol_name == "Exasol"
-    assert semver.VersionInfo.is_valid(exasol_version)
+    assert stderr == ""
 
     # Check the query output.
     expected = textwrap.dedent("""
@@ -291,11 +282,14 @@ def test_connect_table_width(reusable_deployment: Deployment) -> None:
 
     os.close(master_fd)
 
-    # Skip first line because it contains the DB version
-    # which is dynamic.
-    actual_lines = str(output_raw, "utf-8").split("\n")[1:]
-    actual_lines = [line.rstrip("\r") for line in actual_lines]
-    actual = "\n".join(actual_lines).strip("\n")
+    output_lines = [line.rstrip("\r") for line in str(output_raw, "utf-8").split("\n")]
+    version_line = output_lines[0].strip()
+    output_without_version = "\n".join(output_lines[1:]).strip("\n")
+
+    # Interactive shell should print the version and exit hint.
+    exasol_name, exasol_version = version_line.split(" ")
+    assert exasol_name == "Exasol"
+    assert semver.VersionInfo.is_valid(exasol_version)
 
     expected = textwrap.dedent("""
     Type "exit" to exit the shell
@@ -307,7 +301,7 @@ def test_connect_table_width(reusable_deployment: Deployment) -> None:
     └────┴─────────────────────────────────────────────────────┘
     """)
 
-    assert actual == expected.strip("\n")
+    assert output_without_version == expected.strip("\n")
 
 
 @pytest.mark.skipif(
