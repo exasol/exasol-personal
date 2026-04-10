@@ -64,7 +64,8 @@ func init() {
 		infraVars := collectInfrastructureVariableOverrides(cmd)
 		installVars := collectInstallationVariableOverrides(cmd)
 		infraPreset := presetRefFromArg(args[0])
-		installPreset := defaultedPresetRefFromOptionalArg(args, 1, defaultInstallationPresetRef())
+		installPreset := defaultedPresetRefFromOptionalArg(
+			args, 1, defaultInstallationPresetRefForInfra(infraPreset))
 
 		safePrint(deploy.EulaNoticeText)
 

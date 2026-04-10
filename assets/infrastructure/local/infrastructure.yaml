@@ -1,0 +1,11 @@
+name: Exasol Local via Podman
+description: Provision Exasol Nano locally using Podman.
+
+localRuntime:
+  kind: podman
+  image: exasol/nano:latest
+  host: 127.0.0.1
+  sqlPort: 8563
+  uiPort: 8443
+  shmSize: 1g
+  readinessTimeoutSeconds: 90

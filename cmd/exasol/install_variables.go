@@ -176,8 +176,14 @@ func scanInstallationPresetSelection(args []string) (*deploy.PresetRef, error) {
 		return nil, errors.New("infra preset not provided")
 	}
 
+	infraPreset := presetRefFromArg(positionals[cmdIndex+1])
+
 	// Optional installation preset argument; default when omitted.
-	installArg := presets.DefaultInstallation
+	defaultInstall := defaultInstallationPresetRefForInfra(infraPreset)
+	installArg := defaultInstall.Name
+	if defaultInstall.IsPath() {
+		installArg = defaultInstall.Path
+	}
 	if cmdIndex+2 < len(positionals) {
 		installArg = positionals[cmdIndex+2]
 	}

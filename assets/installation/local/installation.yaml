@@ -1,0 +1,4 @@
+name: Exasol Local
+description: Local Exasol Nano install with no node-side installation steps.
+
+install: []
