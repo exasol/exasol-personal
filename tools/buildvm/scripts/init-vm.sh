@@ -4,6 +4,9 @@ set -euo pipefail
 DISK_IMG="disk.img"
 CLOUD_INIT_ISO="cloud-init.iso"
 PID_FILE="qemu.pid"
+SHARED_DIR="shared"
+VIRTIOFS_SOCKET="virtiofs.sock"
+VIRTIOFSD_PID_FILE="virtiofsd.pid"
 
 if [ ! -f "$DISK_IMG" ]; then
     echo "Error: $DISK_IMG not found. Run 'task download-image' first."
@@ -27,8 +30,29 @@ if [ -f "$PID_FILE" ]; then
     fi
 fi
 
+# Create shared directory if it doesn't exist
+if [ ! -d "$SHARED_DIR" ]; then
+    echo "==> Creating shared directory: $SHARED_DIR"
+    mkdir -p "$SHARED_DIR"
+fi
+
+# Clean up old socket
+rm -f "$VIRTIOFS_SOCKET"
+
+echo "==> Starting virtiofsd daemon..."
+/usr/libexec/virtiofsd \
+    --socket-path="$VIRTIOFS_SOCKET" \
+    --shared-dir="$SHARED_DIR" \
+    --sandbox none \
+    --cache=auto \
+    --thread-pool-size=4 &
+VIRTIOFSD_PID=$!
+echo "$VIRTIOFSD_PID" > "$VIRTIOFSD_PID_FILE"
+sleep 1
+
 echo "==> Starting Alpine Linux VM in background..."
 echo "==> SSH will be available on localhost:2222"
+echo "==> Shared folder: $SHARED_DIR -> /mnt/host (in VM)"
 echo "==> Use: ssh -i vm-key -p 2222 alpine@localhost"
 echo ""
 
@@ -41,19 +65,26 @@ qemu-system-aarch64 \
     -drive file="$CLOUD_INIT_ISO",format=raw,if=virtio,readonly=on \
     -netdev user,id=net0,hostfwd=tcp::2222-:22 \
     -device virtio-net-pci,netdev=net0 \
+    -chardev socket,id=char0,path="$VIRTIOFS_SOCKET" \
+    -device vhost-user-fs-pci,chardev=char0,tag=hostshare \
+    -object memory-backend-file,id=mem,size=2G,mem-path=/dev/shm,share=on \
+    -numa node,memdev=mem \
     -daemonize \
     -pidfile "$PID_FILE" \
     -display none
 
 echo "==> VM started successfully (PID: $(cat $PID_FILE))"
+echo "==> virtiofsd running (PID: $VIRTIOFSD_PID)"
 echo "==> Waiting for cloud-init to complete..."
 
-# Wait for SSH to be available and cloud-init to complete
-MAX_WAIT=120
+# Wait for cloud-init to complete by polling shared folder
+COMPLETION_MARKER="$SHARED_DIR/cloud-init-complete"
+MAX_WAIT=300
 ELAPSED=0
 while [ $ELAPSED -lt $MAX_WAIT ]; do
-    if ssh -i vm-key -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 alpine@localhost "test -f /tmp/cloud-init-complete" 2>/dev/null; then
+    if [ -f "$COMPLETION_MARKER" ]; then
         echo "==> Cloud-init completed successfully!"
+        rm -f "$COMPLETION_MARKER"  # Clean up marker file
         break
     fi
     sleep 2

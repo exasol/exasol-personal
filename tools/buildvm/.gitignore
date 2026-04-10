@@ -8,3 +8,7 @@ vm-key
 vm-key.pub
 qemu.pid
 uefi-vars.fd
+virtiofsd.pid
+virtiofs.sock
+shared/*
+!shared/.gitkeep

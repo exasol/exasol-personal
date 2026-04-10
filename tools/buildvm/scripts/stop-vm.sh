@@ -2,6 +2,8 @@
 set -euo pipefail
 
 PID_FILE="qemu.pid"
+VIRTIOFSD_PID_FILE="virtiofsd.pid"
+VIRTIOFS_SOCKET="virtiofs.sock"
 
 if [ ! -f "$PID_FILE" ]; then
     echo "Error: VM is not running (no PID file found)"
@@ -25,7 +27,7 @@ for i in {1..10}; do
     if ! ps -p "$PID" > /dev/null 2>&1; then
         echo "==> VM stopped successfully"
         rm -f "$PID_FILE"
-        exit 0
+        break
     fi
     sleep 0.5
 done
@@ -40,3 +42,20 @@ else
     rm -f "$PID_FILE"
     echo "==> VM stopped successfully"
 fi
+
+# Stop virtiofsd daemon if running
+if [ -f "$VIRTIOFSD_PID_FILE" ]; then
+    VIRTIOFSD_PID=$(cat "$VIRTIOFSD_PID_FILE")
+    if ps -p "$VIRTIOFSD_PID" > /dev/null 2>&1; then
+        echo "==> Stopping virtiofsd (PID: $VIRTIOFSD_PID)..."
+        kill "$VIRTIOFSD_PID" 2>/dev/null || true
+        sleep 0.5
+        if ps -p "$VIRTIOFSD_PID" > /dev/null 2>&1; then
+            kill -9 "$VIRTIOFSD_PID" 2>/dev/null || true
+        fi
+    fi
+    rm -f "$VIRTIOFSD_PID_FILE"
+fi
+
+# Clean up socket
+rm -f "$VIRTIOFS_SOCKET"

@@ -4,6 +4,10 @@
 bootcmd:
   - echo "https://dl-cdn.alpinelinux.org/alpine/v3.23/community" >> /etc/apk/repositories
 
+# Auto-mount virtiofs shared folder (works with vfkit on Mac)
+mounts:
+  - [ hostshare, /mnt/host, virtiofs, "defaults,nofail", "0", "0" ]
+
 users:
   - name: alpine
     groups: wheel
@@ -24,10 +28,14 @@ runcmd:
   # Grow root partition to use full 3GB disk
   - growpart /dev/vda 2
   - resize2fs /dev/vda2
+  # Mount shared folder (if available)
+  - mkdir -p /mnt/host
+  - mount -a || true
   # Start SSH service
   - rc-update add sshd default
   - service sshd start
-  - touch /tmp/cloud-init-complete
+  # Signal completion via shared folder
+  - touch /mnt/host/cloud-init-complete
   # Clean up to minimize disk usage
   - apk cache clean
   - rm -rf /var/cache/apk/*

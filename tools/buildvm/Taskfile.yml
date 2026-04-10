@@ -5,7 +5,7 @@ tasks:
     desc: Install QEMU dependencies
     cmds:
       - sudo apt-get update
-      - sudo apt-get install -y qemu-system-aarch64 qemu-utils qemu-efi-aarch64 wget genisoimage parted e2fsprogs bc xz-utils
+      - sudo apt-get install -y qemu-system-aarch64 qemu-utils qemu-efi-aarch64 wget genisoimage parted e2fsprogs bc xz-utils virtiofsd uidmap
 
   generate-ssh-key:
     desc: Generate SSH key for VM access
