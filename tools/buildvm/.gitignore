@@ -2,13 +2,17 @@ installer.iso
 disk.img
 disk.img.xz
 alpine-cloud.qcow2
+alpine-pristine.img
 *.qcow2
 cloud-init.iso
 vm-key
 vm-key.pub
+test-key
+test-key.pub
 qemu.pid
 uefi-vars.fd
 virtiofsd.pid
 virtiofs.sock
 shared/*
 !shared/.gitkeep
+!shared/README.md

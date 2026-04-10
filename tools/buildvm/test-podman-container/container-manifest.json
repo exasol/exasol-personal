@@ -1,0 +1,5 @@
+{
+  "containerFile": "test-server-container.tar.gz",
+  "port": 8080,
+  "args": ["-dir", "/data"]
+}

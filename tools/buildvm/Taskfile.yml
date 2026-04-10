@@ -5,7 +5,7 @@ tasks:
     desc: Install QEMU dependencies
     cmds:
       - sudo apt-get update
-      - sudo apt-get install -y qemu-system-aarch64 qemu-utils qemu-efi-aarch64 wget genisoimage parted e2fsprogs bc xz-utils virtiofsd uidmap
+      - sudo apt-get install -y qemu-system-aarch64 qemu-utils qemu-efi-aarch64 wget genisoimage parted e2fsprogs bc xz-utils virtiofsd uidmap podman jq
 
   generate-ssh-key:
     desc: Generate SSH key for VM access
@@ -50,8 +50,6 @@ tasks:
 
   compress-disk:
     desc: Compress disk image with xz for distribution
-    deps:
-      - shrink-disk
     cmds:
       - ./scripts/compress-disk.sh
 
@@ -75,13 +73,54 @@ tasks:
     cmds:
       - ./scripts/startup-benchmark.sh
 
+  test-ssh-keys:
+    desc: Test SSH key import feature (requires built VM image)
+    cmds:
+      - ./scripts/test-ssh-keys.sh
+
+  test-container:
+    desc: Test container REST server and data persistence (requires running VM with container)
+    deps:
+      - build-test-container
+    cmds:
+      - cp dist/test-server-container.tar.gz ../shared/test-server-container.tar.gz
+      - cp dist/container-manifest.json ../shared/container-manifest.json
+      - echo "Container tarball and manifest copied to shared directory"
+      - ./scripts/test-container.sh
+
+  test:
+    desc: Run all tests
+    cmds:
+      - task: test-ssh-keys
+      - task: test-container
+
+  build-test-container:
+    desc: Build and package the test Podman container for distribution
+    dir: test-podman-container
+    cmds:
+      - ./build-packaged-container.sh
+
   build:
     desc: Build complete VM image ready for distribution
     deps:
-      - compress-disk
+      - shrink-disk 
+
+  release:
+    desc: Compresses the disk image for distribution. The `build` task must have been run first.
+    deps:
+      - test
+    cmds:
+      - task: compress-disk
+
+  cleanup-force:
+    desc: Force kill all QEMU and virtiofsd processes and clean up files
+    cmds:
+      - task: clean
+      - ./scripts/cleanup-force.sh
 
   clean:
     desc: Remove all generated files (disk image, cloud-init ISO, SSH keys, etc.)
     cmds:
+      - task: stop-vm  
       - git clean -Xf .
       - echo "==> Cleaned all ignored files in buildvm directory"

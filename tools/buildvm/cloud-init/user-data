@@ -23,28 +23,13 @@ packages:
   - cloud-utils-growpart  # for growpart command
   - e2fsprogs             # for resize2fs command
   - podman                # container runtime
+  - jq                    # JSON parsing for manifest files
 
 runcmd:
-  # Grow root partition to use full 3GB disk
-  - growpart /dev/vda 2
-  - resize2fs /dev/vda2
-  # Mount shared folder (if available)
-  - mkdir -p /mnt/host
-  - mount -a || true
-  # Start SSH service
-  - rc-update add sshd default
-  - service sshd start
-  # Signal completion via shared folder
-  - touch /mnt/host/cloud-init-complete
-  # Clean up to minimize disk usage
-  - apk cache clean
-  - rm -rf /var/cache/apk/*
-  - rm -rf /tmp/* /var/tmp/* || true
-  - find /var/log -type f -exec truncate -s 0 {} \;
-  # Zero free space for better compression
-  - dd if=/dev/zero of=/zerofill bs=1M || true
-  - sync
-  - rm -f /zerofill
-  - sync
-  # Shutdown so we can shrink the image
-  - poweroff
+  # Copy scripts from shared folder to system
+  - cp /mnt/host/scripts/*.sh /usr/local/bin/
+  - chmod +x /usr/local/bin/*.sh
+  # Run setup scripts
+  - /usr/local/bin/setup-system.sh
+  - /usr/local/bin/setup-services.sh
+  - /usr/local/bin/cleanup-and-shutdown.sh

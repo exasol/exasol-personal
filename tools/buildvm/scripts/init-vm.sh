@@ -22,11 +22,11 @@ if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")
     if ps -p "$PID" > /dev/null 2>&1; then
         echo "Error: VM is already running (PID: $PID)"
-        echo "Run 'task stop-vm' to stop it first."
+        echo "Run 'task stop-vm' or 'task cleanup-force' to stop it first."
         exit 1
     else
         echo "==> Removing stale PID file..."
-        rm "$PID_FILE"
+        rm -f "$PID_FILE"
     fi
 fi
 
@@ -36,7 +36,8 @@ if [ ! -d "$SHARED_DIR" ]; then
     mkdir -p "$SHARED_DIR"
 fi
 
-# Clean up old socket
+# Clean up old files
+rm -f "$VIRTIOFSD_PID_FILE"
 rm -f "$VIRTIOFS_SOCKET"
 
 echo "==> Starting virtiofsd daemon..."
@@ -50,8 +51,22 @@ VIRTIOFSD_PID=$!
 echo "$VIRTIOFSD_PID" > "$VIRTIOFSD_PID_FILE"
 sleep 1
 
+# Build port forwarding string from manifest
+MANIFEST_PORTFWD=$(./scripts/read-manifest-ports.sh || true)
+if [ -n "$MANIFEST_PORTFWD" ]; then
+    NETDEV_PORTFWD="hostfwd=tcp::2222-:22,$MANIFEST_PORTFWD"
+else
+    NETDEV_PORTFWD="hostfwd=tcp::2222-:22"
+fi
+
 echo "==> Starting Alpine Linux VM in background..."
 echo "==> SSH will be available on localhost:2222"
+if [ -n "$MANIFEST_PORTFWD" ]; then
+    MANIFEST_PORT=$(echo "$MANIFEST_PORTFWD" | grep -oP '(?<=::)\d+(?=-:)' || true)
+    if [ -n "$MANIFEST_PORT" ]; then
+        echo "==> Container port: localhost:$MANIFEST_PORT"
+    fi
+fi
 echo "==> Shared folder: $SHARED_DIR -> /mnt/host (in VM)"
 echo "==> Use: ssh -i vm-key -p 2222 alpine@localhost"
 echo ""
@@ -63,7 +78,7 @@ qemu-system-aarch64 \
     -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd \
     -drive file="$DISK_IMG",format=raw,if=virtio \
     -drive file="$CLOUD_INIT_ISO",format=raw,if=virtio,readonly=on \
-    -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+    -netdev user,id=net0,$NETDEV_PORTFWD \
     -device virtio-net-pci,netdev=net0 \
     -chardev socket,id=char0,path="$VIRTIOFS_SOCKET" \
     -device vhost-user-fs-pci,chardev=char0,tag=hostshare \
@@ -100,14 +115,6 @@ if [ $ELAPSED -ge $MAX_WAIT ]; then
     exit 1
 fi
 
-echo "==> Stopping VM to save cloud-init configuration..."
-./scripts/stop-vm.sh
-
-echo ""
-echo "==> Initialization complete!"
-echo "==> Disk image is ready with:"
-echo "    - Alpine user with password 'alpine'"
-echo "    - SSH key configured"
-echo "    - SSH server enabled"
-echo ""
-echo "==> Run 'task start-vm' to start the VM"
+echo "==> VM initialized and ready!"
+echo "==> Run 'task connect' to connect via SSH"
+echo "==> Run 'task stop-vm' to stop the VM"

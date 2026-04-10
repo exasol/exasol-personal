@@ -16,11 +16,11 @@ if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")
     if ps -p "$PID" > /dev/null 2>&1; then
         echo "Error: VM is already running (PID: $PID)"
-        echo "Run 'task stop-vm' or 'task cleanup-force' to stop it first."
+        echo "Run 'task stop-vm' to stop it first."
         exit 1
     else
         echo "==> Removing stale PID file..."
-        rm -f "$PID_FILE"
+        rm "$PID_FILE"
     fi
 fi
 
@@ -30,8 +30,7 @@ if [ ! -d "$SHARED_DIR" ]; then
     mkdir -p "$SHARED_DIR"
 fi
 
-# Clean up old files
-rm -f "$VIRTIOFSD_PID_FILE"
+# Clean up old socket
 rm -f "$VIRTIOFS_SOCKET"
 
 echo "==> Starting virtiofsd daemon..."
@@ -45,22 +44,8 @@ VIRTIOFSD_PID=$!
 echo "$VIRTIOFSD_PID" > "$VIRTIOFSD_PID_FILE"
 sleep 1
 
-# Build port forwarding string from manifest
-MANIFEST_PORTFWD=$(./scripts/read-manifest-ports.sh || true)
-if [ -n "$MANIFEST_PORTFWD" ]; then
-    NETDEV_PORTFWD="hostfwd=tcp::2222-:22,$MANIFEST_PORTFWD"
-else
-    NETDEV_PORTFWD="hostfwd=tcp::2222-:22"
-fi
-
 echo "==> Starting Alpine Linux VM in background..."
 echo "==> SSH will be available on localhost:2222"
-if [ -n " $MANIFEST_PORTFWD" ]; then
-    MANIFEST_PORT=$(echo "$MANIFEST_PORTFWD" | grep -oP '(?<=::)\d+(?=-:)' || true)
-    if [ -n "$MANIFEST_PORT" ]; then
-        echo "==> Container port: localhost:$MANIFEST_PORT"
-    fi
-fi
 echo "==> Shared folder: $SHARED_DIR -> /mnt/host (in VM)"
 echo "==> Use: ssh -i vm-key -p 2222 alpine@localhost"
 echo ""
@@ -71,7 +56,7 @@ qemu-system-aarch64 \
     -m 2048 \
     -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd \
     -drive file="$DISK_IMG",format=raw,if=virtio \
-    -netdev user,id=net0,$NETDEV_PORTFWD \
+    -netdev user,id=net0,hostfwd=tcp::2222-:22 \
     -device virtio-net-pci,netdev=net0 \
     -chardev socket,id=char0,path="$VIRTIOFS_SOCKET" \
     -device vhost-user-fs-pci,chardev=char0,tag=hostshare \
@@ -80,6 +65,12 @@ qemu-system-aarch64 \
     -daemonize \
     -pidfile "$PID_FILE" \
     -display none
+
+# Report forwarded ports
+MANIFEST_PORT=$(./read-manifest-ports.sh | grep -oP "(?<=::)\d+(?=-:)" || true)
+if [ -n "$MANIFEST_PORT" ]; then
+    echo "==> Container port forwarding: localhost:$MANIFEST_PORT -> VM:$MANIFEST_PORT"
+fi
 
 echo "==> VM started successfully (PID: $(cat $PID_FILE))"
 echo "==> virtiofsd running (PID: $VIRTIOFSD_PID)"

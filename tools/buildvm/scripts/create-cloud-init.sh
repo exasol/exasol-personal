@@ -12,6 +12,11 @@ fi
 echo "==> Reading SSH public key..."
 SSH_PUB_KEY=$(cat "$SSH_KEY.pub")
 
+echo "==> Copying scripts to shared directory..."
+mkdir -p shared/scripts
+cp cloud-init/scripts/* shared/scripts/
+chmod +x shared/scripts/*.sh shared/scripts/*.initd
+
 echo "==> Generating user-data with SSH key..."
 sed "s|SSH_PUBLIC_KEY_PLACEHOLDER|$SSH_PUB_KEY|g" cloud-init/user-data > user-data
 
@@ -31,3 +36,4 @@ echo "==> Cleaning up temporary files..."
 rm user-data meta-data
 
 echo "==> Cloud-init ISO created: $CLOUD_INIT_ISO"
+echo "==> Scripts copied to shared/scripts/"
