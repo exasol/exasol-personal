@@ -19,6 +19,7 @@ type Opts struct {
 	Username                   string
 	Password                   string
 	InsecureSkipCertValidation bool
+	ExecuteOnSemicolon         bool
 }
 
 //nolint:revive
@@ -91,7 +92,7 @@ func Connect(ctx context.Context, opts *Opts, deploymentDir string) error {
 		return err
 	}
 
-	return RunShell(func(input string) error {
+	return RunShellWithOpts(func(input string) error {
 		// The input string is expected to be trimmed of whitespace
 		if input == "" {
 			return nil
@@ -103,7 +104,7 @@ func Connect(ctx context.Context, opts *Opts, deploymentDir string) error {
 		}
 
 		return printResult(queryResult)
-	})
+	}, ShellOpts{ExecuteOnSemicolon: opts.ExecuteOnSemicolon})
 }
 
 func printResult(queryResult generaltypes.QueryResulter) error {
