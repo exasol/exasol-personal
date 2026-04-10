@@ -1,6 +1,9 @@
 #!/bin/sh
 # Load and run container from shared folder based on manifest
 
+# Suppress cgroups-v1 warning for podman
+export PODMAN_IGNORE_CGROUPSV1_WARNING=1
+
 MANIFEST_FILE="/mnt/host/container-manifest.json"
 LOG_DIR="/mnt/host/logs"
 LOG_FILE="$LOG_DIR/container-load-$(date +%Y%m%d-%H%M%S).log"
