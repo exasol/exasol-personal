@@ -1,5 +1,6 @@
 installer.iso
 disk.img
+disk.img.xz
 alpine-cloud.qcow2
 *.qcow2
 cloud-init.iso

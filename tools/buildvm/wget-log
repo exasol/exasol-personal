@@ -1,0 +1,11 @@
+--2026-04-10 19:31:10--  https://dl-cdn.alpinelinux.org/alpine/v3.23/releases/cloud/nocloud_alpine-3.23.3-aarch64-uefi-cloudinit-r0.qcow2
+Resolving dl-cdn.alpinelinux.org (dl-cdn.alpinelinux.org)... 146.75.122.132
+Connecting to dl-cdn.alpinelinux.org (dl-cdn.alpinelinux.org)|146.75.122.132|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 235929600 (225M) [application/octet-stream]
+Saving to: ‘alpine-cloud.qcow2’
+
+alpine-cloud.qcow2                         81%[=====================================================================>                ] 183.36M  57.1MB/s    eta 1s     alpine-cloud.qcow2                         85%[========================================================================>             ] 193.13M  58.5MB/s    eta 1s     alpine-cloud.qcow2                         92%[==============================================================================>       ] 207.60M  59.9MB/s    eta 1s     alpine-cloud.qcow2                         96%[==================================================================================>   ] 218.06M  59.6MB/s    eta 1s     alpine-cloud.qcow2                        100%[=====================================================================================>] 225.00M  60.0MB/s    in 3.9s    
+
+2026-04-10 19:31:14 (57.5 MB/s) - ‘alpine-cloud.qcow2’ saved [235929600/235929600]
+

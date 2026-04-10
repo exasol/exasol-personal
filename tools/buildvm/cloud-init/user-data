@@ -28,3 +28,15 @@ runcmd:
   - rc-update add sshd default
   - service sshd start
   - touch /tmp/cloud-init-complete
+  # Clean up to minimize disk usage
+  - apk cache clean
+  - rm -rf /var/cache/apk/*
+  - rm -rf /tmp/* /var/tmp/* || true
+  - find /var/log -type f -exec truncate -s 0 {} \;
+  # Zero free space for better compression
+  - dd if=/dev/zero of=/zerofill bs=1M || true
+  - sync
+  - rm -f /zerofill
+  - sync
+  # Shutdown so we can shrink the image
+  - poweroff

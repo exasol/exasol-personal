@@ -5,7 +5,7 @@ tasks:
     desc: Install QEMU dependencies
     cmds:
       - sudo apt-get update
-      - sudo apt-get install -y qemu-system-aarch64 qemu-utils qemu-efi-aarch64 wget genisoimage
+      - sudo apt-get install -y qemu-system-aarch64 qemu-utils qemu-efi-aarch64 wget genisoimage parted e2fsprogs bc xz-utils
 
   generate-ssh-key:
     desc: Generate SSH key for VM access
@@ -41,6 +41,20 @@ tasks:
     cmds:
       - ./scripts/init-vm.sh
 
+  shrink-disk:
+    desc: Shrink disk image to minimum size (run after init-vm)
+    deps:
+      - init-vm
+    cmds:
+      - sudo ./scripts/shrink-disk.sh
+
+  compress-disk:
+    desc: Compress disk image with xz for distribution
+    deps:
+      - shrink-disk
+    cmds:
+      - ./scripts/compress-disk.sh
+
   start-vm:
     desc: Start the Alpine Linux VM
     cmds:
@@ -60,6 +74,11 @@ tasks:
     desc: Benchmark VM startup time (start VM and measure time to SSH)
     cmds:
       - ./scripts/startup-benchmark.sh
+
+  build:
+    desc: Build complete VM image ready for distribution
+    deps:
+      - compress-disk
 
   clean:
     desc: Remove all generated files (disk image, cloud-init ISO, SSH keys, etc.)
