@@ -1,4 +1,9 @@
 #cloud-config
+
+# Enable community repo for cloud-utils-growpart
+bootcmd:
+  - echo "https://dl-cdn.alpinelinux.org/alpine/v3.23/community" >> /etc/apk/repositories
+
 users:
   - name: alpine
     groups: wheel
@@ -11,8 +16,15 @@ users:
 
 packages:
   - openssh
+  - cloud-utils-growpart  # for growpart command
+  - e2fsprogs             # for resize2fs command
+  - podman                # container runtime
 
 runcmd:
+  # Grow root partition to use full 3GB disk
+  - growpart /dev/vda 2
+  - resize2fs /dev/vda2
+  # Start SSH service
   - rc-update add sshd default
   - service sshd start
   - touch /tmp/cloud-init-complete

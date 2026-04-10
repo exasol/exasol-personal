@@ -19,6 +19,13 @@ tasks:
     cmds:
       - ./scripts/download-image.sh {{.IMAGE_URL}}
 
+  resize-disk:
+    desc: Resize disk image to 3GB
+    deps:
+      - download-image
+    cmds:
+      - ./scripts/resize-disk.sh
+
   create-cloud-init:
     desc: Create cloud-init configuration ISO
     deps:
@@ -29,7 +36,7 @@ tasks:
   init-vm:
     desc: Initialize and start the Alpine Linux VM (first time setup)
     deps:
-      - download-image
+      - resize-disk
       - create-cloud-init
     cmds:
       - ./scripts/init-vm.sh
