@@ -91,7 +91,7 @@ func getConnectionDetails(deploymentDir string) (*ConnectionDetails, error) {
 func GetSQLInstructions(connectionDetails *ConnectionDetails) string {
 	uiURL := "https://" + net.JoinHostPort(connectionDetails.Hostname, connectionDetails.UIPort)
 
-	return `
+	instructions := `
 === How to Connect from a Graphical SQL Client ===
 To connect using a client of your choice:
 1. Create a new database connection.
@@ -111,14 +111,19 @@ To connect using the CLI:
 1. Open the following URL in the browser: ` + uiURL + `
 2. Accept certificate if necessary
 3. Login with username "admin" and password stored in ` + connectionDetails.SecretsFilePath + `
+`
 
+	if connectionDetails.SSHCommand != "" {
+		instructions += `
 === SSH Connection Instructions ===
   Public IP: ` + connectionDetails.PublicIp + `
   Primary admin shell (COS): exasol shell container
   Host shell (OS): exasol shell host
   Alternative: ` + connectionDetails.SSHCommand + `
-
 `
+	}
+
+	return instructions + "\n"
 }
 
 func GetDocumentationLink() string {

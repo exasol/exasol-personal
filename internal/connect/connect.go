@@ -45,14 +45,15 @@ func NewExasolConnection(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get deployment host-port: %w", err)
 	}
-	certFingerprint, err := nodeDetails.GetCertFingerprint()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get deployment tls certificate: %w", err)
-	}
-
+	var certFingerprint string
 	optsFns := []exasol.OptFn{}
 	if insecureSkipCertValidation {
 		optsFns = append(optsFns, exasol.WithoutValidateServerCertificate)
+	} else {
+		certFingerprint, err = nodeDetails.GetCertFingerprint()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get deployment tls certificate: %w", err)
+		}
 	}
 
 	database, err := exasol.New(username, password, host, certFingerprint, port, optsFns...)

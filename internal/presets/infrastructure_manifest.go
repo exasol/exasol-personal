@@ -20,11 +20,25 @@ type InfrastructureTofu struct {
 	VarsOutputFile string `yaml:"varsOutputFile"`
 }
 
+// InfrastructureLocalRuntime captures optional local-runtime related configuration from the
+// manifest. This is used for local host-backed prototypes where provisioning is not handled
+// by OpenTofu resources alone.
+type InfrastructureLocalRuntime struct {
+	Kind                    string `yaml:"kind"`
+	Image                   string `yaml:"image"`
+	Host                    string `yaml:"host,omitempty"`
+	SQLPort                 int    `yaml:"sqlPort,omitempty"`
+	UIPort                  int    `yaml:"uiPort,omitempty"`
+	ShmSize                 string `yaml:"shmSize,omitempty"`
+	ReadinessTimeoutSeconds int    `yaml:"readinessTimeoutSeconds,omitempty"`
+}
+
 // InfrastructureManifest represents the infrastructure metadata and optional tofu configuration.
 type InfrastructureManifest struct {
-	Name        string              `yaml:"name"`
-	Description string              `yaml:"description"`
-	Tofu        *InfrastructureTofu `yaml:"tofu,omitempty"`
+	Name         string                      `yaml:"name"`
+	Description  string                      `yaml:"description"`
+	Tofu         *InfrastructureTofu         `yaml:"tofu,omitempty"`
+	LocalRuntime *InfrastructureLocalRuntime `yaml:"localRuntime,omitempty"`
 }
 
 var (

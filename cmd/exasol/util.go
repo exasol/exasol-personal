@@ -97,6 +97,23 @@ func defaultInstallationPresetRef() deploy.PresetRef {
 	return deploy.PresetRef{Name: presets.DefaultInstallation}
 }
 
+func defaultInstallationPresetRefForInfra(infraPreset deploy.PresetRef) deploy.PresetRef {
+	if infraPreset.IsPath() {
+		manifest, err := presets.ReadInfrastructureManifestFromDir(infraPreset.Path)
+		if err == nil && manifest != nil && manifest.LocalRuntime != nil {
+			return deploy.PresetRef{Name: "local"}
+		}
+
+		return defaultInstallationPresetRef()
+	}
+
+	if strings.TrimSpace(infraPreset.Name) == "local" {
+		return deploy.PresetRef{Name: "local"}
+	}
+
+	return defaultInstallationPresetRef()
+}
+
 func defaultedPresetRefFromOptionalArg(
 	args []string,
 	index int,

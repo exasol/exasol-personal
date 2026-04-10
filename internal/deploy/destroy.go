@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/task_runner"
 	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/exasol/exasol-personal/internal/util"
@@ -52,17 +53,28 @@ func Destroy(ctx context.Context, deploymentDir string, verbose bool) error {
 			if err != nil {
 				return err
 			}
-			if manifest.Tofu == nil {
-				slog.Info("no tofu configuration defined; skipping destroy")
-				return nil
-			}
 
 			var externalCommandStandardOut io.Writer
 			if verbose {
 				externalCommandStandardOut = os.Stderr
 			}
 
-			if manifest.Tofu != nil {
+			if manifest.LocalRuntime != nil {
+				slog.Info("destroying local runtime resources")
+
+				backend, err := localruntime.NewBackend(localruntime.Config{
+					Kind: manifest.LocalRuntime.Kind,
+				}, &localruntime.LocalExecutor{})
+				if err != nil {
+					return err
+				}
+
+				if err := backend.Destroy(ctx, localruntime.DestroyOptions{
+					DeploymentDir: deploymentDir,
+				}); err != nil {
+					return err
+				}
+			} else if manifest.Tofu != nil {
 				tofuCfg := tofu.NewTofuConfigFromDeployment(deploymentDir, *manifest.Tofu)
 				logBuffer := task_runner.NewLogBuffer()
 				err = tofu.Destroy(
@@ -77,6 +89,8 @@ func Destroy(ctx context.Context, deploymentDir string, verbose bool) error {
 
 					return err
 				}
+			} else {
+				slog.Info("no infrastructure provisioning configuration defined; skipping destroy")
 			}
 
 			// Stop handling interrupts before committing final initialized state
@@ -94,6 +108,10 @@ func Destroy(ctx context.Context, deploymentDir string, verbose bool) error {
 			err = os.Remove(filepath.Join(deploymentDir, config.ConnectionInstruction))
 			if err != nil {
 				slog.Debug(fmt.Sprintf("failed to remove connection instructions file: %v", err))
+			}
+			if err := os.Remove(filepath.Join(deploymentDir, localruntime.MetadataFileName)); err != nil &&
+				!os.IsNotExist(err) {
+				slog.Debug(fmt.Sprintf("failed to remove local runtime metadata file: %v", err))
 			}
 
 			slog.Info("Successfully destroyed deployment and released all resources")

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/remote"
 	"github.com/exasol/exasol-personal/internal/task_runner"
@@ -334,6 +335,44 @@ func runInfrastructureProvision(
 	out, outErr io.Writer,
 	tofuLockfileMode TofuLockfileMode,
 ) error {
+	if manifest.LocalRuntime != nil {
+		slog.Info("beginning deployment with local runtime")
+
+		state, err := config.ReadExasolPersonalState(deploymentDir)
+		if err != nil {
+			return err
+		}
+
+		backend, err := localruntime.NewBackend(localruntime.Config{
+			Kind:                    manifest.LocalRuntime.Kind,
+			Image:                   manifest.LocalRuntime.Image,
+			Host:                    manifest.LocalRuntime.Host,
+			SQLPort:                 manifest.LocalRuntime.SQLPort,
+			UIPort:                  manifest.LocalRuntime.UIPort,
+			ShmSize:                 manifest.LocalRuntime.ShmSize,
+			ReadinessTimeoutSeconds: manifest.LocalRuntime.ReadinessTimeoutSeconds,
+		}, &localruntime.LocalExecutor{})
+		if err != nil {
+			return err
+		}
+
+		_, err = backend.Install(ctx, localruntime.InstallOptions{
+			DeploymentDir: deploymentDir,
+			DeploymentID:  state.DeploymentId,
+			Config: localruntime.Config{
+				Kind:                    manifest.LocalRuntime.Kind,
+				Image:                   manifest.LocalRuntime.Image,
+				Host:                    manifest.LocalRuntime.Host,
+				SQLPort:                 manifest.LocalRuntime.SQLPort,
+				UIPort:                  manifest.LocalRuntime.UIPort,
+				ShmSize:                 manifest.LocalRuntime.ShmSize,
+				ReadinessTimeoutSeconds: manifest.LocalRuntime.ReadinessTimeoutSeconds,
+			},
+		})
+
+		return err
+	}
+
 	if manifest.Tofu == nil {
 		slog.Info("tofu: no configuration defined; skipping")
 		return nil
