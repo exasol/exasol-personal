@@ -1,0 +1,13 @@
+FROM docker.io/alpine:latest
+
+WORKDIR /root/
+
+# Copy the pre-built binary
+COPY server .
+
+# Expose port
+EXPOSE 8080
+
+# Run the server
+ENTRYPOINT ["./server"]
+CMD ["-dir", "/data"]
