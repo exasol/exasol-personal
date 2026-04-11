@@ -7,6 +7,7 @@ PID_FILE="qemu.pid"
 SHARED_DIR="shared"
 VIRTIOFS_SOCKET="virtiofs.sock"
 VIRTIOFSD_PID_FILE="virtiofsd.pid"
+VM_LOG_FILE="vm-init.log"
 
 if [ ! -f "$DISK_IMG" ]; then
     echo "Error: $DISK_IMG not found. Run 'task download-image' first."
@@ -51,6 +52,9 @@ VIRTIOFSD_PID=$!
 echo "$VIRTIOFSD_PID" > "$VIRTIOFSD_PID_FILE"
 sleep 1
 
+# Clear log file from previous runs
+> "$VM_LOG_FILE"
+
 # Build port forwarding string from manifest
 MANIFEST_PORTFWD=$(./scripts/read-manifest-ports.sh || true)
 if [ -n "$MANIFEST_PORTFWD" ]; then
@@ -69,6 +73,7 @@ if [ -n "$MANIFEST_PORTFWD" ]; then
 fi
 echo "==> Shared folder: $SHARED_DIR -> /mnt/host (in VM)"
 echo "==> Use: ssh -i vm-key -p 2222 alpine@localhost"
+echo "==> VM console output will be logged to: $VM_LOG_FILE"
 echo ""
 
 qemu-system-aarch64 \
@@ -84,12 +89,15 @@ qemu-system-aarch64 \
     -device vhost-user-fs-pci,chardev=char0,tag=hostshare \
     -object memory-backend-file,id=mem,size=2G,mem-path=/dev/shm,share=on \
     -numa node,memdev=mem \
+    -serial file:"$VM_LOG_FILE" \
     -daemonize \
     -pidfile "$PID_FILE" \
     -display none
 
-echo "==> VM started successfully (PID: $(cat $PID_FILE))"
+VM_PID=$(cat $PID_FILE)
+echo "==> VM started successfully (PID: $VM_PID)"
 echo "==> virtiofsd running (PID: $VIRTIOFSD_PID)"
+echo "==> Console output: tail -f $VM_LOG_FILE"
 echo "==> Waiting for cloud-init to complete..."
 
 # Wait for cloud-init to complete by polling shared folder
@@ -105,7 +113,7 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
     sleep 2
     ELAPSED=$((ELAPSED + 2))
     if [ $((ELAPSED % 10)) -eq 0 ]; then
-        echo "==> Still waiting... ($ELAPSED seconds elapsed)"
+        echo "==> Still waiting for cloud-init... ($ELAPSED seconds elapsed)"
     fi
 done
 
@@ -115,6 +123,29 @@ if [ $ELAPSED -ge $MAX_WAIT ]; then
     exit 1
 fi
 
-echo "==> VM initialized and ready!"
-echo "==> Run 'task connect' to connect via SSH"
-echo "==> Run 'task stop-vm' to stop the VM"
+echo "==> Cloud-init finished. VM will now power off..."
+echo "==> Waiting for VM to shut down..."
+
+# Wait for VM process to exit
+MAX_SHUTDOWN_WAIT=60
+SHUTDOWN_ELAPSED=0
+while [ $SHUTDOWN_ELAPSED -lt $MAX_SHUTDOWN_WAIT ]; do
+    if ! ps -p "$VM_PID" > /dev/null 2>&1; then
+        echo "==> VM has powered off successfully"
+        rm -f "$PID_FILE"
+        break
+    fi
+    sleep 2
+    SHUTDOWN_ELAPSED=$((SHUTDOWN_ELAPSED + 2))
+done
+
+if [ $SHUTDOWN_ELAPSED -ge $MAX_SHUTDOWN_WAIT ]; then
+    echo "==> Warning: VM did not shut down gracefully within ${MAX_SHUTDOWN_WAIT}s"
+    echo "==> Run 'task cleanup-force' if needed"
+    exit 1
+fi
+
+echo "==> VM initialization complete!"
+echo "==> The VM has been configured with SSH keys, packages, and services"
+echo "==> Run 'task start-vm' to start the VM"
+echo "==> Then 'task connect' to connect via SSH"

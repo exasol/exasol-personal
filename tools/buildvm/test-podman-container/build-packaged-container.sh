@@ -39,14 +39,27 @@ echo_info "Starting container build and packaging process..."
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
-# Build the container image
+# Build the Go binary for ARM64
+echo_info "Building Go binary for ARM64..."
+if CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -o server .; then
+    echo_info "Go binary built successfully"
+else
+    echo_error "Failed to build Go binary"
+    exit 1
+fi
+
+# Build the container image for ARM64 (using Go cross-compilation)
 echo_info "Building container image: ${IMAGE_NAME}:${IMAGE_TAG}..."
-if podman build -t "${IMAGE_NAME}:${IMAGE_TAG}" -f Containerfile .; then
+if podman build --platform linux/arm64 -t "${IMAGE_NAME}:${IMAGE_TAG}" -f Containerfile .; then
     echo_info "Container image built successfully"
 else
     echo_error "Failed to build container image"
+    rm -f server  # Clean up binary
     exit 1
 fi
+
+# Clean up the local binary
+rm -f server
 
 # Save the container image to a tar archive
 echo_info "Packaging container image to ${OUTPUT_DIR}/${ARCHIVE_NAME}..."

@@ -8,6 +8,12 @@ echo "==> Mounting shared folder..."
 mkdir -p /mnt/host
 mount -a || true
 
+echo "==> Mounting cgroup2 for container support..."
+if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
+  mount -t cgroup2 none /sys/fs/cgroup
+  echo "cgroup2 mounted"
+fi
+
 echo "==> Configuring rootless podman (subuid/subgid)..."
 # Add subuid/subgid ranges for alpine user for rootless containers
 if ! grep -q "^alpine:" /etc/subuid; then

@@ -7,6 +7,7 @@ bootcmd:
 # Auto-mount virtiofs shared folder (works with vfkit on Mac)
 mounts:
   - [ hostshare, /mnt/host, virtiofs, "defaults,nofail", "0", "0" ]
+  - [ none, /sys/fs/cgroup, cgroup2, "defaults", "0", "0" ]
 
 users:
   - name: alpine
@@ -24,6 +25,7 @@ packages:
   - e2fsprogs             # for resize2fs command
   - podman                # container runtime
   - jq                    # JSON parsing for manifest files
+  - iptables              # Required for podman networking
 
 runcmd:
   # Copy scripts from shared folder to system

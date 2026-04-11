@@ -58,6 +58,11 @@ tasks:
     cmds:
       - ./scripts/start-vm.sh
 
+  start-vm-attached:
+    desc: Start the VM with console attached for debugging (Ctrl-A X to exit)
+    cmds:
+      - ./scripts/start-vm.sh --attached
+
   stop-vm:
     desc: Stop the Alpine Linux VM
     cmds:
@@ -81,11 +86,8 @@ tasks:
   test-container:
     desc: Test container REST server and data persistence (requires running VM with container)
     deps:
-      - build-test-container
+      - copy-test-container-to-shared
     cmds:
-      - cp dist/test-server-container.tar.gz ../shared/test-server-container.tar.gz
-      - cp dist/container-manifest.json ../shared/container-manifest.json
-      - echo "Container tarball and manifest copied to shared directory"
       - ./scripts/test-container.sh
 
   test:
@@ -93,6 +95,14 @@ tasks:
     cmds:
       - task: test-ssh-keys
       - task: test-container
+
+  copy-test-container-to-shared:
+    deps:
+      - build-test-container
+    cmds:
+      - cp test-podman-container/dist/test-server-container.tar.gz shared/test-server-container.tar.gz
+      - cp test-podman-container/dist/container-manifest.json shared/container-manifest.json
+      - echo "Container tarball and manifest copied to shared directory"
 
   build-test-container:
     desc: Build and package the test Podman container for distribution
@@ -105,7 +115,7 @@ tasks:
     deps:
       - shrink-disk 
 
-  release:
+  package:
     desc: Compresses the disk image for distribution. The `build` task must have been run first.
     deps:
       - test

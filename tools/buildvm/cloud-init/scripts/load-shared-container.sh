@@ -1,8 +1,13 @@
 #!/bin/sh
 # Load and run container from shared folder based on manifest
 
-# Suppress cgroups-v1 warning for podman
-export PODMAN_IGNORE_CGROUPSV1_WARNING=1
+# Ensure we run as root for proper podman access
+if [ "$(id -u)" -ne 0 ]; then
+  exec sudo "$0" "$@"
+fi
+
+# Don't use rootless podman - run as root to avoid cgroup issues
+unset PODMAN_IGNORE_CGROUPSV1_WARNING
 
 MANIFEST_FILE="/mnt/host/container-manifest.json"
 LOG_DIR="/mnt/host/logs"
@@ -145,15 +150,21 @@ fi
 # Create data directory if it doesn't exist
 mkdir -p "$DATA_DIR"
 
-# Run the container with args
+# Container runtime log file
+CONTAINER_LOG_FILE="$LOG_DIR/container-runtime-$(date +%Y%m%d-%H%M%S).log"
+
+# Run the container with args (as root with proper cgroup2 support)
 log_msg "Starting container on port $PORT..."
 if podman run -d \
   --name "$CONTAINER_NAME" \
-  -p "${PORT}:${PORT}" \
-  -v "${DATA_DIR}:/data:Z" \
+  --network host \
+  -v "${DATA_DIR}:/data" \
+  --log-driver k8s-file \
+  --log-opt path="$CONTAINER_LOG_FILE" \
   "$IMAGE_NAME" \
   $ARGS; then
   log_msg "Container started successfully on port $PORT"
+  log_msg "Container runtime logs: $CONTAINER_LOG_FILE"
   log_msg "=== Container Load Script Completed Successfully ==="
 else
   log_msg "Failed to start container"
