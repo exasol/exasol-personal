@@ -85,13 +85,33 @@ Yes
 quit
 EOF
 
-# Calculate final disk size
-ESP_SIZE_MB=2  # EFI System Partition
-OVERHEAD_MB=1  # GPT backup table
-FINAL_SIZE_MB=$((ESP_SIZE_MB + NEW_FS_SIZE_MB + OVERHEAD_MB))
+# Calculate final disk size based on actual partition layout
+# Disk needs to be at least: (last partition end + GPT backup table)
+OVERHEAD_SECTORS=34  # Sectors needed for GPT backup table at end
+FINAL_SIZE_SECTORS=$((NEW_PART_END + OVERHEAD_SECTORS + 1))
+FINAL_SIZE_BYTES=$((FINAL_SIZE_SECTORS * SECTOR_SIZE))
+FINAL_SIZE_MB=$((FINAL_SIZE_BYTES / 1024 / 1024 + 1))  # Round up
 
 echo "==> Truncating disk image to ${FINAL_SIZE_MB}MB..."
 truncate -s "${FINAL_SIZE_MB}M" "$DISK_IMG"
+
+echo "==> Repairing GPT backup header..."
+sgdisk -e "$DISK_IMG" > /dev/null 2>&1 || {
+    echo "Warning: Failed to repair GPT, trying alternative method..."
+    # Alternative: use gdisk
+    gdisk "$DISK_IMG" <<EOF > /dev/null 2>&1 || true
+x
+e
+w
+Y
+EOF
+}
+
+echo "==> Verifying disk integrity..."
+parted "$DISK_IMG" print 2>&1 | grep -q "Partition Table: gpt" || {
+    echo "Error: GPT partition table is corrupted"
+    exit 1
+}
 
 echo "==> Disk shrinking complete!"
 echo "==> Original size: 3GB"

@@ -7,6 +7,7 @@ SHARED_DIR="shared"
 VIRTIOFS_SOCKET="virtiofs.sock"
 VIRTIOFSD_PID_FILE="virtiofsd.pid"
 VM_LOG_FILE="vm.log"
+VM_CONFIG="vm-config.json"
 
 # Check for --attached flag
 ATTACHED=false
@@ -55,6 +56,16 @@ sleep 1
 # Clear log file from previous runs
 > "$VM_LOG_FILE"
 
+# Read VM configuration
+if [ -f "$VM_CONFIG" ]; then
+    VM_CPUS=$(jq -r '.cpus // 2' "$VM_CONFIG")
+    VM_MEMORY=$(jq -r '.memoryMB // 2048' "$VM_CONFIG")
+else
+    echo "Warning: $VM_CONFIG not found, using defaults"
+    VM_CPUS=2
+    VM_MEMORY=2048
+fi
+
 # Build port forwarding string from manifest
 MANIFEST_PORTFWD=$(./scripts/read-manifest-ports.sh || true)
 if [ -n "$MANIFEST_PORTFWD" ]; then
@@ -76,19 +87,23 @@ echo "==> Use: ssh -i vm-key -p 2222 alpine@localhost"
 echo "==> Console output: tail -f $VM_LOG_FILE"
 echo ""
 
+# Detect VM architecture and get QEMU configuration
+source ./scripts/get-qemu-args.sh
+
 if [ "$ATTACHED" = "true" ]; then
     echo "==> Starting VM in attached mode (press Ctrl-A X to exit)..."
-    qemu-system-aarch64 \
-        -machine virt \
-        -cpu cortex-a72 \
-        -m 2048 \
-        -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd \
+    $QEMU_BIN \
+        -machine $QEMU_MACHINE \
+        -cpu $QEMU_CPU \
+        -m $VM_MEMORY \
+        -smp $VM_CPUS \
+        -bios "$QEMU_BIOS" \
         -drive file="$DISK_IMG",format=raw,if=virtio \
         -netdev user,id=net0,$NETDEV_PORTFWD \
         -device virtio-net-pci,netdev=net0 \
         -chardev socket,id=char0,path="$VIRTIOFS_SOCKET" \
         -device vhost-user-fs-pci,chardev=char0,tag=hostshare \
-        -object memory-backend-file,id=mem,size=2G,mem-path=/dev/shm,share=on \
+        -object memory-backend-file,id=mem,size=${VM_MEMORY}M,mem-path=/dev/shm,share=on \
         -numa node,memdev=mem \
         -serial file:"$VM_LOG_FILE" \
         -nographic
@@ -98,17 +113,18 @@ if [ "$ATTACHED" = "true" ]; then
     echo "==> VM stopped"
     rm -f "$PID_FILE"
 else
-    qemu-system-aarch64 \
-        -machine virt \
-        -cpu cortex-a72 \
-        -m 2048 \
-        -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd \
+    $QEMU_BIN \
+        -machine $QEMU_MACHINE \
+        -cpu $QEMU_CPU \
+        -m $VM_MEMORY \
+        -smp $VM_CPUS \
+        -bios "$QEMU_BIOS" \
         -drive file="$DISK_IMG",format=raw,if=virtio \
         -netdev user,id=net0,$NETDEV_PORTFWD \
         -device virtio-net-pci,netdev=net0 \
         -chardev socket,id=char0,path="$VIRTIOFS_SOCKET" \
         -device vhost-user-fs-pci,chardev=char0,tag=hostshare \
-        -object memory-backend-file,id=mem,size=2G,mem-path=/dev/shm,share=on \
+        -object memory-backend-file,id=mem,size=${VM_MEMORY}M,mem-path=/dev/shm,share=on \
         -numa node,memdev=mem \
         -serial file:"$VM_LOG_FILE" \
         -daemonize \

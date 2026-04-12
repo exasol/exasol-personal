@@ -2,10 +2,10 @@ version: '3'
 
 tasks:
   install-deps:
-    desc: Install QEMU dependencies
+    desc: Install QEMU dependencies for both x86_64 and ARM64
     cmds:
       - sudo apt-get update
-      - sudo apt-get install -y qemu-system-aarch64 qemu-utils qemu-efi-aarch64 wget genisoimage parted e2fsprogs bc xz-utils virtiofsd uidmap podman jq
+      - sudo apt-get install -y qemu-system-x86 qemu-system-aarch64 qemu-utils qemu-efi-aarch64 ovmf wget genisoimage parted e2fsprogs bc xz-utils virtiofsd uidmap podman jq gdisk
 
   generate-ssh-key:
     desc: Generate SSH key for VM access
@@ -16,6 +16,7 @@ tasks:
     desc: Download Alpine Linux NoCloud image
     vars:
       IMAGE_URL: https://dl-cdn.alpinelinux.org/alpine/v3.23/releases/cloud/nocloud_alpine-3.23.3-aarch64-uefi-cloudinit-r0.qcow2
+      # IMAGE_URL: https://dl-cdn.alpinelinux.org/alpine/v3.23/releases/cloud/nocloud_alpine-3.23.3-x86_64-uefi-cloudinit-r0.qcow2
     cmds:
       - ./scripts/download-image.sh {{.IMAGE_URL}}
 
@@ -43,8 +44,6 @@ tasks:
 
   shrink-disk:
     desc: Shrink disk image to minimum size (run after init-vm)
-    deps:
-      - init-vm
     cmds:
       - sudo ./scripts/shrink-disk.sh
 
@@ -112,15 +111,20 @@ tasks:
 
   build:
     desc: Build complete VM image ready for distribution
-    deps:
-      - shrink-disk 
-
-  package:
-    desc: Compresses the disk image for distribution. The `build` task must have been run first.
-    deps:
-      - test
     cmds:
-      - task: compress-disk
+      - task: init-vm
+      - task: shrink-disk
+      - task: test
+
+  package-mac:
+    desc: Package VM for macOS using vfkit (packages disk image for distribution)
+    cmds:
+      - ./scripts/package-mac.sh
+
+  package-windows:
+    desc: Package VM for Windows Hyper-V (converts disk.img to VHDX format)
+    cmds:
+      - ./scripts/package-windows.sh
 
   cleanup-force:
     desc: Force kill all QEMU and virtiofsd processes and clean up files

@@ -1,8 +1,19 @@
 
-# Basic usage
+# Basic Requirements
+
+We require a minimal linux virtual machine to distribute Exasol Nano. The vm must work on apple silicon using `vfkit`.
+
+The container image type must be `.img`. We cannot use the smaller `.qcow2` disk image format because the macos virtualization tool `vfkit` does not support it. For sharing directories with the host, we must use `virtiofs` for the same reason.
+
+# Usage
+
 1. `task install-deps` installs QEMU and any other dependencies that are required for building this disk image.
 
-2. `task init-vm` downloads the alpine linux NoCloud image and configure it with cloud-init.
+2. `task build` does several tasks. Once these tasks are complete, you can use `task start-vm`.
+    - Downloads the base disk image
+    - Extends its size, to make room for new packages
+    - Configures it with cloud-init
+    - Reduces its size, leaving an empty 100mb of space for logs
 
 3. `task start-vm` starts the (pre-initialized) vm in the background. You can then use `task connect` to ssh into it and `task startup-benchmark` to 
 
@@ -10,11 +21,13 @@
 
 5. `task package` compresses the `disk.img` file
 
-Use `task
+While a vm is running, you can use:
 
-## Basic Requirements
+1. `task connect` to ssh into it
 
-The container image type must be `.img`. We cannot use the smaller `.qcow2` disk image format because the macos virtualization tool `vfkit` does not support it. For sharing directories with the host, we must use `virtiofs` for the same reason.
+2. `task test` to run:
+    - Test that new authorized ssh keys can be added via the shared folder
+    - Test that a podman container be started and can write to the shared folder
 
 ## Minimizing the container
 

@@ -1,0 +1,5 @@
+{
+  "cpus": 2,
+  "memoryMB": 2048,
+  "description": "VM resource configuration. Containers will automatically inherit these resources."
+}

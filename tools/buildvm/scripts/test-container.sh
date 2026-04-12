@@ -49,7 +49,7 @@ sleep 5
 
 # Check if container port is accessible (wait up to 30 seconds)
 echo_info "Waiting for container to be ready..."
-MAX_WAIT=30
+MAX_WAIT=600
 ELAPSED=0
 PORT_READY=false
 

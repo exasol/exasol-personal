@@ -50,8 +50,8 @@ fi
 echo "==> Stopping VM (PID: $PID)..."
 kill "$PID"
 
-# Wait for process to terminate
-for i in {1..10}; do
+# Wait for process to terminate (up to 5 minutes)
+for i in {1..600}; do
     if ! ps -p "$PID" > /dev/null 2>&1; then
         echo "==> VM stopped successfully"
         rm -f "$PID_FILE"

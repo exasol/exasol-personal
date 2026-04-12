@@ -39,18 +39,45 @@ echo_info "Starting container build and packaging process..."
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
-# Build the Go binary for ARM64
-echo_info "Building Go binary for ARM64..."
-if CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -o server .; then
+# Detect target architecture from disk-arch.txt
+ARCH_FILE="../disk-arch.txt"
+if [ -f "$ARCH_FILE" ]; then
+    DISK_ARCH=$(cat "$ARCH_FILE")
+    echo_info "Detected disk architecture: $DISK_ARCH"
+    
+    # Map to GOARCH
+    case "$DISK_ARCH" in
+        x86_64)
+            GOARCH="amd64"
+            PLATFORM="linux/amd64"
+            ;;
+        aarch64)
+            GOARCH="arm64"
+            PLATFORM="linux/arm64"
+            ;;
+        *)
+            echo_error "Unknown architecture: $DISK_ARCH"
+            exit 1
+            ;;
+    esac
+else
+    echo_warn "disk-arch.txt not found, defaulting to arm64"
+    GOARCH="arm64"
+    PLATFORM="linux/arm64"
+fi
+
+# Build the Go binary for target architecture
+echo_info "Building Go binary for $GOARCH..."
+if CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH go build -a -installsuffix cgo -o server .; then
     echo_info "Go binary built successfully"
 else
     echo_error "Failed to build Go binary"
     exit 1
 fi
 
-# Build the container image for ARM64 (using Go cross-compilation)
-echo_info "Building container image: ${IMAGE_NAME}:${IMAGE_TAG}..."
-if podman build --platform linux/arm64 -t "${IMAGE_NAME}:${IMAGE_TAG}" -f Containerfile .; then
+# Build the container image
+echo_info "Building container image: ${IMAGE_NAME}:${IMAGE_TAG} for $PLATFORM..."
+if podman build --platform $PLATFORM -t "${IMAGE_NAME}:${IMAGE_TAG}" -f Containerfile .; then
     echo_info "Container image built successfully"
 else
     echo_error "Failed to build container image"

@@ -8,6 +8,7 @@ SHARED_DIR="shared"
 VIRTIOFS_SOCKET="virtiofs.sock"
 VIRTIOFSD_PID_FILE="virtiofsd.pid"
 VM_LOG_FILE="vm-init.log"
+VM_CONFIG="vm-config.json"
 
 if [ ! -f "$DISK_IMG" ]; then
     echo "Error: $DISK_IMG not found. Run 'task download-image' first."
@@ -55,6 +56,16 @@ sleep 1
 # Clear log file from previous runs
 > "$VM_LOG_FILE"
 
+# Read VM configuration
+if [ -f "$VM_CONFIG" ]; then
+    VM_CPUS=$(jq -r '.cpus // 2' "$VM_CONFIG")
+    VM_MEMORY=$(jq -r '.memoryMB // 2048' "$VM_CONFIG")
+else
+    echo "Warning: $VM_CONFIG not found, using defaults"
+    VM_CPUS=2
+    VM_MEMORY=2048
+fi
+
 # Build port forwarding string from manifest
 MANIFEST_PORTFWD=$(./scripts/read-manifest-ports.sh || true)
 if [ -n "$MANIFEST_PORTFWD" ]; then
@@ -76,18 +87,22 @@ echo "==> Use: ssh -i vm-key -p 2222 alpine@localhost"
 echo "==> VM console output will be logged to: $VM_LOG_FILE"
 echo ""
 
-qemu-system-aarch64 \
-    -machine virt \
-    -cpu cortex-a72 \
-    -m 2048 \
-    -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd \
+# Detect VM architecture and get QEMU configuration
+source ./scripts/get-qemu-args.sh
+
+$QEMU_BIN \
+    -machine $QEMU_MACHINE \
+    -cpu $QEMU_CPU \
+    -m $VM_MEMORY \
+    -smp $VM_CPUS \
+    -bios "$QEMU_BIOS" \
     -drive file="$DISK_IMG",format=raw,if=virtio \
-    -drive file="$CLOUD_INIT_ISO",format=raw,if=virtio,readonly=on \
+    -drive file="$CLOUD_INIT_ISO",format=raw,if=virtio,media=cdrom,readonly=on \
     -netdev user,id=net0,$NETDEV_PORTFWD \
     -device virtio-net-pci,netdev=net0 \
     -chardev socket,id=char0,path="$VIRTIOFS_SOCKET" \
     -device vhost-user-fs-pci,chardev=char0,tag=hostshare \
-    -object memory-backend-file,id=mem,size=2G,mem-path=/dev/shm,share=on \
+    -object memory-backend-file,id=mem,size=${VM_MEMORY}M,mem-path=/dev/shm,share=on \
     -numa node,memdev=mem \
     -serial file:"$VM_LOG_FILE" \
     -daemonize \
@@ -99,25 +114,40 @@ echo "==> VM started successfully (PID: $VM_PID)"
 echo "==> virtiofsd running (PID: $VIRTIOFSD_PID)"
 echo "==> Console output: tail -f $VM_LOG_FILE"
 echo "==> Waiting for cloud-init to complete..."
+echo ""
+
+# Start tailing the VM log in the background
+tail -f "$VM_LOG_FILE" &
+TAIL_PID=$!
+
+# Ensure tail process is killed when script exits (for any reason)
+trap 'kill $TAIL_PID 2>/dev/null || true; wait $TAIL_PID 2>/dev/null || true' EXIT INT TERM
 
 # Wait for cloud-init to complete by polling shared folder
 COMPLETION_MARKER="$SHARED_DIR/cloud-init-complete"
-MAX_WAIT=300
+MAX_WAIT=600
 ELAPSED=0
 while [ $ELAPSED -lt $MAX_WAIT ]; do
     if [ -f "$COMPLETION_MARKER" ]; then
+        # Stop tailing the log
+        kill $TAIL_PID 2>/dev/null || true
+        wait $TAIL_PID 2>/dev/null || true
+        
+        echo ""
         echo "==> Cloud-init completed successfully!"
         rm -f "$COMPLETION_MARKER"  # Clean up marker file
         break
     fi
     sleep 2
     ELAPSED=$((ELAPSED + 2))
-    if [ $((ELAPSED % 10)) -eq 0 ]; then
-        echo "==> Still waiting for cloud-init... ($ELAPSED seconds elapsed)"
-    fi
 done
 
 if [ $ELAPSED -ge $MAX_WAIT ]; then
+    # Stop tailing the log
+    kill $TAIL_PID 2>/dev/null || true
+    wait $TAIL_PID 2>/dev/null || true
+    
+    echo ""
     echo "==> Warning: Timeout waiting for cloud-init to complete"
     echo "==> VM is still running. Run 'task stop-vm' to stop it manually."
     exit 1
@@ -127,7 +157,7 @@ echo "==> Cloud-init finished. VM will now power off..."
 echo "==> Waiting for VM to shut down..."
 
 # Wait for VM process to exit
-MAX_SHUTDOWN_WAIT=60
+MAX_SHUTDOWN_WAIT=600
 SHUTDOWN_ELAPSED=0
 while [ $SHUTDOWN_ELAPSED -lt $MAX_SHUTDOWN_WAIT ]; do
     if ! ps -p "$VM_PID" > /dev/null 2>&1; then

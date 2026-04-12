@@ -10,10 +10,16 @@ vm-key.pub
 test-key
 test-key.pub
 qemu.pid
+virtiofs.sock.pid
 uefi-vars.fd
 virtiofsd.pid
 virtiofs.sock
 vm-init.log
+vm-console.log
+vfkit.pid
+vfkit.log
 shared/*
 !shared/.gitkeep
 !shared/README.md
+package/
+release/

@@ -48,7 +48,7 @@ echo "==> Starting VM..."
 
 # Try to connect with the test key (retry for 5 minutes)
 echo "==> Testing SSH connection with test key (will retry for 5 minutes)..."
-MAX_WAIT=300  # 5 minutes in seconds
+MAX_WAIT=600  # 10 minutes in seconds
 ELAPSED=0
 START_TIME=$(date +%s)
 

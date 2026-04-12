@@ -1,0 +1,8 @@
+
+windows-x86_64:
+  disk_img_url: https://dl-cdn.alpinelinux.org/alpine/v3.23/releases/cloud/nocloud_alpine-3.23.3-x86_64-uefi-tiny-r0.qcow2
+  target_os: windows
+
+mac-arm64:
+  disk_img_url: https://dl-cdn.alpinelinux.org/alpine/v3.23/releases/cloud/nocloud_alpine-3.23.3-aarch64-uefi-cloudinit-r0.qcow2
+  target_os: mac
