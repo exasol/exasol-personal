@@ -34,4 +34,7 @@ runcmd:
   # Run setup scripts
   - /usr/local/bin/setup-system.sh
   - /usr/local/bin/setup-services.sh
+  # Load container from shared folder (if present)
+  - /usr/local/bin/load-shared-container.sh
+  # Cleanup and shutdown
   - /usr/local/bin/cleanup-and-shutdown.sh

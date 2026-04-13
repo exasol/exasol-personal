@@ -38,6 +38,23 @@ if [ ! -d "$SHARED_DIR" ]; then
     mkdir -p "$SHARED_DIR"
 fi
 
+# Ensure SSH key is in shared authorized_keys for VM access
+if [ -f "vm-key.pub" ]; then
+    echo "==> Setting up SSH key for VM access..."
+    
+    # Create authorized_keys if it doesn't exist
+    touch "$SHARED_DIR/authorized_keys"
+    chmod 644 "$SHARED_DIR/authorized_keys"
+    
+    # Add vm-key.pub if not already present
+    if ! grep -qF "$(cat vm-key.pub)" "$SHARED_DIR/authorized_keys" 2>/dev/null; then
+        cat vm-key.pub >> "$SHARED_DIR/authorized_keys"
+    fi
+else
+    echo "Error: vm-key.pub not found. Run 'task generate-ssh-key' first."
+    exit 1
+fi
+
 # Clean up old files
 rm -f "$VIRTIOFSD_PID_FILE"
 rm -f "$VIRTIOFS_SOCKET"

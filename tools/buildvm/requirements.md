@@ -139,6 +139,20 @@ BuildVM is a tool for building lightweight Alpine Linux VM images with embedded 
 
 **R7.5**: Multiple containers MUST NOT be supported (single container only)
 
+**R7.6**: Container loading MUST occur during:
+- VM initialization (init-vm) via cloud-init - loads container into VM image
+- Subsequent VM startups via load-shared-container service
+
+**R7.7**: Container data directory (/mnt/host/container-data) MUST:
+- Be automatically created by container loading script if missing
+- Be mounted as /data inside the container
+- Persist data across restarts when shared folder is available
+
+**R7.8**: Containers MUST be tolerant of data folder volatility:
+- Data folder may be missing if shared folder unavailable (Hyper-V without data disk)
+- Data folder may be empty if user clears shared folder
+- Container should handle missing/empty data gracefully (recreate defaults, skip optional features)
+
 ### R8: SSH Access
 
 **R8.1**: SSH MUST be accessible on port 2222 via port forwarding
@@ -151,6 +165,16 @@ BuildVM is a tool for building lightweight Alpine Linux VM images with embedded 
 - Managed via import-shared-keys service
 
 **R8.4**: SSH MUST use alpine user (not root)
+
+**R8.5**: SSH key security MUST enforce:
+- Only keys in /mnt/host/authorized_keys have VM access
+- All existing keys are replaced (not appended) on each import
+- import-shared-keys service runs before sshd starts accepting connections
+
+**R8.6**: Development workflow MUST:
+- start-vm copies vm-key.pub to shared/authorized_keys
+- connect uses vm-key for SSH access
+- stop-vm removes shared/authorized_keys for security
 
 ### R9: Resource Configuration
 
@@ -481,7 +505,7 @@ The system MUST NOT provide graphical console access. SSH only.
 The Windows/Hyper-V package MUST NOT implement automatic folder sharing. Users must configure SMB/CIFS manually.
 
 ### NR4: Windows Development Environment
-The tool MUST NOT support development on Windows. Linux/macOS only for builds.
+The tool MUST NOT support development on Windows. Linux only for builds.
 
 ### NR5: Dynamic Resource Scaling
 The system MUST NOT support hot-adding CPUs or memory. VM restart required.

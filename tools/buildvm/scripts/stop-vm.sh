@@ -87,3 +87,5 @@ fi
 
 # Clean up socket
 rm -f "$VIRTIOFS_SOCKET"
+
+echo "==> Cleanup complete"

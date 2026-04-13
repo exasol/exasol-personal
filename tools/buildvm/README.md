@@ -5,6 +5,15 @@ We require a minimal linux virtual machine to distribute Exasol Nano. The vm mus
 
 The container image type must be `.img`. We cannot use the smaller `.qcow2` disk image format because the macos virtualization tool `vfkit` does not support it. For sharing directories with the host, we must use `virtiofs` for the same reason.
 
+## Possible Windows requirements
+
+Running a VM on windows will always require admin rights. The VM can be run on Hyper-V without additional dependencies.
+
+Hyper-V requires the disk image is converted to VHDX.
+
+On windows we do not have access to virtiofs, instead we can mount a VHDX file as an dynamically expanding disk.
+This slightly complicates adding new ssh keys, as the disk will need to be mounted to the host to access its content.
+
 # Usage
 
 1. `task install-deps` installs QEMU and any other dependencies that are required for building this disk image.
@@ -39,13 +48,17 @@ Containers receive a
 
 ## Adding new authorized keys
 
-The user will not have access to the ssh keys we used during container setup.
+**Security Model**: Only SSH keys present in the `shared/authorized_keys` file will have access to the VM. All other keys are removed on startup.
 
-If they want to ssh into the container, they can add their keys to the `./authorized_keys/` directory of the folder that is shared with the vm. When the vm is restarted, keys in this directory will be picked up.
+When you run `task start-vm`, the VM's SSH key (`vm-key.pub`) is automatically copied to `shared/authorized_keys`. This key is used by `task connect` to access the VM.
+
+When you run `task stop-vm`, the key is automatically removed from the shared folder.
 
 ## Podman containers
 
 The vm is configured to run one podman container. To install a container, move it to the shared directory and register it in the `container-manifest.json` file.
+
+Use `task prepare-container` to copy your container and manifest to the shared folder. The included test container (`test-podman-container/`) and `test-container` task are **placeholders for demonstration purposes** - replace them with your actual container.
 
 ```json
 {
@@ -57,6 +70,26 @@ The vm is configured to run one podman container. To install a container, move i
 
 The port is used for forwarding in both qemu and podman.
 The args are passed to the container.
+
+### Container Loading Behavior
+
+Containers are loaded:
+1. **During VM build** (init-vm) - If a container is present in the shared folder during build, it's loaded into the VM image
+2. **On each startup** - The VM checks the shared folder for new/updated containers
+
+This allows the VM to:
+- Work with containers even when the shared folder is empty (uses the container loaded during build)
+- Automatically update to new containers when placed in the shared folder
+
+### Container Data Tolerance
+
+**Important**: Containers must be designed to tolerate missing or empty data folders.
+
+The data directory (`/data` inside the container, mounted from `/mnt/host/container-data`) may:
+- Be missing if the shared folder is unavailable (e.g., Hyper-V without data disk attached)
+- Be empty if the user clears the shared folder
+
+The container loading script automatically creates `/mnt/host/container-data` if it doesn't exist, but the underlying shared folder (`/mnt/host`) may not always be available.
 
 
 # Debugging

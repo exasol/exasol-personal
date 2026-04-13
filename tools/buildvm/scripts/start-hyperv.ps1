@@ -3,9 +3,9 @@
 
 <#
 .SYNOPSIS
-    Start Alpine Linux VM using Hyper-V
+    Start Linux VM using Hyper-V
 .DESCRIPTION
-    Creates and starts an Alpine Linux VM in Hyper-V with the provided VHDX disk.
+    Creates and starts an Linux VM in Hyper-V with the provided VHDX disk.
     Requires administrative privileges and Hyper-V to be enabled.
     
     NOTE: Containers running inside the VM will automatically have access to all
@@ -22,10 +22,10 @@
     The data disk is mounted at /mnt/host inside the VM (default: exasol-data.vhdx)
 
 .PARAMETER VMName
-    Name of the Hyper-V VM (default: Alpine-VM)
+    Name of the Hyper-V VM (default: Exasol-VM)
 
 .PARAMETER VHDXPath
-    Path to the VHDX disk file (default: alpine-vm.vhdx)
+    Path to the VHDX disk file (default: exasol-vm.vhdx)
 
 .PARAMETER SwitchName
     Name of the Hyper-V virtual switch (default: Default Switch)
@@ -46,8 +46,8 @@ param(
     [Parameter(Position=2)]
     [string]$DataDiskPath = "",
     
-    [string]$VMName = "Alpine-VM",
-    [string]$VHDXPath = "alpine-vm.vhdx",
+    [string]$VMName = "Exasol-VM",
+    [string]$VHDXPath = "exasol-vm.vhdx",
     [string]$SwitchName = "Default Switch"
 )
 

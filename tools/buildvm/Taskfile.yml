@@ -38,11 +38,18 @@ tasks:
     cmds:
       - ./scripts/create-cloud-init.sh
 
+  prepare-container:
+    desc: Build and prepare the container for distribution
+    cmds:
+      - task: build-test-container
+      - task: copy-test-container-to-shared
+
   init-vm:
     desc: Initialize and start the Alpine Linux VM (first time setup)
     deps:
       - expand-disk
       - create-cloud-init
+      - prepare-container
     status:
       - test -f vm-initialized.flag
     cmds:
@@ -54,8 +61,6 @@ tasks:
       - test -f disk-shrunk.flag
     cmds:
       - sudo ./scripts/shrink-disk.sh
-
- 
 
   start-vm:
     desc: Start the Alpine Linux VM
