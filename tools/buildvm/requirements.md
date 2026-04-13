@@ -126,6 +126,11 @@ BuildVM is a tool for building lightweight Alpine Linux VM images with embedded 
 - `containerFile`: Path to container tarball (optional, null = skip loading)
 - `port`: Container port to expose
 - `args`: Array of command-line arguments
+- `mounts`: Array of volume mounts (optional, no mounts created if not specified)
+  - Each mount has `hostPath` (relative to /mnt/host) and `containerPath`
+  - Paths containing `..` MUST be rejected with error
+  - hostPath starting with `./` has prefix stripped (e.g., `./data` becomes `/mnt/host/data`)
+  - Multiple mounts are supported
 
 **R7.2**: Container loading MUST support:
 - Initial load from tarball

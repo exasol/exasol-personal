@@ -10,6 +10,7 @@ fi
 unset PODMAN_IGNORE_CGROUPSV1_WARNING
 
 MANIFEST_FILE="/mnt/host/container-manifest.json"
+STORED_MANIFEST="/var/lib/container-manifest.json"
 LOG_DIR="/mnt/host/logs"
 LOG_FILE="$LOG_DIR/container-load-$(date +%Y%m%d-%H%M%S).log"
 
@@ -30,43 +31,118 @@ exec 2>&1
 log_msg "=== Container Load Script Started ==="
 
 # Constants
-DATA_DIR="/mnt/host/container-data"
 CONTAINER_NAME="container"
 STATE_FILE="/var/lib/container-state.sha256"
 
-# Check if manifest exists and has containerFile
+# Parse mounts from manifest (will be set later if manifest exists)
+VOLUME_FLAGS=""
+
+# Check if manifest exists, fall back to stored manifest if available
 SKIP_LOAD=false
 if [ ! -f "$MANIFEST_FILE" ]; then
-  log_msg "No manifest file found at $MANIFEST_FILE"
-  log_msg "Will attempt to start existing container if available"
-  SKIP_LOAD=true
+  if [ -f "$STORED_MANIFEST" ]; then
+    log_msg "No manifest in shared folder, using stored manifest from previous load"
+    MANIFEST_FILE="$STORED_MANIFEST"
+    SKIP_LOAD=true  # Don't try to reload container, just restart it
+  else
+    log_msg "No manifest file found (checked shared and stored locations)"
+    log_msg "Will attempt to start existing container if available"
+    SKIP_LOAD=true
+  fi
 else
-  log_msg "Reading configuration from manifest"
-  
+  log_msg "Reading configuration from shared folder manifest"
+fi
+
+# Check if manifest exists, fall back to stored manifest if available
+HAS_MANIFEST=false
+if [ ! -f "$MANIFEST_FILE" ]; then
+  if [ -f "$STORED_MANIFEST" ]; then
+    log_msg "No manifest in shared folder, using stored manifest from previous load"
+    MANIFEST_FILE="$STORED_MANIFEST"
+    HAS_MANIFEST=true
+  else
+    log_msg "No manifest file found (checked shared and stored locations)"
+    log_msg "Will attempt to start existing container if available"
+    HAS_MANIFEST=false
+  fi
+else
+  log_msg "Reading configuration from shared folder manifest"
+  HAS_MANIFEST=true
+fi
+
+# Parse configuration from manifest if we have one
+if [ "$HAS_MANIFEST" = "true" ]; then
   # Extract configuration from manifest using jq
   CONTAINER_FILE=$(jq -r '.containerFile' "$MANIFEST_FILE" 2>/dev/null)
   PORT=$(jq -r '.port' "$MANIFEST_FILE" 2>/dev/null)
   ARGS=$(jq -r '.args[]' "$MANIFEST_FILE" 2>/dev/null | tr '\n' ' ')
   
+  # Parse mounts from manifest
+  MOUNT_COUNT=$(jq -r '.mounts | length // 0' "$MANIFEST_FILE" 2>/dev/null)
+  
+  if [ "$MOUNT_COUNT" -gt 0 ]; then
+    log_msg "Found $MOUNT_COUNT mount(s) in manifest"
+    # Build -v flags from mounts array
+    for i in $(seq 0 $((MOUNT_COUNT - 1))); do
+      HOST_PATH=$(jq -r ".mounts[$i].hostPath" "$MANIFEST_FILE")
+      CONTAINER_PATH=$(jq -r ".mounts[$i].containerPath" "$MANIFEST_FILE")
+      
+      # Validate paths
+      if echo "$HOST_PATH" | grep -q '\.\./'; then
+        log_msg "Error: hostPath contains '..' which is not allowed: $HOST_PATH"
+        exit 1
+      fi
+      
+      if echo "$CONTAINER_PATH" | grep -q '\.\./'; then
+        log_msg "Error: containerPath contains '..' which is not allowed: $CONTAINER_PATH"
+        exit 1
+      fi
+      
+      # Resolve host path relative to /mnt/host
+      # Remove leading ./ if present
+      HOST_PATH_CLEAN="${HOST_PATH#./}"
+      FULL_HOST_PATH="/mnt/host/$HOST_PATH_CLEAN"
+      
+      # Create directory if it doesn't exist
+      log_msg "Creating mount directory: $FULL_HOST_PATH"
+      mkdir -p "$FULL_HOST_PATH"
+      
+      # Add -v flag
+      VOLUME_FLAGS="$VOLUME_FLAGS -v ${FULL_HOST_PATH}:${CONTAINER_PATH}"
+      log_msg "Mount: $FULL_HOST_PATH -> $CONTAINER_PATH"
+    done
+  else
+    log_msg "No mounts specified in manifest, container will run without volume mounts"
+  fi
+fi
+
+# Determine if we should try to load/reload a container
+SKIP_LOAD=false
+if [ "$HAS_MANIFEST" = "true" ]; then
   # Check if containerFile is specified
   if [ -z "$CONTAINER_FILE" ] || [ "$CONTAINER_FILE" = "null" ]; then
     log_msg "No containerFile specified in manifest"
     log_msg "Will attempt to start existing container if available"
     SKIP_LOAD=true
   else
-    # Validate port is specified
-    if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
-      log_msg "Error: port not specified in manifest"
-      exit 1
-    fi
-    
-    # Build path to container file
-    SHARED_CONTAINER="/mnt/host/$CONTAINER_FILE"
-    
-    # Check if container file exists
-    if [ ! -f "$SHARED_CONTAINER" ]; then
-      log_msg "Container file not found: $SHARED_CONTAINER"
-      log_msg "Will attempt to start existing container if available"
+    # Check if we're using stored manifest (no shared manifest)
+    if [ "$MANIFEST_FILE" = "$STORED_MANIFEST" ]; then
+      log_msg "Using stored manifest, will not reload container"
+      SKIP_LOAD=true
+    else
+      # Validate port is specified
+      if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
+        log_msg "Error: port not specified in manifest"
+        exit 1
+      fi
+      
+      # Build path to container file
+      SHARED_CONTAINER="/mnt/host/$CONTAINER_FILE"
+      
+      # Check if container file exists
+      if [ ! -f "$SHARED_CONTAINER" ]; then
+        log_msg "Container file not found: $SHARED_CONTAINER"
+        log_msg "Will attempt to start existing container if available"
       SKIP_LOAD=true
     else
       log_msg "Found container: $SHARED_CONTAINER"
@@ -127,6 +203,9 @@ if [ "$SKIP_LOAD" = "false" ]; then
       log_msg "Container image loaded successfully"
       # Save the checksum
       echo "$CURRENT_SHA" > "$STATE_FILE"
+      # Store the manifest for future restarts
+      cp "/mnt/host/container-manifest.json" "$STORED_MANIFEST"
+      log_msg "Stored manifest for future restarts"
     else
       log_msg "Failed to load container image"
       exit 1
@@ -157,9 +236,6 @@ if podman ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
   podman rm "$CONTAINER_NAME" 2>/dev/null || true
 fi
 
-# Create data directory if it doesn't exist
-mkdir -p "$DATA_DIR"
-
 # Container runtime log file
 CONTAINER_LOG_FILE="$LOG_DIR/container-runtime-$(date +%Y%m%d-%H%M%S).log"
 
@@ -172,7 +248,7 @@ log_msg "Starting container on port $PORT..."
 if podman run -d \
   --name "$CONTAINER_NAME" \
   --network host \
-  -v "${DATA_DIR}:/data" \
+  $VOLUME_FLAGS \
   --log-driver k8s-file \
   --log-opt path="$CONTAINER_LOG_FILE" \
   "$IMAGE_NAME" \

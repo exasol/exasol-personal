@@ -64,12 +64,48 @@ Use `task prepare-container` to copy your container and manifest to the shared f
 {
   "containerFile": "test-server-container.tar.gz",
   "port": 8080,
-  "args": ["-dir", "/data", "-port", "8080"]
+  "args": ["-dir", "/data", "-port", "8080"],
+  "mounts": [
+    {
+      "hostPath": "./container-data",
+      "containerPath": "/data"
+    }
+  ]
 }
 ```
 
-The port is used for forwarding in both qemu and podman.
-The args are passed to the container.
+**Manifest fields:**
+- `containerFile`: Path to the container tarball (relative to shared folder)
+- `port`: Container port to expose (forwarded to host)
+- `args`: Command-line arguments passed to the container
+- `mounts`: (Optional) Array of volume mounts
+  - `hostPath`: Path on host, relative to shared folder (e.g., `./container-data` → `/mnt/host/container-data`)
+  - `containerPath`: Path inside container (e.g., `/data`)
+  - Paths containing `..` are rejected for security
+  - If no mounts specified, container runs without volume mounts
+
+**Multiple mounts example:**
+```json
+{
+  "containerFile": "app.tar.gz",
+  "port": 3000,
+  "args": ["--config", "/etc/app/config.yaml"],
+  "mounts": [
+    {
+      "hostPath": "./app-data",
+      "containerPath": "/data"
+    },
+    {
+      "hostPath": "./app-config",
+      "containerPath": "/etc/app"
+    },
+    {
+      "hostPath": "./app-logs",
+      "containerPath": "/var/log/app"
+    }
+  ]
+}
+```
 
 ### Container Loading Behavior
 
@@ -81,16 +117,30 @@ This allows the VM to:
 - Work with containers even when the shared folder is empty (uses the container loaded during build)
 - Automatically update to new containers when placed in the shared folder
 
+**Container Loading Scenarios:**
+
+| Situation | Manifest Source | Action |
+|-----------|----------------|--------|
+| **First boot after init-vm** | Shared folder | Load container, store manifest to `/var/lib/` |
+| **Subsequent restart, shared folder available** | Shared folder | Check checksum, reload only if changed |
+| **Restart, shared folder empty/deleted** | Stored (`/var/lib/container-manifest.json`) | Start existing container (no reload) |
+| **Container tarball updated** | Shared folder | Detect via checksum, reload container |
+| **No manifest anywhere** | None | Try starting any existing container |
+
 ### Container Data Tolerance
 
-**Important**: Containers must be designed to tolerate missing or empty data folders.
+**Important**: Containers must be designed to tolerate missing or empty mount points.
 
-The data directory (`/data` inside the container, mounted from `/mnt/host/container-data`) may:
+If your container defines volume mounts in the manifest, mounted directories may:
 - Be missing if the shared folder is unavailable (e.g., Hyper-V without data disk attached)
 - Be empty if the user clears the shared folder
 
-The container loading script automatically creates `/mnt/host/container-data` if it doesn't exist, but the underlying shared folder (`/mnt/host`) may not always be available.
+Containers should:
+- Check for mount availability and handle gracefully if missing
+- Recreate default data/configuration files if mounted directories are empty
+- Continue operating with reduced functionality if persistent storage is unavailable
 
+The container loading script automatically creates host mount directories before starting the container, but the underlying shared folder (`/mnt/host`) may not always be available.
 
 # Debugging
 
