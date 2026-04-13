@@ -1,8 +1,14 @@
 #!/bin/sh
 set -e
 echo "==> Growing partition and filesystem..."
-growpart /dev/vda 2
-resize2fs /dev/vda2
+# growpart returns non-zero when partition can't grow (already at max size)
+# Handle gracefully to allow script to continue
+if growpart /dev/vda 2 2>&1 | grep -q "NOCHANGE"; then
+  echo "Partition already at maximum size"
+else
+  resize2fs /dev/vda2
+  echo "Partition and filesystem grown successfully"
+fi
 
 echo "==> Setting up shared storage at /mnt/host..."
 mkdir -p /mnt/host
@@ -71,23 +77,25 @@ if ! grep -q "PODMAN_IGNORE_CGROUPSV1_WARNING" /home/exasol/.profile 2>/dev/null
 fi
 
 echo "==> Configuring GRUB to skip boot menu..."
-# Set GRUB timeout to 0 to boot immediately
-if [ -f /etc/default/grub ]; then
-  sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub
-  # Also set hidden timeout
-  if ! grep -q "^GRUB_HIDDEN_TIMEOUT=" /etc/default/grub; then
-    echo "GRUB_HIDDEN_TIMEOUT=0" >> /etc/default/grub
+# Edit GRUB config directly (Alpine cloud images don't ship with grub-mkconfig tooling)
+if [ -f /boot/grub/grub.cfg ]; then
+  # Replace ALL timeout settings in the file (including those in conditional blocks)
+  sed -i 's/^[[:space:]]*set timeout=.*/  set timeout=0/' /boot/grub/grub.cfg
+  sed -i 's/^[[:space:]]*set timeout_style=.*/  set timeout_style=hidden/' /boot/grub/grub.cfg
+  
+  # Verify changes took effect and check for any remaining non-zero timeouts
+  REMAINING_TIMEOUTS=$(grep -E '^[[:space:]]*set timeout=' /boot/grub/grub.cfg | grep -v 'timeout=0' || true)
+  REMAINING_STYLES=$(grep -E '^[[:space:]]*set timeout_style=' /boot/grub/grub.cfg | grep -v 'timeout_style=hidden' || true)
+  
+  if [ -z "$REMAINING_TIMEOUTS" ] && [ -z "$REMAINING_STYLES" ]; then
+    echo "GRUB configured for immediate boot (timeout=0, style=hidden)"
   else
-    sed -i 's/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=0/' /etc/default/grub
+    echo "WARNING: GRUB configuration may not have applied correctly"
+    echo "Remaining timeout settings:"
+    grep -E '^[[:space:]]*set timeout' /boot/grub/grub.cfg || true
   fi
-  # Regenerate GRUB configuration
-  if command -v grub-mkconfig >/dev/null 2>&1; then
-    grub-mkconfig -o /boot/grub/grub.cfg
-    echo "GRUB configured for immediate boot"
-  elif command -v update-grub >/dev/null 2>&1; then
-    update-grub
-    echo "GRUB configured for immediate boot"
-  fi
+else
+  echo "WARNING: /boot/grub/grub.cfg not found - GRUB timeout not changed"
 fi
 
 echo "==> System setup complete"

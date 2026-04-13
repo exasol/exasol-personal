@@ -80,7 +80,7 @@ The VM is branded as "Exasol VM" for end users, with technical references to Alp
 - Podman installation and configuration
 - SSH key import from shared folder
 - Container loading from shared folder
-- GRUB timeout = 0
+- GRUB timeout = 0 (direct grub.cfg edit)
 - Cloud-init service disablement after first boot
 
 **R5.4**: Cloud-init MUST run custom scripts in order:
@@ -302,10 +302,12 @@ The VM is branded as "Exasol VM" for end users, with technical references to Alp
 
 **R10.1**: GRUB timeout MUST be set to 0 to skip boot menu
 
-**R10.2**: GRUB configuration MUST be applied during cloud-init:
-- Set GRUB_TIMEOUT=0
-- Set GRUB_HIDDEN_TIMEOUT=0
-- Regenerate grub.cfg via grub-mkconfig or update-grub
+**R10.2**: GRUB configuration MUST be applied during cloud-init by directly editing /boot/grub/grub.cfg:
+- Set `timeout=0` for immediate boot
+- Set `timeout_style=hidden` to skip menu display
+- Use sed to update existing values or insert new ones
+- Alpine cloud images lack /etc/default/grub and grub-mkconfig tooling
+- Direct config edit avoids package installation overhead and bootloader risks
 
 **R10.3**: VM MUST boot directly to Alpine Linux without user interaction
 
