@@ -38,13 +38,15 @@ case "$UNAME_S" in
         ;;
 esac
 
-DOWNLOAD_DIR="$(pwd)"
-DOWNLOAD_PATH="$DOWNLOAD_DIR/$DOWNLOAD_FILENAME"
+INSTALL_DIR="$HOME/.local/bin"
+DOWNLOAD_PATH="$INSTALL_DIR/$DOWNLOAD_FILENAME"
 PACKAGE_DOWNLOAD_URL="$BASE_URL/$OS/$ARCH/latest/$DOWNLOAD_FILENAME"
 
 echo "Detected OS: $OS"
 echo "Detected Architecture: $ARCH"
-echo "Downloading Exasol Personal binary..."
+echo "Installing Exasol Personal binary to $INSTALL_DIR..."
+
+mkdir -p "$INSTALL_DIR"
 
 if ! curl -fSL --progress-bar "$PACKAGE_DOWNLOAD_URL" -o "$DOWNLOAD_PATH"; then
     echo "Error: Failed to download from $PACKAGE_DOWNLOAD_URL"
@@ -54,8 +56,21 @@ fi
 chmod +x "$DOWNLOAD_PATH"
 
 echo
-echo "Download complete!"
+echo "Installation complete!"
 echo
+
+case ":$PATH:" in
+    *":$INSTALL_DIR:"*)
+        ;;
+    *)
+        echo "  $INSTALL_DIR is not in your PATH. Add this to your shell config:"
+        echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
+        echo
+        echo "  For zsh:  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
+        echo "  For bash: echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+        echo
+        ;;
+esac
 
 cat <<EOF
 Next steps:
@@ -65,13 +80,13 @@ Next steps:
   2. Setup AWS Profile - Refer https://docs.exasol.com/db/latest/get_started/exasol_personal_aws_setup.htm
 
   3. Run the installer from the deployment directory:
-       ../exasol install <infra preset name-or-path> [install preset name-or-path]
+       exasol install <infra preset name-or-path> [install preset name-or-path]
 
 Where:
   <infra preset name-or-path>   Infrastructure preset to use (e.g., aws)
   [install preset name-or-path] Optional installation preset (e.g., ubuntu)
 
 Examples:
-  ../exasol install aws
-  ../exasol install aws ubuntu
+  exasol install aws
+  exasol install aws ubuntu
 EOF
