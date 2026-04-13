@@ -9,7 +9,7 @@
 
 **The High-Performance Analytics Engine — Free for Personal Use**
 
-*Deploy a full-scale Exasol cluster on your own AWS infrastructure in minutes*
+*Deploy a full-scale Exasol cluster on your own cloud infrastructure in minutes*
 
 [![Documentation](https://img.shields.io/badge/docs-exasol.com-blue)](https://docs.exasol.com/db/latest/home.htm)
 [![Community](https://img.shields.io/badge/community-exasol-green)](https://community.exasol.com)
@@ -24,34 +24,35 @@
 - ♾️ **Unlimited Data** — Store and analyze unlimited amounts of data with no artificial limits
 - 📈 **Scalable Architecture** — Scale up to any number of nodes using Exasol's MPP (Massively Parallel Processing) architecture
 - 🤖 **Built-in AI Functions** — Leverage native AI/ML capabilities with GPU acceleration
-- ⚙️ **Simple Deployment** — Spin up a distributed cluster on your own AWS infrastructure with just a few commands
+- ⚙️ **Simple Deployment** — Spin up a distributed cluster on AWS, Azure, or Exoscale with just a few commands
 - 🖥️ **Cross-Platform CLI** — Install and manage your cluster using the Exasol Launcher on Linux, macOS, or Windows
 
 
 ## ✅ Prerequisites
 
-- An AWS account that can provision large type instances. Exasol launcher by default uses the r6i.xlarge EC2 instance type.
-- An AWS user with enough permissions to create resources such as EC2 instances.
+A cloud account on one of the supported platforms with permission to provision compute instances:
 
-To learn how to set up an AWS account with an instance profile and configure your local environment to use that profile when installing Exasol Personal, see [Set up an AWS account for Exasol Personal](./HOWTO_SETUP_AWS_ACCOUNT.md).
-To learn how to set up an Azure account and local authentication for the Azure preset, see [Set up an Azure account for Exasol Personal](./HOWTO_SETUP_AZURE_ACCOUNT.md).
+- **AWS** — [Set up an AWS account for Exasol Personal](./HOWTO_SETUP_AWS_ACCOUNT.md)
+- **Azure** — [Set up an Azure account for Exasol Personal](./HOWTO_SETUP_AZURE_ACCOUNT.md)
+- **Exoscale** — [Set up an Exoscale account for Exasol Personal](./HOWTO_SETUP_EXOSCALE_ACCOUNT.md)
 
 
-## 🏎️ Quick Start for macOS 🍎 and Linux 🐧
+## 🏎️ Quick Start (macOS / Linux)
 
-Download the Exasol launcher:
 ```bash
+# 1. Download the launcher
 curl https://downloads.exasol.com/exasol-personal/installer.sh | sh
-```
-Create a deployment directory:
-```bash
+
+# 2. Create a deployment directory
 mkdir deployment && cd deployment
+
+# 3. Install on your cloud of choice
+../exasol install aws        # Amazon Web Services
+../exasol install azure      # Microsoft Azure
+../exasol install exoscale   # Exoscale
 ```
-Install Exasol Personal:
-```bash
-../exasol install aws
-```
-Read on for how to install on Windows and for more detailed instructions.
+
+Read on for Windows instructions and full details.
 
 
 ## 🚀 Deploy Exasol Personal
@@ -68,36 +69,24 @@ Read on for how to install on Windows and for more detailed instructions.
 
    Copy the `exasol` binary into your PATH.
 
-
 2. Create a new directory “deployment” and change into the directory:
    ```bash
    mkdir deployment
    cd deployment
    ```
-3. Configure the `AWS_PROFILE` environment variable to use the instance profile that you created in your AWS account for Exasol Personal.
 
-   If the profile name is `exasol`:
-   ```bash
-   # Linux / macOS (Bash)
-   export AWS_PROFILE=exasol
-   ```
-   ```powershell
-   # Windows (PowerShell)
-   $env:AWS_PROFILE = "exasol"
-   ```
-      ```powershell
-   # Windows (cmd)
-   set AWS_PROFILE=exasol
-   ```
+3. Configure authentication for your cloud provider. See the relevant account setup guide in [Prerequisites](#-prerequisites) for the environment variables and credentials required.
 
-4. To install Exasol Personal, run the following command:
+4. To install Exasol Personal, run the following command with the preset for your cloud provider:
    ```bash
-   exasol install aws
+   exasol install aws        # Amazon Web Services
+   exasol install azure      # Microsoft Azure
+   exasol install exoscale   # Exoscale
    ```
    The `exasol install` command does the following:
-   - Generates Terraform files in the deployment directory
-   - Provisions the necessary AWS infrastructure with Terraform
-   - Starts up the AWS infrastructure
+   - Generates OpenTofu files in the deployment directory
+   - Provisions the necessary cloud infrastructure
+   - Starts up the infrastructure
    - Downloads and installs Exasol Personal on that infrastructure
 
    The whole process normally takes about 10 to 20 minutes to complete.
@@ -165,11 +154,11 @@ Both tables are distributed by `PRODUCT_ID`, enabling efficient joins between th
 
 ## ⚙️ Choosing cluster size and instance types
 
-The launcher will by default generate Terraform files to install one Exasol node on one Amazon EC2 instance of the type r6i.xlarge. To change the number of nodes and the EC2 instance type to use in the deployment, use the `--cluster-size` and `--instance-type` options:
+By default the launcher deploys a single-node cluster on a memory-optimized instance (e.g. `r6i.xlarge` on AWS, `Standard_E4s_v3` on Azure, `standard.extra-large` on Exoscale). To change the number of nodes or the instance type, use the `--cluster-size` and `--instance-type` options:
 ```bash
-exasol install aws --cluster-size <number> --instance-type <string>
+exasol install <preset> --cluster-size <number> --instance-type <string>
 ```
-If the deployment process is interrupted, EC2 instances that were created by the process will not be terminated and may therefore continue to accrue cost. In case of an aborted deployment you must log in to the AWS console and manually terminate those instances.
+If the deployment process is interrupted, cloud resources that were already created will not be removed automatically and may continue to accrue cost. In that case, use `exasol destroy` to clean up the deployment, or remove the resources manually in your cloud provider's console.
 
 ## ⏯️ Start and stop Exasol Personal
 
@@ -222,78 +211,34 @@ Your browser may show a security warning when connecting to Exasol Admin because
 
 To connect with SSH to the EC2 instance that your Exasol database is running on, use `exasol diag shell`.
 
-## ☁️ Add Support for Additional Cloud Platforms
+## 📦 Presets
 
-Exasol Personal can be deployed on cloud platforms beyond AWS through **infrastructure presets**. A preset is a self-contained directory of templates and configuration files that the launcher uses to provision infrastructure and install Exasol on it. The launcher ships with built-in presets, and you can also point it at a preset directory on your local filesystem.
+Exasol Personal uses **presets** — self-contained directories of templates and config files — to provision infrastructure and install Exasol. Each deployment combines two presets:
 
-### Two preset types
+- **Infrastructure preset** — provisions cloud resources (compute, network, storage). Built-in: `aws`, `azure`, `exoscale`.
+- **Installation preset** — installs and configures Exasol on the provisioned nodes. Built-in: `ubuntu` (used by default).
 
-Each deployment uses two presets together:
-
-- **Infrastructure preset** — provisions cloud resources (nodes, disks, network) and prepares node bootstrap data. The built-in `aws` preset uses OpenTofu templates to manage AWS resources.
-- **Installation preset** — defines how Exasol is installed and configured on the provisioned nodes. The built-in `ubuntu` installation preset is used by default and works with any infrastructure preset that follows the same conventions.
-
-### Using presets on the command line
-
-The `install` (and `init`) command takes the infrastructure preset as its first argument and an optional installation preset as its second argument:
-
-```
+```bash
 exasol install <infra-preset> [install-preset]
+
+exasol install aws            # built-in preset by name
+exasol install ./my-preset    # local preset by path (starts with . / ~ or contains /)
+exasol install ./my-infra ./my-install   # both presets from local paths
 ```
 
-**Built-in presets** are selected by name:
-
-```bash
-# Use the built-in AWS infrastructure preset with the default installation preset
-exasol install aws
-
-# Explicitly specify both presets by name
-exasol install aws ubuntu
-```
-
-**External presets** on your local filesystem are selected by path. Any argument that looks like a path (starts with `.`, `~`, or contains `/` or `\`) is treated as a directory path:
-
-```bash
-# Use a local infrastructure preset directory
-exasol install ./my-gcp-preset
-
-# Use local directories for both presets
-exasol install ./my-gcp-preset ./my-install-preset
-
-# Use a built-in installation preset with a local infrastructure preset
-exasol install /path/to/my-preset ubuntu
-```
-
-To see the list of available built-in presets, run:
+List all available built-in presets:
 
 ```bash
 exasol presets
 ```
 
-### Where built-in presets live
+### Local presets
 
-Built-in presets are embedded in the launcher binary and sourced from:
+You can store your own preset directories anywhere on your filesystem and pass the path directly to `exasol install`. This lets you target additional cloud platforms or customize provisioning without modifying the launcher.
 
-- `assets/infrastructure/<preset>/` — infrastructure presets (OpenTofu templates + `infrastructure.yaml`)
-- `assets/installation/<preset>/` — installation presets (scripts, cloud-init fragments + `installation.yaml`)
+### Building your own preset
 
-When you run `exasol install`, the selected presets are extracted into the deployment directory under `infrastructure/` and `installation/`.
-
-External presets can live in any folder that you choose.
-
-### Creating a new infrastructure preset
-
-To add support for a new cloud platform, create a preset directory with the following:
-
-1. **`infrastructure.yaml` manifest** — at minimum a `name`, `description`, and a `tofu` block pointing to your variables file.
-2. **OpenTofu templates** — to provision the required resources (compute instances, networking, storage).
-3. **Required deployment artifacts** written by the templates to the `infrastructure_artifact_dir` output directory:
-   - `deployment.json` — node details (IPs, SSH info, DB endpoints, TLS cert)
-   - `secrets.json` — credentials (`dbPassword`, `adminUiPassword`)
-   - `node_access.pem` — SSH private key for the launcher to use
-4. **Installation preset integration** — embed installation assets (from `installation/cloudconf/` and `installation/files/`) into your node bootstrap mechanism (e.g. cloud-init). The existing AWS preset at `assets/infrastructure/aws/` is the reference implementation.
-
-For a detailed description of the preset contract, manifest schemas, variable channels, and compatibility guidelines, see [doc/presets.md](doc/presets.md).
+See [doc/presets.md](doc/presets.md) for the full preset contract: manifest schema, required output artifacts, variable channels, and the reference implementation in `assets/infrastructure/aws/`.
 
 ## ⚖️ Licensing
 
