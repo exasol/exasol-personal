@@ -124,13 +124,20 @@ BuildVM is a tool for building lightweight Alpine Linux VM images with embedded 
 
 **R7.1**: Container manifest (container-manifest.json) MUST define:
 - `containerFile`: Path to container tarball (optional, null = skip loading)
-- `port`: Container port to expose
+- `ports`: Array of port numbers that the container exposes (e.g., `[8080]` or `[8080, 3000]`)
 - `args`: Array of command-line arguments
 - `mounts`: Array of volume mounts (optional, no mounts created if not specified)
   - Each mount has `hostPath` (relative to /mnt/host) and `containerPath`
   - Paths containing `..` MUST be rejected with error
   - hostPath starting with `./` has prefix stripped (e.g., `./data` becomes `/mnt/host/data`)
   - Multiple mounts are supported
+
+**R7.1.1**: Port validation MUST occur before init-vm:
+- All ports listed in container manifest MUST be exposed in vm-config.json
+- Validation script (validate-port-config.sh) checks container ports against vm-config.json
+- init-vm MUST fail with clear error if validation fails
+- Validation passes if no container manifest present (no ports to validate)
+- Validation warning if vm-config.json has no ports field but container manifest exists
 
 **R7.2**: Container loading MUST support:
 - Initial load from tarball
@@ -157,6 +164,46 @@ BuildVM is a tool for building lightweight Alpine Linux VM images with embedded 
 - Data folder may be missing if shared folder unavailable (Hyper-V without data disk)
 - Data folder may be empty if user clears shared folder
 - Container should handle missing/empty data gracefully (recreate defaults, skip optional features)
+
+**R7.9**: Container manifest MUST be stored to /var/lib/container-manifest.json:
+- Stored after successful container load from tarball
+- Used as fallback when shared folder manifest unavailable
+- Enables container restarts without shared folder access
+
+**R7.10**: Port forwarding configuration:
+- vm-config.json MUST define ports array for container port forwarding
+- Each port entry MUST include: protocol ("tcp" or "udp"), host (port number), vm (port number)
+- All three fields (protocol, host, vm) are REQUIRED - no defaults, no optional fields
+- Empty ports array disables container port forwarding (SSH only)
+- Format for CLI args: "protocol:host:vm,protocol:host:vm,..."
+- Examples: "tcp:8080:8080", "tcp:8080:8080,tcp:9000:3000"
+- Supports port remapping (host port ≠ VM port)
+- No auto-detection fallback - ports MUST be explicitly configured
+
+**R7.11**: Platform-specific port forwarding behavior:
+- QEMU (Linux dev): Automatic forwarding via `-netdev user,hostfwd=protocol::host-:vm`
+  - Container accessible at localhost:host_port
+  - Uses host port (first number) from vm-config.json
+- vfkit (macOS): Automatic forwarding via `--device virtio-net,nat,guestPort=vm,hostPort=host`
+  - Container accessible at localhost:host_port
+  - Uses host port (first number) from vm-config.json
+  - CLI script accepts port_rules as positional arg 3
+- Hyper-V (Windows): No automatic forwarding
+  - Container accessible at vm_ip:vm_port
+  - Uses VM port (second number) from vm-config.json
+  - Host port (first number) ignored for direct IP access
+  - CLI script accepts PortRules as positional parameter 2
+  - VM IP written to vm-ip.txt file (see R7.12)
+
+**R7.12**: Hyper-V VM IP detection and storage:
+- start-hyperv.ps1 MUST attempt to detect VM IP address after startup
+- Maximum wait time: 5 minutes (300 seconds)
+- Poll interval: 2 seconds
+- VM IP MUST be written to vm-ip.txt in same directory as data disk
+- File format: Plain text, IPv4 address only, no newline
+- If IP unavailable after timeout: Write error message to file
+- VM IP displayed in console output when available
+- Container access URLs shown with actual IP when available
 
 ### R8: SSH Access
 
@@ -187,27 +234,42 @@ BuildVM is a tool for building lightweight Alpine Linux VM images with embedded 
 - 2 CPUs
 - 2048 MB RAM
 
-**R9.2**: vm-config.json MUST define:
+**R9.2**: init-vm-config.json MUST define build-time VM resources:
 ```json
 {
   "cpus": 2,
   "memoryMB": 2048,
-  "description": "VM resource configuration. Containers will automatically inherit these resources."
+  "description": "VM build-time configuration (init-vm only). For runtime config, see vm-config.json."
 }
 ```
 
-**R9.3**: Development environment (buildvm directory) MAY use custom vm-config.json
+**R9.3**: vm-config.json MUST define runtime VM resources and port forwarding:
+```json
+{
+  "cpus": 2,
+  "memoryMB": 2048,
+  "description": "VM runtime configuration. Containers will automatically inherit these resources.",
+  "ports": [
+    {"protocol": "tcp", "host": 8080, "vm": 8080}
+  ]
+}
+```
 
-**R9.4**: Release packages MUST use scripts/release-vm-config.json (defaults: 2 CPUs, 2GB RAM)
+**R9.4**: Development environment uses:
+- init-vm-config.json for VM build (task init-vm)
+- vm-config.json for VM runtime (task start-vm)
 
-**R9.5**: Startup scripts MUST accept resources as positional arguments:
+**R9.5**: Release packages MUST include vm-config.json (copied from buildvm/vm-config.json)
+
+**R9.6**: Startup scripts MUST accept resources as positional arguments:
 - Position 0: CPU count
 - Position 1: Memory in MB
-- Position 2: Shared folder path (optional)
+- Position 2: Port rules (format: "protocol:host:vm,protocol:host:vm,...")
+- Position 3: Shared folder path / Data disk path (platform-dependent)
 
-**R9.6**: Startup scripts MUST NOT depend on JSON parsing (jq, ConvertFrom-Json)
+**R9.7**: Startup scripts MUST NOT depend on JSON parsing (jq, ConvertFrom-Json)
 
-**R9.7**: Both bash and PowerShell scripts MUST support positional parameters for easy launcher integration
+**R9.8**: Both bash and PowerShell scripts MUST support positional parameters for easy launcher integration
 
 ### R10: Boot Optimization
 

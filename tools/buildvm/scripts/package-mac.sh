@@ -5,7 +5,6 @@ DISK_IMG="disk.img"
 ARCH_FILE="disk-arch.txt"
 VFKIT_SCRIPT="scripts/start-vfkit.sh"
 VM_CONFIG="vm-config.json"
-RELEASE_VM_CONFIG="scripts/release-vm-config.json"
 
 # Check if disk image exists
 if [ ! -f "$DISK_IMG" ]; then
@@ -52,7 +51,7 @@ cp "$DISK_IMG" "$DISK_FILE"
 
 # Copy VM configuration with default values for release
 echo "==> Copying VM configuration..."
-cp "$RELEASE_VM_CONFIG" "$PACKAGE_DIR/vm-config.json"
+cp "$VM_CONFIG" "$PACKAGE_DIR/vm-config.json"
 
 # Copy vfkit startup script
 echo "==> Copying vfkit startup script..."

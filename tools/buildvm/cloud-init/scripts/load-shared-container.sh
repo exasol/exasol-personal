@@ -74,7 +74,10 @@ fi
 if [ "$HAS_MANIFEST" = "true" ]; then
   # Extract configuration from manifest using jq
   CONTAINER_FILE=$(jq -r '.containerFile' "$MANIFEST_FILE" 2>/dev/null)
-  PORT=$(jq -r '.port' "$MANIFEST_FILE" 2>/dev/null)
+  
+  # Read ports array - join with commas for logging
+  CONTAINER_PORTS=$(jq -r '.ports // [] | join(", ")' "$MANIFEST_FILE" 2>/dev/null)
+  
   ARGS=$(jq -r '.args[]' "$MANIFEST_FILE" 2>/dev/null | tr '\n' ' ')
   
   # Parse mounts from manifest
@@ -130,9 +133,9 @@ if [ "$HAS_MANIFEST" = "true" ]; then
       log_msg "Using stored manifest, will not reload container"
       SKIP_LOAD=true
     else
-      # Validate port is specified
-      if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
-        log_msg "Error: port not specified in manifest"
+      # Validate ports are specified
+      if [ -z "$CONTAINER_PORTS" ]; then
+        log_msg "Error: ports not specified in manifest"
         exit 1
       fi
       
@@ -146,7 +149,7 @@ if [ "$HAS_MANIFEST" = "true" ]; then
       SKIP_LOAD=true
     else
       log_msg "Found container: $SHARED_CONTAINER"
-      log_msg "Port: $PORT"
+      log_msg "Ports: $CONTAINER_PORTS"
       log_msg "Args: $ARGS"
     fi
   fi
@@ -244,7 +247,7 @@ CONTAINER_LOG_FILE="$LOG_DIR/container-runtime-$(date +%Y%m%d-%H%M%S).log"
 # This allows the container to automatically use all VM resources.
 # If VM resources are increased (e.g., more CPUs or RAM), the container
 # will automatically have access to them without configuration changes.
-log_msg "Starting container on port $PORT..."
+log_msg "Starting container (ports: $CONTAINER_PORTS)..."
 if podman run -d \
   --name "$CONTAINER_NAME" \
   --network host \
@@ -253,7 +256,7 @@ if podman run -d \
   --log-opt path="$CONTAINER_LOG_FILE" \
   "$IMAGE_NAME" \
   $ARGS; then
-  log_msg "Container started successfully on port $PORT"
+  log_msg "Container started successfully (ports: $CONTAINER_PORTS)"
   log_msg "Container runtime logs: $CONTAINER_LOG_FILE"
   log_msg "=== Container Load Script Completed Successfully ==="
 else

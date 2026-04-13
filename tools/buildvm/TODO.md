@@ -1,16 +1,13 @@
-[ ] support port remapping in the manifest file
-    - should probably be handled by the launcher script using the final vm's port mapping feature.
-
-[ ] extend the mounting system to allow the manifest file to decide on its own disk mounts.
-
 [ ] implement build profiles for windows and mac, making the choice of which vm image to download easy
-
-[ ] separate initial setup shared directory used by init-vm from the runtime shared directroy used by start-vm
-    - not needed except as a test
 
 [ ] prevent vm wasting time in the boot menu
 
 [ ] configure aggressive log rotation / move logs to shared directory
+
+[x] support port remapping in the manifest file
+    - should probably be handled by the launcher script using the final vm's port mapping feature.
+
+[x] extend the mounting system to allow the manifest file to decide on its own disk mounts.
 
 [x] the container should be loaded into the vm as part of the init-vm task
 

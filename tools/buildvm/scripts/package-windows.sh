@@ -5,7 +5,6 @@ DISK_IMG="disk.img"
 ARCH_FILE="disk-arch.txt"
 HYPERV_SCRIPT="scripts/start-hyperv.ps1"
 VM_CONFIG="vm-config.json"
-RELEASE_VM_CONFIG="scripts/release-vm-config.json"
 
 # Check if disk image exists
 if [ ! -f "$DISK_IMG" ]; then
@@ -52,7 +51,7 @@ qemu-img convert -f raw -O vhdx -o subformat=dynamic "$DISK_IMG" "$VHDX_FILE"
 
 # Copy VM configuration with default values for release
 echo "==> Copying VM configuration..."
-cp "$RELEASE_VM_CONFIG" "$PACKAGE_DIR/vm-config.json"
+cp "$VM_CONFIG" "$PACKAGE_DIR/vm-config.json"
 
 # Copy PowerShell startup script
 echo "==> Copying Hyper-V startup script..."

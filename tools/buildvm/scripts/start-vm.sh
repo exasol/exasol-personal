@@ -83,21 +83,49 @@ else
     VM_MEMORY=2048
 fi
 
-# Build port forwarding string from manifest
-MANIFEST_PORTFWD=$(./scripts/read-manifest-ports.sh || true)
-if [ -n "$MANIFEST_PORTFWD" ]; then
-    NETDEV_PORTFWD="hostfwd=tcp::2222-:22,$MANIFEST_PORTFWD"
+# Build port forwarding string
+PORTFWD_RULES=""
+if [ -f "$VM_CONFIG" ]; then
+    # Check if ports array exists in vm-config.json
+    HAS_PORTS=$(jq -r 'has("ports")' "$VM_CONFIG" 2>/dev/null || echo "false")
+    if [ "$HAS_PORTS" = "true" ]; then
+        # Read ports from vm-config.json
+        PORT_COUNT=$(jq -r '.ports | length' "$VM_CONFIG" 2>/dev/null || echo "0")
+        if [ "$PORT_COUNT" -gt 0 ]; then
+            for i in $(seq 0 $((PORT_COUNT - 1))); do
+                PROTOCOL=$(jq -r ".ports[$i].protocol" "$VM_CONFIG")
+                HOST_PORT=$(jq -r ".ports[$i].host" "$VM_CONFIG")
+                VM_PORT=$(jq -r ".ports[$i].vm" "$VM_CONFIG")
+                
+                if [ -n "$PORTFWD_RULES" ]; then
+                    PORTFWD_RULES="$PORTFWD_RULES,hostfwd=$PROTOCOL::$HOST_PORT-:$VM_PORT"
+                else
+                    PORTFWD_RULES="hostfwd=$PROTOCOL::$HOST_PORT-:$VM_PORT"
+                fi
+            done
+        fi
+    fi
+fi
+
+# Always include SSH port
+if [ -n "$PORTFWD_RULES" ]; then
+    NETDEV_PORTFWD="hostfwd=tcp::2222-:22,$PORTFWD_RULES"
 else
     NETDEV_PORTFWD="hostfwd=tcp::2222-:22"
 fi
 
 echo "==> Starting Alpine Linux VM in background..."
 echo "==> SSH will be available on localhost:2222"
-if [ -n " $MANIFEST_PORTFWD" ]; then
-    MANIFEST_PORT=$(echo "$MANIFEST_PORTFWD" | grep -oP '(?<=::)\d+(?=-:)' || true)
-    if [ -n "$MANIFEST_PORT" ]; then
-        echo "==> Container port: localhost:$MANIFEST_PORT"
-    fi
+if [ -n "$PORTFWD_RULES" ]; then
+    # Extract and display forwarded ports
+    echo "$PORTFWD_RULES" | tr ',' '\n' | while read -r rule; do
+        if [[ "$rule" =~ hostfwd=([^:]+)::([0-9]+)-:([0-9]+) ]]; then
+            PROTO="${BASH_REMATCH[1]}"
+            HOST="${BASH_REMATCH[2]}"
+            VM="${BASH_REMATCH[3]}"
+            echo "==> Port forwarding: localhost:$HOST -> VM:$VM ($PROTO)"
+        fi
+    done
 fi
 echo "==> Shared folder: $SHARED_DIR -> /mnt/host (in VM)"
 echo "==> Use: ssh -i vm-key -p 2222 alpine@localhost"

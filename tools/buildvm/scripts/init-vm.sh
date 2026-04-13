@@ -8,7 +8,7 @@ SHARED_DIR="shared"
 VIRTIOFS_SOCKET="virtiofs.sock"
 VIRTIOFSD_PID_FILE="virtiofsd.pid"
 VM_LOG_FILE="vm-init.log"
-VM_CONFIG="vm-config.json"
+VM_CONFIG="init-vm-config.json"
 
 if [ ! -f "$DISK_IMG" ]; then
     echo "Error: $DISK_IMG not found. Run 'task download-image' first."
@@ -55,6 +55,14 @@ sleep 1
 
 # Clear log file from previous runs
 > "$VM_LOG_FILE"
+
+# Validate port configuration before starting VM
+echo "==> Validating port configuration..."
+if ! ./scripts/validate-port-config.sh; then
+    echo ""
+    echo "Error: Port validation failed"
+    exit 1
+fi
 
 # Read VM configuration
 if [ -f "$VM_CONFIG" ]; then

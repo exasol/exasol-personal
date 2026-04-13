@@ -17,6 +17,11 @@
 .PARAMETER MemoryMB
     Memory in MB to allocate to the VM (default: 2048)
 
+.PARAMETER PortRules
+    Port forwarding rules in format "protocol:host:vm,protocol:host:vm,..."
+    Example: "tcp:8080:8080,tcp:9000:3000"
+    Note: Hyper-V port forwarding requires manual NAT configuration. See output for instructions.
+
 .PARAMETER DataDiskPath
     Path to data disk VHDX file. If empty, creates 'exasol-data.vhdx' in script directory.
     The data disk is mounted at /mnt/host inside the VM (default: exasol-data.vhdx)
@@ -33,7 +38,8 @@
 .EXAMPLE
     .\start.ps1
     .\start.ps1 4 4096
-    .\start.ps1 2 2048 "D:\vm-data\exasol-data.vhdx"
+    .\start.ps1 2 2048 "tcp:8080:8080"
+    .\start.ps1 2 2048 "tcp:8080:8080,tcp:9000:3000" "D:\vm-data\exasol-data.vhdx"
 #>
 
 param(
@@ -44,6 +50,9 @@ param(
     [int]$MemoryMB = 2048,
     
     [Parameter(Position=2)]
+    [string]$PortRules = "",
+    
+    [Parameter(Position=3)]
     [string]$DataDiskPath = "",
     
     [string]$VMName = "Exasol-VM",
@@ -202,10 +211,41 @@ Start-Sleep -Seconds 2
 # Get VM info
 $vm = Get-VM -Name $VMName
 
+# Try to get VM IP address (may take time for DHCP)
+Write-Host "==> Waiting for VM to obtain IP address (max 5 minutes)..." -ForegroundColor Cyan
+$vmIP = $null
+$maxWaitSeconds = 300  # 5 minutes
+$waitedSeconds = 0
+
+while ($waitedSeconds -lt $maxWaitSeconds) {
+    $networkAdapter = Get-VMNetworkAdapter -VMName $VMName
+    if ($networkAdapter.IPAddresses) {
+        # Get first IPv4 address
+        $vmIP = $networkAdapter.IPAddresses | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1
+        if ($vmIP) {
+            break
+        }
+    }
+    Start-Sleep -Seconds 2
+    $waitedSeconds += 2
+}
+
+# Write IP to file in data disk directory
+$ipFilePath = Join-Path (Split-Path -Parent $DataDiskPath) "vm-ip.txt"
+if ($vmIP) {
+    $vmIP | Out-File -FilePath $ipFilePath -Encoding ASCII -NoNewline
+    Write-Host "==> VM IP address: $vmIP" -ForegroundColor Green
+    Write-Host "==> IP written to: $ipFilePath" -ForegroundColor Cyan
+} else {
+    Write-Host "==> Could not obtain VM IP address (VM may still be booting)" -ForegroundColor Yellow
+    Write-Host "==> Check later with: Get-VM '$VMName' | Select -ExpandProperty NetworkAdapters | Select IPAddresses" -ForegroundColor Yellow
+    "IP not available yet - check VM network adapter" | Out-File -FilePath $ipFilePath -Encoding ASCII
+}
+
 Write-Host ""
-Write-Host "========================================" -ForegroundColor Green
+Write-Host "=========================================" -ForegroundColor Green
 Write-Host "  Alpine Linux VM Started Successfully" -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Green
+Write-Host "=========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "VM Information:" -ForegroundColor Cyan
 Write-Host "  Name: $VMName"
@@ -215,25 +255,52 @@ Write-Host "  Memory: $($MemoryStartupBytes / 1GB) GB"
 Write-Host "  System VHDX: $VHDXPath"
 Write-Host "  Data VHDX: $DataDiskPath"
 Write-Host "  Network: $SwitchName"
-Write-Host "  Data mount: /mnt/host (inside VM)"
+if ($vmIP) {
+    Write-Host "  VM IP: $vmIP (saved to vm-ip.txt)" -ForegroundColor Green
+}
 Write-Host ""
-Write-Host "Connection Instructions:" -ForegroundColor Yellow
-Write-Host ""
-Write-Host "1. Connect to VM console:" -ForegroundColor White
-Write-Host "   vmconnect.exe localhost '$VMName'" -ForegroundColor Gray
-Write-Host ""
-Write-Host "2. Wait for the VM to boot (20-30 seconds)" -ForegroundColor White
-Write-Host ""
-Write-Host "3. Login with:" -ForegroundColor White
-Write-Host "   Username: alpine" -ForegroundColor Gray
-Write-Host "   Password: <use SSH key or set password via cloud-init>" -ForegroundColor Gray
-Write-Host ""
-Write-Host "4. Get VM IP address (run in VM console):" -ForegroundColor White
-Write-Host "   ip addr show eth0" -ForegroundColor Gray
-Write-Host ""
-Write-Host "5. SSH to VM from host:" -ForegroundColor White
-Write-Host "   ssh -i vm-key alpine@<vm-ip-address>" -ForegroundColor Gray
-Write-Host ""
+
+# Display port forwarding information if configured
+if ($PortRules) {
+    Write-Host "Container Port Access (Hyper-V):" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Note: On Hyper-V, connect using the VM's IP address and VM ports." -ForegroundColor Cyan
+    Write-Host "Host port mappings (first number) only apply to optional NetNat configuration." -ForegroundColor Cyan
+    Write-Host ""
+    
+    if ($vmIP) {
+        Write-Host "VM IP: $vmIP" -ForegroundColor White
+        Write-Host ""
+        Write-Host "Access container ports:" -ForegroundColor White
+        $portPairs = $PortRules -split ','
+        foreach ($pair in $portPairs) {
+            $parts = $pair -split ':'
+            if ($parts.Length -eq 3) {
+                $protocol = $parts[0].ToUpper()
+                $vmPort = $parts[2]
+                Write-Host "  $protocol port $vmPort -> http://${vmIP}:${vmPort}" -ForegroundColor Gray
+            }
+        }
+    } else {
+        Write-Host "Configured VM ports (use VM IP when available):" -ForegroundColor White
+        $portPairs = $PortRules -split ','
+        foreach ($pair in $portPairs) {
+            $parts = $pair -split ':'
+            if ($parts.Length -eq 3) {
+                $protocol = $parts[0].ToUpper()
+                $vmPort = $parts[2]
+                Write-Host "  $protocol port $vmPort -> http://<vm-ip>:${vmPort}" -ForegroundColor Gray
+            }
+        }
+        Write-Host ""
+        Write-Host "Get IP from: $ipFilePath" -ForegroundColor Cyan
+    }
+    Write-Host ""
+    Write-Host "Optional: For localhost access, configure NetNat manually:" -ForegroundColor Cyan
+    Write-Host "  Example: Add-NetNatStaticMapping -NatName 'YourNAT' -Protocol TCP -ExternalPort <host-port> -InternalIPAddress $vmIP -InternalPort <vm-port>" -ForegroundColor Gray
+    Write-Host ""
+}
+
 Write-Host "Management Commands:" -ForegroundColor Yellow
 Write-Host "  Stop VM:    Stop-VM -Name '$VMName'" -ForegroundColor Gray
 Write-Host "  Remove VM:  Remove-VM -Name '$VMName' -Force" -ForegroundColor Gray
