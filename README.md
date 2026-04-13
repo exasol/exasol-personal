@@ -47,9 +47,9 @@ curl https://downloads.exasol.com/exasol-personal/installer.sh | sh
 mkdir deployment && cd deployment
 
 # 3. Install on your cloud of choice
-../exasol install aws        # Amazon Web Services
-../exasol install azure      # Microsoft Azure
-../exasol install exoscale   # Exoscale
+exasol install aws        # Amazon Web Services
+exasol install azure      # Microsoft Azure
+exasol install exoscale   # Exoscale
 ```
 
 Read on for Windows instructions and full details.
@@ -57,17 +57,16 @@ Read on for Windows instructions and full details.
 
 ## 🚀 Deploy Exasol Personal
 
-1. Download Exasol Launcher for your platform.
+1. Download and install the Exasol Launcher for your platform.
 
    On Linux and macOS, run:
    ```bash
    curl https://downloads.exasol.com/exasol-personal/installer.sh | sh
    ```
 
-   On all platforms including Windows:
-   Download Exasol Launcher from the [Exasol Download Portal](https://downloads.exasol.com/exasol-personal).
+   This installs the `exasol` binary to `~/.local/bin`. On most Linux distributions this directory is already in your `PATH`. On macOS, or if the installer reports that `~/.local/bin` is not in your `PATH`, follow its instructions.
 
-   Copy the `exasol` binary into your PATH.
+   On Windows: download the Exasol Launcher from the [Exasol Download Portal](https://downloads.exasol.com/exasol-personal) and copy the `exasol` binary to a directory in your `PATH`.
 
 2. Create a new directory “deployment” and change into the directory:
    ```bash
@@ -93,9 +92,7 @@ Read on for Windows instructions and full details.
 
    When the deployment process has finished, you will see instructions on how to connect to your Exasol database using a client of your choice. You can also find this information at any time by using `exasol info` in the terminal.
 
-Most `exasol` commands must be run from the context of the deployment directory. Change into the deployment directory before you run any `exasol` commands, and prepend the command with the relative path to the binary. For example: `../exasol <command>`.
-
-To avoid having to prepend all exasol commands with the path to the binary, you can add the path to your PATH environment variable. For more information about how to set environment variables, refer to the documentation for your operating system.
+Most `exasol` commands must be run from the context of the deployment directory. Change into the deployment directory before you run any `exasol` commands.
 
 ## 📊 Load Sample Data
 
@@ -192,7 +189,7 @@ Once the deployment process is complete, use `exasol info` for information about
 
 You can also use the built-in SQL client in Exasol Launcher to connect directly to the database from the command line:
 ```bash
-../exasol connect
+exasol connect
 ```
 See also...
 - To learn more about how you can connect to your Exasol database and start loading data using the many supported tools and integrations, see [Connect to Exasol](https://docs.exasol.com/db/latest/connect_exasol.htm) and [Load Data](https://docs.exasol.com/db/latest/loading_data.htm).
