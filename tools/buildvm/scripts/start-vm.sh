@@ -107,15 +107,16 @@ if [ -f "$VM_CONFIG" ]; then
     fi
 fi
 
-# Always include SSH port
+# Use ports from vm-config.json directly (including SSH)
 if [ -n "$PORTFWD_RULES" ]; then
-    NETDEV_PORTFWD="hostfwd=tcp::2222-:22,$PORTFWD_RULES"
+    NETDEV_PORTFWD="$PORTFWD_RULES"
 else
-    NETDEV_PORTFWD="hostfwd=tcp::2222-:22"
+    # No ports configured - won't be able to connect to VM
+    echo "Warning: No ports configured in vm-config.json - VM will not be accessible"
+    NETDEV_PORTFWD=""
 fi
 
-echo "==> Starting Alpine Linux VM in background..."
-echo "==> SSH will be available on localhost:2222"
+echo "==> Starting Exasol VM in background..."
 if [ -n "$PORTFWD_RULES" ]; then
     # Extract and display forwarded ports
     echo "$PORTFWD_RULES" | tr ',' '\n' | while read -r rule; do
@@ -123,12 +124,15 @@ if [ -n "$PORTFWD_RULES" ]; then
             PROTO="${BASH_REMATCH[1]}"
             HOST="${BASH_REMATCH[2]}"
             VM="${BASH_REMATCH[3]}"
-            echo "==> Port forwarding: localhost:$HOST -> VM:$VM ($PROTO)"
+            if [ "$VM" = "22" ]; then
+                echo "==> SSH: localhost:$HOST (ssh -i vm-key -p $HOST exasol@localhost)"
+            else
+                echo "==> Port forwarding: localhost:$HOST -> VM:$VM ($PROTO)"
+            fi
         fi
     done
 fi
 echo "==> Shared folder: $SHARED_DIR -> /mnt/host (in VM)"
-echo "==> Use: ssh -i vm-key -p 2222 alpine@localhost"
 echo "==> Console output: tail -f $VM_LOG_FILE"
 echo ""
 

@@ -57,17 +57,17 @@ if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
 fi
 
 echo "==> Configuring rootless podman (subuid/subgid)..."
-# Add subuid/subgid ranges for alpine user for rootless containers
-if ! grep -q "^alpine:" /etc/subuid; then
-  echo "alpine:100000:65536" >> /etc/subuid
+# Add subuid/subgid ranges for exasol user for rootless containers
+if ! grep -q "^exasol:" /etc/subuid; then
+  echo "exasol:100000:65536" >> /etc/subuid
 fi
-if ! grep -q "^alpine:" /etc/subgid; then
-  echo "alpine:100000:65536" >> /etc/subgid
+if ! grep -q "^exasol:" /etc/subgid; then
+  echo "exasol:100000:65536" >> /etc/subgid
 fi
 
 # Set environment variable to suppress cgroups-v1 warning
-if ! grep -q "PODMAN_IGNORE_CGROUPSV1_WARNING" /home/alpine/.profile 2>/dev/null; then
-  echo "export PODMAN_IGNORE_CGROUPSV1_WARNING=1" >> /home/alpine/.profile
+if ! grep -q "PODMAN_IGNORE_CGROUPSV1_WARNING" /home/exasol/.profile 2>/dev/null; then
+  echo "export PODMAN_IGNORE_CGROUPSV1_WARNING=1" >> /home/exasol/.profile
 fi
 
 echo "==> Configuring GRUB to skip boot menu..."

@@ -60,9 +60,9 @@ cp "$HYPERV_SCRIPT" "$PACKAGE_DIR/start.ps1"
 # Create README with usage instructions
 echo "==> Creating README..."
 cat > "$PACKAGE_DIR/README.md" << 'EOF'
-# Alpine Linux VM for Windows
+# Exasol VM for Windows
 
-This package contains an Alpine Linux VM configured to run on Windows using Hyper-V.
+This package contains an Exasol VM configured to run on Windows using Hyper-V.
 
 ## Prerequisites
 
@@ -107,10 +107,10 @@ Containers running inside the VM will automatically have access to all allocated
 
 The script will display connection instructions. Typically:
 
-1. Connect to VM console: `vmconnect.exe localhost 'Alpine-VM'`
+1. Connect to VM console: `vmconnect.exe localhost 'Exasol-VM'`
 2. Wait for boot (20-30 seconds)
 3. Get VM IP: Run `ip addr show eth0` in VM console
-4. SSH from Windows: `ssh -i vm-key alpine@<vm-ip-address>`
+4. SSH from Windows: `ssh -i vm-key exasol@<vm-ip-address>`
 
 ## Folder Sharing
 
@@ -123,9 +123,9 @@ See Hyper-V documentation for details on network file sharing.
 
 ## Management
 
-- **Stop VM:** `Stop-VM -Name 'Alpine-VM'`
-- **Remove VM:** `Remove-VM -Name 'Alpine-VM' -Force`
-- **VM Console:** `vmconnect.exe localhost 'Alpine-VM'`
+- **Stop VM:** `Stop-VM -Name 'Exasol-VM'`
+- **Remove VM:** `Remove-VM -Name 'Exasol-VM' -Force`
+- **VM Console:** `vmconnect.exe localhost 'Exasol-VM'`
 EOF
 
 echo "==> README.md created"

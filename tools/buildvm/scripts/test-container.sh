@@ -64,7 +64,7 @@ done
 
 if [ "$PORT_READY" = "false" ]; then
     echo_error "Container port 8080 not accessible after ${MAX_WAIT} seconds"
-    echo_error "Check if container is running: ssh -i vm-key -p 2222 alpine@localhost 'podman ps'"
+    echo_error "Check if container is running: ssh -i vm-key -p 2222 exasol@localhost 'podman ps'"
     echo_error ""
     echo_error "Container load logs:"
     if ls shared/logs/container-load-*.log 1> /dev/null 2>&1; then

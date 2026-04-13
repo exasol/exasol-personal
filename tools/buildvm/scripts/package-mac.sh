@@ -37,7 +37,7 @@ case "$ARCH" in
 esac
 
 PACKAGE_DIR="package/$PACKAGE_NAME"
-DISK_FILE="$PACKAGE_DIR/alpine-vm.img"
+DISK_FILE="$PACKAGE_DIR/exasol-vm.img"
 RELEASE_FILE="release/$PACKAGE_NAME.tar.xz"
 
 echo "==> Creating macOS vfkit package: $PACKAGE_NAME"
@@ -61,9 +61,9 @@ chmod +x "$PACKAGE_DIR/start.sh"
 # Create README with usage instructions
 echo "==> Creating README..."
 cat > "$PACKAGE_DIR/README.md" << 'EOF'
-# Alpine Linux VM for macOS
+# Linux VM for macOS
 
-This package contains an Alpine Linux VM configured to run on macOS using vfkit.
+This package contains an Linux VM configured to run on macOS using vfkit.
 
 ## Prerequisites
 
@@ -109,14 +109,14 @@ cp container-manifest.json shared/
 
 Inside the VM, your files will be at `/mnt/host`:
 ```bash
-ssh -i vm-key -p 2222 alpine@localhost
+ssh -i vm-key -p 2222 exasol@localhost
 ls /mnt/host
 ```
 
 ## Connection
 
-- **SSH:** `ssh -i vm-key -p 2222 alpine@localhost`
-- **Username:** alpine
+- **SSH:** `ssh -i vm-key -p 2222 exasol@localhost`
+- **Username:** exasol
 - **Authentication:** SSH key (vm-key file in this directory)
 
 ## Management

@@ -82,7 +82,7 @@ else
     NETDEV_PORTFWD="hostfwd=tcp::2222-:22"
 fi
 
-echo "==> Starting Alpine Linux VM in background..."
+echo "==> Starting Exasol VM in background..."
 echo "==> SSH will be available on localhost:2222"
 if [ -n "$MANIFEST_PORTFWD" ]; then
     MANIFEST_PORT=$(echo "$MANIFEST_PORTFWD" | grep -oP '(?<=::)\d+(?=-:)' || true)
@@ -91,7 +91,7 @@ if [ -n "$MANIFEST_PORTFWD" ]; then
     fi
 fi
 echo "==> Shared folder: $SHARED_DIR -> /mnt/host (in VM)"
-echo "==> Use: ssh -i vm-key -p 2222 alpine@localhost"
+echo "==> Use: ssh -i vm-key -p 2222 exasol@localhost"
 echo "==> VM console output will be logged to: $VM_LOG_FILE"
 echo ""
 

@@ -143,7 +143,7 @@ if ($existingVM) {
         Write-Host ""
         Write-Host "To connect to the VM:" -ForegroundColor Yellow
         Write-Host "  1. Use Hyper-V Manager: vmconnect.exe localhost '$VMName'"
-        Write-Host "  2. Once booted, SSH via: ssh -i vm-key alpine@<vm-ip-address>"
+        Write-Host "  2. Once booted, SSH via: ssh -i vm-key exasol@<vm-ip-address>"
         Write-Host "     (Find IP by connecting to VM console and running: ip addr)"
         exit 0
     }
@@ -166,9 +166,9 @@ if ($existingVM) {
             Write-Host "==> Using 'Default Switch'" -ForegroundColor Green
         } else {
             # Create an internal switch
-            Write-Host "==> Creating new internal switch: Alpine-Switch" -ForegroundColor Cyan
-            New-VMSwitch -Name "Alpine-Switch" -SwitchType Internal | Out-Null
-            $SwitchName = "Alpine-Switch"
+            Write-Host "==> Creating new internal switch: Exasol-Switch" -ForegroundColor Cyan
+            New-VMSwitch -Name "Exasol-Switch" -SwitchType Internal | Out-Null
+            $SwitchName = "Exasol-Switch"
         }
     }
     
@@ -183,7 +183,7 @@ if ($existingVM) {
     # Configure VM settings
     Write-Host "==> Configuring VM settings..." -ForegroundColor Cyan
     
-    # Disable Secure Boot (Alpine may not have signed bootloader)
+    # Disable Secure Boot (VM image may not have signed bootloader)
     Set-VMFirmware -VMName $VMName -EnableSecureBoot Off
     
     # Set processor count
@@ -244,7 +244,7 @@ if ($vmIP) {
 
 Write-Host ""
 Write-Host "=========================================" -ForegroundColor Green
-Write-Host "  Alpine Linux VM Started Successfully" -ForegroundColor Green
+Write-Host "  Linux VM Started Successfully" -ForegroundColor Green
 Write-Host "=========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "VM Information:" -ForegroundColor Cyan

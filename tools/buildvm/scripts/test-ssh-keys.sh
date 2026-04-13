@@ -53,7 +53,7 @@ ELAPSED=0
 START_TIME=$(date +%s)
 
 while [ $ELAPSED -lt $MAX_WAIT ]; do
-    if ssh -i "$TEST_KEY" -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 alpine@localhost "echo 'SSH key import successful!'" 2>/dev/null; then
+    if ssh -i "$TEST_KEY" -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 exasol@localhost "echo 'SSH key import successful!'" 2>/dev/null; then
         echo "==> ✓ Test passed: Successfully connected with imported key after ${ELAPSED} seconds"
         SUCCESS=true
         break

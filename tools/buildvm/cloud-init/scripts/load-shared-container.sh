@@ -146,11 +146,12 @@ if [ "$HAS_MANIFEST" = "true" ]; then
       if [ ! -f "$SHARED_CONTAINER" ]; then
         log_msg "Container file not found: $SHARED_CONTAINER"
         log_msg "Will attempt to start existing container if available"
-      SKIP_LOAD=true
-    else
-      log_msg "Found container: $SHARED_CONTAINER"
-      log_msg "Ports: $CONTAINER_PORTS"
-      log_msg "Args: $ARGS"
+        SKIP_LOAD=true
+      else
+        log_msg "Found container: $SHARED_CONTAINER"
+        log_msg "Ports: $CONTAINER_PORTS"
+        log_msg "Args: $ARGS"
+      fi
     fi
   fi
 fi

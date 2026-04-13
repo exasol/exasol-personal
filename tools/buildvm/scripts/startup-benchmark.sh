@@ -20,7 +20,7 @@ echo "==> Waiting for SSH connection..."
 MAX_WAIT=180  # 3 minutes for slow emulation
 ELAPSED=0
 while [ $ELAPSED -lt $MAX_WAIT ]; do
-    if ssh -i vm-key -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 alpine@localhost "true" 2>/dev/null; then
+    if ssh -i vm-key -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 exasol@localhost "true" 2>/dev/null; then
         END_TIME=$(date +%s%3N)  # milliseconds
         BOOT_TIME=$(( (END_TIME - START_TIME) / 1000 ))  # Convert to seconds
         BOOT_TIME_MS=$(( (END_TIME - START_TIME) % 1000 ))  # Remainder in ms

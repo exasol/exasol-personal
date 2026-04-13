@@ -45,15 +45,22 @@ tasks:
       - task: copy-test-container-to-shared
 
   init-vm:
-    desc: Initialize and start the Alpine Linux VM (first time setup)
+    desc: Initialize and start the Exasol VM (first time setup)
     deps:
-      - expand-disk
       - create-cloud-init
       - prepare-container
     status:
       - test -f vm-initialized.flag
     cmds:
+      - task: expand-disk
       - ./scripts/init-vm.sh
+      - task: clean-shared
+
+  clean-shared:
+    desc: Clean shared folder after initialization
+    internal: true
+    cmds:
+      - ./scripts/clean-shared.sh
 
   shrink-disk:
     desc: Shrink disk image to minimum size (run after init-vm)
@@ -63,7 +70,7 @@ tasks:
       - sudo ./scripts/shrink-disk.sh
 
   start-vm:
-    desc: Start the Alpine Linux VM
+    desc: Start the Exasol VM
     cmds:
       - ./scripts/start-vm.sh
 
@@ -73,14 +80,14 @@ tasks:
       - ./scripts/start-vm.sh --attached
 
   stop-vm:
-    desc: Stop the Alpine Linux VM
+    desc: Stop the Exasol VM
     cmds:
       - ./scripts/stop-vm.sh
 
   connect:
-    desc: Connect to the Alpine Linux VM via SSH
+    desc: Connect to the Exasol VM via SSH
     cmds:
-      - ssh -i vm-key -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null alpine@localhost
+      - ssh -i vm-key -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null exasol@localhost
 
   startup-benchmark:
     desc: Benchmark VM startup time (start VM and measure time to SSH)

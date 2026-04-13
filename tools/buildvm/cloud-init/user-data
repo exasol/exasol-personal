@@ -10,11 +10,11 @@ mounts:
   - [ none, /sys/fs/cgroup, cgroup2, "defaults", "0", "0" ]
 
 users:
-  - name: alpine
+  - name: exasol
     groups: wheel
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/sh
-    plain_text_passwd: alpine
+    plain_text_passwd: exasol
     lock_passwd: false
     ssh_authorized_keys:
       - SSH_PUBLIC_KEY_PLACEHOLDER

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Alpine Linux VM Startup Script for macOS using vfkit
+# Linux VM Startup Script for macOS using vfkit
 # Requires: vfkit (install via: brew install vfkit)
 
 # Usage: ./start.sh [cpu_count] [memory_mb] [port_rules] [shared_directory]
@@ -9,8 +9,8 @@ set -euo pipefail
 # port_rules format: "protocol:host:vm,protocol:host:vm,..." (e.g., "tcp:8080:8080,tcp:9000:3000")
 
 # Configuration
-VM_NAME="Alpine-VM"
-DISK_IMG="alpine-vm.img"
+VM_NAME="Exasol-VM"
+DISK_IMG="exasol-vm.img"
 SSH_PORT=2222
 
 # Parse command line arguments
@@ -98,7 +98,7 @@ fi
 
 echo ""
 echo "=========================================="
-echo "  Starting Alpine Linux VM with vfkit"
+echo "  Starting Linux VM with vfkit"
 echo "=========================================="
 echo ""
 echo "VM Configuration:"
@@ -177,7 +177,7 @@ echo "==> VM started successfully!"
 echo "==> vfkit PID: $VFKIT_PID"
 echo ""
 echo "Connection Information:"
-echo "  SSH: ssh -i vm-key -p $SSH_PORT alpine@localhost"
+echo "  SSH: ssh -i vm-key -p $SSH_PORT exasol@localhost"
 echo "  Console log: tail -f vm-console.log"
 echo "  vfkit log: tail -f vfkit.log"
 if [ -n "$SHARED_DIR_ABS" ]; then

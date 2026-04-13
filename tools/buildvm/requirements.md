@@ -4,6 +4,8 @@
 
 BuildVM is a tool for building lightweight Alpine Linux VM images with embedded Podman container support. The tool produces VM packages for multiple platforms (macOS/vfkit, Windows/Hyper-V) from a single Alpine Linux base image.
 
+The VM is branded as "Exasol VM" for end users, with technical references to Alpine Linux preserved in internal documentation. VM hostname is exasol-vm and the default user is exasol.
+
 ## Core Requirements
 
 ### R1: Multi-Platform Support
@@ -71,8 +73,8 @@ BuildVM is a tool for building lightweight Alpine Linux VM images with embedded 
 **R5.2**: Cloud-init ISO MUST be presented with media=cdrom flag
 
 **R5.3**: Cloud-init MUST configure:
-- Hostname: alpine-vm
-- User: alpine (with SSH key authentication)
+- Hostname: exasol-vm
+- User: exasol (with SSH key authentication)
 - System timezone: UTC
 - cgroup2 filesystem mounting
 - Podman installation and configuration
@@ -87,6 +89,18 @@ BuildVM is a tool for building lightweight Alpine Linux VM images with embedded 
 3. import-shared-keys.sh (SSH key import)
 4. load-shared-container.sh (container loading)
 5. cleanup-and-shutdown.sh (finalization)
+
+**R5.5**: VM branding and naming MUST be consistent:
+- All user-facing references MUST use "Exasol VM" branding (not "Alpine Linux VM")
+- VM hostname: exasol-vm (not alpine-vm)
+- Default user: exasol (not alpine)
+- SSH key comment: exasol-vm-key (not alpine-vm-key)
+- Console messages: "Starting Exasol VM" (not "Starting Alpine Linux VM")
+- Task descriptions: "Start the Exasol VM" (not "Start the Alpine Linux VM")
+- Hyper-V VM name: Exasol-VM (not Alpine-VM)
+- vfkit VM name: Exasol-VM (not Alpine-VM)
+- Technical documentation MAY reference Alpine Linux as the base OS
+- Internal file names (alpine-pristine.img, alpine-cloud.qcow2) preserved for clarity
 
 ### R6: Folder Sharing
 
@@ -205,6 +219,19 @@ BuildVM is a tool for building lightweight Alpine Linux VM images with embedded 
 - VM IP displayed in console output when available
 - Container access URLs shown with actual IP when available
 
+**R7.13**: Shared folder lifecycle management:
+- After init-vm completes, shared folder MUST be completely cleaned (all contents removed)
+- Cleanup MUST be performed by clean-shared task (internal) called by init-vm task
+- Cleaned items include: scripts/, test containers, manifests, authorized_keys, logs/, container-data/
+- Rationale: Scripts copied into VM disk, containers loaded into VM image, no longer needed
+- start-vm MUST recreate necessary files:
+  - shared/authorized_keys from vm-key.pub (for SSH access)
+- Container loading service MUST recreate necessary directories on demand:
+  - shared/logs/ for container logs
+  - shared/container-data/ for volume mounts (if specified in manifest)
+- Tests operate on clean, empty shared folder with predictable state
+- Container services MUST tolerate missing files and recreate as needed
+
 ### R8: SSH Access
 
 **R8.1**: SSH MUST be accessible on port 2222 via port forwarding
@@ -216,7 +243,7 @@ BuildVM is a tool for building lightweight Alpine Linux VM images with embedded 
 - Automatically imported from /mnt/host/authorized_keys if present
 - Managed via import-shared-keys service
 
-**R8.4**: SSH MUST use alpine user (not root)
+**R8.4**: SSH MUST use exasol user (not root)
 
 **R8.5**: SSH key security MUST enforce:
 - Only keys in /mnt/host/authorized_keys have VM access

@@ -1,2 +1,2 @@
-instance-id: alpine-vm-001
-local-hostname: alpine-vm
+instance-id: exasol-vm-001
+local-hostname: exasol-vm
