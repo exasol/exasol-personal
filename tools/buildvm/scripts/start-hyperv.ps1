@@ -17,8 +17,9 @@
 .PARAMETER MemoryMB
     Memory in MB to allocate to the VM (default: 2048)
 
-.PARAMETER SharedFolder
-    Shared folder path (reserved for future use, currently ignored)
+.PARAMETER DataDiskPath
+    Path to data disk VHDX file. If empty, creates 'exasol-data.vhdx' in script directory.
+    The data disk is mounted at /mnt/host inside the VM (default: exasol-data.vhdx)
 
 .PARAMETER VMName
     Name of the Hyper-V VM (default: Alpine-VM)
@@ -28,12 +29,23 @@
 
 .PARAMETER SwitchName
     Name of the Hyper-V virtual switch (default: Default Switch)
+
+.EXAMPLE
+    .\start.ps1
+    .\start.ps1 4 4096
+    .\start.ps1 2 2048 "D:\vm-data\exasol-data.vhdx"
 #>
 
 param(
+    [Parameter(Position=0)]
     [int]$ProcessorCount = 2,
+    
+    [Parameter(Position=1)]
     [int]$MemoryMB = 2048,
-    [string]$SharedFolder = "",
+    
+    [Parameter(Position=2)]
+    [string]$DataDiskPath = "",
+    
     [string]$VMName = "Alpine-VM",
     [string]$VHDXPath = "alpine-vm.vhdx",
     [string]$SwitchName = "Default Switch"
@@ -45,9 +57,26 @@ $ErrorActionPreference = "Stop"
 # Convert memory from MB to bytes
 $MemoryStartupBytes = $MemoryMB * 1MB
 
-# Shared folder is not supported on Hyper-V yet, but accept the parameter
-if ($SharedFolder) {
-    Write-Warning "Shared folder parameter provided but not yet supported on Hyper-V. Use SMB/CIFS instead."
+# Setup data disk path (default to exasol-data.vhdx in script directory)
+if (-not $DataDiskPath) {
+    $DataDiskPath = Join-Path $PSScriptRoot "exasol-data.vhdx"
+} elseif (-not [System.IO.Path]::IsPathRooted($DataDiskPath)) {
+    $DataDiskPath = Join-Path $PSScriptRoot $DataDiskPath
+}
+
+# Ensure data disk directory exists
+$DataDiskDir = Split-Path -Parent $DataDiskPath
+if (-not (Test-Path $DataDiskDir)) {
+    New-Item -ItemType Directory -Path $DataDiskDir -Force | Out-Null
+}
+
+# Create data disk if it doesn't exist (10GB dynamic VHDX)
+if (-not (Test-Path $DataDiskPath)) {
+    Write-Host "==> Creating data disk: $DataDiskPath" -ForegroundColor Cyan
+    New-VHD -Path $DataDiskPath -SizeBytes 10GB -Dynamic | Out-Null
+    Write-Host "==> Data disk created (10GB dynamic)" -ForegroundColor Green
+} else {
+    Write-Host "==> Using existing data disk: $DataDiskPath" -ForegroundColor Cyan
 }
 
 # Check if Hyper-V is available
@@ -80,6 +109,19 @@ $existingVM = Get-VM -Name $VMName -ErrorAction SilentlyContinue
 
 if ($existingVM) {
     Write-Host "==> VM '$VMName' already exists" -ForegroundColor Yellow
+    
+    # Check if data disk is attached
+    $dataDisks = Get-VMHardDiskDrive -VMName $VMName | Where-Object { $_.Path -eq $DataDiskPath }
+    if (-not $dataDisks) {
+        Write-Host "==> Attaching data disk to existing VM..." -ForegroundColor Cyan
+        if ($existingVM.State -eq "Running") {
+            Write-Host "==> Stopping VM to attach data disk..." -ForegroundColor Yellow
+            Stop-VM -Name $VMName -Force
+            Start-Sleep -Seconds 2
+        }
+        Add-VMHardDiskDrive -VMName $VMName -Path $DataDiskPath
+        Write-Host "==> Data disk attached successfully" -ForegroundColor Green
+    }
     
     # Check VM state
     if ($existingVM.State -eq "Running") {
@@ -144,6 +186,11 @@ if ($existingVM) {
     # Configure automatic start/stop
     Set-VM -Name $VMName -AutomaticStartAction Nothing -AutomaticStopAction ShutDown
     
+    # Attach data disk to VM
+    Write-Host "==> Attaching data disk..." -ForegroundColor Cyan
+    Add-VMHardDiskDrive -VMName $VMName -Path $DataDiskPath
+    Write-Host "==> Data disk attached successfully" -ForegroundColor Green
+    
     Write-Host "==> VM created successfully!" -ForegroundColor Green
     Write-Host "==> Starting VM..." -ForegroundColor Cyan
     Start-VM -Name $VMName
@@ -165,8 +212,10 @@ Write-Host "  Name: $VMName"
 Write-Host "  State: $($vm.State)"
 Write-Host "  CPUs: $($vm.ProcessorCount)"
 Write-Host "  Memory: $($MemoryStartupBytes / 1GB) GB"
-Write-Host "  VHDX: $VHDXPath"
+Write-Host "  System VHDX: $VHDXPath"
+Write-Host "  Data VHDX: $DataDiskPath"
 Write-Host "  Network: $SwitchName"
+Write-Host "  Data mount: /mnt/host (inside VM)"
 Write-Host ""
 Write-Host "Connection Instructions:" -ForegroundColor Yellow
 Write-Host ""

@@ -179,3 +179,4 @@ echo "==> VM initialization complete!"
 echo "==> The VM has been configured with SSH keys, packages, and services"
 echo "==> Run 'task start-vm' to start the VM"
 echo "==> Then 'task connect' to connect via SSH"
+touch vm-initialized.flag

@@ -4,9 +4,51 @@ echo "==> Growing partition and filesystem..."
 growpart /dev/vda 2
 resize2fs /dev/vda2
 
-echo "==> Mounting shared folder..."
+echo "==> Setting up shared storage at /mnt/host..."
 mkdir -p /mnt/host
+
+# Try to mount from fstab (virtiofs for Mac/QEMU/vfkit)
 mount -a || true
+
+# Check if /mnt/host is mounted
+if mountpoint -q /mnt/host; then
+  echo "==> Using virtiofs for /mnt/host (Mac/QEMU/vfkit)"
+else
+  # Check for secondary block device (Hyper-V data disk)
+  # Look for first virtio disk that isn't vda (system disk)
+  DATA_DISK=""
+  for disk in /dev/vdb /dev/sdb /dev/xvdb; do
+    if [ -b "$disk" ]; then
+      DATA_DISK="$disk"
+      break
+    fi
+  done
+  
+  if [ -n "$DATA_DISK" ]; then
+    echo "==> Detected block device $DATA_DISK for /mnt/host (Hyper-V)"
+    
+    # Check if disk is already formatted
+    if ! blkid "$DATA_DISK" > /dev/null 2>&1; then
+      echo "==> Formatting $DATA_DISK as ext4..."
+      mkfs.ext4 -L exasol-data "$DATA_DISK"
+    else
+      echo "==> Using existing filesystem on $DATA_DISK"
+    fi
+    
+    # Mount the disk
+    echo "==> Mounting $DATA_DISK at /mnt/host..."
+    mount "$DATA_DISK" /mnt/host
+    
+    # Add to fstab for persistence (if not already there)
+    if ! grep -q "^LABEL=exasol-data" /etc/fstab; then
+      echo "LABEL=exasol-data /mnt/host ext4 defaults,nofail 0 2" >> /etc/fstab
+      echo "==> Added $DATA_DISK to /etc/fstab for auto-mount on boot"
+    fi
+  else
+    echo "==> Warning: No shared storage available (no virtiofs or block device found)"
+    echo "==> /mnt/host will be empty. Container features requiring shared storage will not work."
+  fi
+fi
 
 echo "==> Mounting cgroup2 for container support..."
 if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then

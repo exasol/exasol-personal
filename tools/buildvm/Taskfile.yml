@@ -17,15 +17,19 @@ tasks:
     vars:
       IMAGE_URL: https://dl-cdn.alpinelinux.org/alpine/v3.23/releases/cloud/nocloud_alpine-3.23.3-aarch64-uefi-cloudinit-r0.qcow2
       # IMAGE_URL: https://dl-cdn.alpinelinux.org/alpine/v3.23/releases/cloud/nocloud_alpine-3.23.3-x86_64-uefi-cloudinit-r0.qcow2
+    status:
+      - test -f image-downloaded.flag
     cmds:
       - ./scripts/download-image.sh {{.IMAGE_URL}}
 
-  resize-disk:
-    desc: Resize disk image to 3GB
+  expand-disk:
+    desc: Expand disk image to 3GB
     deps:
       - download-image
+    status:
+      - test -f disk-expanded.flag
     cmds:
-      - ./scripts/resize-disk.sh
+      - ./scripts/expand-disk.sh
 
   create-cloud-init:
     desc: Create cloud-init configuration ISO
@@ -37,20 +41,21 @@ tasks:
   init-vm:
     desc: Initialize and start the Alpine Linux VM (first time setup)
     deps:
-      - resize-disk
+      - expand-disk
       - create-cloud-init
+    status:
+      - test -f vm-initialized.flag
     cmds:
       - ./scripts/init-vm.sh
 
   shrink-disk:
     desc: Shrink disk image to minimum size (run after init-vm)
+    status:
+      - test -f disk-shrunk.flag
     cmds:
       - sudo ./scripts/shrink-disk.sh
 
-  compress-disk:
-    desc: Compress disk image with xz for distribution
-    cmds:
-      - ./scripts/compress-disk.sh
+ 
 
   start-vm:
     desc: Start the Alpine Linux VM
@@ -118,11 +123,15 @@ tasks:
 
   package-mac:
     desc: Package VM for macOS using vfkit (packages disk image for distribution)
+    deps:
+      - build
     cmds:
       - ./scripts/package-mac.sh
 
   package-windows:
     desc: Package VM for Windows Hyper-V (converts disk.img to VHDX format)
+    deps:
+      - build
     cmds:
       - ./scripts/package-windows.sh
 
