@@ -13,7 +13,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/cleanup"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 	"github.com/spf13/cobra"
 )
 
@@ -34,26 +36,46 @@ var cleanupDiscoverCmd = &cobra.Command{
 	PreRun: func(_ *cobra.Command, _ []string) { configureLogger() },
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		region := cleanupOpts.Region
-		// Default owner filter to caller ARN when not provided
-		if cleanupDiscoverOpts.OwnerFilter == "" {
-			cfg, err := config.LoadDefaultConfig(cmd.Context())
-			if err == nil {
-				stsClient := sts.NewFromConfig(cfg)
-				idOut, err := stsClient.GetCallerIdentity(cmd.Context(), &sts.GetCallerIdentityInput{})
-				if err == nil && idOut.Arn != nil && *idOut.Arn != "" {
-					cleanupDiscoverOpts.OwnerFilter = *idOut.Arn
-					cleanupDiscoverOpts.ownerIsDefault = true
+		
+		var collectors []shared.ProviderCollector
+		
+		// AWS Collector - default owner to caller identity
+		if shouldUseProvider(aws.ProviderName) {
+			awsRegion := cleanupOpts.AWSRegion
+			if awsRegion == "" {
+				awsRegion = "us-east-1" // Default region
+			}
+			
+			awsOwnerFilter := cleanupDiscoverOpts.OwnerFilter
+			
+			// AWS-specific default: use caller identity if no filter provided
+			if awsOwnerFilter == "" {
+				cfg, err := config.LoadDefaultConfig(cmd.Context())
+				if err == nil {
+					stsClient := sts.NewFromConfig(cfg)
+					idOut, err := stsClient.GetCallerIdentity(cmd.Context(), &sts.GetCallerIdentityInput{})
+					if err == nil && idOut.Arn != nil && *idOut.Arn != "" {
+						awsOwnerFilter = *idOut.Arn
+						cleanupDiscoverOpts.ownerIsDefault = true
+					}
 				}
 			}
+			
+			collectors = append(collectors,
+				aws.NewCollector(awsRegion, awsOwnerFilter, cleanupDiscoverOpts.Legacy))
 		}
-		// Use shared collector for summaries
-		res, err := cleanup.CollectDeploymentSummaries(
-			cmd.Context(),
-			region,
-			cleanupDiscoverOpts.OwnerFilter,
-			cleanupDiscoverOpts.Legacy,
-		)
+		
+		// Exoscale Collector - use provided owner filter or empty for all
+		if shouldUseProvider(exoscale.ProviderName) {
+			exoOwnerFilter := cleanupDiscoverOpts.OwnerFilter
+			// Exoscale default: empty means all deployments (no caller identity equivalent)
+			
+			collectors = append(collectors,
+				exoscale.NewCollector(cleanupOpts.ExoscaleZone, exoOwnerFilter, cleanupDiscoverOpts.Legacy))
+		}
+		
+		// Collect from all providers
+		res, err := shared.CollectAllProviders(cmd.Context(), collectors)
 		if err != nil {
 			return err
 		}
@@ -69,6 +91,7 @@ var cleanupDiscoverCmd = &cobra.Command{
 		}
 		valid := map[string]bool{
 			"deployment": true,
+			"provider":   true,
 			"owner":      true,
 			"region":     true,
 			"created":    true,
@@ -97,6 +120,14 @@ var cleanupDiscoverCmd = &cobra.Command{
 						}
 
 						return res[item1].ID > res[item2].ID
+					}
+				case "provider":
+					if res[item1].Provider != res[item2].Provider {
+						if dir == 1 {
+							return res[item1].Provider < res[item2].Provider
+						}
+
+						return res[item1].Provider > res[item2].Provider
 					}
 				case "owner":
 					if res[item1].Owner != res[item2].Owner {
@@ -177,15 +208,20 @@ var cleanupDiscoverCmd = &cobra.Command{
 				}
 				rows = append(
 					rows, []string{
-						deployment.ID, owner, deployment.Region, created,
-						deployment.State, strconv.Itoa(deployment.Resources),
+						deployment.ID,
+						deployment.Provider,
+						deployment.Region,
+						owner,
+						created,
+						deployment.State,
+						strconv.Itoa(deployment.Resources),
 					},
 				)
 			}
-			cleanup.RenderTable(
+			shared.RenderTable(
 				cmd.OutOrStdout(),
-				[]string{"deployment", "owner", "region", "created", "state", "resources"},
-				[]int{20, 50, 14, 22, 10, 9},
+				[]string{"deployment", "provider", "region", "owner", "created", "state", "resources"},
+				[]int{20, 10, 14, 40, 22, 10, 9},
 				rows,
 			)
 
@@ -197,7 +233,7 @@ var cleanupDiscoverCmd = &cobra.Command{
 		if cleanupDiscoverOpts.Legacy {
 			mode = "legacy"
 		}
-		regionDisplay := cleanupOpts.Region
+		regionDisplay := cleanupOpts.AWSRegion
 		if regionDisplay == "" {
 			regionDisplay = "(default)"
 		}
@@ -226,7 +262,7 @@ func registerCleanupDiscoverFlags(cmd *cobra.Command) {
 			"Owner ARN/wildcard to filter (defaults to caller; use * for any)")
 	cmd.Flags().StringVar(&cleanupDiscoverOpts.Order, "order", "state,created,resources",
 		"Order by columns (comma-separated). Prefix +/- for asc/desc per field."+
-			" Fields: deployment,owner,region,created,state,resources."+
+			" Fields: deployment,provider,owner,region,created,state,resources."+
 			" Default: state,created,resources")
 	cmd.Flags().BoolVar(&cleanupDiscoverOpts.Legacy, "legacy", false,
 		"Discover legacy deployments (ignore mandatory Project=exasol-personal)")
