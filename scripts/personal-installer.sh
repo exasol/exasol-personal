@@ -39,7 +39,7 @@ case "$UNAME_S" in
 esac
 
 INSTALL_DIR="$HOME/.local/bin"
-DOWNLOAD_PATH="$INSTALL_DIR/$DOWNLOAD_FILENAME"
+INSTALL_PATH="$INSTALL_DIR/$DOWNLOAD_FILENAME"
 PACKAGE_DOWNLOAD_URL="$BASE_URL/$OS/$ARCH/latest/$DOWNLOAD_FILENAME"
 
 echo "Detected OS: $OS"
@@ -48,12 +48,12 @@ echo "Installing Exasol Personal binary to $INSTALL_DIR..."
 
 mkdir -p "$INSTALL_DIR"
 
-if ! curl -fSL --progress-bar "$PACKAGE_DOWNLOAD_URL" -o "$DOWNLOAD_PATH"; then
+if ! curl -fSL --progress-bar "$PACKAGE_DOWNLOAD_URL" -o "$INSTALL_PATH"; then
     echo "Error: Failed to download from $PACKAGE_DOWNLOAD_URL"
     exit 1
 fi
 
-chmod +x "$DOWNLOAD_PATH"
+chmod +x "$INSTALL_PATH"
 
 echo
 echo "Installation complete!"
