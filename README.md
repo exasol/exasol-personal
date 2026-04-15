@@ -206,7 +206,17 @@ Your browser may show a security warning when connecting to Exasol Admin because
 
 ## 🔒 Connect using SSH
 
-To connect with SSH to the compute instance that your Exasol database is running on, use `exasol diag shell`.
+To connect with SSH to your deployment use one of the following commands:
+
+```bash
+# Connect to the compute instance your database is running on:
+exasol shell host`
+```
+
+```bash
+# Connect to the COS container your node is running on:
+exasol shell container
+```
 
 ## 📦 Presets
 
