@@ -149,7 +149,7 @@ FILE 'product_reviews.parquet';
 Both tables are distributed by `PRODUCT_ID`, enabling efficient joins between them.
 
 
-## ⚙️ Choosing cluster size and instance types
+## ⚙️ Choosing cluster size and compute instance types
 
 By default the launcher deploys a single-node cluster on a memory-optimized instance (e.g. `r6i.xlarge` on AWS, `Standard_E4s_v3` on Azure, `standard.extra-large` on Exoscale). To change the number of nodes or the instance type, use the `--cluster-size` and `--instance-type` options:
 ```bash
@@ -163,9 +163,9 @@ To save costs, you can temporarily stop Exasol Personal by using the following c
 ```bash
 exasol stop
 ```
-This stops the EC2 instance(s) that Exasol Personal is running on.
+This stops the compute instance(s) that Exasol Personal is running on.
 
-Networking and data volumes that the database data is stored on will continue to incur costs when instances are stopped.
+Networking and data volumes that the database data is stored on will continue to incur costs when compute instances are stopped.
 
 To start Exasol Personal again, use the following command:
 ```bash
@@ -175,13 +175,13 @@ The IP addresses of the nodes will change when you restart Exasol Personal. Chec
 
 ## 🗑️ Remove Exasol Personal
 
-To completely remove an Exasol Personal deployment, use `exasol destroy`. This command will terminate the EC2 instance and delete it and all associated resources in AWS.
+To completely remove an Exasol Personal deployment, use `exasol destroy`. This command will terminate and delete the compute instances and all associated resources on your cloud platform.
 
 To learn more about this command, use `exasol destroy --help`.
 
-Deleting the deployment directory and the Exasol Launcher will not remove the resources that were created in your AWS account. To completely remove a deployment, you must use the `exasol destroy` command.
+Deleting the deployment directory and the Exasol Launcher will not remove the resources that were created in your cloud environment. To completely remove a deployment, you must use the `exasol destroy` command.
 
-If you have already deleted the deployment directory and the exasol binary, you must log in to the AWS console and manually terminate the EC2 instances and associated resources.
+If you have already deleted the deployment directory and the Exasol Launcher, you must remove the resources manually in your cloud provider’s console.
 
 ## 🔜 Next steps
 
@@ -206,7 +206,7 @@ Your browser may show a security warning when connecting to Exasol Admin because
 
 ## 🔒 Connect using SSH
 
-To connect with SSH to the EC2 instance that your Exasol database is running on, use `exasol diag shell`.
+To connect with SSH to the compute instance that your Exasol database is running on, use `exasol diag shell`.
 
 ## 📦 Presets
 
@@ -235,7 +235,7 @@ You can store your own preset directories anywhere on your filesystem and pass t
 
 ### Building your own preset
 
-See [doc/presets.md](doc/presets.md) for the full preset contract: manifest schema, required output artifacts, variable channels, and the reference implementation in `assets/infrastructure/aws/`.
+See [doc/presets.md](doc/presets.md) for the full preset contract: manifest schema, required output artifacts, variable channels, and the reference implementations in `assets/infrastructure`.
 
 ## ⚖️ Licensing
 
