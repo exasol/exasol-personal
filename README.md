@@ -210,7 +210,7 @@ To connect with SSH to your deployment use one of the following commands:
 
 ```bash
 # Connect to the compute instance your database is running on:
-exasol shell host`
+exasol shell host
 ```
 
 ```bash
