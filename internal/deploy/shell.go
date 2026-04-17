@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/remote"
@@ -63,11 +62,7 @@ func sshRemoteForNodeUnsafe(deploymentDir string, selectedNode string) (*remote.
 		return nil, err
 	}
 
-	keyFilePath := sshDetails.KeyFile
-	if !filepath.IsAbs(keyFilePath) {
-		keyFilePath = filepath.Join(deploymentDir, keyFilePath)
-	}
-
+	keyFilePath := config.ResolveDeploymentPath(sshDetails.KeyFile, deploymentDir)
 	keyData, err := os.ReadFile(keyFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: could not read SSH key file %s", err, keyFilePath)

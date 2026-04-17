@@ -26,13 +26,13 @@ variable "deployment_created_at" {
 }
 
 variable "infrastructure_artifact_dir" {
-  description = "Directory where deployment artifacts for the Exasol Personal launcher (JSON, PEM) are written"
+  description = "Directory where deployment artifacts for the Exasol Personal launcher (JSON, PEM) are written; launcher supplies a path relative to the extracted infrastructure preset directory"
   type        = string
   default     = ".."
 }
 
 variable "installation_preset_dir" {
-  description = "Directory where installation preset can be found"
+  description = "Directory where installation preset can be found; launcher supplies a path relative to the extracted infrastructure preset directory"
   type        = string
   default     = ".."
 }

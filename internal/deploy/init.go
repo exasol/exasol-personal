@@ -143,10 +143,12 @@ func InitDeployment(
 				return fmt.Errorf("failed to read extracted installation manifest: %w", err)
 			}
 
-			// These values should always be part of the infra vars per contract
-			// It tell the infrastructure preset where to write deployment artifacts fot the launcher
-			infraVars["infrastructure_artifact_dir"] = deploymentDir
-			infraVars["installation_preset_dir"] = installDir
+			// These values should always be part of the infra vars per contract.
+			// They are expressed relative to the extracted infrastructure preset
+			// directory, which keeps the deployment directory movable while
+			// preserving a single launcher-owned layout SSOT.
+			infraVars["infrastructure_artifact_dir"] = config.RelativeInfrastructureArtifactDir()
+			infraVars["installation_preset_dir"] = config.RelativeInstallationPresetDir()
 			// Launcher-governed identity values.
 			infraVars["deployment_id"] = deploymentId
 			infraVars["cluster_identity"] = clusterIdentity
