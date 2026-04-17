@@ -39,10 +39,10 @@ tasks:
       - ./scripts/create-cloud-init.sh
 
   prepare-container:
-    desc: Build and prepare the container for distribution
+    desc: Build and prepare the exasol-nano container for distribution
     cmds:
-      - task: build-test-container
-      - task: copy-test-container-to-shared
+      - task: build-nano-container
+      - task: copy-nano-container-to-shared
 
   init-vm:
     desc: Initialize and start the Exasol VM (first time setup)
@@ -106,11 +106,30 @@ tasks:
     cmds:
       - ./scripts/test-container.sh
 
+  test-nano:
+    desc: Test Exasol Nano container in VM (SQL + UI port reachability)
+    cmds:
+      - ./scripts/test-nano.sh
+
   test:
     desc: Run all tests
     cmds:
       - task: test-ssh-keys
-      - task: test-container
+      - task: test-nano
+
+  build-nano-container:
+    desc: Pull and package the exasol-nano container for VM distribution
+    dir: exasol-nano-container
+    cmds:
+      - ./build-packaged-container.sh
+
+  copy-nano-container-to-shared:
+    deps:
+      - build-nano-container
+    cmds:
+      - cp exasol-nano-container/dist/exasol-nano.tar.gz shared/exasol-nano.tar.gz
+      - cp exasol-nano-container/dist/container-manifest.json shared/container-manifest.json
+      - echo "Exasol Nano container and manifest copied to shared directory"
 
   copy-test-container-to-shared:
     deps:
@@ -118,7 +137,7 @@ tasks:
     cmds:
       - cp test-podman-container/dist/test-server-container.tar.gz shared/test-server-container.tar.gz
       - cp test-podman-container/dist/container-manifest.json shared/container-manifest.json
-      - echo "Container tarball and manifest copied to shared directory"
+      - echo "Test container tarball and manifest copied to shared directory"
 
   build-test-container:
     desc: Build and package the test Podman container for distribution

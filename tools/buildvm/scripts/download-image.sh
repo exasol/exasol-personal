@@ -49,7 +49,7 @@ echo "==> Kernel info: $ARCH_INFO"
 if echo "$ARCH_INFO" | grep -iq "x86-64\|x86_64"; then
     ARCH="x86_64"
     echo "==> Detected architecture: x86_64"
-elif echo "$ARCH_INFO" | grep -iq "aarch64\|ARM aarch64"; then
+elif echo "$ARCH_INFO" | grep -iq "aarch64\|ARM aarch64\|ARM64"; then
     ARCH="aarch64"
     echo "==> Detected architecture: aarch64"
 else

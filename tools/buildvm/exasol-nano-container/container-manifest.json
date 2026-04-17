@@ -1,0 +1,7 @@
+{
+  "containerFile": "exasol-nano.tar.gz",
+  "ports": [8563, 8443],
+  "shmSize": "1g",
+  "args": [],
+  "mounts": []
+}

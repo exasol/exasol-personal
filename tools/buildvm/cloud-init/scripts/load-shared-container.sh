@@ -74,10 +74,13 @@ fi
 if [ "$HAS_MANIFEST" = "true" ]; then
   # Extract configuration from manifest using jq
   CONTAINER_FILE=$(jq -r '.containerFile' "$MANIFEST_FILE" 2>/dev/null)
-  
+
   # Read ports array - join with commas for logging
   CONTAINER_PORTS=$(jq -r '.ports // [] | join(", ")' "$MANIFEST_FILE" 2>/dev/null)
-  
+
+  # Read shmSize (e.g. "1g") - used for --shm-size flag
+  SHM_SIZE=$(jq -r '.shmSize // ""' "$MANIFEST_FILE" 2>/dev/null)
+
   ARGS=$(jq -r '.args[]' "$MANIFEST_FILE" 2>/dev/null | tr '\n' ' ')
   
   # Parse mounts from manifest
@@ -231,27 +234,49 @@ log_msg "Using image: $IMAGE_NAME"
 # Check if container is already running
 if podman ps --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
   log_msg "Container already running, nothing to do"
+  log_msg "=== Container Load Script Completed Successfully ==="
   exit 0
 fi
 
-# Stop and remove existing container if it exists but isn't running
+# Fast path: restart existing stopped container (preserves filesystem)
+if [ "$SKIP_LOAD" != "false" ] || [ "${RELOAD_NEEDED:-true}" = "false" ]; then
+  if podman ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
+    log_msg "Restarting existing stopped container..."
+    if podman start "$CONTAINER_NAME"; then
+      log_msg "Container restarted successfully (ports: $CONTAINER_PORTS)"
+      log_msg "=== Container Load Script Completed Successfully ==="
+      exit 0
+    else
+      log_msg "Failed to restart container, will recreate"
+      podman rm "$CONTAINER_NAME" 2>/dev/null || true
+    fi
+  fi
+fi
+
+# Remove stopped container if it exists (update path — new image loaded)
 if podman ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
-  log_msg "Removing stopped container"
+  log_msg "Removing old container for fresh start with new image"
   podman rm "$CONTAINER_NAME" 2>/dev/null || true
 fi
 
 # Container runtime log file
 CONTAINER_LOG_FILE="$LOG_DIR/container-runtime-$(date +%Y%m%d-%H%M%S).log"
 
-# Run the container with args (as root with proper cgroup2 support)
+# Build --shm-size flag if specified in manifest
+SHM_FLAG=""
+if [ -n "$SHM_SIZE" ] && [ "$SHM_SIZE" != "null" ]; then
+  SHM_FLAG="--shm-size $SHM_SIZE"
+  log_msg "Shared memory size: $SHM_SIZE"
+fi
+
+# Run a new container (first time or after image update)
 # NOTE: No --cpus or --memory limits are set intentionally.
 # This allows the container to automatically use all VM resources.
-# If VM resources are increased (e.g., more CPUs or RAM), the container
-# will automatically have access to them without configuration changes.
-log_msg "Starting container (ports: $CONTAINER_PORTS)..."
+log_msg "Creating new container (ports: $CONTAINER_PORTS)..."
 if podman run -d \
   --name "$CONTAINER_NAME" \
   --network host \
+  $SHM_FLAG \
   $VOLUME_FLAGS \
   --log-driver k8s-file \
   --log-opt path="$CONTAINER_LOG_FILE" \

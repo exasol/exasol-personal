@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DISK_IMG="disk.img"
-MIN_SIZE_BUFFER_MB=100  # Extra space beyond minimum
+MIN_SIZE_BUFFER_MB=2048  # Extra space for pre-extracted DB files + runtime needs
 
 if [ ! -f "$DISK_IMG" ]; then
     echo "Error: $DISK_IMG not found. Run 'task init-vm' first."

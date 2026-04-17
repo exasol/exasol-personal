@@ -1,9 +1,10 @@
 {
   "cpus": 2,
-  "memoryMB": 2048,
-  "description": "VM runtime configuration. Containers will automatically inherit these resources.",
+  "memoryMB": 4096,
+  "description": "VM runtime configuration for Exasol Nano. Containers automatically inherit these resources.",
   "ports": [
     {"protocol": "tcp", "host": 2222, "vm": 22},
-    {"protocol": "tcp", "host": 8080, "vm": 8080}
+    {"protocol": "tcp", "host": 8563, "vm": 8563},
+    {"protocol": "tcp", "host": 8443, "vm": 8443}
   ]
 }

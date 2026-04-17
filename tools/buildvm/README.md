@@ -1,4 +1,51 @@
 
+# Production Architecture (macOS)
+
+```mermaid
+graph TB
+    subgraph macOS["macOS Host"]
+        CLI["exasol CLI (Go binary)"]
+        
+        subgraph Commands["User Commands"]
+            INSTALL["exasol install local"]
+            CONNECT["exasol connect"]
+            STOP["exasol stop"]
+            START["exasol start"]
+        end
+        
+        VF["Virtualization.framework<br/>(Go module, built into macOS)"]
+        
+        subgraph VM["Alpine Linux VM (~/.exasol/local/alpine-vm.img)"]
+            subgraph Podman["Podman (runc + CRIU)"]
+                subgraph Container["exasol/nano container"]
+                    SQL["SQL :8563"]
+                    UI["UI :8443"]
+                end
+            end
+            
+            SHARED["/mnt/host<br/>(logs, updates, SSH keys)"]
+        end
+        
+        VIRTIOFS["shared/ folder"]
+    end
+    
+    CLI --> Commands
+    INSTALL -->|"1. Download VM image from S3<br/>2. Start VM<br/>3. Wait for DB ready"| VF
+    CONNECT -->|"localhost:8563"| SQL
+    STOP -->|"1. Checkpoint container<br/>2. Stop VM"| VF
+    START -->|"1. Start VM<br/>2. Restore checkpoint<br/>3. DB ready in ~5s"| VF
+    
+    VF -->|"Port forward<br/>8563, 8443"| VM
+    VIRTIOFS <-->|virtiofs| SHARED
+    
+    style macOS fill:#fff,stroke:#333,color:#000
+    style VM fill:#fff,stroke:#0288d1,color:#000
+    style Podman fill:#fff,stroke:#f57c00,color:#000
+    style Container fill:#fff,stroke:#388e3c,color:#000
+    style Commands fill:#fff,stroke:#c62828,color:#000
+    style CLI fill:#fff,stroke:#333,color:#000
+```
+
 # Basic Requirements
 
 We require a minimal linux virtual machine to distribute Exasol Nano. The vm must work on apple silicon using `vfkit`.

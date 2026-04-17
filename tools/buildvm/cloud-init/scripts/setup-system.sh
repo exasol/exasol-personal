@@ -10,6 +10,13 @@ else
   echo "Partition and filesystem grown successfully"
 fi
 
+echo "==> Adding hostname to /etc/hosts..."
+HOSTNAME=$(hostname)
+if ! grep -q "$HOSTNAME" /etc/hosts; then
+  echo "127.0.0.1 $HOSTNAME" >> /etc/hosts
+  echo "Added $HOSTNAME to /etc/hosts"
+fi
+
 echo "==> Setting up shared storage at /mnt/host..."
 mkdir -p /mnt/host
 

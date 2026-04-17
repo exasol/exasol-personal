@@ -15,7 +15,7 @@ case "$ARCH" in
     x86_64)
         QEMU_BIN="qemu-system-x86_64"
         QEMU_MACHINE="q35"
-        QEMU_CPU="qemu64"
+        QEMU_CPU="max"
         
         # Check for OVMF firmware (multiple possible paths)
         QEMU_BIOS=""
