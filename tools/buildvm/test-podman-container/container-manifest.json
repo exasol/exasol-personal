@@ -1,0 +1,11 @@
+{
+  "containerFile": "test-server-container.tar.gz",
+  "ports": [8080],
+  "args": ["-dir", "/data", "-port", "8080"],
+  "mounts": [
+    {
+      "hostPath": "./container-data",
+      "containerPath": "/data"
+    }
+  ]
+}

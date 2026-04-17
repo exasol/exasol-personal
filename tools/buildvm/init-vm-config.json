@@ -1,0 +1,5 @@
+{
+  "cpus": 2,
+  "memoryMB": 2048,
+  "description": "VM build-time configuration (init-vm only). For runtime config, see vm-config.json."
+}

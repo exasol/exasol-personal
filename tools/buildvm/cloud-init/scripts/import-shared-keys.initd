@@ -1,0 +1,16 @@
+#!/sbin/openrc-run
+
+name="import-shared-keys"
+description="Import SSH keys from shared folder"
+
+depend() {
+  need localmount
+  after networking
+  before sshd
+}
+
+start() {
+  ebegin "Importing SSH keys from shared folder"
+  /usr/local/bin/import-shared-keys.sh
+  eend $?
+}
