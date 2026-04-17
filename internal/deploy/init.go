@@ -196,6 +196,14 @@ func InitDeployment(
 				}
 			}
 
+			if infrastructurePreset.Name == "local" {
+				vmDir := filepath.Join(deploymentDir, "vm")
+				util.EnsureDir(vmDir)
+				if err := tofu.WriteVMData(vmDir); err != nil {
+					return err
+				}
+			}
+
 			slog.Info(
 				"successfully initialized deployment",
 				"infrastructure",

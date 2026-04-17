@@ -11,3 +11,18 @@ import _ "embed"
 var TofuBinary []byte
 
 const TofuBinaryName = "tofu.exe"
+
+//go:embed generated/arm64/alpine-arm64.qcow2
+var AlpineImage []byte
+
+const AlpineImageName = "alpine-arm64.qcow2"
+
+//go:embed generated/cloud-init.iso
+var CloudInitImage []byte
+
+const CloudInitImageName = "cloud-init.iso"
+
+//go:embed generated/vm-key
+var VmSshKey []byte
+
+const VmSshKeyName = "vm-key"

@@ -16,9 +16,11 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 const tofuVersion = "1.11.5"
+const alpineVersion = "3.23.3"
 
 func tofuCompressedFileName(operatingSystem, arch string) string {
 	return fmt.Sprintf("tofu_%s_%s_%s.tar.gz", tofuVersion, operatingSystem, arch)
@@ -31,25 +33,29 @@ func tofuUrl(operatingSystem, arch string) string {
 	)
 }
 
+func alpineImageUrl(arch string) string {
+	alpineArches := map[string]string{
+		"amd64": "x86_64",
+		"arm64": "aarch64",
+	}
+
+	return fmt.Sprintf("https://dl-cdn.alpinelinux.org/alpine/v%s/releases/cloud/nocloud_alpine-%s-%s-bios-cloudinit-r0.qcow2",
+		strings.Join(strings.Split(alpineVersion, ".")[:2], "."),
+		alpineVersion,
+		alpineArches[arch],
+	)
+}
+
+func alpineImageFileName(arch string) string {
+	return fmt.Sprintf("alpine-%s.qcow2", arch)
+}
+
 // Download open tofu and unzip it into the specified dir.
 // If the dir already contains the required binary (accounting for os and arch), do nothing.
 func main() {
-	err := downloadTofu()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = generateThirdPartyLicenses()
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-// nolint: gosec
-func downloadTofu() error {
 	goos := flag.String("goos", "", "operating system")
 	goarch := flag.String("goarch", "", "arch")
-	destDir := flag.String("dir", ".", "Enable debug mode")
+	destDir := flag.String("dir", ".", "output directory")
 
 	flag.Parse()
 
@@ -61,12 +67,30 @@ func downloadTofu() error {
 		*goarch = runtime.GOARCH
 	}
 
-	*destDir = filepath.Join(*destDir, *goos, *goarch)
+	err := downloadTofu(goos, goarch, destDir)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	compressedFilePath := path.Join(*destDir, tofuCompressedFileName(*goos, *goarch))
+	err = downloadAlpine(goarch, destDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = generateThirdPartyLicenses()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+// nolint: gosec
+func downloadTofu(goos, goarch, baseDestDir *string) error {
+	destDir := filepath.Join(*baseDestDir, *goos, *goarch)
+
+	compressedFilePath := path.Join(destDir, tofuCompressedFileName(*goos, *goarch))
 
 	if _, err := os.Stat(compressedFilePath); os.IsNotExist(err) {
-		if err := downloadTofuBin(destDir, goos, goarch, compressedFilePath); err != nil {
+		if err := downloadTofuBin(&destDir, goos, goarch, compressedFilePath); err != nil {
 			return err
 		}
 	} else {
@@ -98,7 +122,7 @@ func downloadTofu() error {
 			return fmt.Errorf("tar reader error: %w", err)
 		}
 
-		target := filepath.Join(*destDir, header.Name)
+		target := filepath.Join(destDir, header.Name)
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -178,6 +202,69 @@ func downloadTofuBin(destDir, goos, goarch *string, compressedFilePath string) e
 	}
 
 	return compressedFile.Close()
+}
+
+// nolint: gosec
+func downloadAlpine(goarch, baseDestDir *string) error {
+	destDir := filepath.Join(*baseDestDir, *goarch)
+
+	imageFilePath := path.Join(destDir, alpineImageFileName(*goarch))
+
+	if _, err := os.Stat(imageFilePath); os.IsNotExist(err) {
+		if err := downloadAlpineImage(&destDir, goarch, imageFilePath); err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("alpine image is already download") // nolint: revive,forbidigo
+	}
+
+	return nil
+}
+
+func downloadAlpineImage(destDir, goarch *string, imageFilePath string) error {
+	url := alpineImageUrl(*goarch)
+	fmt.Printf("dowloading alpine release %s\n", url) // nolint: revive,forbidigo
+
+	// Remove the output dir if it already exists. Otherwise it may cause problems if
+	// it contains files from a previous cross-compile.
+	err := os.RemoveAll(*destDir)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	err = os.MkdirAll(*destDir, 0o700) // nolint: mnd
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close() // nolint: revive
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status: %s", resp.Status)
+	}
+
+	imageFile, err := os.Create(imageFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+
+	_, err = io.Copy(imageFile, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write to file: %w", err)
+	}
+
+	return imageFile.Close()
 }
 
 func generateThirdPartyLicenses() error {

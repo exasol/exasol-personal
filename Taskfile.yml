@@ -32,7 +32,7 @@ tasks:
         darwin/arm64/tofu
         linux/amd64/tofu
         linux/arm64/tofu
-        windows/amd64/tofu.exe        
+        windows/amd64/tofu.exe
     cmds:
       - for:
           var: TARGETS
@@ -51,6 +51,8 @@ tasks:
     cmds:
       - go generate ./...
       - go run ./tools/downloadtofu/main.go -goos="$GOOS" -goarch="$GOARCH" -dir "./assets/tofubin/generated/"
+      - task -d tools/buildvm create-cloud-init
+      - cp tools/buildvm/vm-key tools/buildvm/cloud-init.iso assets/tofubin/generated/
 
   tofu-download-windows:
     desc: Download OpenTofu binaries for Windows (required for go:embed)
@@ -273,9 +275,9 @@ tasks:
       - go tool tflint --recursive --format=default --chdir=./assets/infrastructure
 
   lint-licenses:
-    desc: Run addlicense on check mode for all source files    
+    desc: Run addlicense on check mode for all source files
     cmds:
-      - go tool addlicense -l mit -c "Exasol AG" -check -s=only $(find . -type f -iregex ".*\.\(go\|py\)$")      
+      - go tool addlicense -l mit -c "Exasol AG" -check -s=only $(find . -type f -iregex ".*\.\(go\|py\)$")
 
   lint-licenses-fix:
     desc: Run addlicense to add the correct license header for all source files
@@ -322,4 +324,4 @@ tasks:
       - task: lint
       - task: build
       - task: tests-unit
-      - task: tests-integration      
+      - task: tests-integration
