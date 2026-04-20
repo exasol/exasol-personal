@@ -16,7 +16,9 @@ const connectCmdLongDesc = connectCmdShortDesc + `
 Establish an SQL connection to the database instance in an active deployment.
 `
 
-var connectOpts connect.Opts
+var connectOpts = connect.Opts{
+	ExecuteOnSemicolon: true,
+}
 
 var connectCmd = &cobra.Command{
 	Use:          "connect",
@@ -47,6 +49,12 @@ func registerConnectFlags() {
 		&connectOpts.InsecureSkipCertValidation,
 		"insecure", "k", false,
 		"Skip server certificate verification",
+	)
+
+	connectCmd.PersistentFlags().BoolVar(
+		&connectOpts.ExecuteOnSemicolon,
+		"execute-on-semicolon", true,
+		"Execute SQL only after semicolon terminators are entered",
 	)
 }
 

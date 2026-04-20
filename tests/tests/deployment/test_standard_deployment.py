@@ -6,6 +6,7 @@
 import logging
 import os
 import platform
+import re
 import signal
 import struct
 import subprocess
@@ -22,7 +23,6 @@ from typing import Final
 
 import pytest
 import requests
-import semver
 
 from framework.deployment import (
     Deployment,
@@ -123,16 +123,7 @@ def test_single_query(reusable_deployment: Deployment) -> None:
     stderr = proc.stderr.strip()
     stdout = proc.stdout.strip()
 
-    lines = stderr.splitlines()
-    version_line, exit_hint_lint = lines[0], lines[1]
-
-    assert exit_hint_lint.strip() == 'Type "exit" to exit the shell'
-
-    # Check the Exasol version that is printed as the first line
-    exasol_name, exasol_version = version_line.split(" ")
-
-    assert exasol_name == "Exasol"
-    assert semver.VersionInfo.is_valid(exasol_version)
+    assert stderr == ""
 
     # Check the query output.
     expected = textwrap.dedent("""
@@ -291,14 +282,10 @@ def test_connect_table_width(reusable_deployment: Deployment) -> None:
 
     os.close(master_fd)
 
-    # Skip first line because it contains the DB version
-    # which is dynamic.
-    actual_lines = str(output_raw, "utf-8").split("\n")[1:]
-    actual_lines = [line.rstrip("\r") for line in actual_lines]
-    actual = "\n".join(actual_lines).strip("\n")
+    output_lines = [line.rstrip("\r") for line in str(output_raw, "utf-8").split("\n")]
+    output = "\n".join(output_lines).strip("\n")
 
     expected = textwrap.dedent("""
-    Type "exit" to exit the shell
     ┌────┬─────────────────────────────────────────────────────┐
     │ id │                        name                         │
     ├────┼─────────────────────────────────────────────────────┤
@@ -307,7 +294,49 @@ def test_connect_table_width(reusable_deployment: Deployment) -> None:
     └────┴─────────────────────────────────────────────────────┘
     """)
 
-    assert actual == expected.strip("\n")
+    assert output == expected.strip("\n")
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.installation_e2e
+def test_connect_interactive_shows_version_and_exit_hint(
+    reusable_deployment: Deployment,
+) -> None:
+    launcher_path = reusable_deployment.launcher.launcher_path
+    deployment_dir = reusable_deployment.deployment_dir.name
+    master_fd, slave_fd = os.openpty()
+
+    proc = subprocess.Popen(
+        [launcher_path, "connect", "--deployment-dir", deployment_dir],
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+    )
+
+    try:
+        os.write(master_fd, b"exit\n")
+        return_code = proc.wait(timeout=120)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        os.close(slave_fd)
+
+    output_raw = b""
+    try:
+        while chunk := os.read(master_fd, 1024):
+            output_raw += chunk
+    except OSError:
+        pass
+    finally:
+        os.close(master_fd)
+
+    output = output_raw.decode("utf-8", errors="replace")
+
+    assert return_code == 0
+    assert 'Type "exit" to exit the shell' in output
+    assert re.search(r"\bExasol \d+\.\d+\.\d+\b", output) is not None
 
 
 @pytest.mark.skipif(

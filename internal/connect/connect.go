@@ -6,6 +6,7 @@ package connect
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 
@@ -13,12 +14,14 @@ import (
 	"github.com/exasol/exasol-personal/internal/connect/exasol"
 	"github.com/exasol/exasol-personal/internal/connect/tablewriter"
 	generaltypes "github.com/exasol/exasol-personal/internal/connect/types"
+	"github.com/exasol/exasol-personal/internal/util"
 )
 
 type Opts struct {
 	Username                   string
 	Password                   string
 	InsecureSkipCertValidation bool
+	ExecuteOnSemicolon         bool
 }
 
 //nolint:revive
@@ -86,12 +89,13 @@ func Connect(ctx context.Context, opts *Opts, deploymentDir string) error {
 
 	defer database.Close()
 
-	_, err = fmt.Fprintln(os.Stderr, "Type \"exit\" to exit the shell")
-	if err != nil {
-		return err
+	if util.IsInteractiveStdin() {
+		if err := printExitHint(os.Stderr); err != nil {
+			return err
+		}
 	}
 
-	return RunShell(func(input string) error {
+	return RunShellWithOpts(func(input string) error {
 		// The input string is expected to be trimmed of whitespace
 		if input == "" {
 			return nil
@@ -103,7 +107,13 @@ func Connect(ctx context.Context, opts *Opts, deploymentDir string) error {
 		}
 
 		return printResult(queryResult)
-	})
+	}, ShellOpts{ExecuteOnSemicolon: opts.ExecuteOnSemicolon})
+}
+
+func printExitHint(output io.Writer) error {
+	_, err := fmt.Fprintln(output, "Type \"exit\" to exit the shell")
+
+	return err
 }
 
 func printResult(queryResult generaltypes.QueryResulter) error {

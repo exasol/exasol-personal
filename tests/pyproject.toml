@@ -6,7 +6,7 @@ authors = [{ name = "Exasol", email = "entwicklung@exasol.com" }]
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-  "pytest (>=8.4.1,<9.0.0)",
+  "pytest (>=9.0.3,<10.0.0)",
   "websocket-client (>=1.8.0,<2.0.0)",
   "pydantic (>=2.12.0,<3.0.0)",
   "semver (>=3.0.4,<4.0.0)",

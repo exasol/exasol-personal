@@ -137,6 +137,16 @@ func GetTerminalWidth() (int, bool) {
 	return width, true
 }
 
+// IsInteractiveStdin returns true when stdin is attached to a terminal.
+func IsInteractiveStdin() bool {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+
+	return (stat.Mode() & os.ModeCharDevice) != 0
+}
+
 var (
 	ErrSourceNotDir = errors.New("source is not a directory")
 	ErrDestNotDir   = errors.New("destination is not a directory")
