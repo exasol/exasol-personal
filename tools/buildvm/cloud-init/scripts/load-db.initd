@@ -1,0 +1,24 @@
+#!/sbin/openrc-run
+
+name="load-db"
+description="Load and run Exasol Nano linux.run"
+
+depend() {
+  need localmount
+  after networking import-shared-keys
+}
+
+start() {
+  ebegin "Loading and running Exasol Nano database"
+  /usr/local/bin/load-db.sh
+  eend $?
+}
+
+stop() {
+  ebegin "Stopping Exasol Nano database"
+  if [ -f /var/run/exasol-db.pid ]; then
+    kill -TERM "$(cat /var/run/exasol-db.pid)" 2>/dev/null || true
+    rm -f /var/run/exasol-db.pid
+  fi
+  eend 0
+}

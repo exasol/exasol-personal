@@ -23,9 +23,8 @@ packages:
   - openssh
   - cloud-utils-growpart  # for growpart command
   - e2fsprogs             # for resize2fs command
-  - podman                # container runtime
-  - jq                    # JSON parsing for manifest files
-  - iptables              # Required for podman networking
+  - xz                    # needed by linux.run self-extractor
+  - bash                  # needed by extracted DB scripts
 
 runcmd:
   # Copy scripts from shared folder to system
@@ -34,7 +33,7 @@ runcmd:
   # Run setup scripts
   - /usr/local/bin/setup-system.sh
   - /usr/local/bin/setup-services.sh
-  # Load container from shared folder (if present)
-  - /usr/local/bin/load-shared-container.sh
+  # Load and start the database from shared folder
+  - /usr/local/bin/load-db.sh
   # Cleanup and shutdown
   - /usr/local/bin/cleanup-and-shutdown.sh

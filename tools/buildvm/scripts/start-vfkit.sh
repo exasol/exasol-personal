@@ -53,48 +53,13 @@ fi
 CURRENT_ARCH=$(uname -m)
 echo "==> Detected host architecture: $CURRENT_ARCH"
 
-# Configure based on architecture
-if [[ "$CURRENT_ARCH" == "arm64" ]]; then
-    BOOTLOADER="/opt/homebrew/share/vfkit/edk2-aarch64-code.fd"
-    echo "==> Using ARM64 configuration"
-elif [[ "$CURRENT_ARCH" == "x86_64" ]]; then
-    BOOTLOADER="/usr/local/share/vfkit/edk2-x86_64-code.fd"
-    echo "==> Using x86_64 configuration"
-else
+if [[ "$CURRENT_ARCH" != "arm64" && "$CURRENT_ARCH" != "x86_64" ]]; then
     echo "Error: Unsupported architecture: $CURRENT_ARCH"
     exit 1
 fi
 
-# Check if bootloader exists
-if [ ! -f "$BOOTLOADER" ]; then
-    echo "Warning: UEFI bootloader not found at expected location: $BOOTLOADER"
-    echo "Attempting to locate alternative bootloader..."
-    
-    # Try to find bootloader in common locations
-    POSSIBLE_LOCATIONS=(
-        "/opt/homebrew/Cellar/vfkit/*/share/vfkit/edk2-${CURRENT_ARCH/arm64/aarch64}-code.fd"
-        "/usr/local/Cellar/vfkit/*/share/vfkit/edk2-${CURRENT_ARCH/arm64/aarch64}-code.fd"
-        "/opt/homebrew/share/vfkit/edk2-${CURRENT_ARCH/arm64/aarch64}-code.fd"
-    )
-    
-    BOOTLOADER=""
-    for pattern in "${POSSIBLE_LOCATIONS[@]}"; do
-        # Use glob expansion
-        for file in $pattern; do
-            if [ -f "$file" ]; then
-                BOOTLOADER="$file"
-                echo "==> Found bootloader: $BOOTLOADER"
-                break 2
-            fi
-        done
-    done
-    
-    if [ -z "$BOOTLOADER" ]; then
-        echo "Error: Could not locate UEFI bootloader for $CURRENT_ARCH"
-        echo "Please ensure vfkit is properly installed with: brew reinstall vfkit"
-        exit 1
-    fi
-fi
+# vfkit uses Apple Virtualization.framework's built-in EFI — no firmware file needed.
+# The variable store is created in the current dir on first boot and persisted.
 
 echo ""
 echo "=========================================="
@@ -107,7 +72,6 @@ echo "  CPUs: $CPUS"
 echo "  Memory: ${MEMORY_GB}GB (${MEMORY_MB}MB)"
 echo "  Disk: $DISK_IMG"
 echo "  SSH Port: localhost:$SSH_PORT"
-echo "  Bootloader: $BOOTLOADER"
 if [ -n "$SHARED_DIR_ABS" ]; then
     echo "  Shared Folder: $SHARED_DIR_ABS -> /mnt/host (in VM)"
 else
@@ -126,13 +90,26 @@ echo "==> Starting VM..."
 echo "==> VM will run in the background. Monitor with: ps aux | grep vfkit"
 echo ""
 
+# gvproxy provides host-to-guest port forwarding (vfkit does not do this itself).
+# The actual guest IP is discovered later from gvproxy's DHCP lease table.
+GVPROXY_VFKIT_SOCK="$PWD/gvproxy-vfkit.sock"
+GVPROXY_API_SOCK="$PWD/gvproxy-api.sock"
+
+# Persist a random locally-administered MAC so gvproxy sees the same guest across runs.
+MAC_FILE="vm-mac.txt"
+if [ ! -f "$MAC_FILE" ]; then
+    printf '52:54:00:%02x:%02x:%02x\n' \
+        $((RANDOM % 256)) $((RANDOM % 256)) $((RANDOM % 256)) > "$MAC_FILE"
+fi
+VM_MAC=$(cat "$MAC_FILE")
+
 # Build vfkit command arguments
 VFKIT_ARGS=(
     --cpus "$CPUS"
     --memory $((MEMORY_GB * 1024))
-    --bootloader "$BOOTLOADER"
+    --bootloader "efi,variable-store=efi-vars.fd,create"
     --device virtio-blk,path="$DISK_IMG_ABS"
-    --device virtio-net,nat,guestPort=22,hostPort=$SSH_PORT
+    --device "virtio-net,unixSocketPath=$GVPROXY_VFKIT_SOCK,mac=$VM_MAC"
     --device virtio-rng
     --device virtio-serial,logFilePath=vm-console.log
 )
@@ -154,9 +131,35 @@ if [ -n "$SHARED_DIR_ABS" ]; then
     VFKIT_ARGS+=(--device "virtio-fs,sharedDir=$SHARED_DIR_ABS,mountTag=hostshare")
 fi
 
+# Start gvproxy (provides user-mode NAT + host port forwarding for vfkit)
+if [ ! -x "./gvproxy" ]; then
+    echo "Error: gvproxy binary missing. Expected at ./gvproxy (bundled with this package)."
+    exit 1
+fi
+if ! command -v jq >/dev/null 2>&1; then
+    echo "Error: jq is required to parse vm-config.json. Install with: brew install jq"
+    exit 1
+fi
+
+rm -f "$GVPROXY_VFKIT_SOCK" "$GVPROXY_API_SOCK" gvproxy.pid
+./gvproxy \
+    --mtu 1500 \
+    --listen "unix://$GVPROXY_API_SOCK" \
+    --listen-vfkit "unixgram://$GVPROXY_VFKIT_SOCK" \
+    --log-file gvproxy.log \
+    --pid-file gvproxy.pid &
+
+for _ in $(seq 1 30); do
+    [ -S "$GVPROXY_VFKIT_SOCK" ] && [ -S "$GVPROXY_API_SOCK" ] && break
+    sleep 0.2
+done
+if [ ! -S "$GVPROXY_VFKIT_SOCK" ] || [ ! -S "$GVPROXY_API_SOCK" ]; then
+    echo "Error: gvproxy failed to start. Log:"
+    cat gvproxy.log 2>/dev/null || true
+    exit 1
+fi
+
 # Start vfkit in the background
-# Note: vfkit uses different syntax than QEMU
-# --cpus, --memory (in MiB), --device for virtio devices
 vfkit "${VFKIT_ARGS[@]}" > vfkit.log 2>&1 &
 
 VFKIT_PID=$!
@@ -172,6 +175,35 @@ if ! kill -0 "$VFKIT_PID" 2>/dev/null; then
     cat vfkit.log
     exit 1
 fi
+
+# Discover the guest IP from gvproxy's DHCP lease table (matches our VM_MAC).
+# gvproxy assigns addresses in order of arrival and reserves some slots, so we
+# can't assume a fixed IP — look up the one gvproxy actually handed to us.
+GUEST_IP=""
+for _ in $(seq 1 30); do
+    GUEST_IP=$(curl -s --unix-socket "$GVPROXY_API_SOCK" \
+        http:/unix/services/dhcp/leases 2>/dev/null \
+        | jq -r --arg mac "$VM_MAC" 'to_entries[] | select(.value == $mac) | .key' \
+        | head -1)
+    [ -n "$GUEST_IP" ] && break
+    sleep 0.5
+done
+if [ -z "$GUEST_IP" ]; then
+    echo "Error: guest did not appear in gvproxy DHCP leases (MAC $VM_MAC)"
+    exit 1
+fi
+
+# Expose TCP ports from vm-config.json through gvproxy to the discovered guest IP
+jq -c '.ports[]? | select(.protocol == "tcp")' vm-config.json 2>/dev/null | while read -r entry; do
+    hp=$(printf '%s' "$entry" | jq -r '.host')
+    vp=$(printf '%s' "$entry" | jq -r '.vm')
+    curl -fsS --unix-socket "$GVPROXY_API_SOCK" \
+        http:/unix/services/forwarder/expose \
+        -X POST -H 'Content-Type: application/json' \
+        -d "{\"local\":\":$hp\",\"remote\":\"$GUEST_IP:$vp\",\"protocol\":\"tcp\"}" \
+        > /dev/null
+    echo "==> Port forward: localhost:$hp -> $GUEST_IP:$vp"
+done
 
 echo "==> VM started successfully!"
 echo "==> vfkit PID: $VFKIT_PID"

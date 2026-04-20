@@ -63,25 +63,8 @@ else
   fi
 fi
 
-echo "==> Mounting cgroup2 for container support..."
-if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
-  mount -t cgroup2 none /sys/fs/cgroup
-  echo "cgroup2 mounted"
-fi
-
-echo "==> Configuring rootless podman (subuid/subgid)..."
-# Add subuid/subgid ranges for exasol user for rootless containers
-if ! grep -q "^exasol:" /etc/subuid; then
-  echo "exasol:100000:65536" >> /etc/subuid
-fi
-if ! grep -q "^exasol:" /etc/subgid; then
-  echo "exasol:100000:65536" >> /etc/subgid
-fi
-
-# Set environment variable to suppress cgroups-v1 warning
-if ! grep -q "PODMAN_IGNORE_CGROUPSV1_WARNING" /home/exasol/.profile 2>/dev/null; then
-  echo "export PODMAN_IGNORE_CGROUPSV1_WARNING=1" >> /home/exasol/.profile
-fi
+echo "==> Creating /exa directory for DB state..."
+mkdir -p /exa
 
 echo "==> Configuring GRUB to skip boot menu..."
 # Edit GRUB config directly (Alpine cloud images don't ship with grub-mkconfig tooling)

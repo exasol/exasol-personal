@@ -56,15 +56,7 @@ sleep 1
 # Clear log file from previous runs
 > "$VM_LOG_FILE"
 
-# Validate port configuration before starting VM
-echo "==> Validating port configuration..."
-if ! ./scripts/validate-port-config.sh; then
-    echo ""
-    echo "Error: Port validation failed"
-    exit 1
-fi
-
-# Read VM configuration
+# Read VM configuration (init-vm uses init-vm-config.json, no port forwarding for DB)
 if [ -f "$VM_CONFIG" ]; then
     VM_CPUS=$(jq -r '.cpus // 2' "$VM_CONFIG")
     VM_MEMORY=$(jq -r '.memoryMB // 2048' "$VM_CONFIG")
@@ -74,22 +66,11 @@ else
     VM_MEMORY=2048
 fi
 
-# Build port forwarding string from manifest
-MANIFEST_PORTFWD=$(./scripts/read-manifest-ports.sh || true)
-if [ -n "$MANIFEST_PORTFWD" ]; then
-    NETDEV_PORTFWD="hostfwd=tcp::2222-:22,$MANIFEST_PORTFWD"
-else
-    NETDEV_PORTFWD="hostfwd=tcp::2222-:22"
-fi
+# init-vm only needs SSH for debugging; DB is accessed from inside the VM
+NETDEV_PORTFWD="hostfwd=tcp::2222-:22"
 
 echo "==> Starting Exasol VM in background..."
 echo "==> SSH will be available on localhost:2222"
-if [ -n "$MANIFEST_PORTFWD" ]; then
-    MANIFEST_PORT=$(echo "$MANIFEST_PORTFWD" | grep -oP '(?<=::)\d+(?=-:)' || true)
-    if [ -n "$MANIFEST_PORT" ]; then
-        echo "==> Container port: localhost:$MANIFEST_PORT"
-    fi
-fi
 echo "==> Shared folder: $SHARED_DIR -> /mnt/host (in VM)"
 echo "==> Use: ssh -i vm-key -p 2222 exasol@localhost"
 echo "==> VM console output will be logged to: $VM_LOG_FILE"

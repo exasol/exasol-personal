@@ -9,18 +9,19 @@ cleanup() {
   local exit_code=$?
   echo ""
   echo "==> Cleaning up..."
-  
+
   # Stop the VM if it's running
   if [ -f "qemu.pid" ]; then
     echo "==> Stopping VM..."
     ./scripts/stop-vm.sh || true
   fi
-  
-  # Clean up test files
+
+  # Clean up host-side test key only. Do NOT delete shared/authorized_keys
+  # — start-vm.sh re-populates it with vm-key.pub on next boot and the
+  # baked-in key in the disk should remain usable.
   echo "==> Removing test files..."
   rm -f "$TEST_KEY" "$TEST_KEY.pub"
-  rm -f "$AUTHORIZED_KEYS"
-  
+
   exit $exit_code
 }
 

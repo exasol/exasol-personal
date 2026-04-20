@@ -5,6 +5,9 @@ DISK_IMG="disk.img"
 ARCH_FILE="disk-arch.txt"
 VFKIT_SCRIPT="scripts/start-vfkit.sh"
 VM_CONFIG="vm-config.json"
+SSH_KEY="vm-key"
+GVPROXY_VERSION="v0.8.8"
+GVPROXY_URL="https://github.com/containers/gvisor-tap-vsock/releases/download/${GVPROXY_VERSION}/gvproxy-darwin"
 
 # Check if disk image exists
 if [ ! -f "$DISK_IMG" ]; then
@@ -57,6 +60,20 @@ cp "$VM_CONFIG" "$PACKAGE_DIR/vm-config.json"
 echo "==> Copying vfkit startup script..."
 cp "$VFKIT_SCRIPT" "$PACKAGE_DIR/start.sh"
 chmod +x "$PACKAGE_DIR/start.sh"
+
+# Copy SSH private key so users can connect to the VM
+if [ -f "$SSH_KEY" ]; then
+    echo "==> Copying SSH key..."
+    cp "$SSH_KEY" "$PACKAGE_DIR/$SSH_KEY"
+    chmod 600 "$PACKAGE_DIR/$SSH_KEY"
+else
+    echo "Warning: $SSH_KEY not found; package will ship without it."
+fi
+
+# Download gvproxy for host-to-guest port forwarding (vfkit itself does not do this)
+echo "==> Downloading gvproxy $GVPROXY_VERSION..."
+curl -fSL -o "$PACKAGE_DIR/gvproxy" "$GVPROXY_URL"
+chmod +x "$PACKAGE_DIR/gvproxy"
 
 # Create README with usage instructions
 echo "==> Creating README..."

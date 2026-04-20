@@ -5,7 +5,7 @@ tasks:
     desc: Install QEMU dependencies for both x86_64 and ARM64
     cmds:
       - sudo apt-get update
-      - sudo apt-get install -y qemu-system-x86 qemu-system-aarch64 qemu-utils qemu-efi-aarch64 ovmf wget genisoimage parted e2fsprogs bc xz-utils virtiofsd uidmap podman jq gdisk
+      - sudo apt-get install -y qemu-system-x86 qemu-system-aarch64 qemu-utils qemu-efi-aarch64 ovmf wget genisoimage parted e2fsprogs bc xz-utils virtiofsd gdisk gh
 
   generate-ssh-key:
     desc: Generate SSH key for VM access
@@ -38,17 +38,17 @@ tasks:
     cmds:
       - ./scripts/create-cloud-init.sh
 
-  prepare-container:
-    desc: Build and prepare the exasol-nano container for distribution
+  prepare-db:
+    desc: Fetch the exasol-nano linux.run and copy to shared folder
     cmds:
-      - task: build-nano-container
-      - task: copy-nano-container-to-shared
+      - task: fetch-linux-run
+      - task: copy-linux-run-to-shared
 
   init-vm:
     desc: Initialize and start the Exasol VM (first time setup)
     deps:
       - create-cloud-init
-      - prepare-container
+      - prepare-db
     status:
       - test -f vm-initialized.flag
     cmds:
@@ -99,51 +99,24 @@ tasks:
     cmds:
       - ./scripts/test-ssh-keys.sh
 
-  test-container:
-    desc: Test container REST server and data persistence (requires running VM with container)
-    deps:
-      - copy-test-container-to-shared
-    cmds:
-      - ./scripts/test-container.sh
-
-  test-nano:
-    desc: Test Exasol Nano container in VM (SQL + UI port reachability)
-    cmds:
-      - ./scripts/test-nano.sh
-
   test:
     desc: Run all tests
     cmds:
       - task: test-ssh-keys
-      - task: test-nano
 
-  build-nano-container:
-    desc: Pull and package the exasol-nano container for VM distribution
-    dir: exasol-nano-container
+  fetch-linux-run:
+    desc: Fetch the exasol-nano linux.run from GitHub releases
+    dir: linux-run
     cmds:
-      - ./build-packaged-container.sh
+      - ./fetch.sh
 
-  copy-nano-container-to-shared:
+  copy-linux-run-to-shared:
     deps:
-      - build-nano-container
+      - fetch-linux-run
     cmds:
-      - cp exasol-nano-container/dist/exasol-nano.tar.gz shared/exasol-nano.tar.gz
-      - cp exasol-nano-container/dist/container-manifest.json shared/container-manifest.json
-      - echo "Exasol Nano container and manifest copied to shared directory"
-
-  copy-test-container-to-shared:
-    deps:
-      - build-test-container
-    cmds:
-      - cp test-podman-container/dist/test-server-container.tar.gz shared/test-server-container.tar.gz
-      - cp test-podman-container/dist/container-manifest.json shared/container-manifest.json
-      - echo "Test container tarball and manifest copied to shared directory"
-
-  build-test-container:
-    desc: Build and package the test Podman container for distribution
-    dir: test-podman-container
-    cmds:
-      - ./build-packaged-container.sh
+      - cp linux-run/dist/db.run shared/db.run
+      - cp linux-run/dist/entrypoint.sh shared/entrypoint.sh
+      - echo "linux.run and entrypoint.sh copied to shared directory"
 
   build:
     desc: Build complete VM image ready for distribution
