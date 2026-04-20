@@ -1,62 +1,114 @@
 {
-  "comment": "Minimal IAM policy for Exasol Personal deployments on Exoscale. Apply this policy to the IAM role used by your Terraform operator API key.",
-  "note": "Exoscale IAM policies are configured via the Portal or API (exoscale_iam_role resource). This JSON is provided as a reference for the required service permissions.",
   "default-service-strategy": "deny",
   "services": {
-    "compute-legacy": {
-      "type": "allow",
+    "compute": {
+      "type": "rules",
       "rules": [
         {
-          "expression": "operation in ['list-instances', 'get-instance', 'create-instance', 'update-instance', 'delete-instance', 'start-instance', 'stop-instance', 'reboot-instance']"
+          "action": "allow",
+          "expression": "operation in ['list-zones', 'list-instances', 'get-instance', 'create-instance', 'update-instance', 'delete-instance', 'start-instance', 'stop-instance', 'reboot-instance']"
         },
         {
+          "action": "allow",
           "expression": "operation in ['list-instance-types', 'get-instance-type']"
         },
         {
+          "action": "allow",
           "expression": "operation in ['list-templates', 'get-template']"
         },
         {
-          "expression": "operation in ['list-ssh-keys', 'get-ssh-key', 'create-ssh-key', 'delete-ssh-key']"
+          "action": "allow",
+          "expression": "operation in ['list-ssh-keys', 'get-ssh-key', 'create-ssh-key', 'register-ssh-key', 'delete-ssh-key']"
         },
         {
+          "action": "allow",
           "expression": "operation in ['list-security-groups', 'get-security-group', 'create-security-group', 'delete-security-group']"
         },
         {
+          "action": "allow",
           "expression": "operation in ['list-security-group-rules', 'add-rule-to-security-group', 'delete-rule-from-security-group']"
         },
         {
+          "action": "allow",
           "expression": "operation in ['list-private-networks', 'get-private-network', 'create-private-network', 'update-private-network', 'delete-private-network', 'attach-instance-to-private-network', 'detach-instance-from-private-network']"
-        }
-      ]
-    },
-    "block-storage": {
-      "type": "allow",
-      "rules": [
-        {
-          "expression": "operation in ['list-block-storage-volumes', 'get-block-storage-volume', 'create-block-storage-volume', 'update-block-storage-volume', 'delete-block-storage-volume', 'attach-block-storage-volume-to-instance', 'detach-block-storage-volume-from-instance']"
         },
         {
+          "action": "allow",
+          "expression": "operation in ['list-block-storage-volumes', 'get-block-storage-volume', 'create-block-storage-volume', 'update-block-storage-volume', 'delete-block-storage-volume', 'attach-block-storage-volume-to-instance', 'detach-block-storage-volume-from-instance', 'detach-block-storage-volume']"
+        },
+        {
+          "action": "allow",
           "expression": "operation in ['list-block-storage-snapshots', 'get-block-storage-snapshot', 'create-block-storage-snapshot', 'delete-block-storage-snapshot']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['get-reverse-dns-instance', 'update-reverse-dns-instance', 'delete-reverse-dns-instance']"
         }
       ]
     },
     "sos": {
-      "type": "allow",
+      "type": "rules",
       "rules": [
         {
-          "expression": "operation in ['create-bucket', 'delete-bucket', 'list-buckets', 'get-bucket-acl', 'put-bucket-acl']",
-          "comment": "SOS bucket operations are performed via S3 API using the aws.sos provider; this grants the IAM key permission to use SOS"
+          "action": "allow",
+          "expression": "operation in ['create-bucket', 'delete-bucket', 'list-buckets', 'list-sos-buckets-usage', 'head-bucket']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['get-bucket-acl', 'put-bucket-acl', 'get-bucket-cors', 'put-bucket-cors', 'delete-bucket-cors', 'get-bucket-encryption', 'put-bucket-encryption', 'delete-bucket-encryption']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['get-bucket-lifecycle', 'put-bucket-lifecycle', 'delete-bucket-lifecycle', 'get-bucket-logging', 'put-bucket-logging']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['get-bucket-policy', 'put-bucket-policy', 'delete-bucket-policy', 'get-bucket-replication', 'put-bucket-replication', 'delete-bucket-replication']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['get-bucket-tagging', 'put-bucket-tagging', 'delete-bucket-tagging', 'get-bucket-versioning', 'put-bucket-versioning']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['get-bucket-website', 'put-bucket-website', 'delete-bucket-website', 'get-bucket-request-payment', 'get-bucket-location']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['get-bucket-ownership-controls', 'put-bucket-ownership-controls', 'delete-bucket-ownership-controls']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['get-bucket-accelerate-configuration', 'put-bucket-accelerate-configuration']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['get-bucket-notification-configuration', 'put-bucket-notification']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['list-objects', 'get-object', 'put-object', 'delete-object', 'head-object', 'get-object-acl', 'put-object-acl']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['get-object-tagging', 'put-object-tagging', 'delete-object-tagging', 'get-object-legal-hold', 'get-object-lock-configuration', 'get-object-retention']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['list-multipart-uploads', 'list-object-versions', 'abort-multipart-upload']"
         }
       ]
     },
     "iam": {
-      "type": "allow",
+      "type": "rules",
       "rules": [
         {
+          "action": "allow",
           "expression": "operation in ['list-iam-roles', 'get-iam-role', 'create-iam-role', 'update-iam-role', 'delete-iam-role']"
         },
         {
-          "expression": "operation in ['list-iam-api-keys', 'get-iam-api-key', 'create-iam-api-key', 'revoke-iam-api-key']"
+          "action": "allow",
+          "expression": "operation in ['list-api-keys', 'get-api-key', 'create-api-key', 'delete-api-key', 'revoke-api-key', 'list-iam-api-keys', 'get-iam-api-key', 'create-iam-api-key', 'revoke-iam-api-key']"
         }
       ]
     }
