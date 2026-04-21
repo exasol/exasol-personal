@@ -4,7 +4,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -18,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/exasol/exasol-personal/assets/tofubin"
+	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/exasol/exasol-personal/internal/util"
 	"gopkg.in/yaml.v3"
 )
@@ -60,7 +59,7 @@ func main() {
 	verbose := flag.Bool("v", false, "Verbose output")
 	flag.Parse()
 
-	if err := ensureEmbeddedTofuIsNotPlaceholder(); err != nil {
+	if err := tofu.EnsureEmbeddedTofuArchiveIsNotPlaceholder(); err != nil {
 		log.Fatal(err)
 	}
 
@@ -83,19 +82,6 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-}
-
-func ensureEmbeddedTofuIsNotPlaceholder() error {
-	// In dev workflows the tofu binaries are downloaded into assets/tofubin/generated.
-	// In some situations we only have placeholder files (for go:embed), which would
-	// produce a non-functional tofu binary.
-	if len(tofubin.TofuBinary) == 0 {
-		return errors.New("embedded tofu binary is empty; run `task generate` to download it")
-	}
-	if len(tofubin.TofuBinary) < 256 && bytes.Contains(bytes.ToLower(tofubin.TofuBinary), []byte("placeholder")) {
-		return errors.New("embedded tofu binary appears to be a placeholder; run `task generate` (or tofu download task) to fetch OpenTofu")
-	}
-	return nil
 }
 
 func discoverInfrastructurePresetDirs(infraAssetsDir string, onlyPresets []string) ([]string, error) {
@@ -163,8 +149,8 @@ func updateLockfileForPreset(ctx context.Context, presetDir string, platforms []
 		return fmt.Errorf("copy preset dir to temp: %w", err)
 	}
 
-	tofuPath := filepath.Join(tmpModuleDir, tofubin.TofuBinaryName)
-	if err := os.WriteFile(tofuPath, tofubin.TofuBinary, 0o744); err != nil { // nolint: gosec
+	tofuPath := filepath.Join(tmpModuleDir, tofu.BinaryName)
+	if err := tofu.WriteBinary(tofuPath); err != nil {
 		return fmt.Errorf("write tofu binary: %w", err)
 	}
 

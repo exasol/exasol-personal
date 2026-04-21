@@ -7,7 +7,7 @@ package tofubin
 
 import _ "embed"
 
-//go:embed generated/linux/arm64/tofu
-var TofuBinary []byte
+//go:embed generated/linux/arm64/tofu.tar.gz
+var TofuArchive []byte
 
 const TofuBinaryName = "tofu"

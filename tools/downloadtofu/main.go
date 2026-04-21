@@ -4,8 +4,7 @@
 package main
 
 import (
-	"archive/tar"
-	"compress/gzip"
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -19,20 +18,21 @@ import (
 )
 
 const tofuVersion = "1.11.5"
+const tofuArchiveName = "tofu.tar.gz"
 
-func tofuCompressedFileName(operatingSystem, arch string) string {
+func tofuReleaseFileName(operatingSystem, arch string) string {
 	return fmt.Sprintf("tofu_%s_%s_%s.tar.gz", tofuVersion, operatingSystem, arch)
 }
 
 func tofuUrl(operatingSystem, arch string) string {
 	return fmt.Sprintf("https://github.com/opentofu/opentofu/releases/download/v%s/%s",
 		tofuVersion,
-		tofuCompressedFileName(operatingSystem, arch),
+		tofuReleaseFileName(operatingSystem, arch),
 	)
 }
 
-// Download open tofu and unzip it into the specified dir.
-// If the dir already contains the required binary (accounting for os and arch), do nothing.
+// Download OpenTofu compressed archive into the specified platform dir.
+// If a real archive already exists, do nothing.
 func main() {
 	err := downloadTofu()
 	if err != nil {
@@ -63,72 +63,18 @@ func downloadTofu() error {
 
 	*destDir = filepath.Join(*destDir, *goos, *goarch)
 
-	compressedFilePath := path.Join(*destDir, tofuCompressedFileName(*goos, *goarch))
+	compressedFilePath := path.Join(*destDir, tofuArchiveName)
 
-	if _, err := os.Stat(compressedFilePath); os.IsNotExist(err) {
+	downloadArchive, err := shouldDownloadArchive(compressedFilePath)
+	if err != nil {
+		return err
+	}
+	if downloadArchive {
 		if err := downloadTofuBin(destDir, goos, goarch, compressedFilePath); err != nil {
 			return err
 		}
 	} else {
-		fmt.Println("open tofu is already download") // nolint: revive,forbidigo
-	}
-
-	compressedFile, err := os.Open(compressedFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to open compressed file: %w", err)
-	}
-
-	fmt.Printf("uncompressing tofu release %s\n", compressedFilePath) // nolint: revive,forbidigo
-
-	uncompressedStream, err := gzip.NewReader(compressedFile)
-	if err != nil {
-		return fmt.Errorf("gzip reader error: %w", err)
-	}
-	defer uncompressedStream.Close()
-
-	tarReader := tar.NewReader(uncompressedStream)
-
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-
-		if err != nil {
-			return fmt.Errorf("tar reader error: %w", err)
-		}
-
-		target := filepath.Join(*destDir, header.Name)
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
-				return fmt.Errorf("mkdir error: %w", err)
-			}
-		case tar.TypeReg:
-			// nolint: mnd
-			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
-				return fmt.Errorf("mkdir parent error: %w", err)
-			}
-
-			outFile, err := os.Create(target)
-			if err != nil {
-				return fmt.Errorf("create file error: %w", err)
-			}
-
-			if _, err := io.Copy(outFile, tarReader); err != nil {
-				outFile.Close() // nolint: revive
-				return fmt.Errorf("copy file error: %w", err)
-			}
-
-			err = outFile.Close()
-			if err != nil {
-				return err
-			}
-		default:
-			// nolint: revive,forbidigo
-			fmt.Printf("Skipping unknown type: %c in %s\n", header.Typeflag, header.Name)
-		}
+		fmt.Println("OpenTofu archive is already downloaded") // nolint: revive,forbidigo
 	}
 
 	return nil
@@ -178,6 +124,24 @@ func downloadTofuBin(destDir, goos, goarch *string, compressedFilePath string) e
 	}
 
 	return compressedFile.Close()
+}
+
+func shouldDownloadArchive(compressedFilePath string) (bool, error) {
+	data, err := os.ReadFile(compressedFilePath)
+	if err == nil {
+		// Placeholder files are plain text. Replace them with the real archive.
+		if len(data) < 256 && bytes.Contains(bytes.ToLower(data), []byte("placeholder")) {
+			return true, nil
+		}
+
+		return false, nil
+	}
+
+	if os.IsNotExist(err) {
+		return true, nil
+	}
+
+	return false, fmt.Errorf("failed to inspect %q: %w", compressedFilePath, err)
 }
 
 func generateThirdPartyLicenses() error {

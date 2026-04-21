@@ -28,11 +28,12 @@ tasks:
     vars:
       PLACEHOLDER_TEXT: "placeholder for go:embed"
       TARGETS: >-
-        darwin/amd64/tofu
-        darwin/arm64/tofu
-        linux/amd64/tofu
-        linux/arm64/tofu
-        windows/amd64/tofu.exe        
+        darwin/amd64/tofu.tar.gz
+        darwin/arm64/tofu.tar.gz
+        linux/amd64/tofu.tar.gz
+        linux/arm64/tofu.tar.gz
+        windows/amd64/tofu.tar.gz
+        windows/arm64/tofu.tar.gz
     cmds:
       - for:
           var: TARGETS
