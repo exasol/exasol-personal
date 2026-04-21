@@ -11,12 +11,24 @@ else
     ARCH="aarch64"
 fi
 
+# Only use KVM when host arch matches guest arch (cross-arch always needs TCG)
+HOST_ARCH=$(uname -m)
+KVM_AVAILABLE=false
+if [ "$HOST_ARCH" = "$ARCH" ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+    KVM_AVAILABLE=true
+fi
+
 case "$ARCH" in
     x86_64)
         QEMU_BIN="qemu-system-x86_64"
         QEMU_MACHINE="q35"
         QEMU_CPU="max"
-        
+
+        if [ "$KVM_AVAILABLE" = true ]; then
+            QEMU_MACHINE="q35,accel=kvm"
+            QEMU_CPU="host"
+        fi
+
         # Check for OVMF firmware (multiple possible paths)
         QEMU_BIOS=""
         for path in "/usr/share/ovmf/OVMF.fd" "/usr/share/OVMF/OVMF_CODE.fd" "/usr/share/edk2/ovmf/OVMF_CODE.fd" "/usr/share/qemu/ovmf-x86_64.bin"; do
@@ -25,19 +37,24 @@ case "$ARCH" in
                 break
             fi
         done
-        
+
         if [ -z "$QEMU_BIOS" ]; then
             echo "Error: OVMF firmware not found. Install with: sudo apt-get install ovmf" >&2
             exit 1
         fi
         ;;
-        
+
     aarch64)
         QEMU_BIN="qemu-system-aarch64"
         QEMU_MACHINE="virt"
         QEMU_CPU="cortex-a72"
         QEMU_BIOS="/usr/share/qemu-efi-aarch64/QEMU_EFI.fd"
-        
+
+        if [ "$KVM_AVAILABLE" = true ]; then
+            QEMU_MACHINE="virt,accel=kvm"
+            QEMU_CPU="host"
+        fi
+
         if [ ! -f "$QEMU_BIOS" ]; then
             echo "Error: ARM64 UEFI firmware not found. Install with: sudo apt-get install qemu-efi-aarch64" >&2
             exit 1
@@ -62,3 +79,4 @@ echo "==> QEMU binary: $QEMU_BIN" >&2
 echo "==> Machine type: $QEMU_MACHINE" >&2
 echo "==> CPU type: $QEMU_CPU" >&2
 echo "==> BIOS/Firmware: $QEMU_BIOS" >&2
+echo "==> KVM acceleration: $([ "$KVM_AVAILABLE" = true ] && echo enabled || echo disabled)" >&2

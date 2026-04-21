@@ -114,7 +114,5 @@ parted "$DISK_IMG" print 2>&1 | grep -q "Partition Table: gpt" || {
 }
 
 echo "==> Disk shrinking complete!"
-echo "==> Original size: 3GB"
 echo "==> New size: ${FINAL_SIZE_MB}MB (~$(echo "scale=1; $FINAL_SIZE_MB / 1024" | bc)GB)"
-echo "==> Saved: ~$((3072 - FINAL_SIZE_MB))MB"
 touch disk-shrunk.flag

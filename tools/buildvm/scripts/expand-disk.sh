@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DISK_IMG="disk.img"
-TARGET_SIZE="3G"
+TARGET_SIZE="6G"
 
 if [ ! -f "$DISK_IMG" ]; then
     echo "Error: $DISK_IMG not found. Run 'task download-image' first."
