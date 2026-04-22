@@ -57,6 +57,14 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
     if ssh -i "$TEST_KEY" -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 exasol@localhost "echo 'SSH key import successful!'" 2>/dev/null; then
         echo "==> ✓ Test passed: Successfully connected with imported key after ${ELAPSED} seconds"
         SUCCESS=true
+
+        # Scrub the test-key from the shipped image. Reset shared/authorized_keys
+        # to just vm-key.pub and re-run import-shared-keys in the VM so the disk
+        # ends up with only vm-key.pub before shutdown.
+        echo "==> Removing test-key from shipped image..."
+        cat vm-key.pub > "$AUTHORIZED_KEYS"
+        ssh -i "$TEST_KEY" -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            exasol@localhost "sudo /usr/local/bin/import-shared-keys.sh"
         break
     fi
     

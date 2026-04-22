@@ -29,3 +29,8 @@ done < "$SHARED_KEYS"
 chmod 600 "$USER_KEYS"
 chown exasol:exasol "$USER_KEYS"
 chown exasol:exasol /home/exasol/.ssh
+
+# Flush to disk. Without this, a subsequent ungraceful shutdown (e.g. QEMU
+# killed via SIGTERM by stop-vm.sh) can land authorized_keys on disk with
+# metadata committed but data still in page cache, producing a zero-byte file.
+sync
