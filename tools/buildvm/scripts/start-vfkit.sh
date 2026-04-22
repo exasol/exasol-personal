@@ -4,9 +4,9 @@ set -euo pipefail
 # Linux VM Startup Script for macOS using vfkit
 # Requires: vfkit (install via: brew install vfkit)
 
-# Usage: ./start.sh [cpu_count] [memory_mb] [port_rules] [shared_directory]
-# All arguments are optional. Defaults: 2 CPUs, 2048 MB RAM, no port forwarding, no folder sharing
-# port_rules format: "protocol:host:vm,protocol:host:vm,..." (e.g., "tcp:8080:8080,tcp:9000:3000")
+# Usage: ./start.sh [cpu_count] [memory_mb] [shared_directory]
+# All arguments are optional. Defaults: 2 CPUs, 2048 MB RAM, no folder sharing.
+# Host-to-guest port forwards are read from vm-config.json and configured via gvproxy.
 
 # Configuration
 VM_NAME="Exasol-VM"
@@ -16,8 +16,7 @@ SSH_PORT=2222
 # Parse command line arguments
 CPUS="${1:-2}"
 MEMORY_MB="${2:-2048}"
-PORT_RULES="${3:-}"
-SHARED_DIR="${4:-}"
+SHARED_DIR="${3:-}"
 
 # Convert memory from MB to GB for vfkit
 MEMORY_GB=$((MEMORY_MB / 1024))
@@ -113,17 +112,6 @@ VFKIT_ARGS=(
     --device virtio-rng
     --device virtio-serial,logFilePath=vm-console.log
 )
-
-# Add port forwarding rules if provided
-if [ -n "$PORT_RULES" ]; then
-    IFS=',' read -ra RULES <<< "$PORT_RULES"
-    for rule in "${RULES[@]}"; do
-        IFS=':' read -r proto host_port vm_port <<< "$rule"
-        # vfkit requires separate virtio-net devices for each port forward
-        VFKIT_ARGS+=(--device "virtio-net,nat,guestPort=$vm_port,hostPort=$host_port")
-        echo "==> Port forwarding: localhost:$host_port -> VM:$vm_port ($proto)"
-    done
-fi
 
 # Add virtio-fs device if shared directory is provided
 # The mountTag must be "hostshare" to match cloud-init configuration

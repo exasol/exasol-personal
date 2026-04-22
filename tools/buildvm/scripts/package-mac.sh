@@ -110,20 +110,6 @@ To share a folder between your Mac and the VM, provide it as the third argument:
 
 The shared folder will be mounted at `/mnt/host` inside the VM.
 
-### Example with container deployment:
-
-```bash
-# Create a shared directory
-mkdir shared
-
-# Put your container tarball and manifest in it
-cp my-container.tar.gz shared/
-cp container-manifest.json shared/
-
-# Start VM with shared folder (2 CPUs, 2GB RAM)
-./start.sh 2 2048 shared
-```
-
 Inside the VM, your files will be at `/mnt/host`:
 ```bash
 ssh -i vm-key -p 2222 exasol@localhost
@@ -157,8 +143,6 @@ You can also override these via command line arguments:
 ./start.sh <cpu_count> <memory_mb> [shared_folder]
 ```
 
-Containers running inside the VM will automatically have access to all allocated resources.
-
 ## Notes
 
 - Wait 20-30 seconds for the VM to fully boot before connecting
@@ -185,8 +169,11 @@ echo ""
 echo "==> Creating compressed release archive..."
 mkdir -p release
 
-# Use tar to create archive and pipe to xz for compression
-tar -C package -cf - "$PACKAGE_NAME" | xz -6 -v > "$RELEASE_FILE"
+# Use tar to create archive and pipe to xz for compression.
+# -9 -e maxes out the dictionary; -T0 parallelizes across all cores so build
+# time stays reasonable. Disk images are mostly zero-filled (see
+# cleanup-and-shutdown.sh) so high levels pay off.
+tar -C package -cf - "$PACKAGE_NAME" | xz -9 -e -T0 -v > "$RELEASE_FILE"
 
 RELEASE_SIZE=$(stat -f%z "$RELEASE_FILE" 2>/dev/null || stat -c%s "$RELEASE_FILE")
 

@@ -5,7 +5,7 @@ tasks:
     desc: Install QEMU dependencies for both x86_64 and ARM64
     cmds:
       - sudo apt-get update
-      - sudo apt-get install -y qemu-system-x86 qemu-system-aarch64 qemu-utils qemu-efi-aarch64 ovmf wget genisoimage parted e2fsprogs bc xz-utils virtiofsd gdisk gh
+      - sudo apt-get install -y qemu-system-x86 qemu-system-aarch64 qemu-utils qemu-efi-aarch64 ovmf wget genisoimage parted e2fsprogs bc xz-utils virtiofsd gdisk gh jq
 
   generate-ssh-key:
     desc: Generate SSH key for VM access

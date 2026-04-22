@@ -5,7 +5,7 @@ SHARED_DIR="shared"
 
 echo "==> Cleaning shared folder..."
 
-# Remove everything - start-vm and container scripts recreate what they need
+# Remove everything - start-vm recreates what it needs
 if [ -d "$SHARED_DIR" ]; then
     rm -rf "$SHARED_DIR"/*
     echo "==> Shared folder cleaned (empty)"
@@ -15,4 +15,4 @@ fi
 
 echo "==> Shared folder ready for start-vm"
 echo "    - start-vm will recreate authorized_keys"
-echo "    - Container scripts will recreate logs/ and mount directories as needed"
+echo "    - load-db will recreate logs/ as needed"

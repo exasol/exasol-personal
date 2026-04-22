@@ -1,7 +1,7 @@
 {
   "cpus": 2,
   "memoryMB": 4096,
-  "description": "VM runtime configuration for Exasol Nano. Containers automatically inherit these resources.",
+  "description": "VM runtime configuration for Exasol Nano. Port rules are forwarded from host to guest by vfkit (macOS, via gvproxy) or QEMU (Linux).",
   "ports": [
     {"protocol": "tcp", "host": 2222, "vm": 22},
     {"protocol": "tcp", "host": 8563, "vm": 8563},

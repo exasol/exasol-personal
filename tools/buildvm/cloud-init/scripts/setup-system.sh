@@ -59,7 +59,7 @@ else
     fi
   else
     echo "==> Warning: No shared storage available (no virtiofs or block device found)"
-    echo "==> /mnt/host will be empty. Container features requiring shared storage will not work."
+    echo "==> /mnt/host will be empty. SSH key import and db.run updates from the host will not work."
   fi
 fi
 

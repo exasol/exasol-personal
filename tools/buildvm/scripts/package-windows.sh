@@ -101,8 +101,6 @@ You can also override these via command line parameters:
 .\start.ps1 -ProcessorCount <cpu_count> -MemoryMB <memory_mb>
 ```
 
-Containers running inside the VM will automatically have access to all allocated resources.
-
 ## Connection
 
 The script will display connection instructions. Typically:

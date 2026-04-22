@@ -1,6 +1,5 @@
 #!/bin/sh
 # Load and run Exasol Nano linux.run directly in the VM.
-# Replaces the podman-based load-shared-container.sh.
 
 # Ensure we run as root (OpenRC services run as root; cloud-init runcmd too)
 if [ "$(id -u)" -ne 0 ]; then
