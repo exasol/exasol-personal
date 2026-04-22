@@ -395,8 +395,8 @@ def test_diag_cos_runs_confd_client(reusable_deployment: Deployment) -> None:
 def test_license_session_limit(reusable_deployment: Deployment) -> None:
     # license_session_limit is the limit defined in Exasol Personal
     # license. This value should match it.
-    license_session_limit: Final = 5
-    exceeded_count: Final = 3  # We exceed the session limit by this amount.
+    license_session_limit: Final = 20
+    exceeded_count: Final = 5  # We exceed the session limit by this amount.
 
     procs: list[Process] = []
     # Gather primitive arguments for the worker
