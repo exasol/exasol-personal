@@ -20,7 +20,7 @@ packages = [{ include = "tests" }]
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.20.0"
 ruff = "^0.15.8"
-pydantic = { extras = ["mypy"], version = "^2.11.7" }
+pydantic = { extras = ["mypy"], version = "^2.13.3" }
 types-requests = "^2.33.0"
 
 [tool.pytest.ini_options]
