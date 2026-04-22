@@ -1,5 +1,5 @@
 {
-  "cpus": 2,
-  "memoryMB": 4096,
-  "description": "VM build-time configuration (init-vm only). For runtime config, see vm-config.json."
+  "cpus": 6,
+  "memoryMB": 8192,
+  "description": "VM build-time configuration (init-vm only). Higher values speed up the build on TCG hosts; shipped VM uses vm-config.json. Leave 1-2 host vCPUs free for virtiofsd and the host OS."
 }

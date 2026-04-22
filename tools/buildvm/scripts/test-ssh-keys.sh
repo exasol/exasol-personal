@@ -58,13 +58,17 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
         echo "==> ✓ Test passed: Successfully connected with imported key after ${ELAPSED} seconds"
         SUCCESS=true
 
-        # Scrub the test-key from the shipped image. Reset shared/authorized_keys
-        # to just vm-key.pub and re-run import-shared-keys in the VM so the disk
-        # ends up with only vm-key.pub before shutdown.
+        # Scrub the test-key from the shipped image: overwrite authorized_keys
+        # directly as the exasol user (no sudo needed — Alpine doesn't ship
+        # sudo) and sync so the write reaches disk before stop-vm kills QEMU.
+        # Also reset shared/authorized_keys so a future task start-vm starts
+        # clean.
         echo "==> Removing test-key from shipped image..."
         cat vm-key.pub > "$AUTHORIZED_KEYS"
         ssh -i "$TEST_KEY" -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            exasol@localhost "sudo /usr/local/bin/import-shared-keys.sh"
+            exasol@localhost \
+            "cat > ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && sync" \
+            < vm-key.pub
         break
     fi
     

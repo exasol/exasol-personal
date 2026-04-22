@@ -5,7 +5,7 @@ SQL_PORT=8563
 DB_PID_FILE=/var/run/exasol-db.pid
 
 echo "==> Waiting for database to accept connections on port $SQL_PORT..."
-MAX_WAIT=600
+MAX_WAIT=1800
 ELAPSED=0
 DB_READY=false
 while [ $ELAPSED -lt $MAX_WAIT ]; do

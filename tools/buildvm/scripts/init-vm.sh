@@ -81,6 +81,7 @@ source ./scripts/get-qemu-args.sh
 
 $QEMU_BIN \
     -machine $QEMU_MACHINE \
+    -accel $QEMU_ACCEL \
     -cpu $QEMU_CPU \
     -m $VM_MEMORY \
     -smp $VM_CPUS \
@@ -114,7 +115,7 @@ trap 'kill $TAIL_PID 2>/dev/null || true; wait $TAIL_PID 2>/dev/null || true' EX
 
 # Wait for cloud-init to complete by polling shared folder
 COMPLETION_MARKER="$SHARED_DIR/cloud-init-complete"
-MAX_WAIT=600
+MAX_WAIT=1800
 ELAPSED=0
 while [ $ELAPSED -lt $MAX_WAIT ]; do
     if [ -f "$COMPLETION_MARKER" ]; then
@@ -146,7 +147,7 @@ echo "==> Cloud-init finished. VM will now power off..."
 echo "==> Waiting for VM to shut down..."
 
 # Wait for VM process to exit
-MAX_SHUTDOWN_WAIT=600
+MAX_SHUTDOWN_WAIT=1800
 SHUTDOWN_ELAPSED=0
 while [ $SHUTDOWN_ELAPSED -lt $MAX_SHUTDOWN_WAIT ]; do
     if ! ps -p "$VM_PID" > /dev/null 2>&1; then

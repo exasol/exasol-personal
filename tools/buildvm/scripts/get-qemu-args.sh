@@ -23,10 +23,11 @@ case "$ARCH" in
         QEMU_BIN="qemu-system-x86_64"
         QEMU_MACHINE="q35"
         QEMU_CPU="max"
+        QEMU_ACCEL="tcg,thread=multi"
 
         if [ "$KVM_AVAILABLE" = true ]; then
-            QEMU_MACHINE="q35,accel=kvm"
             QEMU_CPU="host"
+            QEMU_ACCEL="kvm"
         fi
 
         # Check for OVMF firmware (multiple possible paths)
@@ -49,10 +50,11 @@ case "$ARCH" in
         QEMU_MACHINE="virt"
         QEMU_CPU="cortex-a72"
         QEMU_BIOS="/usr/share/qemu-efi-aarch64/QEMU_EFI.fd"
+        QEMU_ACCEL="tcg,thread=multi"
 
         if [ "$KVM_AVAILABLE" = true ]; then
-            QEMU_MACHINE="virt,accel=kvm"
             QEMU_CPU="host"
+            QEMU_ACCEL="kvm"
         fi
 
         if [ ! -f "$QEMU_BIOS" ]; then
@@ -72,6 +74,7 @@ export QEMU_BIN
 export QEMU_MACHINE
 export QEMU_CPU
 export QEMU_BIOS
+export QEMU_ACCEL
 
 # Also print for debugging
 echo "==> Using architecture: $ARCH" >&2
@@ -79,4 +82,5 @@ echo "==> QEMU binary: $QEMU_BIN" >&2
 echo "==> Machine type: $QEMU_MACHINE" >&2
 echo "==> CPU type: $QEMU_CPU" >&2
 echo "==> BIOS/Firmware: $QEMU_BIOS" >&2
+echo "==> Accelerator: $QEMU_ACCEL" >&2
 echo "==> KVM acceleration: $([ "$KVM_AVAILABLE" = true ] && echo enabled || echo disabled)" >&2

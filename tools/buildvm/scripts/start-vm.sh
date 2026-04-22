@@ -143,6 +143,7 @@ if [ "$ATTACHED" = "true" ]; then
     echo "==> Starting VM in attached mode (press Ctrl-A X to exit)..."
     $QEMU_BIN \
         -machine $QEMU_MACHINE \
+        -accel $QEMU_ACCEL \
         -cpu $QEMU_CPU \
         -m $VM_MEMORY \
         -smp $VM_CPUS \
@@ -164,6 +165,7 @@ if [ "$ATTACHED" = "true" ]; then
 else
     $QEMU_BIN \
         -machine $QEMU_MACHINE \
+        -accel $QEMU_ACCEL \
         -cpu $QEMU_CPU \
         -m $VM_MEMORY \
         -smp $VM_CPUS \
