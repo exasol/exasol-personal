@@ -6,6 +6,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"path/filepath"
 )
 
 //nolint:gosec // gosec thinks this is a password
@@ -41,4 +42,12 @@ func ReadSecrets(deployment DeploymentDir) (*Secrets, error) {
 	slog.Debug("reading secrets file", "file", filepath)
 
 	return readConfig[Secrets](filepath, "secrets")
+}
+
+func WriteSecrets(deploymentDir string, secrets *Secrets) error {
+	if secrets == nil {
+		secrets = &Secrets{}
+	}
+
+	return writeConfig(secrets, filepath.Join(deploymentDir, secretsFileName), "secrets")
 }

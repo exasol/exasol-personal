@@ -19,10 +19,19 @@ import (
 // InstallManifest represents the installation preset workflow and metadata.
 // It is read from <deploymentDir>/installation/installation.yaml (extracted from assets).
 type InstallManifest struct {
-	Name        string       `yaml:"name"`
-	Description string       `yaml:"description"`
-	Variables   *Variables   `yaml:"variables"`
-	Install     InstallSteps `yaml:"install"`
+	Name          string         `yaml:"name"`
+	Description   string         `yaml:"description"`
+	Compatibility *Compatibility `yaml:"compatibility,omitempty"`
+	Variables     *Variables     `yaml:"variables"`
+	Install       InstallSteps   `yaml:"install"`
+}
+
+func (m *InstallManifest) RequiredCapabilities() []string {
+	if m == nil || m.Compatibility == nil {
+		return nil
+	}
+
+	return normalizedCapabilities(m.Compatibility.Requires)
 }
 
 // Variables defines installation-preset-owned variables.
@@ -105,9 +114,10 @@ func (d *VariableDef) EffectiveType() (string, error) {
 	}
 }
 
-// InstallStep supports remoteExec tasks.
+// InstallStep supports exactly one task type per step.
 type InstallStep struct {
-	RemoteExec *RemoteExecTask `yaml:"remoteExec"`
+	RemoteExec   *RemoteExecTask   `yaml:"remoteExec"`
+	LocalCommand *LocalCommandTask `yaml:"localCommand"`
 }
 
 // UnmarshalYAML allows InstallStep to be defined in two YAML styles:
@@ -130,7 +140,11 @@ func (s *InstallStep) UnmarshalYAML(value *yaml.Node) error {
 	}
 	*s = InstallStep(tmp)
 
-	if s.RemoteExec != nil {
+	if s.RemoteExec != nil && s.LocalCommand != nil {
+		return errors.New("install step must set exactly one task type")
+	}
+
+	if s.RemoteExec != nil || s.LocalCommand != nil {
 		return nil
 	}
 

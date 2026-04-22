@@ -15,6 +15,7 @@ package presets
 const (
 	DefaultInfrastructure = "aws"
 	DefaultInstallation   = "ubuntu"
+	DefaultLocalInstallation = "nano"
 
 	InfrastructureManifestFilename = "infrastructure.yaml"
 	InstallationManifestFilename   = "installation.yaml"

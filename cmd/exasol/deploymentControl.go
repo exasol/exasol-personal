@@ -16,7 +16,7 @@ const startCmdShortDesc = `Start a deployment`
 const startCmdLongDesc = startCmdShortDesc + `
 
 Start a deployment after it has been stopped.
-After the deployment starts, it will have a new public IP address and DNS name assigned.
+Cloud deployments may receive new public IP or DNS details after they restart.
 
 This command now waits until the Exasol database becomes ready and can accept connections.
 If the database does not become ready within the timeout, the command fails.`

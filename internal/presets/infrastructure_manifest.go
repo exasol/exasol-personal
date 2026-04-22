@@ -22,9 +22,19 @@ type InfrastructureTofu struct {
 
 // InfrastructureManifest represents the infrastructure metadata and optional tofu configuration.
 type InfrastructureManifest struct {
-	Name        string              `yaml:"name"`
-	Description string              `yaml:"description"`
-	Tofu        *InfrastructureTofu `yaml:"tofu,omitempty"`
+	Name          string              `yaml:"name"`
+	Description   string              `yaml:"description"`
+	Backend       string              `yaml:"backend,omitempty"`
+	Compatibility *Compatibility      `yaml:"compatibility,omitempty"`
+	Tofu          *InfrastructureTofu `yaml:"tofu,omitempty"`
+}
+
+func (m *InfrastructureManifest) ProvidedCapabilities() []string {
+	if m == nil || m.Compatibility == nil {
+		return nil
+	}
+
+	return normalizedCapabilities(m.Compatibility.Provides)
 }
 
 var (

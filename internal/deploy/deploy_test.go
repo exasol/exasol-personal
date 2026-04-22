@@ -9,14 +9,14 @@ import (
 	"testing"
 )
 
-func TestAppendDeployFailureResourceHint(t *testing.T) {
+func TestAppendDeployFailureHint_AddsCloudResourceHint(t *testing.T) {
 	t.Parallel()
 
 	// Given
 	baseErr := errors.New("tofu apply failed")
 
 	// When
-	err := appendDeployFailureResourceHint(baseErr)
+	err := appendDeployFailureHint(baseErr, backendTypeTofu)
 
 	// Then
 	if err == nil {
@@ -30,13 +30,31 @@ func TestAppendDeployFailureResourceHint(t *testing.T) {
 	}
 }
 
-func TestAppendDeployFailureResourceHintNilInput(t *testing.T) {
+func TestAppendDeployFailureHintNilInput(t *testing.T) {
 	t.Parallel()
 
 	// Given/When
-	err := appendDeployFailureResourceHint(nil)
+	err := appendDeployFailureHint(nil, backendTypeTofu)
 	// Then
 	if err != nil {
 		t.Fatalf("expected nil, got: %v", err)
+	}
+}
+
+func TestAppendDeployFailureHint_AddsLocalLogHint(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	baseErr := errors.New("local runtime failed")
+
+	// When
+	err := appendDeployFailureHint(baseErr, backendTypeLocal)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected non-nil error")
+	}
+	if !strings.Contains(err.Error(), "local-runtime/logs") {
+		t.Fatalf("expected local log hint, got: %q", err.Error())
 	}
 }

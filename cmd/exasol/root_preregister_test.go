@@ -73,3 +73,24 @@ func TestScanInfrastructurePresetFromArgs_InstallCommand(t *testing.T) {
 		t.Fatalf("unexpected preset: %#v", preset)
 	}
 }
+
+func TestScanInstallationPresetSelection_DefaultsLocalToNano(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	args := []string{"install", "local"}
+
+	// When
+	preset, err := scanInstallationPresetSelection(args)
+
+	// Then
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if preset == nil {
+		t.Fatal("expected preset, got nil")
+	}
+	if preset.Name != presets.DefaultLocalInstallation || preset.Path != "" {
+		t.Fatalf("unexpected preset: %#v", preset)
+	}
+}

@@ -14,6 +14,8 @@ import (
 	"github.com/exasol/exasol-personal/internal/connect"
 )
 
+var verifyDatabaseConnectionFn = verifyDatabaseConnection
+
 // verifyDatabaseConnection checks if the database service is accepting connections
 // by attempting a connection with invalid credentials and expecting an authentication error.
 func verifyDatabaseConnection(ctx context.Context, deployment config.DeploymentDir) error {
@@ -80,7 +82,7 @@ func waitForDatabaseState(
 	params WaitParams,
 ) error {
 	return PollWithBackoff(ctx, func(ctx context.Context) (bool, error) {
-		err := verifyDatabaseConnection(ctx, deployment)
+		err := verifyDatabaseConnectionFn(ctx, deployment)
 		conditionMet := (params.ReadyMode && err == nil) || (!params.ReadyMode && err != nil)
 
 		return conditionMet, err

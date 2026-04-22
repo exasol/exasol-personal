@@ -1,5 +1,10 @@
 name: Exasol in Azure on Ubuntu
 description: Provisioning in Azure. Ubuntu, managed disks, static public IP.
+backend: tofu
+
+compatibility:
+  provides:
+    - remote-exec
 
 tofu:
   variablesFile: variables_public.tf

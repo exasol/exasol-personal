@@ -39,26 +39,24 @@ func NewExasolConnection(
 		password = secrets.DbPassword
 	}
 
-	nodeDetails, err := config.ReadNodeDetails(deployment)
+	connectionInfo, err := config.ResolveConnectionInfo(deployment)
 	if err != nil {
-		return nil, fmt.Errorf("reading node details: %w", err)
-	}
-
-	host, port, err := nodeDetails.GetDeploymentHostPort()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get deployment host-port: %w", err)
-	}
-	certFingerprint, err := nodeDetails.GetCertFingerprint()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get deployment tls certificate: %w", err)
+		return nil, fmt.Errorf("reading deployment connection info: %w", err)
 	}
 
 	optsFns := []exasol.OptFn{}
-	if insecureSkipCertValidation {
+	if insecureSkipCertValidation || connectionInfo.InsecureSkipCertValidation {
 		optsFns = append(optsFns, exasol.WithoutValidateServerCertificate)
 	}
 
-	database, err := exasol.New(username, password, host, certFingerprint, port, optsFns...)
+	database, err := exasol.New(
+		username,
+		password,
+		connectionInfo.Host,
+		connectionInfo.CertFingerprint,
+		connectionInfo.DBPort,
+		optsFns...,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -66,8 +64,8 @@ func NewExasolConnection(
 	slog.Debug(
 		"connecting to database",
 		"username", username,
-		"host", host,
-		"port", port,
+		"host", connectionInfo.Host,
+		"port", connectionInfo.DBPort,
 		"insecure_skip_cert_validation", insecureSkipCertValidation,
 	)
 

@@ -29,6 +29,7 @@ The system SHALL execute local deployment lifecycle operations through a dedicat
 - GIVEN an initialized local deployment directory
 - WHEN the user runs `exasol deploy`
 - THEN the launcher starts the local runtime through the local backend
+- AND the launcher boots its own local VM and invokes the selected Linux ExaNano `.run` payload inside that guest
 - AND the launcher waits for the database to become ready
 - AND the launcher marks the deployment as running
 

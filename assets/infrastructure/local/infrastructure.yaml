@@ -1,0 +1,7 @@
+name: Local
+description: Built-in local deployment on Apple Silicon macOS
+backend: local
+compatibility:
+  provides:
+    - local
+    - guest-bootstrap

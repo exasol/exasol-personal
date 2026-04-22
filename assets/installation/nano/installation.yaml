@@ -1,0 +1,7 @@
+name: Nano
+description: ExaNano local guest runtime
+compatibility:
+  requires:
+    - local
+    - guest-bootstrap
+install: []

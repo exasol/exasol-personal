@@ -36,7 +36,8 @@ The system SHALL publish the local runtime payload artifacts and the launcher in
 
 - GIVEN a release includes local deployment support
 - WHEN release artifacts are published
-- THEN the versioned Linux ExaNano payloads needed by local mode are published to the product-owned HTTP location
+- THEN the versioned Linux ExaNano `.run` payloads needed by local mode are published to the product-owned HTTP location
+- AND any supporting guest boot assets required to start the launcher-owned VM are published alongside them
 
 #### Scenario: Installer-ready launcher release
 

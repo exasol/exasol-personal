@@ -91,15 +91,19 @@ All virtualization-specific code should be isolated behind `internal/localruntim
 
 ### Linux ExaNano payload delivery
 
-Linux ExaNano payloads are external versioned artifacts, not embedded blobs.
+Linux ExaNano `.run` payloads are external versioned artifacts, not embedded blobs or native macOS runtime dependencies.
 
 The launcher should:
 
-- resolve a pinned version from a product-owned HTTP location
-- download payloads as needed
+- resolve a pinned Linux `.run` payload version from a product-owned HTTP location
+- download the runnable `.run` payload and any minimal guest boot assets needed to start the Linux VM
 - verify checksums
 - cache them in an Exasol-owned data directory
+- boot the guest through the launcher-owned virtualization layer
+- invoke the selected `.run` payload inside the guest during bootstrap
 - persist the selected payload identity into deployment-owned local runtime state
+
+Supporting boot assets such as kernel or initrd may be published alongside the database payload, but the database runtime contract remains the Linux `.run` artifact executed inside the guest. The launcher must not depend on an ExaNano macOS host binary to run local mode.
 
 ### Control channel
 

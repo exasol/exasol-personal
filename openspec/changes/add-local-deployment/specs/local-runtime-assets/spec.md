@@ -4,13 +4,25 @@
 
 ### Requirement: Versioned local runtime payload distribution
 
-The system SHALL obtain Linux ExaNano payloads for local mode as versioned artifacts from a product-owned HTTP location.
+The system SHALL obtain Linux ExaNano `.run` payloads for local mode as versioned artifacts from a product-owned HTTP location.
 
 #### Scenario: Resolve payload metadata for local deployment
 
 - GIVEN the user is preparing a local deployment
 - WHEN the launcher resolves the required ExaNano payload
-- THEN it uses product-owned payload metadata that identifies a versioned artifact
+- THEN it uses product-owned payload metadata that identifies a versioned Linux `.run` artifact for the selected guest architecture
+
+### Requirement: Launcher-owned guest execution
+
+The system SHALL execute the selected Linux `.run` payload inside the launcher-owned VM instead of delegating local execution to a separate native macOS ExaNano runtime.
+
+#### Scenario: Start local database inside the guest
+
+- GIVEN the launcher has selected a Linux `.run` payload for a local deployment
+- AND the launcher has booted the local VM
+- WHEN guest bootstrap starts the database
+- THEN it invokes the selected `.run` payload inside the guest
+- AND the launcher remains the owner of the host-side virtualization lifecycle
 
 ### Requirement: Payload verification and caching
 
