@@ -174,14 +174,15 @@ tasks:
       - poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}integration
 
   tests-deployment:
-    desc: Run deployment tests
+    desc: Run deployment tests (`e.g. task tests-deployment INFRA=aws TEST=test_standard_deployment.py::test_license_session_limit`)
     deps: [tests-setup]
     dir: '{{.TESTS_DIR}}'
     vars:
       INFRA: '{{default "aws" .INFRA}}'
+      TEST: '{{default "" .TEST}}'
     cmds:
       - |
-        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
+        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment{{if .TEST}}{{.SEP}}{{.TEST}}{{end}}
 
   tests-deployment-infrastructure:
     desc: Run infrastructure-focused deployment tests
