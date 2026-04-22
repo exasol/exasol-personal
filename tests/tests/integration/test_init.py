@@ -9,12 +9,7 @@ from subprocess import CalledProcessError
 import pytest
 
 from .conftest import get_version_check_count
-from .helpers import (
-    export_preset,
-    first_infrastructure_preset_id_or_skip,
-    first_installation_preset_id_or_skip,
-    run_command,
-)
+from .helpers import export_preset, first_infrastructure_preset_id_or_skip, run_command
 
 
 def test_init_defaults_and_help(exasol_path: str) -> None:
@@ -32,6 +27,9 @@ def test_init_defaults_and_help(exasol_path: str) -> None:
     assert "Available infrastructure presets:" in output
     assert infra_id in output
     assert "Available installation presets:" in output
+    assert "special" in output.lower()
+    assert "compatibility matrix" in output.lower()
+    assert "local" in output
 
     # And the help nudges users towards presets discovery/export
     assert "exasol presets" in output
@@ -243,7 +241,17 @@ def test_init_accepts_install_preset_path_as_second_arg(
 ) -> None:
     # Given an installation preset exported to a directory
     infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
-    install_id = first_installation_preset_id_or_skip(exasol_path)
+    catalog = json.loads(run_command([exasol_path, "presets", "list", "--json"]).stdout)
+    install_ids = [
+        preset.get("id")
+        for preset in catalog.get("installations", [])
+        if isinstance(preset, dict)
+    ]
+    if "ubuntu" not in install_ids:
+        pytest.skip(
+            "no compatible exported installation preset available for this test"
+        )
+    install_id = "ubuntu"
 
     install_dir = tmp_path / "install_export"
     install_dir.mkdir()

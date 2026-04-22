@@ -12,6 +12,7 @@ locals {
   key_file_path               = "${local.infrastructure_artifact_dir}/${local.key_file_name}"
 
   deployment_info = {
+    backend          = "tofu"
     deploymentId     = local.deployment_id
     region           = data.aws_region.current.id
     availabilityZone = local.selected_az
@@ -20,6 +21,17 @@ locals {
     instanceType     = var.instance_type
     vpcId            = aws_vpc.vpc.id
     subnetId         = aws_subnet.subnet.id
+    connection = length(values(data.aws_instance.nodes)) > 0 ? {
+      host          = values(data.aws_instance.nodes)[0].public_dns
+      displayHost   = values(data.aws_instance.nodes)[0].public_dns
+      publicIp      = values(data.aws_instance.nodes)[0].public_ip
+      dbPort        = 8563
+      uiPort        = 8443
+      username      = "sys"
+      sshCommand    = "ssh -i ${local.key_file_relative_path} ubuntu@${values(data.aws_instance.nodes)[0].public_dns} -p 22"
+      sshPort       = "22"
+      shellSupported = true
+    } : null
     nodes = {
       for k, node in data.aws_instance.nodes :
       k => {

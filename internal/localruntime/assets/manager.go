@@ -25,6 +25,8 @@ var (
 	ErrPayloadMetadataUnavailable = errors.New("local runtime payload metadata unavailable")
 )
 
+const payloadCacheDirMode = 0o700
+
 type Metadata struct {
 	Payloads []Payload `json:"payloads"`
 }
@@ -115,12 +117,20 @@ func (m *Manager) EnsureCached(ctx context.Context, payload *Payload) (string, e
 	)
 }
 
-func (m *Manager) EnsureBootCached(ctx context.Context, payload *Payload) (*CachedBootAssets, error) {
+func (m *Manager) EnsureBootCached(
+	ctx context.Context,
+	payload *Payload,
+) (*CachedBootAssets, error) {
 	if payload == nil {
 		return nil, fmt.Errorf("%w: nil payload", ErrPayloadNotFound)
 	}
 	if payload.Boot == nil || payload.Boot.Kernel == nil || payload.Boot.Initrd == nil {
-		return nil, fmt.Errorf("%w: missing boot assets for %s/%s", ErrPayloadNotFound, payload.Version, payload.Architecture)
+		return nil, fmt.Errorf(
+			"%w: missing boot assets for %s/%s",
+			ErrPayloadNotFound,
+			payload.Version,
+			payload.Architecture,
+		)
 	}
 
 	kernelPath, err := m.ensureAssetCached(
@@ -179,7 +189,7 @@ func (m *Manager) ensureAssetCached(
 		return cachePath, nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cachePath), payloadCacheDirMode); err != nil {
 		return "", fmt.Errorf("failed to create payload cache dir: %w", err)
 	}
 
@@ -295,8 +305,8 @@ func (a *Asset) resolvedFilename() string {
 	return "asset.bin"
 }
 
-func verifyFileSHA256(path string, expected string) (bool, error) {
-	file, err := os.Open(path)
+func verifyFileSHA256(filePath string, expected string) (bool, error) {
+	file, err := os.Open(filePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil

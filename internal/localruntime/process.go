@@ -43,7 +43,11 @@ func (r *Runtime) WriteRunnerPID(pid int) error {
 		return err
 	}
 
-	return os.WriteFile(r.layout.PIDFilePath(), []byte(strconv.Itoa(pid)+"\n"), 0o600)
+	return os.WriteFile(
+		r.layout.PIDFilePath(),
+		[]byte(strconv.Itoa(pid)+"\n"),
+		localRuntimeFileMode,
+	)
 }
 
 func (r *Runtime) RunnerRunning() (bool, int, error) {
@@ -59,7 +63,7 @@ func (r *Runtime) RunnerRunning() (bool, int, error) {
 	return IsProcessRunning(pid), pid, nil
 }
 
-func (r *Runtime) WaitForRunnerExit(ctx context.Context, pid int) error {
+func (*Runtime) WaitForRunnerExit(ctx context.Context, pid int) error {
 	ticker := time.NewTicker(processPollInterval)
 	defer ticker.Stop()
 

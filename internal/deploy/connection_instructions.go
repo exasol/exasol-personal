@@ -23,8 +23,8 @@ const (
 )
 
 type ConnectionDetails struct {
-	Backend         string
 	Hostname        string
+	DisplayHost     string
 	DBPort          string
 	UIPort          string
 	Username        string
@@ -60,11 +60,11 @@ func getConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails, 
 	}
 
 	return &ConnectionDetails{
-		Backend:         connectionInfo.Backend,
 		DeploymentName:  connectionInfo.DeploymentName,
 		ClusterSize:     connectionInfo.ClusterSize,
 		ClusterState:    connectionInfo.ClusterState,
 		Hostname:        connectionInfo.Host,
+		DisplayHost:     connectionInfo.DisplayHost,
 		PublicIp:        connectionInfo.PublicIP,
 		DBPort:          strconv.Itoa(connectionInfo.DBPort),
 		UIPort:          strconv.Itoa(connectionInfo.UIPort),
@@ -79,20 +79,28 @@ func getConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails, 
 }
 
 func GetSQLInstructions(connectionDetails *ConnectionDetails) string {
-	uiURL := "https://" + net.JoinHostPort(displayHostname(connectionDetails), connectionDetails.UIPort)
+	uiURL := "https://" + net.JoinHostPort(
+		displayHostname(connectionDetails),
+		connectionDetails.UIPort,
+	)
+	certificateLine := ""
+	if connectionDetails.CertFingerprint != "" {
+		certificateLine = "  - Certificate Fingerprint: " + connectionDetails.CertFingerprint + "\n"
+	} else if connectionDetails.InsecureSkipTLS {
+		certificateLine = "  - Certificate Validation: disable validation / " +
+			"use nocertcheck for the current deployment setup\n"
+	}
 
-	if connectionDetails.Backend == config.DeploymentBackendLocal {
-		return `
+	instructions := `
 === How to Connect from a Graphical SQL Client ===
 To connect using a client of your choice:
 1. Create a new database connection.
 2. Choose 'Exasol' as the driver.
 3. Enter the following values below in 'Database':
-  - Server: localhost
+  - Server: ` + displayHostname(connectionDetails) + `
   - Port: ` + connectionDetails.DBPort + `
   - UserId: ` + connectionDetails.Username + `
-  - Certificate Validation: disable validation / use nocertcheck for the built-in local self-signed setup
-  - Password: <stored in ` + connectionDetails.SecretsFilePath + `>
+` + certificateLine + `  - Password: <stored in ` + connectionDetails.SecretsFilePath + `>
 
 === CLI Connection Instructions ===
 To connect using the CLI:
@@ -104,30 +112,12 @@ To connect using the CLI:
 3. Login with username "admin" and password stored in ` + connectionDetails.SecretsFilePath + `
 
 `
+
+	if !connectionDetails.ShellSupported {
+		return instructions
 	}
 
-	return `
-=== How to Connect from a Graphical SQL Client ===
-To connect using a client of your choice:
-1. Create a new database connection.
-2. Choose 'Exasol' as the driver.
-3. Enter the following values below in 'Database':
-  - Server: ` + displayHostname(connectionDetails) + `
-  - Port: ` + connectionDetails.DBPort + `
-  - UserId: ` + connectionDetails.Username + `
-  - Certificate Fingerprint: ` + connectionDetails.CertFingerprint + `
-  - Password: <stored in ` + connectionDetails.SecretsFilePath + `>
-
-=== CLI Connection Instructions ===
-To connect using the CLI:
-  exasol connect
-
-=== How to open the Administration UI ===
-1. Open the following URL in the browser: ` + uiURL + `
-2. Accept certificate if necessary
-3. Login with username "admin" and password stored in ` + connectionDetails.SecretsFilePath + `
-
-=== SSH Connection Instructions ===
+	return instructions + `=== SSH Connection Instructions ===
   Public IP: ` + connectionDetails.PublicIp + `
   Primary admin shell (COS): exasol shell container
   Host shell (OS): exasol shell host
@@ -261,45 +251,25 @@ func printConnectionInsInJSONUnsafe(
 
 	encoder := json.NewEncoder(writer)
 	encoder.SetIndent("", "  ")
-
-	switch wfState {
-	case StatusRunning:
-		if localInfo, err := config.ReadLocalDeploymentInfo(deployment.Root()); err == nil {
-			localInfo.DeploymentState = wfState
-			return encoder.Encode(localInfo)
-		}
-		nodeDetails, err := config.ReadNodeDetails(deployment)
+	if wfState == StatusRunning || wfState == StatusStopped {
+		info, err := config.ReadDeploymentInfo(deployment)
 		if err != nil {
 			return err
 		}
-		nodeDetails.DeploymentState = wfState
+		info.DeploymentState = wfState
 
-		return encoder.Encode(nodeDetails)
-	case StatusStopped:
-		if localInfo, err := config.ReadLocalDeploymentInfo(deployment.Root()); err == nil {
-			localInfo.DeploymentState = wfState
-			return encoder.Encode(localInfo)
-		}
-		connectionDetails, err := getConnectionDetails(deployment)
-		if err != nil {
-			return err
-		}
-		details.DeploymentID = connectionDetails.DeploymentName
-		details.ClusterSize = connectionDetails.ClusterSize
-		details.ClusterState = connectionDetails.ClusterState
-
-		return encoder.Encode(details)
-	default:
-		return encoder.Encode(details)
+		return encoder.Encode(info)
 	}
+
+	return encoder.Encode(details)
 }
 
 func displayHostname(connectionDetails *ConnectionDetails) string {
 	if connectionDetails == nil {
 		return ""
 	}
-	if connectionDetails.Backend == config.DeploymentBackendLocal {
-		return "localhost"
+	if connectionDetails.DisplayHost != "" {
+		return connectionDetails.DisplayHost
 	}
 	if connectionDetails.Hostname != "" {
 		return connectionDetails.Hostname

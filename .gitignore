@@ -15,6 +15,9 @@
 .DS_Store
 Thumbs.db
 
+# agent stuff
+.codex
+
 # State and artifacts
 tfstate*
 *.tfplan

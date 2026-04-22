@@ -42,7 +42,6 @@ func TestWriteLocalArtifacts_WritesDeploymentInfoAndSecrets(t *testing.T) {
 
 	// When
 	err := writeLocalArtifacts(deploymentDir, localClusterStateRunning, StatusRunning)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -64,7 +63,11 @@ func TestWriteLocalArtifacts_WritesDeploymentInfoAndSecrets(t *testing.T) {
 		t.Fatalf("failed to read local secrets: %v", err)
 	}
 	if secrets.DbPassword != localDefaultDatabasePassword {
-		t.Fatalf("expected db password %q, got %q", localDefaultDatabasePassword, secrets.DbPassword)
+		t.Fatalf(
+			"expected db password %q, got %q",
+			localDefaultDatabasePassword,
+			secrets.DbPassword,
+		)
 	}
 	if secrets.AdminUiPassword != localDefaultAdminUIPassword {
 		t.Fatalf(
@@ -99,7 +102,11 @@ func TestWaitForLocalRuntimeStarted_FailsWhenRunnerIsInactive(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("failed to save local runtime state: %v", err)
 	}
-	if err := writeLocalArtifacts(deploymentDir, localClusterStateStarting, StatusOperationInProgress); err != nil {
+	if err := writeLocalArtifacts(
+		deploymentDir,
+		localClusterStateStarting,
+		StatusOperationInProgress,
+	); err != nil {
 		t.Fatalf("failed to write local artifacts: %v", err)
 	}
 
@@ -147,12 +154,14 @@ func TestLocalBackendStop_CleansUpWhenRunnerIsAlreadyGone(t *testing.T) {
 
 	// When
 	err := (localBackend{}).Stop(context.Background(), deployment, nil, nil, nil)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if _, readErr := runtime.ReadRunnerPID(); !errors.Is(readErr, localruntime.ErrRuntimeNotRunning) {
+	if _, readErr := runtime.ReadRunnerPID(); !errors.Is(
+		readErr,
+		localruntime.ErrRuntimeNotRunning,
+	) {
 		t.Fatalf("expected PID file cleanup, got %v", readErr)
 	}
 }

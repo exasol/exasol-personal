@@ -12,16 +12,16 @@ var localRuntimePlatformSupported = func() bool {
 	return runtime.GOOS == "darwin" && runtime.GOARCH == "arm64"
 }
 
-func validateBackendPlatform(backendKind string) error {
-	if backendKind != backendTypeLocal {
-		return nil
-	}
+func validateLocalHostPlatform() error {
 	if localRuntimePlatformSupported() {
 		return nil
 	}
 
+	const unsupportedMessagePrefix = "local deployment is only supported on Apple Silicon macOS "
+	const unsupportedMessageSuffix = "(darwin/arm64); current host is %s/%s"
+
 	return fmt.Errorf(
-		"local deployment is only supported on Apple Silicon macOS (darwin/arm64); current host is %s/%s",
+		unsupportedMessagePrefix+unsupportedMessageSuffix,
 		runtime.GOOS,
 		runtime.GOARCH,
 	)

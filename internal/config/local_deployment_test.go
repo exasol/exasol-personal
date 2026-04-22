@@ -33,7 +33,6 @@ func TestReadLocalDeploymentInfo_RoundTrip(t *testing.T) {
 		t.Fatalf("failed to write local deployment info: %v", err)
 	}
 	actual, err := ReadLocalDeploymentInfo(deploymentDir)
-
 	// Then
 	if err != nil {
 		t.Fatalf("failed to read local deployment info: %v", err)
@@ -56,7 +55,11 @@ func TestReadLocalDeploymentInfo_RejectsCloudStyleDeploymentJSON(t *testing.T) {
 		ClusterSize:  1,
 		Nodes:        map[string]nodeDetailsNode{},
 	}
-	if err := writeConfig(nodeDetails, deploymentDir+"/"+nodeDetailsFileName, "node details"); err != nil {
+	if err := writeConfig(
+		nodeDetails,
+		deploymentDir+"/"+nodeDetailsFileName,
+		"node details",
+	); err != nil {
 		t.Fatalf("failed to write node details: %v", err)
 	}
 

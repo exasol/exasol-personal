@@ -5,6 +5,7 @@ package localruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,6 +14,11 @@ import (
 )
 
 const defaultGuestIPv4 = "192.168.64.2"
+
+const (
+	defaultGuestSQLPort = 8563
+	defaultGuestUIPort  = 8443
+)
 
 var newVMDriver = vm.New
 
@@ -49,16 +55,26 @@ func (r *Runtime) Run(ctx context.Context) error {
 	dbPort := state.Ports["db"]
 	uiPort := state.Ports["ui"]
 	if dbPort <= 0 || uiPort <= 0 {
-		return fmt.Errorf("local runtime ports are not initialized")
+		return errors.New("local runtime ports are not initialized")
 	}
 
-	sqlForwarder, err := StartLoopbackForwarder(dbPort, defaultGuestIPv4, 8563)
+	sqlForwarder, err := StartLoopbackForwarder(
+		ctx,
+		dbPort,
+		defaultGuestIPv4,
+		defaultGuestSQLPort,
+	)
 	if err != nil {
 		return err
 	}
 	defer sqlForwarder.Close()
 
-	uiForwarder, err := StartLoopbackForwarder(uiPort, defaultGuestIPv4, 8443)
+	uiForwarder, err := StartLoopbackForwarder(
+		ctx,
+		uiPort,
+		defaultGuestIPv4,
+		defaultGuestUIPort,
+	)
 	if err != nil {
 		return err
 	}

@@ -37,6 +37,28 @@ When code in lower-level packages prints directly to the terminal, it couples th
 
 By restricting direct terminal output to the `cmd` package (or other designated boundary layers), you preserve separation between **core logic** and **presentation**. Other packages should return values or accept an `io.Writer` for output instead of printing directly. This makes logic testable (you can capture or mock output) and reusable in contexts beyond a terminal. A common idiom in Go is to use `fmt.Fprintf(w, ...)` with an `io.Writer` parameter when output must be produced programmatically, rather than writing straight to stdout. :contentReference[oaicite:1]{index=1}
 
+## Keep backend-specific behavior behind backend interfaces
 
+**Rule:** If behavior depends on the deployment backend, resolve the backend once and delegate that behavior to the backend implementation. Do not branch on backend identifiers in command code, and do not read backend-private deployment artifacts outside the backend implementation.
+
+### Explanation
+
+Backend-specific conditionals such as `if backend == "local"` in command orchestration code leak runtime concerns out of the runtime boundary. That makes the codebase harder to extend because every new backend-specific behavior gets copied into more commands instead of staying localized.
+
+The `cmd` layer and the deployment orchestration layer should deal in stable backend capabilities and interfaces: lifecycle operations, diagnostic payloads, shell behavior, connection metadata, and similar contracts. Backend implementations may still use different files or schemas internally, but those details should stay hidden behind the backend abstraction.
+
+This keeps backend behavior coherent, reduces duplication, and makes future backend additions or changes cheaper because most command code does not need to know how a specific backend stores or derives its state.
+
+Backends should return data, not preformatted CLI output. JSON encoding, text rendering, and terminal printing belong in common launcher or `cmd` code, not in backend implementations.
+
+## Make preset compatibility explicit in user-facing CLI output
+
+**Rule:** When preset compatibility is constrained, CLI help and preset discovery commands must surface those constraints directly instead of forcing users to infer them from validation errors.
+
+### Explanation
+
+Compatibility metadata in manifests is necessary for correctness, but it is not sufficient for usability. If a preset is special, or if only certain infrastructure and installation presets can be combined, the launcher should say so in `--help` output and in preset discovery commands such as `exasol presets list`.
+
+This is especially important for `local`, which is not just another infrastructure preset row. It selects a different backend, has different platform constraints, and only works with compatible installation presets. Making that relationship visible up front reduces failed attempts and keeps the command UX honest.
 
 

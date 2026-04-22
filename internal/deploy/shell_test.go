@@ -6,6 +6,8 @@ package deploy
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -30,6 +32,16 @@ func TestOpenHostShell_RejectsLocalDeployments(t *testing.T) {
 		},
 	}); err != nil {
 		t.Fatalf("failed to write local deployment info: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(deploymentDir, "infrastructure"), 0o700); err != nil {
+		t.Fatalf("failed to create infrastructure dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(deploymentDir, "infrastructure", "infrastructure.yaml"),
+		[]byte("name: Local\ndescription: Test local deployment\nbackend: local\n"),
+		0o600,
+	); err != nil {
+		t.Fatalf("failed to write infrastructure manifest: %v", err)
 	}
 
 	// When

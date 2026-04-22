@@ -29,6 +29,9 @@ var initCmdLongDesc = initCmdShortDesc + `
 	Each argument can be either an embedded preset name (e.g. "aws") or a preset directory path.
 	To force path selection, pass a path-like value such as "./my-preset" or "/abs/path/to/preset".
 
+	The built-in "local" infrastructure preset is special: it uses the local backend instead of
+	cloud provisioning and is currently supported only on Apple Silicon macOS.
+
 	Tip: use "exasol presets" to discover and export presets.
 	`
 
@@ -37,7 +40,8 @@ var initCmd = &cobra.Command{
 	Short: initCmdShortDesc,
 	Long:  initCmdLongDesc,
 	Example: "  exasol init " +
-		presets.DefaultInfrastructure + "\n" +
+		"local\n" +
+		"  exasol init " + presets.DefaultInfrastructure + "\n" +
 		"  exasol init " + presets.DefaultInfrastructure + " " +
 		presets.DefaultInstallation + "\n" +
 		"  exasol init ./my-infra-preset ./my-install-preset",
@@ -59,6 +63,13 @@ func init() {
 		presets.ListEmbeddedInfrastructuresPresets()) +
 		"\n\t" + presetNamesForHelp(presets.PresetTypeInstallation,
 		presets.ListEmbeddedInstallationsPresets())
+
+	if note := embeddedLocalPresetNote(); note != "" {
+		initCmd.Long += "\n\n\t" + note
+	}
+	if matrix := embeddedPresetCompatibilityMatrix(); matrix != "" {
+		initCmd.Long += "\n\n\t" + strings.ReplaceAll(matrix, "\n", "\n\t")
+	}
 
 	initCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		deployment := commonFlags.Deployment()

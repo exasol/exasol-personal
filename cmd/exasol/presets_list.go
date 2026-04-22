@@ -16,6 +16,8 @@ var presetsListFlags = struct {
 	TypeFilter string
 }{}
 
+const embeddedPresetAppendixPartCount = 2
+
 func filterPresetCatalog(typeFilter string) (PresetCatalog, error) {
 	filter := normalizePresetTypeFilter(typeFilter)
 	cat := GetPresetCatalog()
@@ -121,7 +123,37 @@ func renderPresetListText(writer io.Writer, typeFilter string, catalog PresetCat
 		}
 	}
 
-	return nil
+	if filter != "" {
+		return nil
+	}
+
+	appendix := embeddedPresetAppendixText()
+	if appendix == "" {
+		return nil
+	}
+	if wroteAny {
+		if _, err := fmt.Fprintln(writer); err != nil {
+			return err
+		}
+	}
+
+	_, err := fmt.Fprintln(writer, appendix)
+
+	return err
+}
+
+func embeddedPresetAppendixText() string {
+	parts := make([]string, 0, embeddedPresetAppendixPartCount)
+
+	if note := embeddedLocalPresetNote(); note != "" {
+		parts = append(parts, note)
+	}
+
+	if matrix := embeddedPresetCompatibilityMatrix(); matrix != "" {
+		parts = append(parts, matrix)
+	}
+
+	return strings.Join(parts, "\n\n")
 }
 
 var presetsListCmd = &cobra.Command{

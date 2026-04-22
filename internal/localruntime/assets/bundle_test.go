@@ -31,7 +31,6 @@ func TestPrepareBundle_UsesExistingDirectoryLayout(t *testing.T) {
 
 	// When
 	bundle, err := PrepareBundle(sourceDir, filepath.Join(t.TempDir(), "ignored"))
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected directory bundle preparation to succeed, got %v", err)
@@ -59,7 +58,6 @@ func TestPrepareBundle_ExtractsTarGzArchive(t *testing.T) {
 
 	// When
 	bundle, err := PrepareBundle(archivePath, destinationRoot)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected archive bundle preparation to succeed, got %v", err)
@@ -77,7 +75,11 @@ func TestPrepareBundle_RejectsMissingRequiredFiles(t *testing.T) {
 
 	// Given
 	sourceDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(sourceDir, "vmlinux.container"), []byte("kernel"), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(sourceDir, "vmlinux.container"),
+		[]byte("kernel"),
+		0o600,
+	); err != nil {
 		t.Fatalf("expected kernel fixture to be written, got %v", err)
 	}
 

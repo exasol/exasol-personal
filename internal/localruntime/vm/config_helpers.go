@@ -11,33 +11,34 @@ import (
 
 const mib = 1024 * 1024
 
-func clampCPUCount(requested int, min, max uint) uint {
+func clampCPUCount(requested int, minValue, maxValue uint) uint {
 	switch {
 	case requested <= 0:
-		return min
-	case uint(requested) < min:
-		return min
-	case uint(requested) > max:
-		return max
+		return minValue
+	case uint(requested) < minValue:
+		return minValue
+	case uint(requested) > maxValue:
+		return maxValue
 	default:
 		return uint(requested)
 	}
 }
 
-func clampMemoryBytes(requested, min, max uint64) uint64 {
+func clampMemoryBytes(requested, minValue, maxValue uint64) uint64 {
 	value := requested
-	if value < min {
-		value = min
+	if value < minValue {
+		value = minValue
 	}
-	if value > max {
-		value = max
+	if value > maxValue {
+		value = maxValue
 	}
 	if value%mib != 0 {
 		value -= value % mib
 	}
-	if value < min {
-		return min
+	if value < minValue {
+		return minValue
 	}
+
 	return value
 }
 
@@ -65,16 +66,21 @@ func sanitizeTag(value string) string {
 	var builder strings.Builder
 	lastDash := false
 
-	for _, r := range strings.TrimSpace(value) {
+	for _, runeValue := range strings.TrimSpace(value) {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
-			builder.WriteRune(r)
+		case runeValue >= 'a' && runeValue <= 'z',
+			runeValue >= 'A' && runeValue <= 'Z',
+			runeValue >= '0' && runeValue <= '9',
+			runeValue == '.',
+			runeValue == '_',
+			runeValue == '-':
+			_, _ = builder.WriteRune(runeValue)
 			lastDash = false
 		default:
 			if lastDash || builder.Len() == 0 {
 				continue
 			}
-			builder.WriteByte('-')
+			_ = builder.WriteByte('-')
 			lastDash = true
 		}
 	}

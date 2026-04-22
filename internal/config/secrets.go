@@ -18,7 +18,7 @@ type Secrets struct {
 }
 
 func SecretsFilePath(deployment DeploymentDir) (string, error) {
-	filepath, exists, err := findExistingFile(deployment.Root(), secretsFileName)
+	secretsPath, exists, err := findExistingFile(deployment.Root(), secretsFileName)
 	if err != nil {
 		return "", fmt.Errorf("failed to get the secrets file path: %w", err)
 	}
@@ -30,18 +30,18 @@ func SecretsFilePath(deployment DeploymentDir) (string, error) {
 		)
 	}
 
-	return filepath, nil
+	return secretsPath, nil
 }
 
 func ReadSecrets(deployment DeploymentDir) (*Secrets, error) {
-	filepath, err := SecretsFilePath(deployment)
+	secretsPath, err := SecretsFilePath(deployment)
 	if err != nil {
 		return nil, err
 	}
 
-	slog.Debug("reading secrets file", "file", filepath)
+	slog.Debug("reading secrets file", "file", secretsPath)
 
-	return readConfig[Secrets](filepath, "secrets")
+	return readConfig[Secrets](secretsPath, "secrets")
 }
 
 func WriteSecrets(deploymentDir string, secrets *Secrets) error {

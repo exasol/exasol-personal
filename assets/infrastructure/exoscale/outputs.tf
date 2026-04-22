@@ -6,6 +6,7 @@ locals {
   key_file_path               = "${local.infrastructure_artifact_dir}/${local.key_file_name}"
 
   deployment_info = {
+    backend          = "tofu"
     deploymentId     = local.deployment_id
     region           = var.zone
     availabilityZone = var.zone
@@ -14,6 +15,17 @@ locals {
     instanceType     = var.instance_type
     vpcId            = exoscale_private_network.cluster.id
     subnetId         = exoscale_private_network.cluster.id
+    connection = length(exoscale_compute_instance.nodes) > 0 ? {
+      host           = values(exoscale_compute_instance.nodes)[0].public_ip_address
+      displayHost    = values(exoscale_compute_instance.nodes)[0].public_ip_address
+      publicIp       = values(exoscale_compute_instance.nodes)[0].public_ip_address
+      dbPort         = 8563
+      uiPort         = 8443
+      username       = "sys"
+      sshCommand     = "ssh -i ${local.key_file_relative_path} ubuntu@${values(exoscale_compute_instance.nodes)[0].public_ip_address} -p 22"
+      sshPort        = "22"
+      shellSupported = true
+    } : null
     nodes = {
       for k, node_config in local.nodes :
       node_config.name => {

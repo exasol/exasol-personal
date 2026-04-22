@@ -13,10 +13,15 @@ import (
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
-const backendTypeTofu = "tofu"
-const backendTypeLocal = "local"
+const (
+	backendTypeTofu  = "tofu"
+	backendTypeLocal = "local"
+)
 
 type deploymentBackend interface {
+	ValidateEnvironment() error
+	OpenHostShell(ctx context.Context, deployment config.DeploymentDir, selectedNode string) error
+	OpenCOSShell(ctx context.Context, deployment config.DeploymentDir) error
 	Deploy(
 		ctx context.Context,
 		deployment config.DeploymentDir,
@@ -60,6 +65,22 @@ func resolveBackendKind(manifest *presets.InfrastructureManifest) (string, error
 			"%w: infrastructure manifest does not declare a supported backend",
 			ErrUnknownDeploymentType,
 		)
+	}
+
+	return backend, nil
+}
+
+func resolveBackendForDeployment(
+	deployment config.DeploymentDir,
+) (deploymentBackend, error) {
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := resolveBackendForManifest(manifest)
+	if err != nil {
+		return nil, err
 	}
 
 	return backend, nil

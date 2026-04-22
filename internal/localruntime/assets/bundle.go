@@ -17,6 +17,11 @@ import (
 
 var ErrPayloadBundleInvalid = errors.New("local runtime payload bundle is invalid")
 
+const (
+	bundleDirMode  = 0o700
+	bundleFileMode = 0o600
+)
+
 type Bundle struct {
 	RootDir    string
 	KernelPath string
@@ -40,7 +45,7 @@ func PrepareBundle(sourcePath string, destinationRoot string) (*Bundle, error) {
 	if err := os.RemoveAll(destinationRoot); err != nil {
 		return nil, fmt.Errorf("failed to reset payload extraction dir: %w", err)
 	}
-	if err := os.MkdirAll(destinationRoot, 0o700); err != nil {
+	if err := os.MkdirAll(destinationRoot, bundleDirMode); err != nil {
 		return nil, fmt.Errorf("failed to create payload extraction dir: %w", err)
 	}
 
@@ -105,7 +110,11 @@ func extractTarGz(sourcePath string, destinationRoot string) error {
 
 	gzipReader, err := gzip.NewReader(sourceFile)
 	if err != nil {
-		return fmt.Errorf("%w: payload bundle is not a gzip archive: %v", ErrPayloadBundleInvalid, err)
+		return fmt.Errorf(
+			"%w: payload bundle is not a gzip archive: %w",
+			ErrPayloadBundleInvalid,
+			err,
+		)
 	}
 	defer gzipReader.Close()
 
@@ -116,7 +125,11 @@ func extractTarGz(sourcePath string, destinationRoot string) error {
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("%w: failed to read payload bundle archive: %v", ErrPayloadBundleInvalid, err)
+			return fmt.Errorf(
+				"%w: failed to read payload bundle archive: %w",
+				ErrPayloadBundleInvalid,
+				err,
+			)
 		}
 
 		targetPath, err := safeBundlePath(destinationRoot, header.Name)
@@ -126,20 +139,24 @@ func extractTarGz(sourcePath string, destinationRoot string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, 0o700); err != nil {
+			if err := os.MkdirAll(targetPath, bundleDirMode); err != nil {
 				return fmt.Errorf("failed to create payload bundle dir: %w", err)
 			}
-		case tar.TypeReg, tar.TypeRegA:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(targetPath), bundleDirMode); err != nil {
 				return fmt.Errorf("failed to create payload bundle parent dir: %w", err)
 			}
 
-			file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, fileMode(header.FileInfo().Mode()))
+			file, err := os.OpenFile(
+				targetPath,
+				os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
+				fileMode(header.FileInfo().Mode()),
+			)
 			if err != nil {
 				return fmt.Errorf("failed to create payload bundle file: %w", err)
 			}
 
-			if _, err := io.Copy(file, tarReader); err != nil {
+			if _, err := io.CopyN(file, tarReader, header.Size); err != nil {
 				_ = file.Close()
 				return fmt.Errorf("failed to extract payload bundle file: %w", err)
 			}
@@ -147,7 +164,7 @@ func extractTarGz(sourcePath string, destinationRoot string) error {
 				return fmt.Errorf("failed to finalize payload bundle file: %w", err)
 			}
 		case tar.TypeSymlink:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
+			if err := os.MkdirAll(filepath.Dir(targetPath), bundleDirMode); err != nil {
 				return fmt.Errorf("failed to create payload bundle symlink dir: %w", err)
 			}
 			if err := os.Symlink(header.Linkname, targetPath); err != nil {
@@ -181,7 +198,7 @@ func safeBundlePath(destinationRoot string, name string) (string, error) {
 
 func fileMode(mode fs.FileMode) fs.FileMode {
 	if mode == 0 {
-		return 0o600
+		return bundleFileMode
 	}
 
 	return mode.Perm()

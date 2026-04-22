@@ -25,19 +25,32 @@ const (
 		"Fix the problem and run `deploy` again, or run `destroy` to clean up."
 )
 
-func appendDeployFailureHint(err error, backendKind string) error {
+func appendDeployFailureHint(
+	deployment config.DeploymentDir,
+	err error,
+) error {
 	if err == nil {
 		return nil
 	}
 
-	if backendKind == backendTypeLocal {
-		return fmt.Errorf(
-			"%w\n\nInspect the local runtime logs under <deploymentDir>/local-runtime/logs/ for details.",
-			err,
+	return fmt.Errorf(
+		"%w\n\nInspect launcher logs at %s for details. %s%s",
+		err,
+		deployment.Resolve("deployment.log"),
+		deployFailureResourceHint,
+		deployFailureResourceHintSuffix(deployment),
+	)
+}
+
+func deployFailureResourceHintSuffix(deployment config.DeploymentDir) string {
+	if _, statErr := os.Stat(deployment.NodeDetailsPath()); statErr == nil {
+		return fmt.Sprintf(
+			" Additional deployment diagnostics are stored in %s.",
+			deployment.NodeDetailsPath(),
 		)
 	}
 
-	return fmt.Errorf("%w\n\n%s", err, deployFailureResourceHint)
+	return ""
 }
 
 //nolint:revive
@@ -140,10 +153,6 @@ func deployFromManifests(
 			if err != nil {
 				return err
 			}
-			backendKind, err := resolveBackendKind(infrastructureManifest)
-			if err != nil {
-				return err
-			}
 			backend, err := resolveBackendForManifest(infrastructureManifest)
 			if err != nil {
 				return err
@@ -169,7 +178,7 @@ func deployFromManifests(
 			); err != nil {
 				unregister()
 
-				deployErr := appendDeployFailureHint(err, backendKind)
+				deployErr := appendDeployFailureHint(deployment, err)
 				if stateErr := exasolState.SetWorkflowStateAndWrite(
 					&config.WorkflowStateDeploymentFailed{
 						Error: deployErr.Error(),
@@ -186,7 +195,7 @@ func deployFromManifests(
 			if err := runInstallSteps(ctx, deployment, installManifest,
 				externalCommandOutput, externalCommandOutput); err != nil {
 				unregister()
-				deployErr := appendDeployFailureHint(err, backendKind)
+				deployErr := appendDeployFailureHint(deployment, err)
 				if stateErr := exasolState.SetWorkflowStateAndWrite(
 					&config.WorkflowStateDeploymentFailed{
 						Error: deployErr.Error(),
@@ -338,13 +347,13 @@ func runInstallSteps(
 	).RunTasks(ctx, tasks, deployment, out, outErr)
 }
 
-func buildInstallTasks(im *presets.InstallManifest) []config.Task {
-	if im == nil {
+func buildInstallTasks(installManifest *presets.InstallManifest) []config.Task {
+	if installManifest == nil {
 		return nil
 	}
 
 	tasks := []config.Task{}
-	for _, step := range im.Install {
+	for _, step := range installManifest.Install {
 		if step.RemoteExec != nil {
 			remoteExec := *step.RemoteExec
 			if remoteExec.Filename != "" {

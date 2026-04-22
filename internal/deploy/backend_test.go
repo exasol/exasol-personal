@@ -18,7 +18,6 @@ func TestResolveBackendForManifest_UsesExplicitBackend(t *testing.T) {
 
 	// When
 	backend, err := resolveBackendForManifest(manifest)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -38,7 +37,6 @@ func TestResolveBackendForManifest_FallsBackToTofuForLegacyManifest(t *testing.T
 
 	// When
 	backend, err := resolveBackendForManifest(manifest)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -74,7 +72,6 @@ func TestResolveBackendForManifest_UsesLocalBackend(t *testing.T) {
 
 	// When
 	backend, err := resolveBackendForManifest(manifest)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

@@ -22,7 +22,6 @@ func TestControllerEnsure_CreatesDeploymentScopedControlDir(t *testing.T) {
 
 	// When
 	err := controller.Ensure()
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected ensure to succeed, got %v", err)
@@ -52,10 +51,18 @@ func TestControllerSharedDir_DescribesMountedControlBridge(t *testing.T) {
 		t.Fatalf("expected control share tag %q, got %q", controlShareTag, sharedDir.Tag)
 	}
 	if sharedDir.Source != controller.Paths().HostDir {
-		t.Fatalf("expected control share source %q, got %q", controller.Paths().HostDir, sharedDir.Source)
+		t.Fatalf(
+			"expected control share source %q, got %q",
+			controller.Paths().HostDir,
+			sharedDir.Source,
+		)
 	}
 	if sharedDir.Destination != controller.Paths().GuestDir {
-		t.Fatalf("expected guest control dir %q, got %q", controller.Paths().GuestDir, sharedDir.Destination)
+		t.Fatalf(
+			"expected guest control dir %q, got %q",
+			controller.Paths().GuestDir,
+			sharedDir.Destination,
+		)
 	}
 }
 
@@ -68,7 +75,6 @@ func TestControllerRequestGracefulStop_FallsBackToStopMarker(t *testing.T) {
 
 	// When
 	err := controller.RequestGracefulStop(context.Background())
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected graceful stop request to succeed, got %v", err)
@@ -113,7 +119,6 @@ func TestControllerSendCommand_UsesUnixControlSocket(t *testing.T) {
 
 	// When
 	response, err := controller.SendCommand(context.Background(), "PING")
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected send command to succeed, got %v", err)
@@ -138,9 +143,17 @@ func TestControllerWaitForRuntimeState_ReturnsWhenStateAppears(t *testing.T) {
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
+		runtimeState := strings.Join([]string{
+			"sql_port=8563",
+			"ui_port=8443",
+			"jupyter_enabled=0",
+			"jupyter_port=8888",
+			"voila_port=8866",
+			"",
+		}, "\n")
 		_ = os.WriteFile(
 			controller.Paths().HostRuntimeStatePath,
-			[]byte("sql_port=8563\nui_port=8443\njupyter_enabled=0\njupyter_port=8888\nvoila_port=8866\n"),
+			[]byte(runtimeState),
 			0o600,
 		)
 	}()
@@ -150,7 +163,6 @@ func TestControllerWaitForRuntimeState_ReturnsWhenStateAppears(t *testing.T) {
 
 	// When
 	state, err := controller.WaitForRuntimeState(ctx)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected runtime state wait to succeed, got %v", err)
@@ -179,13 +191,16 @@ func TestControllerReadRuntimeState_ParsesRuntimeMetadata(t *testing.T) {
 		"voila_port=8866",
 		"",
 	}, "\n")
-	if err := os.WriteFile(controller.Paths().HostRuntimeStatePath, []byte(runtimeState), 0o600); err != nil {
+	if err := os.WriteFile(
+		controller.Paths().HostRuntimeStatePath,
+		[]byte(runtimeState),
+		0o600,
+	); err != nil {
 		t.Fatalf("expected runtime state fixture to be written, got %v", err)
 	}
 
 	// When
 	state, err := controller.ReadRuntimeState()
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected runtime state read to succeed, got %v", err)

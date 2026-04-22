@@ -48,6 +48,9 @@ def test_presets_list_outputs_sections(exasol_path: str) -> None:
     # Then I see headers for the known preset types
     assert "Infrastructure presets:" in output
     assert "Installation presets:" in output
+    assert "Compatibility matrix" in output
+    assert "local" in output
+    assert "special preset" in output.lower()
 
 
 def test_presets_list_json_is_valid(exasol_path: str) -> None:

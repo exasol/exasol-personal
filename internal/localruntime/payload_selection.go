@@ -17,7 +17,8 @@ import (
 
 const (
 	PayloadMetadataURLEnvVar  = "EXASOL_LOCAL_RUNTIME_PAYLOAD_METADATA_URL"
-	DefaultPayloadMetadataURL = "https://downloads.exasol.com/exasol-personal/localruntime/metadata.json"
+	DefaultPayloadMetadataURL = "https://downloads.exasol.com/exasol-personal/" +
+		"localruntime/metadata.json"
 )
 
 var ErrPayloadBootAssetsMissing = errors.New("local runtime payload boot assets are missing")
@@ -25,7 +26,10 @@ var ErrPayloadBootAssetsMissing = errors.New("local runtime payload boot assets 
 type payloadManager interface {
 	Resolve(ctx context.Context, architecture string) (*localassets.Payload, error)
 	EnsureCached(ctx context.Context, payload *localassets.Payload) (string, error)
-	EnsureBootCached(ctx context.Context, payload *localassets.Payload) (*localassets.CachedBootAssets, error)
+	EnsureBootCached(
+		ctx context.Context,
+		payload *localassets.Payload,
+	) (*localassets.CachedBootAssets, error)
 }
 
 var (
@@ -115,7 +119,8 @@ func cachedPayloadRef(state *localstate.State) *localstate.PayloadRef {
 	if state.Payload.Boot == nil {
 		return nil
 	}
-	if !isCachedFile(state.Payload.Boot.KernelPath) || !isCachedFile(state.Payload.Boot.InitrdPath) {
+	if !isCachedFile(state.Payload.Boot.KernelPath) ||
+		!isCachedFile(state.Payload.Boot.InitrdPath) {
 		return nil
 	}
 

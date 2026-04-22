@@ -13,8 +13,10 @@ import (
 	"github.com/exasol/exasol-personal/internal/remote"
 )
 
-var ErrNoNodesFound = errors.New("no nodes found in the active deployment")
-var ErrLocalShellUnsupported = errors.New("shell access is unsupported for local deployments")
+var (
+	ErrNoNodesFound          = errors.New("no nodes found in the active deployment")
+	ErrLocalShellUnsupported = errors.New("shell access is unsupported for local deployments")
+)
 
 // OpenHostShell starts an interactive shell using stdin stdout & stderr.
 func OpenHostShell(
@@ -22,41 +24,25 @@ func OpenHostShell(
 	deployment config.DeploymentDir,
 	selectedNode string,
 ) error {
-	if _, err := config.ReadLocalDeploymentInfo(deployment.Root()); err == nil {
-		return fmt.Errorf(
-			"%w: `shell host` is unavailable because local deployments do not expose SSH host access",
-			ErrLocalShellUnsupported,
-		)
-	}
-
 	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
-		sshRemote, err := sshRemoteForNodeUnsafe(deployment, selectedNode)
+		backend, err := resolveBackendForDeployment(deployment)
 		if err != nil {
 			return err
 		}
 
-		return sshRemote.Shell(ctx, os.Stdout, os.Stderr)
+		return backend.OpenHostShell(ctx, deployment, selectedNode)
 	})
 }
 
 // OpenCOSShell opens an interactive COS session via the access node (n11).
 func OpenCOSShell(ctx context.Context, deployment config.DeploymentDir) error {
-	if _, err := config.ReadLocalDeploymentInfo(deployment.Root()); err == nil {
-		return fmt.Errorf(
-			"%w: `shell container` is unavailable because local deployments do not expose COS shells",
-			ErrLocalShellUnsupported,
-		)
-	}
-
 	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
-		sshRemote, err := sshRemoteForNodeUnsafe(deployment, "n11")
+		backend, err := resolveBackendForDeployment(deployment)
 		if err != nil {
 			return err
 		}
 
-		cosCommand := "/usr/bin/env bash /opt/exasol_launcher/scripts/connectCos.sh"
-
-		return sshRemote.RunInteractiveCommand(ctx, cosCommand, os.Stdout, os.Stderr)
+		return backend.OpenCOSShell(ctx, deployment)
 	})
 }
 

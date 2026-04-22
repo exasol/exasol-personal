@@ -22,8 +22,18 @@ func verifyDatabaseConnection(ctx context.Context, deployment config.DeploymentD
 	var dbErr error
 	// Suppress driver noise only for this probe (invalid creds, transient failures expected).
 	probeErr := connect.WithSilencedDriverErrors(func() error {
+		connectionInfo, err := config.ResolveConnectionInfo(deployment)
+		if err != nil {
+			return err
+		}
+
 		database, err := connect.NewExasolConnection(
-			deployment, "invalid username", "invalid password", true)
+			deployment,
+			connectionInfo,
+			"invalid username",
+			"invalid password",
+			true,
+		)
 		if err != nil {
 			return err
 		}

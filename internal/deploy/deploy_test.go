@@ -7,16 +7,19 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/exasol/exasol-personal/internal/config"
 )
 
-func TestAppendDeployFailureHint_AddsCloudResourceHint(t *testing.T) {
+func TestAppendDeployFailureHint_AddsLauncherLogPath(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	baseErr := errors.New("tofu apply failed")
+	baseErr := errors.New("deployment failed")
+	deployment := config.NewDeploymentDir(t.TempDir())
 
 	// When
-	err := appendDeployFailureHint(baseErr, backendTypeTofu)
+	err := appendDeployFailureHint(deployment, baseErr)
 
 	// Then
 	if err == nil {
@@ -25,36 +28,48 @@ func TestAppendDeployFailureHint_AddsCloudResourceHint(t *testing.T) {
 	if !errors.Is(err, baseErr) {
 		t.Fatalf("expected wrapped error to match base error, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), deployFailureResourceHint) {
-		t.Fatalf("expected error to include resource hint, got: %q", err.Error())
+	if !strings.Contains(err.Error(), deployment.Resolve("deployment.log")) {
+		t.Fatalf("expected error to include deployment log path, got: %q", err.Error())
+	}
+}
+
+func TestAppendDeployFailureHint_AddsDeploymentInfoPathWhenPresent(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	baseErr := errors.New("deployment failed")
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := config.WriteDeploymentInfo(deployment.Root(), &config.DeploymentInfo{
+		Backend:      "tofu",
+		DeploymentId: "dep-1",
+		Connection: &config.DeploymentConnection{
+			Host:           "example.local",
+			DisplayHost:    "example.local",
+			DBPort:         8563,
+			UIPort:         8443,
+			Username:       "sys",
+			ShellSupported: true,
+		},
+	}); err != nil {
+		t.Fatalf("failed to write deployment info: %v", err)
+	}
+
+	// When
+	err := appendDeployFailureHint(deployment, baseErr)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected non-nil error")
+	}
+	if !strings.Contains(err.Error(), deployment.NodeDetailsPath()) {
+		t.Fatalf("expected error to include deployment info path, got: %q", err.Error())
 	}
 }
 
 func TestAppendDeployFailureHintNilInput(t *testing.T) {
 	t.Parallel()
 
-	// Given/When
-	err := appendDeployFailureHint(nil, backendTypeTofu)
-	// Then
-	if err != nil {
+	if err := appendDeployFailureHint(config.NewDeploymentDir(t.TempDir()), nil); err != nil {
 		t.Fatalf("expected nil, got: %v", err)
-	}
-}
-
-func TestAppendDeployFailureHint_AddsLocalLogHint(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	baseErr := errors.New("local runtime failed")
-
-	// When
-	err := appendDeployFailureHint(baseErr, backendTypeLocal)
-
-	// Then
-	if err == nil {
-		t.Fatal("expected non-nil error")
-	}
-	if !strings.Contains(err.Error(), "local-runtime/logs") {
-		t.Fatalf("expected local log hint, got: %q", err.Error())
 	}
 }

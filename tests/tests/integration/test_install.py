@@ -39,6 +39,9 @@ def test_install_help(exasol_path: str) -> None:
     assert "Available infrastructure presets:" in output
     assert infra_id in output
     assert "Available installation presets:" in output
+    assert "special" in output.lower()
+    assert "compatibility matrix" in output.lower()
+    assert "local" in output
     assert "exasol presets" in output
 
 

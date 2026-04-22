@@ -4,6 +4,7 @@
 package localruntime
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,8 @@ import (
 
 const localLoopbackHost = "127.0.0.1"
 
+const proxyCopyDirectionCount = 2
+
 type LoopbackForwarder struct {
 	listener   net.Listener
 	guestHost  string
@@ -23,8 +26,17 @@ type LoopbackForwarder struct {
 	wg         sync.WaitGroup
 }
 
-func StartLoopbackForwarder(hostPort int, guestHost string, guestPort int) (*LoopbackForwarder, error) {
-	listener, err := net.Listen("tcp", net.JoinHostPort(localLoopbackHost, strconv.Itoa(hostPort)))
+func StartLoopbackForwarder(
+	ctx context.Context,
+	hostPort int,
+	guestHost string,
+	guestPort int,
+) (*LoopbackForwarder, error) {
+	listener, err := (&net.ListenConfig{}).Listen(
+		ctx,
+		"tcp",
+		net.JoinHostPort(localLoopbackHost, strconv.Itoa(hostPort)),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on %s:%d: %w", localLoopbackHost, hostPort, err)
 	}
@@ -35,7 +47,7 @@ func StartLoopbackForwarder(hostPort int, guestHost string, guestPort int) (*Loo
 		guestPort: guestPort,
 	}
 	forwarder.wg.Add(1)
-	go forwarder.acceptLoop()
+	go forwarder.acceptLoop(ctx)
 
 	return forwarder, nil
 }
@@ -53,7 +65,7 @@ func (f *LoopbackForwarder) Close() error {
 	return nil
 }
 
-func (f *LoopbackForwarder) acceptLoop() {
+func (f *LoopbackForwarder) acceptLoop(ctx context.Context) {
 	defer f.wg.Done()
 
 	for {
@@ -67,22 +79,26 @@ func (f *LoopbackForwarder) acceptLoop() {
 		}
 
 		f.wg.Add(1)
-		go f.proxyConnection(clientConn)
+		go f.proxyConnection(ctx, clientConn)
 	}
 }
 
-func (f *LoopbackForwarder) proxyConnection(clientConn net.Conn) {
+func (f *LoopbackForwarder) proxyConnection(ctx context.Context, clientConn net.Conn) {
 	defer f.wg.Done()
 	defer clientConn.Close()
 
-	guestConn, err := net.Dial("tcp", net.JoinHostPort(f.guestHost, strconv.Itoa(f.guestPort)))
+	guestConn, err := (&net.Dialer{}).DialContext(
+		ctx,
+		"tcp",
+		net.JoinHostPort(f.guestHost, strconv.Itoa(f.guestPort)),
+	)
 	if err != nil {
 		return
 	}
 	defer guestConn.Close()
 
 	var copyWG sync.WaitGroup
-	copyWG.Add(2)
+	copyWG.Add(proxyCopyDirectionCount)
 
 	go func() {
 		defer copyWG.Done()

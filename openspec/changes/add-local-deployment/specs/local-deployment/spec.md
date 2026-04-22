@@ -48,6 +48,33 @@ The system SHALL execute local deployment lifecycle operations through a dedicat
 - AND removes deployment-owned local runtime artifacts
 - AND returns the deployment to the initialized state
 
+### Requirement: Backend-owned deployment interactions
+
+The system SHALL resolve the deployment backend before executing backend-specific deployment-directory behavior, and SHALL keep backend-private artifacts and schemas behind backend-owned interfaces instead of command-layer branching on backend names or file layouts.
+
+#### Scenario: Diagnostic info is delegated to the backend
+
+- GIVEN a deployment directory has already been initialized
+- WHEN the user runs `exasol diag info`
+- THEN the launcher resolves the deployment backend first
+- AND the launcher reads the backend-produced deployment info through a common deployment-info contract
+- AND the command layer does not read backend-private deployment artifacts directly
+
+#### Scenario: Shell behavior is delegated to the backend
+
+- GIVEN a deployment directory has already been initialized
+- WHEN the user runs `exasol shell host`
+- THEN the launcher resolves the deployment backend first
+- AND the backend decides whether host-shell access exists
+- AND unsupported local-shell behavior is produced by the local backend instead of command-layer special casing
+
+#### Scenario: Backends return data while the launcher formats it
+
+- GIVEN a deployment-directory command needs deployment metadata
+- WHEN the launcher renders text or JSON output
+- THEN backend-specific code provides data and operations
+- AND common launcher code owns JSON encoding and text formatting
+
 ### Requirement: Deployment-scoped local runtime state
 
 The system SHALL keep local runtime state isolated per deployment directory.
@@ -100,3 +127,14 @@ The system SHALL generate deployment artifacts for local deployments that suppor
 - WHEN the user runs `exasol info`
 - THEN the launcher renders connection details appropriate for local loopback access
 - AND includes the deployment's local database and UI endpoints
+
+### Requirement: Common deployment info schema
+
+The system SHALL use a single launcher-facing deployment-info schema for deployment-directory interaction, with backend-specific sections represented through optional fields instead of separate file shapes per backend.
+
+#### Scenario: Local and cloud populate the same deployment info contract
+
+- GIVEN two deployment directories use different backends
+- WHEN each backend writes `deployment.json`
+- THEN both files follow the same launcher-facing schema
+- AND fields without meaningful values may be omitted or null

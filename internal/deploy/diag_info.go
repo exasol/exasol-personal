@@ -22,14 +22,7 @@ func DumpDeploymentInfo(
 }
 
 func dumpDeploymentInfoUnsafe(deployment config.DeploymentDir, writer io.Writer) error {
-	if details, err := config.ReadLocalDeploymentInfo(deployment.Root()); err == nil {
-		encoder := json.NewEncoder(writer)
-		encoder.SetIndent("", "  ")
-
-		return encoder.Encode(details)
-	}
-
-	details, err := config.ReadNodeDetails(deployment)
+	details, err := config.ReadDeploymentInfo(deployment)
 	if err != nil {
 		return err
 	}

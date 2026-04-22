@@ -18,6 +18,8 @@ def test_help_flag(exasol_path: str) -> None:
         "Additional Commands:",
         "Essential Commands:",
         "Flags:",
+        "local",
+        "compatibility matrix",
         'Use "exasol [command] --help" for more information about a command.',
     ]:
         assert text in output

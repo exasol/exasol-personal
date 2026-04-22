@@ -4,7 +4,7 @@
 package localruntime
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"testing"
 )
@@ -17,7 +17,6 @@ func TestRuntimeEnsureRoot_CreatesDeploymentScopedLayout(t *testing.T) {
 
 	// When
 	err := runtime.EnsureRoot()
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -55,10 +54,11 @@ func TestRuntimeAllocatePort_PersistsAndReusesAssignments(t *testing.T) {
 			}
 			port := nextPort
 			nextPort++
+
 			return port, nil
 		}
 
-		return 0, fmt.Errorf("no ports left")
+		return 0, errors.New("no ports left")
 	}
 
 	// When

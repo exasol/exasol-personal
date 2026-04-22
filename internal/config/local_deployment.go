@@ -6,11 +6,8 @@ package config
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 )
-
-const DeploymentBackendLocal = "local"
 
 var ErrNotLocalDeploymentInfo = errors.New("deployment info is not for a local deployment")
 
@@ -23,44 +20,26 @@ type LocalDeploymentInfo struct {
 	Local           *LocalDeploymentRuntime `json:"local,omitempty"`
 }
 
-type LocalDeploymentRuntime struct {
-	Host                       string `json:"host"`
-	DBPort                     int    `json:"dbPort"`
-	UIPort                     int    `json:"uiPort"`
-	Username                   string `json:"username,omitempty"`
-	CertFingerprint            string `json:"certFingerprint,omitempty"`
-	InsecureSkipCertValidation bool   `json:"insecureSkipCertValidation,omitempty"`
-	RuntimeRoot                string `json:"runtimeRoot,omitempty"`
-	ControlSocketPath          string `json:"controlSocketPath,omitempty"`
-	RuntimeStatePath           string `json:"runtimeStatePath,omitempty"`
-	PIDFilePath                string `json:"pidFilePath,omitempty"`
-	ConsoleLogPath             string `json:"consoleLogPath,omitempty"`
-	RunnerLogPath              string `json:"runnerLogPath,omitempty"`
-}
+type LocalDeploymentRuntime = DeploymentRuntime
 
 func ReadLocalDeploymentInfo(deploymentDir string) (*LocalDeploymentInfo, error) {
-	filepath, exists, err := GetDeploymentInfoFilePath(deploymentDir)
+	info, err := ReadDeploymentInfo(NewDeploymentDir(deploymentDir))
 	if err != nil {
 		return nil, err
 	}
-	if !exists {
-		return nil, fmt.Errorf(
-			"%w: failed to open local deployment info file %q",
-			ErrMissingConfigFile,
-			filepath,
-		)
-	}
-
-	info, err := readConfig[LocalDeploymentInfo](filepath, "local deployment info")
-	if err != nil {
-		return nil, err
-	}
-
-	if !info.IsLocal() {
+	if info.Runtime == nil ||
+		!strings.EqualFold(strings.TrimSpace(info.Backend), DeploymentBackendLocal) {
 		return nil, ErrNotLocalDeploymentInfo
 	}
 
-	return info, nil
+	return &LocalDeploymentInfo{
+		Backend:         info.Backend,
+		DeploymentID:    info.DeploymentId,
+		DeploymentState: info.DeploymentState,
+		ClusterSize:     info.ClusterSize,
+		ClusterState:    info.ClusterState,
+		Local:           info.Runtime,
+	}, nil
 }
 
 func WriteLocalDeploymentInfo(deploymentDir string, info *LocalDeploymentInfo) error {
@@ -71,9 +50,16 @@ func WriteLocalDeploymentInfo(deploymentDir string, info *LocalDeploymentInfo) e
 		return fmt.Errorf("%w: backend %q", ErrNotLocalDeploymentInfo, info.Backend)
 	}
 
-	path := filepath.Join(deploymentDir, nodeDetailsFileName)
+	deploymentInfo := &DeploymentInfo{
+		Backend:         DeploymentBackendLocal,
+		DeploymentId:    info.DeploymentID,
+		DeploymentState: info.DeploymentState,
+		ClusterSize:     info.ClusterSize,
+		ClusterState:    info.ClusterState,
+		Runtime:         info.Local,
+	}
 
-	return writeConfig(info, path, "local deployment info")
+	return WriteDeploymentInfo(deploymentDir, deploymentInfo)
 }
 
 func (i *LocalDeploymentInfo) IsLocal() bool {

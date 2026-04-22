@@ -16,6 +16,9 @@ import (
 	localassets "github.com/exasol/exasol-personal/internal/localruntime/assets"
 )
 
+const testPayloadMetadataURL = "https://example.invalid/metadata.json"
+
+//nolint:paralleltest // mutates package-level payload selection hooks.
 func TestRuntimeEnsurePayloadSelected_PersistsRunAndBootAssetPaths(t *testing.T) {
 	// Given
 	runtime := New(t.TempDir())
@@ -38,7 +41,7 @@ func TestRuntimeEnsurePayloadSelected_PersistsRunAndBootAssetPaths(t *testing.T)
 		return cacheDir, nil
 	}
 	resolvePayloadMetadataURL = func() string {
-		return "https://example.invalid/metadata.json"
+		return testPayloadMetadataURL
 	}
 	newPayloadManager = func(metadataURL string, cacheDir string) payloadManager {
 		manager := localassets.NewManager(metadataURL, cacheDir)
@@ -51,7 +54,7 @@ func TestRuntimeEnsurePayloadSelected_PersistsRunAndBootAssetPaths(t *testing.T)
 					return newHTTPResponseBytes(http.StatusOK, kernelBytes), nil
 				case "https://example.invalid/initrd":
 					return newHTTPResponseBytes(http.StatusOK, initrdBytes), nil
-				case "https://example.invalid/metadata.json":
+				case testPayloadMetadataURL:
 					return newHTTPResponse(
 						http.StatusOK,
 						`{"payloads":[{"version":"1.2.3","architecture":"`+
@@ -75,7 +78,6 @@ func TestRuntimeEnsurePayloadSelected_PersistsRunAndBootAssetPaths(t *testing.T)
 
 	// When
 	payload, err := runtime.EnsurePayloadSelected(context.Background())
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected payload selection to succeed, got %v", err)
@@ -94,6 +96,7 @@ func TestRuntimeEnsurePayloadSelected_PersistsRunAndBootAssetPaths(t *testing.T)
 	}
 }
 
+//nolint:paralleltest // mutates package-level payload selection hooks.
 func TestRuntimeEnsurePayloadSelected_RejectsMissingBootMetadata(t *testing.T) {
 	// Given
 	runtime := New(t.TempDir())
@@ -112,13 +115,13 @@ func TestRuntimeEnsurePayloadSelected_RejectsMissingBootMetadata(t *testing.T) {
 		return t.TempDir(), nil
 	}
 	resolvePayloadMetadataURL = func() string {
-		return "https://example.invalid/metadata.json"
+		return testPayloadMetadataURL
 	}
 	newPayloadManager = func(metadataURL string, cacheDir string) payloadManager {
 		manager := localassets.NewManager(metadataURL, cacheDir)
 		manager.HTTPClient = &http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				if req.URL.String() == "https://example.invalid/metadata.json" {
+				if req.URL.String() == testPayloadMetadataURL {
 					return newHTTPResponse(
 						http.StatusOK,
 						`{"payloads":[{"version":"1.2.3","architecture":"`+
@@ -143,7 +146,7 @@ func TestRuntimeEnsurePayloadSelected_RejectsMissingBootMetadata(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing boot metadata to fail")
 	}
-	if err != nil && err.Error() == "" {
+	if err.Error() == "" {
 		t.Fatal("expected a descriptive error")
 	}
 }

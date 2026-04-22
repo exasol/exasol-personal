@@ -25,6 +25,13 @@ const (
 	VersionCheckCategory  = "Exasol Personal"
 
 	VersionCheckLockTimeout = 250 * time.Millisecond
+	goarchAMD64             = "amd64"
+)
+
+const (
+	goosLinux   = "linux"
+	goosDarwin  = "darwin"
+	goosWindows = "windows"
 )
 
 // GetVersionCheckURL resolves the version-check endpoint URL.
@@ -57,17 +64,17 @@ func GetVersionCheckDetails(deployment config.DeploymentDir) *VersionCheckDetail
 	arch := runtime.GOARCH
 
 	switch operatingSystem {
-	case "linux":
+	case goosLinux:
 		operatingSystem = "Linux"
-	case "darwin":
+	case goosDarwin:
 		operatingSystem = "MacOS"
-	case "windows":
+	case goosWindows:
 		operatingSystem = "Windows"
 	default:
 		// Keep the original value for unknown systems
 	}
 
-	if arch == "amd64" {
+	if arch == goarchAMD64 {
 		arch = "x86_64"
 	}
 

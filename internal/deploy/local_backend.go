@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	localRunnerCommandName       = "local-runner"
+	localRunnerCommandName       = "internal-local-runtime-runner"
 	localDefaultDatabaseUser     = "sys"
 	localDefaultDatabasePassword = "exasol"
 	localDefaultAdminUIPassword  = "exasol"
@@ -30,12 +30,37 @@ const (
 	localClusterStateStopped     = "stopped"
 	localLoopbackHost            = "127.0.0.1"
 	localStopTimeout             = 60 * time.Second
+	localRunnerKillWaitTimeout   = 5 * time.Second
 	localRunnerStartupTimeout    = 3 * time.Second
+	localRunnerMaxBackoff        = 5
+	localRunnerLogDirMode        = 0o700
+	localRunnerLogFileMode       = 0o600
+	localRunnerPollInterval      = 100 * time.Millisecond
 )
 
 var localRunnerCommand = startLocalRunnerCommand
 
 type localBackend struct{}
+
+func (localBackend) ValidateEnvironment() error { return validateLocalHostPlatform() }
+
+func (localBackend) OpenHostShell(
+	_ context.Context,
+	_ config.DeploymentDir,
+	_ string,
+) error {
+	return fmt.Errorf(
+		"%w: `shell host` is unavailable because local deployments do not expose SSH host access",
+		ErrLocalShellUnsupported,
+	)
+}
+
+func (localBackend) OpenCOSShell(_ context.Context, _ config.DeploymentDir) error {
+	return fmt.Errorf(
+		"%w: `shell container` is unavailable because local deployments do not expose COS shells",
+		ErrLocalShellUnsupported,
+	)
+}
 
 func (localBackend) Deploy(
 	ctx context.Context,
@@ -93,7 +118,10 @@ func (localBackend) Stop(
 			return fmt.Errorf("failed to stop local runtime process %d: %w", pid, killErr)
 		}
 
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		killCtx, killCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			localRunnerKillWaitTimeout,
+		)
 		defer killCancel()
 		if waitErr := runtime.WaitForRunnerExit(killCtx, pid); waitErr != nil &&
 			!errors.Is(waitErr, context.DeadlineExceeded) {
@@ -165,7 +193,11 @@ func ensureLocalRuntimeStarted(
 		return err
 	}
 
-	if err := writeLocalArtifacts(deploymentDir, localClusterStateStarting, StatusOperationInProgress); err != nil {
+	if err := writeLocalArtifacts(
+		deploymentDir,
+		localClusterStateStarting,
+		StatusOperationInProgress,
+	); err != nil {
 		return err
 	}
 
@@ -217,7 +249,7 @@ func waitForLocalRuntimeStarted(
 		return err == nil, err
 	}, WaitParams{
 		InitialBackoff: 1,
-		MaxBackoff:     5,
+		MaxBackoff:     localRunnerMaxBackoff,
 		ReadyMode:      true,
 		LogPrefix:      "waiting for local database to start",
 	})
@@ -253,13 +285,22 @@ func writeLocalArtifacts(
 		return fmt.Errorf("failed to write local deployment secrets: %w", err)
 	}
 
-	info := &config.LocalDeploymentInfo{
+	info := &config.DeploymentInfo{
 		Backend:         config.DeploymentBackendLocal,
-		DeploymentID:    exasolState.DeploymentId,
+		DeploymentId:    exasolState.DeploymentId,
 		DeploymentState: deploymentState,
 		ClusterSize:     localClusterSize,
 		ClusterState:    clusterState,
-		Local: &config.LocalDeploymentRuntime{
+		Connection: &config.DeploymentConnection{
+			Host:                       localLoopbackHost,
+			DisplayHost:                "localhost",
+			DBPort:                     dbPort,
+			UIPort:                     uiPort,
+			Username:                   localDefaultDatabaseUser,
+			InsecureSkipCertValidation: true,
+			ShellSupported:             false,
+		},
+		Runtime: &config.DeploymentRuntime{
 			Host:                       localLoopbackHost,
 			DBPort:                     dbPort,
 			UIPort:                     uiPort,
@@ -274,7 +315,7 @@ func writeLocalArtifacts(
 		},
 	}
 
-	if err := config.WriteLocalDeploymentInfo(deploymentDir, info); err != nil {
+	if err := config.WriteDeploymentInfo(deploymentDir, info); err != nil {
 		return fmt.Errorf("failed to write local deployment info: %w", err)
 	}
 
@@ -287,17 +328,27 @@ func startLocalRunnerCommand(deploymentDir string, logPath string) error {
 		return fmt.Errorf("failed to resolve launcher executable: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(logPath), localRunnerLogDirMode); err != nil {
 		return fmt.Errorf("failed to create local runner log dir: %w", err)
 	}
 
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	logFile, err := os.OpenFile(
+		logPath,
+		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
+		localRunnerLogFileMode,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to open local runner log file: %w", err)
 	}
 	defer logFile.Close()
 
-	cmd := exec.Command(executable, localRunnerCommandName, "--deployment-dir", deploymentDir)
+	cmd := exec.CommandContext(
+		context.Background(),
+		executable,
+		localRunnerCommandName,
+		"--deployment-dir",
+		deploymentDir,
+	)
 	cmd.Stdin = nil
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -322,7 +373,7 @@ func startLocalRunnerCommand(deploymentDir string, logPath string) error {
 			return fmt.Errorf("local runtime runner exited early; inspect %s", logPath)
 		}
 
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(localRunnerPollInterval)
 	}
 
 	return nil

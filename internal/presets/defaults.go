@@ -13,8 +13,8 @@ package presets
 // They intentionally live outside cmd/ so they can be referenced by internal packages and tests
 // without introducing an import cycle (cmd imports internal, but internal must not import cmd).
 const (
-	DefaultInfrastructure = "aws"
-	DefaultInstallation   = "ubuntu"
+	DefaultInfrastructure    = "aws"
+	DefaultInstallation      = "ubuntu"
 	DefaultLocalInstallation = "nano"
 
 	InfrastructureManifestFilename = "infrastructure.yaml"

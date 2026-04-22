@@ -25,14 +25,33 @@ func TestManagerResolve_SelectsArchitectureFromMetadata(t *testing.T) {
 			return nil, fmt.Errorf("unexpected URL %s", req.URL)
 		}
 
-		body := `{"payloads":[{"version":"1.2.3","architecture":"arm64","url":"https://example.invalid/arm64.run","sha256":"abc","boot":{"kernel":{"url":"https://example.invalid/kernel","sha256":"def"},"initrd":{"url":"https://example.invalid/initrd","sha256":"ghi"}}}]}`
+		body := `
+		{
+			"payloads": [
+				{
+					"version":"1.2.3",
+					"architecture":"arm64",
+					"url":"https://example.invalid/arm64.run",
+					"sha256":"abc",
+					"boot":{
+						"kernel":{
+							"url":"https://example.invalid/kernel",
+							"sha256":"def"
+						},
+						"initrd":{
+							"url":"https://example.invalid/initrd",
+							"sha256":"ghi"
+						}
+					}
+				}
+			]
+		}`
 
 		return newHTTPResponse(http.StatusOK, body), nil
 	})
 
 	// When
 	payload, err := manager.Resolve(context.Background(), "arm64")
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -57,7 +76,7 @@ func TestManagerEnsureCached_DownloadsVerifiesAndReusesPayload(t *testing.T) {
 
 	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
 	var (
-		mu          sync.Mutex
+		mutex       sync.Mutex
 		downloadHit int
 	)
 	manager.HTTPClient = testHTTPClient(func(req *http.Request) (*http.Response, error) {
@@ -65,9 +84,9 @@ func TestManagerEnsureCached_DownloadsVerifiesAndReusesPayload(t *testing.T) {
 			return nil, fmt.Errorf("unexpected URL %s", req.URL)
 		}
 
-		mu.Lock()
+		mutex.Lock()
 		downloadHit++
-		mu.Unlock()
+		mutex.Unlock()
 
 		return newHTTPResponseBytes(http.StatusOK, payloadBytes), nil
 	})
@@ -84,7 +103,6 @@ func TestManagerEnsureCached_DownloadsVerifiesAndReusesPayload(t *testing.T) {
 		t.Fatalf("expected first cache fill to succeed, got %v", err)
 	}
 	secondPath, err := manager.EnsureCached(context.Background(), payload)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected cached reuse to succeed, got %v", err)
@@ -93,8 +111,8 @@ func TestManagerEnsureCached_DownloadsVerifiesAndReusesPayload(t *testing.T) {
 		t.Fatalf("expected cached path reuse, got %q then %q", firstPath, secondPath)
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
+	mutex.Lock()
+	defer mutex.Unlock()
 	if downloadHit != 1 {
 		t.Fatalf("expected exactly one download, got %d", downloadHit)
 	}
@@ -105,7 +123,7 @@ func TestManagerEnsureCached_RejectsInvalidChecksum(t *testing.T) {
 
 	// Given
 	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
-	manager.HTTPClient = testHTTPClient(func(req *http.Request) (*http.Response, error) {
+	manager.HTTPClient = testHTTPClient(func(*http.Request) (*http.Response, error) {
 		return newHTTPResponse(http.StatusOK, "payload-bytes"), nil
 	})
 	payload := &Payload{
@@ -135,13 +153,13 @@ func TestManagerEnsureBootCached_DownloadsAndReusesBootAssets(t *testing.T) {
 	initrdBytes := []byte("initrd")
 	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
 	var (
-		mu   sync.Mutex
-		hits = map[string]int{}
+		mutex sync.Mutex
+		hits  = map[string]int{}
 	)
 	manager.HTTPClient = testHTTPClient(func(req *http.Request) (*http.Response, error) {
-		mu.Lock()
+		mutex.Lock()
 		hits[req.URL.String()]++
-		mu.Unlock()
+		mutex.Unlock()
 
 		switch req.URL.String() {
 		case "https://example.invalid/vmlinux.container":
@@ -173,7 +191,6 @@ func TestManagerEnsureBootCached_DownloadsAndReusesBootAssets(t *testing.T) {
 		t.Fatalf("expected boot asset cache fill to succeed, got %v", err)
 	}
 	second, err := manager.EnsureBootCached(context.Background(), payload)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected cached boot asset reuse to succeed, got %v", err)
@@ -181,13 +198,19 @@ func TestManagerEnsureBootCached_DownloadsAndReusesBootAssets(t *testing.T) {
 	if first.KernelPath != second.KernelPath || first.InitrdPath != second.InitrdPath {
 		t.Fatalf("expected cached boot asset paths to be reused, got %#v then %#v", first, second)
 	}
-	mu.Lock()
-	defer mu.Unlock()
+	mutex.Lock()
+	defer mutex.Unlock()
 	if hits["https://example.invalid/vmlinux.container"] != 1 {
-		t.Fatalf("expected exactly one kernel download, got %d", hits["https://example.invalid/vmlinux.container"])
+		t.Fatalf(
+			"expected exactly one kernel download, got %d",
+			hits["https://example.invalid/vmlinux.container"],
+		)
 	}
 	if hits["https://example.invalid/ubuntu-initrd.cpio.gz"] != 1 {
-		t.Fatalf("expected exactly one initrd download, got %d", hits["https://example.invalid/ubuntu-initrd.cpio.gz"])
+		t.Fatalf(
+			"expected exactly one initrd download, got %d",
+			hits["https://example.invalid/ubuntu-initrd.cpio.gz"],
+		)
 	}
 }
 

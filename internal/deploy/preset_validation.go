@@ -32,11 +32,11 @@ func validatePresetSelection(
 	if _, err := resolveBackendForManifest(infrastructureManifest); err != nil {
 		return err
 	}
-	backendKind, err := resolveBackendKind(infrastructureManifest)
+	backend, err := resolveBackendForManifest(infrastructureManifest)
 	if err != nil {
 		return err
 	}
-	if err := validateBackendPlatform(backendKind); err != nil {
+	if err := backend.ValidateEnvironment(); err != nil {
 		return err
 	}
 
@@ -107,7 +107,8 @@ func validatePresetCompatibility(
 	}
 
 	return fmt.Errorf(
-		"installation preset %q is incompatible with infrastructure preset %q: missing capabilities [%s] (provided [%s])",
+		"installation preset %q is incompatible with infrastructure preset %q:"+
+			" missing capabilities [%s] (provided [%s])",
 		presetLabel(installationPreset),
 		presetLabel(infrastructurePreset),
 		strings.Join(missing, ", "),

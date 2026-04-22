@@ -50,6 +50,13 @@ The system SHALL model preset compatibility through infrastructure-provided capa
 - THEN the infrastructure preset must provide every required capability
 - AND the launcher reports any missing capabilities in the validation error
 
+#### Scenario: Backend environment validation is generic
+
+- GIVEN an infrastructure preset resolves to a backend
+- WHEN the launcher validates that preset before mutating deployment state
+- THEN the launcher invokes generic backend environment validation
+- AND the validation hook is not limited to host-platform checks
+
 ### Requirement: Local default installation resolution
 
 The system SHALL resolve omitted installation presets only to installation presets that are compatible with the selected infrastructure preset.
@@ -65,3 +72,21 @@ The system SHALL resolve omitted installation presets only to installation prese
 - GIVEN the user omits the installation preset
 - WHEN the launcher resolves the default installation preset
 - THEN the resolved preset must still pass compatibility validation against the selected infrastructure preset
+
+### Requirement: Compatibility discoverability
+
+The system SHALL make embedded preset compatibility obvious in CLI help and preset discovery output, and SHALL call out when a preset is special rather than a regular cloud preset.
+
+#### Scenario: Init help highlights the special local preset and compatibility matrix
+
+- GIVEN the launcher includes embedded infrastructure and installation presets
+- WHEN the user runs `exasol init --help`
+- THEN the help output explicitly calls out `local` as a special built-in preset
+- AND the help output shows the embedded preset compatibility matrix
+
+#### Scenario: Preset listing surfaces compatibility relationships
+
+- GIVEN the launcher includes embedded infrastructure and installation presets
+- WHEN the user runs `exasol presets list`
+- THEN the output shows the embedded preset compatibility matrix
+- AND the output calls out `local` as a special built-in preset

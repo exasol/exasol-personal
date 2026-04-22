@@ -5,6 +5,7 @@ package connect
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -27,6 +28,7 @@ type Opts struct {
 //nolint:revive
 func NewExasolConnection(
 	deployment config.DeploymentDir,
+	connectionInfo *config.ConnectionInfo,
 	username string,
 	password string,
 	insecureSkipCertValidation bool,
@@ -38,10 +40,8 @@ func NewExasolConnection(
 		}
 		password = secrets.DbPassword
 	}
-
-	connectionInfo, err := config.ResolveConnectionInfo(deployment)
-	if err != nil {
-		return nil, fmt.Errorf("reading deployment connection info: %w", err)
+	if connectionInfo == nil {
+		return nil, errors.New("reading deployment connection info: missing connection info")
 	}
 
 	optsFns := []exasol.OptFn{}
@@ -72,11 +72,21 @@ func NewExasolConnection(
 	return database, nil
 }
 
-func Connect(ctx context.Context, opts *Opts, deployment config.DeploymentDir) error {
+func Connect(
+	ctx context.Context,
+	opts *Opts,
+	deployment config.DeploymentDir,
+	connectionInfo *config.ConnectionInfo,
+) error {
 	slog.Debug("running connect")
 
 	database, err := NewExasolConnection(
-		deployment, opts.Username, opts.Password, opts.InsecureSkipCertValidation)
+		deployment,
+		connectionInfo,
+		opts.Username,
+		opts.Password,
+		opts.InsecureSkipCertValidation,
+	)
 	if err != nil {
 		return err
 	}

@@ -16,7 +16,6 @@ func TestStoreReadMissing_ReturnsEmptyState(t *testing.T) {
 
 	// When
 	state, err := store.Read()
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -53,7 +52,6 @@ func TestStoreWriteRoundTrip(t *testing.T) {
 		t.Fatalf("expected write to succeed, got %v", err)
 	}
 	actual, err := store.Read()
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected read to succeed, got %v", err)

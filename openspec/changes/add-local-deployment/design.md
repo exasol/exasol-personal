@@ -37,6 +37,16 @@ Backends own:
 - side effects
 - environment-specific lifecycle operations
 - deployment artifact generation
+- backend-specific deployment-directory interactions such as diagnostics, shell behavior, and
+  shell execution
+
+Backend boundary policy:
+
+- commands that operate on an initialized deployment directory resolve the backend first
+- backend-specific behavior stays behind backend interfaces
+- backend-private files and schemas are not inspected directly from command code
+- backends return data and operations; common launcher code formats text and JSON output
+- backend validation is environment-oriented rather than host-platform-specific in the interface
 
 ### Preset compatibility model
 
@@ -57,6 +67,18 @@ Examples:
 - invalid:
   - `aws nano`
   - `local ubuntu`
+
+Compatibility is not only a validation rule. CLI help and preset-listing output should surface the
+embedded compatibility matrix and should explicitly call out that `local` is a special built-in
+preset rather than just another cloud provider row.
+
+### Common deployment info contract
+
+`deployment.json` should be a single launcher-facing contract across backends.
+
+- common fields stay stable across backends
+- backend-specific sections use optional fields
+- launcher code reads one normalized schema instead of branching on backend-private file shapes
 
 ### Local runtime isolation
 

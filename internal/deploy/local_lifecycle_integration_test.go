@@ -21,6 +21,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
+//nolint:paralleltest // modifies package-level hooks for the local runtime.
 func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("requires a POSIX shell helper process")
@@ -38,7 +39,6 @@ func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 
 	// When
 	err := Deploy(context.Background(), deployment, false, TofuLockfileReadonly)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected deploy to succeed, got %v", err)
@@ -77,14 +77,16 @@ func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 
 	// When
 	err = Stop(context.Background(), deployment, false)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected stop to succeed, got %v", err)
 	}
 	assertWorkflowStateType[*config.WorkflowStateStopped](t, deploymentDir)
 
-	if _, readErr := runtime.ReadRunnerPID(); !errors.Is(readErr, localruntime.ErrRuntimeNotRunning) {
+	if _, readErr := runtime.ReadRunnerPID(); !errors.Is(
+		readErr,
+		localruntime.ErrRuntimeNotRunning,
+	) {
 		t.Fatalf("expected runner pid cleanup, got %v", readErr)
 	}
 
@@ -98,7 +100,6 @@ func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 
 	// When
 	err = Start(context.Background(), deployment, false, 1)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected start to succeed, got %v", err)
@@ -130,7 +131,6 @@ func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 
 	// When
 	err = Destroy(context.Background(), deployment, false)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected destroy to succeed, got %v", err)
@@ -143,11 +143,17 @@ func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 	if _, infoErr := config.ReadLocalDeploymentInfo(deploymentDir); infoErr == nil {
 		t.Fatal("expected local deployment info to be removed")
 	}
-	if _, statErr := os.Stat(filepath.Join(deploymentDir, config.ConnectionInstruction)); !errors.Is(statErr, os.ErrNotExist) {
+	if _, statErr := os.Stat(
+		filepath.Join(deploymentDir, config.ConnectionInstruction),
+	); !errors.Is(
+		statErr,
+		os.ErrNotExist,
+	) {
 		t.Fatalf("expected connection instructions removal, got %v", statErr)
 	}
 }
 
+//nolint:paralleltest // modifies package-level hooks for the local runtime.
 func TestConcurrentLocalDeploymentsRemainIsolated(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("requires a POSIX shell helper process")
@@ -166,12 +172,12 @@ func TestConcurrentLocalDeploymentsRemainIsolated(t *testing.T) {
 	runtimeB := localruntime.New(deploymentB)
 
 	// When
-	var wg sync.WaitGroup
+	var waitGroup sync.WaitGroup
 	errCh := make(chan error, 2)
 	for _, deploymentDir := range []string{deploymentA, deploymentB} {
-		wg.Add(1)
+		waitGroup.Add(1)
 		go func(dir string) {
-			defer wg.Done()
+			defer waitGroup.Done()
 			errCh <- Deploy(
 				context.Background(),
 				config.NewDeploymentDir(dir),
@@ -180,7 +186,7 @@ func TestConcurrentLocalDeploymentsRemainIsolated(t *testing.T) {
 			)
 		}(deploymentDir)
 	}
-	wg.Wait()
+	waitGroup.Wait()
 	close(errCh)
 
 	// Then
@@ -224,7 +230,6 @@ func TestConcurrentLocalDeploymentsRemainIsolated(t *testing.T) {
 
 	// When
 	err = Stop(context.Background(), config.NewDeploymentDir(deploymentA), false)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected stop for deployment A to succeed, got %v", err)
@@ -242,7 +247,6 @@ func TestConcurrentLocalDeploymentsRemainIsolated(t *testing.T) {
 
 	// When
 	err = Destroy(context.Background(), config.NewDeploymentDir(deploymentA), false)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected destroy for deployment A to succeed, got %v", err)
@@ -255,7 +259,11 @@ func TestConcurrentLocalDeploymentsRemainIsolated(t *testing.T) {
 	assertWorkflowStateType[*config.WorkflowStateRunning](t, deploymentB)
 
 	// Cleanup
-	if err := Destroy(context.Background(), config.NewDeploymentDir(deploymentB), false); err != nil {
+	if err := Destroy(
+		context.Background(),
+		config.NewDeploymentDir(deploymentB),
+		false,
+	); err != nil {
 		t.Fatalf("expected cleanup destroy for deployment B to succeed, got %v", err)
 	}
 }
@@ -332,7 +340,7 @@ func initializeLocalLifecycleDeployment(t *testing.T, deploymentDir string) {
 		kernelPath:  "kernel",
 		initrdPath:  "initrd",
 	} {
-		if err := os.WriteFile(path, []byte(content), 0o700); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatalf("expected fake runtime fixture %q, got %v", path, err)
 		}
 	}
@@ -358,7 +366,8 @@ func initializeLocalLifecycleDeployment(t *testing.T, deploymentDir string) {
 
 func startLocalLifecycleHelperProcess(deploymentDir string) (int, error) {
 	runtime := localruntime.New(deploymentDir)
-	cmd := exec.Command(
+	cmd := exec.CommandContext(
+		context.Background(),
 		"sh",
 		"-c",
 		"(while [ ! -f \"$1\" ]; do sleep 0.025; done) >/dev/null 2>&1 & echo $!",
@@ -379,6 +388,7 @@ func startLocalLifecycleHelperProcess(deploymentDir string) (int, error) {
 		if findErr == nil {
 			_ = process.Kill()
 		}
+
 		return 0, err
 	}
 

@@ -30,7 +30,7 @@ func TestRuntimePrepareGuest_BuildsMachineConfigFromSelectedRunPayload(t *testin
 		kernelPath:  "kernel",
 		initrdPath:  "initrd",
 	} {
-		if err := os.WriteFile(path, []byte(content), 0o700); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatalf("expected fixture %q to be written, got %v", path, err)
 		}
 	}
@@ -56,7 +56,6 @@ func TestRuntimePrepareGuest_BuildsMachineConfigFromSelectedRunPayload(t *testin
 
 	// When
 	guest, err := runtime.PrepareGuest(context.Background())
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected guest preparation to succeed, got %v", err)
@@ -68,20 +67,42 @@ func TestRuntimePrepareGuest_BuildsMachineConfigFromSelectedRunPayload(t *testin
 		t.Fatalf("expected initrd path %q, got %q", initrdPath, guest.Machine.InitrdPath)
 	}
 	if guest.Machine.DiskImage != runtime.Layout().LayerDiskImageFile() {
-		t.Fatalf("expected layer disk image %q, got %q", runtime.Layout().LayerDiskImageFile(), guest.Machine.DiskImage)
+		t.Fatalf(
+			"expected layer disk image %q, got %q",
+			runtime.Layout().LayerDiskImageFile(),
+			guest.Machine.DiskImage,
+		)
 	}
 	if len(guest.Machine.SharedDirs) != 4 {
-		t.Fatalf("expected control, logs, payload, and provision shares, got %#v", guest.Machine.SharedDirs)
+		t.Fatalf(
+			"expected control, logs, payload, and provision shares, got %#v",
+			guest.Machine.SharedDirs,
+		)
 	}
-	if !strings.Contains(guest.Machine.KernelCommandLine, "exa_volume=exa-payload:/.exanano/payload") {
-		t.Fatalf("expected command line to mount payload share, got %q", guest.Machine.KernelCommandLine)
+	if !strings.Contains(
+		guest.Machine.KernelCommandLine,
+		"exa_volume=exa-payload:/.exanano/payload",
+	) {
+		t.Fatalf(
+			"expected command line to mount payload share, got %q",
+			guest.Machine.KernelCommandLine,
+		)
 	}
-	if !strings.Contains(guest.Machine.KernelCommandLine, "exa_volume=exa-provision:/.exanano/provision") {
-		t.Fatalf("expected command line to mount provision share, got %q", guest.Machine.KernelCommandLine)
+	if !strings.Contains(
+		guest.Machine.KernelCommandLine,
+		"exa_volume=exa-provision:/.exanano/provision",
+	) {
+		t.Fatalf(
+			"expected command line to mount provision share, got %q",
+			guest.Machine.KernelCommandLine,
+		)
 	}
 
 	bootstrapProfilePath := filepath.Join(runtime.Layout().BootstrapDir(), bootstrapProfileFileName)
-	bootstrapEntrypointPath := filepath.Join(runtime.Layout().BootstrapDir(), entrypointWrapperFileName)
+	bootstrapEntrypointPath := filepath.Join(
+		runtime.Layout().BootstrapDir(),
+		entrypointWrapperFileName,
+	)
 	stagedPayloadPath := runtime.Layout().PayloadExecutablePath()
 
 	if _, err := os.Stat(bootstrapProfilePath); err != nil {
@@ -98,7 +119,7 @@ func TestRuntimePrepareGuest_BuildsMachineConfigFromSelectedRunPayload(t *testin
 		t.Fatalf("expected staged payload to be executable, got mode %v", payloadInfo.Mode())
 	}
 	if string(mustReadFile(t, stagedPayloadPath)) != "runfile" {
-		t.Fatalf("expected staged payload content to match source runfile")
+		t.Fatal("expected staged payload content to match source runfile")
 	}
 	layerInfo, err := os.Stat(runtime.Layout().LayerDiskImageFile())
 	if err != nil {
@@ -133,7 +154,7 @@ func TestRuntimePrepareGuest_FailsWithoutBootAssets(t *testing.T) {
 	// Given
 	runtime := New(t.TempDir())
 	payloadPath := filepath.Join(t.TempDir(), "exasol-nano-db.run")
-	if err := os.WriteFile(payloadPath, []byte("runfile"), 0o700); err != nil {
+	if err := os.WriteFile(payloadPath, []byte("runfile"), 0o600); err != nil {
 		t.Fatalf("expected payload fixture to be written, got %v", err)
 	}
 	if err := runtime.SaveState(&localstate.State{

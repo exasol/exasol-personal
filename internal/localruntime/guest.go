@@ -36,6 +36,10 @@ const (
 	defaultGuestLogsMount      = "/.exanano/logs"
 	entrypointWrapperFileName  = "exasol-localruntime-entrypoint.sh"
 	bootstrapProfileFileName   = "profile.sh"
+	localRuntimeDirMode        = 0o700
+	localRuntimeFileMode       = 0o600
+	localRuntimeExecFileMode   = 0o700
+	minimumGuestCPUCount       = 2
 )
 
 var ErrPayloadSelectionMissing = errors.New("local runtime payload selection is missing")
@@ -170,12 +174,19 @@ func (r *Runtime) preparePayloadShare(payload *localstate.PayloadRef) (vm.Shared
 	if err != nil {
 		return vm.SharedDir{}, err
 	}
-	if err := os.MkdirAll(r.layout.PayloadShareDir(), 0o700); err != nil {
-		return vm.SharedDir{}, fmt.Errorf("failed to create local runtime payload share dir: %w", err)
+	if err := os.MkdirAll(r.layout.PayloadShareDir(), localRuntimeDirMode); err != nil {
+		return vm.SharedDir{}, fmt.Errorf(
+			"failed to create local runtime payload share dir: %w",
+			err,
+		)
 	}
 
 	targetPath := r.layout.PayloadExecutablePath()
-	refresh, err := stagedPayloadRefreshRequired(targetPath, r.layout.PayloadChecksumPath(), payload)
+	refresh, err := stagedPayloadRefreshRequired(
+		targetPath,
+		r.layout.PayloadChecksumPath(),
+		payload,
+	)
 	if err != nil {
 		return vm.SharedDir{}, err
 	}
@@ -183,7 +194,10 @@ func (r *Runtime) preparePayloadShare(payload *localstate.PayloadRef) (vm.Shared
 		if err := stagePayloadExecutable(sourcePath, targetPath); err != nil {
 			return vm.SharedDir{}, err
 		}
-		if err := writePayloadChecksum(r.layout.PayloadChecksumPath(), payload.Checksum); err != nil {
+		if err := writePayloadChecksum(
+			r.layout.PayloadChecksumPath(),
+			payload.Checksum,
+		); err != nil {
 			return vm.SharedDir{}, err
 		}
 	}
@@ -198,7 +212,10 @@ func (r *Runtime) preparePayloadShare(payload *localstate.PayloadRef) (vm.Shared
 
 func resolvePayloadExecutablePath(payload *localstate.PayloadRef) (string, error) {
 	if payload == nil || strings.TrimSpace(payload.CachePath) == "" {
-		return "", fmt.Errorf("%w: selected payload cache path is empty", ErrPayloadSelectionMissing)
+		return "", fmt.Errorf(
+			"%w: selected payload cache path is empty",
+			ErrPayloadSelectionMissing,
+		)
 	}
 
 	sourcePath := strings.TrimSpace(payload.CachePath)
@@ -215,13 +232,20 @@ func resolvePayloadExecutablePath(payload *localstate.PayloadRef) (string, error
 		return "", fmt.Errorf("failed to inspect local runtime payload dir: %w", err)
 	}
 	if len(candidates) == 0 {
-		return "", fmt.Errorf("local runtime payload dir %q does not contain a .run artifact", sourcePath)
+		return "", fmt.Errorf(
+			"local runtime payload dir %q does not contain a .run artifact",
+			sourcePath,
+		)
 	}
 
 	return candidates[0], nil
 }
 
-func stagedPayloadRefreshRequired(targetPath string, checksumPath string, payload *localstate.PayloadRef) (bool, error) {
+func stagedPayloadRefreshRequired(
+	targetPath string,
+	checksumPath string,
+	payload *localstate.PayloadRef,
+) (bool, error) {
 	if !isCachedFile(targetPath) {
 		return true, nil
 	}
@@ -248,10 +272,15 @@ func stagePayloadExecutable(sourcePath string, targetPath string) error {
 	}
 
 	if err := os.Link(sourcePath, targetPath); err != nil {
-		if err := copyFile(sourcePath, targetPath, 0o700); err != nil {
+		if err := copyFile(sourcePath, targetPath, localRuntimeExecFileMode); err != nil {
 			return fmt.Errorf("failed to stage local runtime payload: %w", err)
 		}
-	} else if err := os.Chmod(targetPath, 0o700); err != nil {
+
+		return nil
+	}
+
+	//nolint:gosec // Staged payloads must remain executable inside the guest VM.
+	if err := os.Chmod(targetPath, localRuntimeExecFileMode); err != nil {
 		return fmt.Errorf("failed to mark staged payload executable: %w", err)
 	}
 
@@ -274,15 +303,16 @@ func copyFile(sourcePath string, targetPath string, mode os.FileMode) error {
 		_ = targetFile.Close()
 		return err
 	}
-	if err := targetFile.Close(); err != nil {
-		return err
-	}
 
-	return nil
+	return targetFile.Close()
 }
 
 func writePayloadChecksum(path string, checksum string) error {
-	if err := os.WriteFile(path, []byte(strings.TrimSpace(checksum)+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(
+		path,
+		[]byte(strings.TrimSpace(checksum)+"\n"),
+		localRuntimeFileMode,
+	); err != nil {
 		return fmt.Errorf("failed to write staged payload checksum: %w", err)
 	}
 
@@ -291,7 +321,7 @@ func writePayloadChecksum(path string, checksum string) error {
 
 func (r *Runtime) ensureLayerDiskImage() (string, error) {
 	diskImagePath := r.layout.LayerDiskImageFile()
-	file, err := os.OpenFile(diskImagePath, os.O_CREATE|os.O_RDWR, 0o600)
+	file, err := os.OpenFile(diskImagePath, os.O_CREATE|os.O_RDWR, localRuntimeFileMode)
 	if err != nil {
 		return "", fmt.Errorf("failed to open local runtime layer disk image: %w", err)
 	}
@@ -311,18 +341,36 @@ func (r *Runtime) ensureLayerDiskImage() (string, error) {
 }
 
 func (r *Runtime) prepareBootstrapShare() (vm.SharedDir, error) {
-	if err := os.MkdirAll(r.layout.BootstrapDir(), 0o700); err != nil {
+	if err := os.MkdirAll(r.layout.BootstrapDir(), localRuntimeDirMode); err != nil {
 		return vm.SharedDir{}, fmt.Errorf("failed to create local runtime bootstrap dir: %w", err)
 	}
 
-	files := map[string][]byte{
-		bootstrapProfileFileName:  guestBootstrapProfile,
-		entrypointWrapperFileName: guestEntrypointWrapper,
+	files := map[string]struct {
+		content []byte
+		mode    os.FileMode
+	}{
+		bootstrapProfileFileName: {
+			content: guestBootstrapProfile,
+			mode:    localRuntimeFileMode,
+		},
+		entrypointWrapperFileName: {
+			content: guestEntrypointWrapper,
+			mode:    localRuntimeExecFileMode,
+		},
 	}
-	for name, content := range files {
+	for name, file := range files {
 		path := filepath.Join(r.layout.BootstrapDir(), name)
-		if err := os.WriteFile(path, append(content, '\n'), 0o700); err != nil {
-			return vm.SharedDir{}, fmt.Errorf("failed to write local runtime bootstrap asset %q: %w", name, err)
+		//nolint:gosec // The guest entrypoint wrapper must remain executable inside the VM.
+		if err := os.WriteFile(
+			path,
+			append(file.content, '\n'),
+			file.mode,
+		); err != nil {
+			return vm.SharedDir{}, fmt.Errorf(
+				"failed to write local runtime bootstrap asset %q: %w",
+				name,
+				err,
+			)
 		}
 	}
 
@@ -334,7 +382,12 @@ func (r *Runtime) prepareBootstrapShare() (vm.SharedDir, error) {
 	}, nil
 }
 
-func buildKernelCommandLine(payload *localstate.PayloadRef, sharedDirs []vm.SharedDir, dbPort int, uiPort int) string {
+func buildKernelCommandLine(
+	payload *localstate.PayloadRef,
+	sharedDirs []vm.SharedDir,
+	dbPort int,
+	uiPort int,
+) string {
 	parts := []string{
 		defaultKernelAppend,
 		"exa_restart=" + defaultRestartPolicy,
@@ -372,7 +425,10 @@ func bootstrapLayerKey(payload *localstate.PayloadRef) string {
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-func payloadValue(payload *localstate.PayloadRef, selector func(*localstate.PayloadRef) string) string {
+func payloadValue(
+	payload *localstate.PayloadRef,
+	selector func(*localstate.PayloadRef) string,
+) string {
 	if payload == nil {
 		return ""
 	}
@@ -393,10 +449,10 @@ func deploymentMachineName(deploymentDir string) string {
 func defaultGuestCPUCount() int {
 	count := runtime.NumCPU()
 	if count <= 0 {
-		return 2
+		return minimumGuestCPUCount
 	}
-	if count < 2 {
-		return 2
+	if count < minimumGuestCPUCount {
+		return minimumGuestCPUCount
 	}
 
 	return count

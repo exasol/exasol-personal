@@ -4,6 +4,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"net"
 )
@@ -14,7 +15,11 @@ func AllocatePort(excluded map[int]struct{}) (int, error) {
 	const maxAttempts = 32
 
 	for range maxAttempts {
-		listener, err := net.Listen("tcp", net.JoinHostPort(loopbackHost, "0"))
+		listener, err := (&net.ListenConfig{}).Listen(
+			context.Background(),
+			"tcp",
+			net.JoinHostPort(loopbackHost, "0"),
+		)
 		if err != nil {
 			return 0, fmt.Errorf("failed to allocate local port: %w", err)
 		}

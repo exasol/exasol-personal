@@ -53,7 +53,12 @@ func Connect(ctx context.Context, opts *connect.Opts, deployment config.Deployme
 				return util.LoggedError(err, "run `status` for more information")
 			}
 
-			return connect.Connect(ctx, opts, deployment)
+			connectionInfo, err := config.ResolveConnectionInfo(deployment)
+			if err != nil {
+				return err
+			}
+
+			return connect.Connect(ctx, opts, deployment, connectionInfo)
 		})
 
 	return err

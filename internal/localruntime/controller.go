@@ -25,6 +25,9 @@ const (
 	guestControlMountPoint = "/.exanano/control"
 	gracefulStopCommand    = "STOP_GRACEFUL"
 	controlPollInterval    = 100 * time.Millisecond
+	controlDirMode         = 0o700
+	controlFileMode        = 0o600
+	stackPortPartCount     = 4
 )
 
 var (
@@ -93,7 +96,7 @@ func (c Controller) Paths() ControlPaths {
 
 func (c Controller) Ensure() error {
 	paths := c.Paths()
-	if err := os.MkdirAll(paths.HostDir, 0o700); err != nil {
+	if err := os.MkdirAll(paths.HostDir, controlDirMode); err != nil {
 		return fmt.Errorf("failed to create local runtime control dir: %w", err)
 	}
 
@@ -112,7 +115,8 @@ func (c Controller) SharedDir() vm.SharedDir {
 }
 
 func (c Controller) ClearStopRequest() error {
-	if err := os.Remove(c.Paths().HostStopRequestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := os.Remove(c.Paths().HostStopRequestPath); err != nil &&
+		!errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to clear local runtime stop request: %w", err)
 	}
 
@@ -125,7 +129,7 @@ func (c Controller) RequestStop() error {
 	}
 
 	marker := []byte(time.Now().UTC().Format(time.RFC3339) + "\n")
-	if err := os.WriteFile(c.Paths().HostStopRequestPath, marker, 0o600); err != nil {
+	if err := os.WriteFile(c.Paths().HostStopRequestPath, marker, controlFileMode); err != nil {
 		return fmt.Errorf("failed to write local runtime stop request: %w", err)
 	}
 
@@ -156,7 +160,11 @@ func (c Controller) SendCommand(ctx context.Context, command string) (string, er
 	}
 	conn, err := dial(ctx, "unix", socketPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to connect to local runtime control socket %q: %w", socketPath, err)
+		return "", fmt.Errorf(
+			"failed to connect to local runtime control socket %q: %w",
+			socketPath,
+			err,
+		)
 	}
 	defer conn.Close()
 
@@ -201,7 +209,11 @@ func (c Controller) ReadRuntimeState() (*GuestRuntimeState, error) {
 	data, err := os.ReadFile(c.Paths().HostRuntimeStatePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("%w: %s", ErrRuntimeStateUnavailable, c.Paths().HostRuntimeStatePath)
+			return nil, fmt.Errorf(
+				"%w: %s",
+				ErrRuntimeStateUnavailable,
+				c.Paths().HostRuntimeStatePath,
+			)
 		}
 
 		return nil, fmt.Errorf("failed to read local runtime state file: %w", err)
@@ -243,38 +255,62 @@ func parseRuntimeState(data string) (*GuestRuntimeState, error) {
 
 		key, value, found := strings.Cut(line, "=")
 		if !found {
-			return nil, fmt.Errorf("%w: line %d does not contain '='", ErrRuntimeStateInvalid, lineNumber)
+			return nil, fmt.Errorf(
+				"%w: line %d does not contain '='",
+				ErrRuntimeStateInvalid,
+				lineNumber,
+			)
 		}
 
 		switch key {
 		case "sql_port":
 			port, err := strconv.Atoi(value)
 			if err != nil {
-				return nil, fmt.Errorf("%w: invalid sql_port value %q", ErrRuntimeStateInvalid, value)
+				return nil, fmt.Errorf(
+					"%w: invalid sql_port value %q",
+					ErrRuntimeStateInvalid,
+					value,
+				)
 			}
 			state.SQLPort = port
 		case "ui_port":
 			port, err := strconv.Atoi(value)
 			if err != nil {
-				return nil, fmt.Errorf("%w: invalid ui_port value %q", ErrRuntimeStateInvalid, value)
+				return nil, fmt.Errorf(
+					"%w: invalid ui_port value %q",
+					ErrRuntimeStateInvalid,
+					value,
+				)
 			}
 			state.UIPort = port
 		case "jupyter_enabled":
 			enabled, err := parseBoolFlag(value)
 			if err != nil {
-				return nil, fmt.Errorf("%w: invalid jupyter_enabled value %q", ErrRuntimeStateInvalid, value)
+				return nil, fmt.Errorf(
+					"%w: invalid jupyter_enabled value %q",
+					ErrRuntimeStateInvalid,
+					value,
+				)
 			}
 			state.JupyterEnabled = enabled
 		case "jupyter_port":
 			port, err := strconv.Atoi(value)
 			if err != nil {
-				return nil, fmt.Errorf("%w: invalid jupyter_port value %q", ErrRuntimeStateInvalid, value)
+				return nil, fmt.Errorf(
+					"%w: invalid jupyter_port value %q",
+					ErrRuntimeStateInvalid,
+					value,
+				)
 			}
 			state.JupyterPort = port
 		case "voila_port":
 			port, err := strconv.Atoi(value)
 			if err != nil {
-				return nil, fmt.Errorf("%w: invalid voila_port value %q", ErrRuntimeStateInvalid, value)
+				return nil, fmt.Errorf(
+					"%w: invalid voila_port value %q",
+					ErrRuntimeStateInvalid,
+					value,
+				)
 			}
 			state.VoilaPort = port
 		case "stack_enabled":
@@ -313,7 +349,7 @@ func parseBoolFlag(value string) (bool, error) {
 
 func parseStackPort(value string) (GuestStackPort, error) {
 	parts := strings.Split(value, ",")
-	if len(parts) != 4 {
+	if len(parts) != stackPortPartCount {
 		return GuestStackPort{}, fmt.Errorf(
 			"%w: invalid stack_port value %q",
 			ErrRuntimeStateInvalid,
@@ -346,8 +382,8 @@ func parseStackPort(value string) (GuestStackPort, error) {
 	}, nil
 }
 
-func hasSocket(path string) (bool, error) {
-	info, err := os.Stat(path)
+func hasSocket(filePath string) (bool, error) {
+	info, err := os.Stat(filePath)
 	if err != nil {
 		return false, err
 	}

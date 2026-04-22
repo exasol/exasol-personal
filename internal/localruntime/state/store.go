@@ -33,6 +33,11 @@ type Store struct {
 	path string
 }
 
+const (
+	stateDirMode  = 0o700
+	stateFileMode = 0o600
+)
+
 func NewStore(path string) Store {
 	return Store{path: path}
 }
@@ -47,6 +52,7 @@ func (s Store) Read() (*State, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return &State{}, nil
 		}
+
 		return nil, fmt.Errorf("failed to read local runtime state: %w", err)
 	}
 
@@ -68,11 +74,11 @@ func (s Store) Write(state *State) error {
 		return fmt.Errorf("failed to encode local runtime state: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), stateDirMode); err != nil {
 		return fmt.Errorf("failed to create local runtime state dir: %w", err)
 	}
 
-	if err := os.WriteFile(s.path, append(data, '\n'), 0o600); err != nil {
+	if err := os.WriteFile(s.path, append(data, '\n'), stateFileMode); err != nil {
 		return fmt.Errorf("failed to write local runtime state: %w", err)
 	}
 

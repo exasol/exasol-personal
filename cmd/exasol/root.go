@@ -30,9 +30,16 @@ Getting Started:
   and installs the database. It uses either a built-in infrastructure preset or a custom preset 
   at a path you provide. Built-in presets are: aws, azure, exoscale, and local.
 
-  Note: Cloud presets require provider credentials in your environment. The built-in local preset does not.`
+  The built-in "local" preset is special: it uses the launcher's local backend instead of cloud
+  provisioning and is currently supported only on Apple Silicon macOS.
 
-	rootCmdExample = `  exasol install aws`
+	Note: Cloud presets require provider credentials in your environment.
+	The built-in local preset does not.
+  Use "exasol init --help", "exasol install --help", or "exasol presets list" to see the preset
+  compatibility matrix.`
+
+	rootCmdExample = `  exasol install local
+  exasol install aws`
 
 	rootCmdGroupEssential = "essential"
 	rootCmdGroupLifecycle = "lifecycle"

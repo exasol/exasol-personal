@@ -82,7 +82,6 @@ func TestScanInstallationPresetSelection_DefaultsLocalToNano(t *testing.T) {
 
 	// When
 	preset, err := scanInstallationPresetSelection(args)
-
 	// Then
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

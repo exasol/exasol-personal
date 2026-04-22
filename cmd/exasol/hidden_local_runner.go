@@ -9,15 +9,15 @@ import (
 )
 
 var localRunnerCmd = &cobra.Command{
-	Use:    "local-runner",
-	Short:  "",
-	Long:   "",
+	Use:    "internal-local-runtime-runner",
+	Short:  "Internal local runtime supervisor entrypoint",
+	Long:   "Internal local runtime supervisor entrypoint.",
 	Args:   cobra.NoArgs,
 	Hidden: true,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 
-		return localruntime.New(commonFlags.DeploymentDir).Run(cmd.Context())
+		return localruntime.New(commonFlags.Deployment().Root()).Run(cmd.Context())
 	},
 }
 

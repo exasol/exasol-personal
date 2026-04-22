@@ -7,6 +7,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -17,6 +18,34 @@ import (
 )
 
 type tofuBackend struct{}
+
+func (tofuBackend) ValidateEnvironment() error {
+	return nil
+}
+
+func (tofuBackend) OpenHostShell(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	selectedNode string,
+) error {
+	sshRemote, err := sshRemoteForNodeUnsafe(deployment, selectedNode)
+	if err != nil {
+		return err
+	}
+
+	return sshRemote.Shell(ctx, os.Stdout, os.Stderr)
+}
+
+func (tofuBackend) OpenCOSShell(ctx context.Context, deployment config.DeploymentDir) error {
+	sshRemote, err := sshRemoteForNodeUnsafe(deployment, "n11")
+	if err != nil {
+		return err
+	}
+
+	cosCommand := "/usr/bin/env bash /opt/exasol_launcher/scripts/connectCos.sh"
+
+	return sshRemote.RunInteractiveCommand(ctx, cosCommand, os.Stdout, os.Stderr)
+}
 
 func (tofuBackend) Deploy(
 	ctx context.Context,
@@ -161,6 +190,7 @@ func (tofuBackend) Stop(
 	); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("failed to stop the deployment")
+
 		return err
 	}
 

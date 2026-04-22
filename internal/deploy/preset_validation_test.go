@@ -23,7 +23,6 @@ func TestValidatePresetSelection_AcceptsDefaultEmbeddedPair(t *testing.T) {
 
 	// When
 	err := validatePresetSelection(infrastructurePreset, installationPreset)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected default preset pair to be valid, got %v", err)
@@ -80,10 +79,14 @@ install: []
 		t.Fatalf("expected to read deployment dir, got %v", readErr)
 	}
 	if len(entries) != 0 {
-		t.Fatalf("expected deployment directory to remain untouched, found %d entries", len(entries))
+		t.Fatalf(
+			"expected deployment directory to remain untouched, found %d entries",
+			len(entries),
+		)
 	}
 }
 
+//nolint:paralleltest // mutates package-global platform detection.
 func TestValidatePresetSelection_RejectsLocalPresetOnUnsupportedPlatform(t *testing.T) {
 	// Given
 	originalPlatformSupport := localRuntimePlatformSupported
@@ -113,7 +116,6 @@ func TestResolveDefaultInstallationPreset_LocalUsesNano(t *testing.T) {
 
 	// When
 	installationPreset, err := ResolveDefaultInstallationPreset(infrastructurePreset)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

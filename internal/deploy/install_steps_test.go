@@ -48,7 +48,8 @@ func TestBuildInstallTasks_PreservesRemoteAndLocalSteps(t *testing.T) {
 	if tasks[1].LocalCommand == nil {
 		t.Fatal("expected second task to be localCommand")
 	}
-	if got := tasks[1].LocalCommand.Command; len(got) != 2 || got[0] != "echo" || got[1] != "hello" {
+	if got := tasks[1].LocalCommand.Command; len(got) != 2 || got[0] != "echo" ||
+		got[1] != "hello" {
 		t.Fatalf("unexpected local command: %#v", got)
 	}
 }
