@@ -12,7 +12,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -23,11 +22,6 @@ import (
 const (
 	defaultKernelAppend        = "console=hvc0 rdinit=/init init=/init"
 	defaultRestartPolicy       = "always"
-	defaultJupyterEnabled      = false
-	defaultJupyterPort         = 8888
-	defaultVoilaPort           = 8866
-	defaultGuestMemoryBytes    = 4 * 1024 * 1024 * 1024
-	defaultGuestLayerDiskBytes = 64 * 1024 * 1024 * 1024
 	defaultGuestProvisionTag   = "exa-provision"
 	defaultGuestProvisionMount = "/.exanano/provision"
 	defaultGuestPayloadTag     = "exa-payload"
@@ -39,7 +33,6 @@ const (
 	localRuntimeDirMode        = 0o700
 	localRuntimeFileMode       = 0o600
 	localRuntimeExecFileMode   = 0o700
-	minimumGuestCPUCount       = 2
 )
 
 var ErrPayloadSelectionMissing = errors.New("local runtime payload selection is missing")
@@ -70,11 +63,11 @@ func (r *Runtime) PrepareGuest(ctx context.Context) (*GuestConfig, error) {
 		return nil, ErrPayloadSelectionMissing
 	}
 
-	dbPort, err := r.ensurePort("db")
+	ports, err := r.EnsureConnectionPorts()
 	if err != nil {
 		return nil, err
 	}
-	uiPort, err := r.ensurePort("ui")
+	sizing, err := r.LoadMachineSizing()
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +86,7 @@ func (r *Runtime) PrepareGuest(ctx context.Context) (*GuestConfig, error) {
 		return nil, err
 	}
 
-	layerDiskImage, err := r.ensureLayerDiskImage()
+	layerDiskImage, err := r.ensureLayerDiskImage(sizing.LayerDiskBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -120,13 +113,18 @@ func (r *Runtime) PrepareGuest(ctx context.Context) (*GuestConfig, error) {
 	}
 
 	machineConfig := vm.MachineConfig{
-		Name:                  deploymentMachineName(r.layout.DeploymentDir()),
-		KernelPath:            boot.KernelPath,
-		InitrdPath:            boot.InitrdPath,
-		KernelCommandLine:     buildKernelCommandLine(state.Payload, sharedDirs, dbPort, uiPort),
+		Name:       deploymentMachineName(r.layout.DeploymentDir()),
+		KernelPath: boot.KernelPath,
+		InitrdPath: boot.InitrdPath,
+		KernelCommandLine: buildKernelCommandLine(
+			state.Payload,
+			sharedDirs,
+			ports.DB,
+			ports.UI,
+		),
 		DiskImage:             layerDiskImage,
-		CPUCount:              defaultGuestCPUCount(),
-		MemoryBytes:           defaultGuestMemoryBytes,
+		CPUCount:              sizing.CPUCount,
+		MemoryBytes:           sizing.MemoryBytes,
 		MachineIdentifierPath: r.layout.MachineIdentifierFile(),
 		ConsoleLogPath:        r.layout.ConsoleLogFile(),
 		SharedDirs:            sharedDirs,
@@ -136,15 +134,6 @@ func (r *Runtime) PrepareGuest(ctx context.Context) (*GuestConfig, error) {
 		Controller: controller,
 		Machine:    machineConfig,
 	}, nil
-}
-
-func (r *Runtime) ensurePort(name string) (int, error) {
-	port, err := r.AllocatePort(name)
-	if err != nil {
-		return 0, fmt.Errorf("failed to allocate local runtime %s port: %w", name, err)
-	}
-
-	return port, nil
 }
 
 func resolveBootAssets(payload *localstate.PayloadRef) (*bootAssets, error) {
@@ -319,7 +308,7 @@ func writePayloadChecksum(path string, checksum string) error {
 	return nil
 }
 
-func (r *Runtime) ensureLayerDiskImage() (string, error) {
+func (r *Runtime) ensureLayerDiskImage(sizeBytes int64) (string, error) {
 	diskImagePath := r.layout.LayerDiskImageFile()
 	file, err := os.OpenFile(diskImagePath, os.O_CREATE|os.O_RDWR, localRuntimeFileMode)
 	if err != nil {
@@ -332,7 +321,7 @@ func (r *Runtime) ensureLayerDiskImage() (string, error) {
 		return "", fmt.Errorf("failed to stat local runtime layer disk image: %w", err)
 	}
 	if info.Size() == 0 {
-		if err := file.Truncate(defaultGuestLayerDiskBytes); err != nil {
+		if err := file.Truncate(sizeBytes); err != nil {
 			return "", fmt.Errorf("failed to size local runtime layer disk image: %w", err)
 		}
 	}
@@ -398,12 +387,8 @@ func buildKernelCommandLine(
 	}
 
 	parts = append(parts, "exa_layer_key="+bootstrapLayerKey(payload))
-	parts = append(parts, "exa_udf_ccache=/overlay-storage/.exanano/.ccache")
 	parts = append(parts, "exa_sql_port="+strconv.Itoa(dbPort))
 	parts = append(parts, "exa_ui_port="+strconv.Itoa(uiPort))
-	parts = append(parts, "exa_jupyter_enabled="+strconv.FormatBool(defaultJupyterEnabled))
-	parts = append(parts, "exa_jupyter_port="+strconv.Itoa(defaultJupyterPort))
-	parts = append(parts, "exa_voila_port="+strconv.Itoa(defaultVoilaPort))
 
 	return strings.Join(parts, " ")
 }
@@ -444,16 +429,4 @@ func deploymentMachineName(deploymentDir string) string {
 	}
 
 	return name
-}
-
-func defaultGuestCPUCount() int {
-	count := runtime.NumCPU()
-	if count <= 0 {
-		return minimumGuestCPUCount
-	}
-	if count < minimumGuestCPUCount {
-		return minimumGuestCPUCount
-	}
-
-	return count
 }

@@ -14,8 +14,12 @@ The key constraint is that the ExaNano runtime already exists as Linux `.run` ar
 - Add an explicit infrastructure/installation compatibility model so only valid preset pairs are allowed.
 - Add a dedicated local deployment backend rather than routing local through Tofu, SSH, or cloud power-state helpers.
 - Add a deployment-scoped local runtime model under the deployment directory.
+- Add a launcher-owned v1 local credential contract with fixed defaults (`sys` / `exasol`).
 - Add versioned Linux ExaNano `.run` payload download, verification, and caching from a product-owned HTTP location.
 - Add local-safe deployment artifacts and command behavior for `info`, `connect`, `status`, `start`, `stop`, and `destroy`.
+- Finish the common `deployment.json` contract so local mode does not depend on a second local-only deployment-info schema.
+- Add launcher-owned local VM sizing configuration instead of relying only on fixed code constants.
+- Keep the v1 local guest scope limited to the database and admin UI; notebook and UDF-related extras remain out of scope.
 - Keep unsupported shell-style commands honest for local deployments when there is no real equivalent.
 
 ## Impact
@@ -26,6 +30,8 @@ Impacted capability areas:
 - preset resolution and validation
 - local runtime management
 - deployment artifacts and connection rendering
+- credential management
+- local runtime sizing and guest-scope policy
 - macOS arm64 build and release flow
 
 Impacted code areas:

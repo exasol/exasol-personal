@@ -193,6 +193,10 @@ func WriteDeploymentInfo(deploymentDir string, info *DeploymentInfo) error {
 	)
 }
 
+func GetDeploymentInfoFilePath(deploymentDir string) (string, bool, error) {
+	return findExistingFile(deploymentDir, nodeDetailsFileName)
+}
+
 var ErrNoNodeDetailsFile = errors.New("node details file not found in deployment directory")
 
 // Returns the list of node names, sorted increasingly.

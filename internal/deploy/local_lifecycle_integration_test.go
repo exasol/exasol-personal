@@ -45,12 +45,9 @@ func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 	}
 	assertWorkflowStateType[*config.WorkflowStateRunning](t, deploymentDir)
 
-	info, err := config.ReadLocalDeploymentInfo(deploymentDir)
-	if err != nil {
-		t.Fatalf("expected local deployment info, got %v", err)
-	}
-	if info.Local == nil || info.Local.Host != localLoopbackHost {
-		t.Fatalf("expected local loopback connection details, got %#v", info.Local)
+	info := mustReadLocalDeploymentInfo(t, deploymentDir)
+	if info.Runtime.Host != localLoopbackHost {
+		t.Fatalf("expected local loopback connection details, got %#v", info.Runtime)
 	}
 
 	instructions, err := os.ReadFile(filepath.Join(deploymentDir, config.ConnectionInstruction))
@@ -61,10 +58,17 @@ func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 		!containsAll(
 			string(instructions),
 			"localhost",
-			strconv.Itoa(info.Local.DBPort),
-			strconv.Itoa(info.Local.UIPort),
+			strconv.Itoa(info.Runtime.DBPort),
+			strconv.Itoa(info.Runtime.UIPort),
+			`Login with username "`+localDefaultDatabaseUser+`"`,
 		) {
 		t.Fatalf("expected local connection instructions, got %q", string(instructions))
+	}
+	if strings.Contains(string(instructions), `Login with username "admin"`) {
+		t.Fatalf(
+			"expected local connection instructions to avoid admin username, got %q",
+			string(instructions),
+		)
 	}
 
 	firstPID, err := runtime.ReadRunnerPID()
@@ -72,8 +76,8 @@ func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 		t.Fatalf("expected local runner pid, got %v", err)
 	}
 
-	firstDBPort := info.Local.DBPort
-	firstUIPort := info.Local.UIPort
+	firstDBPort := info.Runtime.DBPort
+	firstUIPort := info.Runtime.UIPort
 
 	// When
 	err = Stop(context.Background(), deployment, false)
@@ -90,10 +94,7 @@ func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 		t.Fatalf("expected runner pid cleanup, got %v", readErr)
 	}
 
-	stoppedInfo, err := config.ReadLocalDeploymentInfo(deploymentDir)
-	if err != nil {
-		t.Fatalf("expected stopped local deployment info, got %v", err)
-	}
+	stoppedInfo := mustReadLocalDeploymentInfo(t, deploymentDir)
 	if stoppedInfo.ClusterState != localClusterStateStopped {
 		t.Fatalf("expected stopped cluster state, got %q", stoppedInfo.ClusterState)
 	}
@@ -114,18 +115,12 @@ func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 		t.Fatalf("expected a new runner process after restart, got pid %d", secondPID)
 	}
 
-	restartedInfo, err := config.ReadLocalDeploymentInfo(deploymentDir)
-	if err != nil {
-		t.Fatalf("expected restarted local deployment info, got %v", err)
-	}
-	if restartedInfo.Local == nil {
-		t.Fatal("expected local runtime info after restart")
-	}
-	if restartedInfo.Local.DBPort != firstDBPort || restartedInfo.Local.UIPort != firstUIPort {
+	restartedInfo := mustReadLocalDeploymentInfo(t, deploymentDir)
+	if restartedInfo.Runtime.DBPort != firstDBPort || restartedInfo.Runtime.UIPort != firstUIPort {
 		t.Fatalf(
 			"expected local ports to be reused, got db=%d ui=%d",
-			restartedInfo.Local.DBPort,
-			restartedInfo.Local.UIPort,
+			restartedInfo.Runtime.DBPort,
+			restartedInfo.Runtime.UIPort,
 		)
 	}
 
@@ -140,7 +135,9 @@ func TestLocalLifecycleCommands_RunWithoutCloudCredentials(t *testing.T) {
 	if _, statErr := os.Stat(runtime.Layout().RuntimeRoot()); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("expected runtime root removal, got %v", statErr)
 	}
-	if _, infoErr := config.ReadLocalDeploymentInfo(deploymentDir); infoErr == nil {
+	if _, infoErr := config.ReadDeploymentInfo(
+		config.NewDeploymentDir(deploymentDir),
+	); infoErr == nil {
 		t.Fatal("expected local deployment info to be removed")
 	}
 	if _, statErr := os.Stat(
@@ -198,22 +195,13 @@ func TestConcurrentLocalDeploymentsRemainIsolated(t *testing.T) {
 	assertWorkflowStateType[*config.WorkflowStateRunning](t, deploymentA)
 	assertWorkflowStateType[*config.WorkflowStateRunning](t, deploymentB)
 
-	infoA, err := config.ReadLocalDeploymentInfo(deploymentA)
-	if err != nil {
-		t.Fatalf("expected local deployment info for A, got %v", err)
+	infoA := mustReadLocalDeploymentInfo(t, deploymentA)
+	infoB := mustReadLocalDeploymentInfo(t, deploymentB)
+	if infoA.Runtime.RuntimeRoot == infoB.Runtime.RuntimeRoot {
+		t.Fatalf("expected distinct runtime roots, got %q", infoA.Runtime.RuntimeRoot)
 	}
-	infoB, err := config.ReadLocalDeploymentInfo(deploymentB)
-	if err != nil {
-		t.Fatalf("expected local deployment info for B, got %v", err)
-	}
-	if infoA.Local == nil || infoB.Local == nil {
-		t.Fatalf("expected local runtime details, got A=%#v B=%#v", infoA.Local, infoB.Local)
-	}
-	if infoA.Local.RuntimeRoot == infoB.Local.RuntimeRoot {
-		t.Fatalf("expected distinct runtime roots, got %q", infoA.Local.RuntimeRoot)
-	}
-	if infoA.Local.PIDFilePath == infoB.Local.PIDFilePath {
-		t.Fatalf("expected distinct pid paths, got %q", infoA.Local.PIDFilePath)
+	if infoA.Runtime.PIDFilePath == infoB.Runtime.PIDFilePath {
+		t.Fatalf("expected distinct pid paths, got %q", infoA.Runtime.PIDFilePath)
 	}
 
 	pidA, err := runtimeA.ReadRunnerPID()
@@ -253,7 +241,9 @@ func TestConcurrentLocalDeploymentsRemainIsolated(t *testing.T) {
 	}
 	assertWorkflowStateType[*config.WorkflowStateInitialized](t, deploymentA)
 
-	if _, infoErr := config.ReadLocalDeploymentInfo(deploymentB); infoErr != nil {
+	if _, infoErr := config.ReadDeploymentInfo(
+		config.NewDeploymentDir(deploymentB),
+	); infoErr != nil {
 		t.Fatalf("expected deployment B info to remain available, got %v", infoErr)
 	}
 	assertWorkflowStateType[*config.WorkflowStateRunning](t, deploymentB)
@@ -274,6 +264,7 @@ func installLocalLifecycleTestHooks(t *testing.T) func() {
 	originalPlatformSupport := localRuntimePlatformSupported
 	originalRunnerCommand := localRunnerCommand
 	originalVerifyDatabaseConnection := verifyDatabaseConnectionFn
+	originalEnsureLocalDatabaseCredentials := ensureLocalDatabaseCredentialsFn
 
 	var (
 		processesMu sync.Mutex
@@ -281,9 +272,14 @@ func installLocalLifecycleTestHooks(t *testing.T) func() {
 	)
 
 	localRuntimePlatformSupported = func() bool { return true }
-	verifyDatabaseConnectionFn = func(context.Context, config.DeploymentDir) error { return nil }
-	localRunnerCommand = func(deploymentDir string, _ string) error {
-		pid, err := startLocalLifecycleHelperProcess(deploymentDir)
+	verifyDatabaseConnectionFn = func(context.Context, config.DeploymentDir) error {
+		return nil
+	}
+	ensureLocalDatabaseCredentialsFn = func(context.Context, config.DeploymentDir) error {
+		return nil
+	}
+	localRunnerCommand = func(deployment config.DeploymentDir, _ *localruntime.Runtime) error {
+		pid, err := startLocalLifecycleHelperProcess(deployment.Root())
 		if err != nil {
 			return err
 		}
@@ -299,6 +295,7 @@ func installLocalLifecycleTestHooks(t *testing.T) func() {
 		localRuntimePlatformSupported = originalPlatformSupport
 		localRunnerCommand = originalRunnerCommand
 		verifyDatabaseConnectionFn = originalVerifyDatabaseConnection
+		ensureLocalDatabaseCredentialsFn = originalEnsureLocalDatabaseCredentials
 
 		processesMu.Lock()
 		defer processesMu.Unlock()
@@ -411,6 +408,20 @@ func assertWorkflowStateType[T any](t *testing.T, deploymentDir string) {
 	if _, ok := workflowState.(T); !ok {
 		t.Fatalf("expected workflow state %T, got %T", *new(T), workflowState)
 	}
+}
+
+func mustReadLocalDeploymentInfo(t *testing.T, deploymentDir string) *config.DeploymentInfo {
+	t.Helper()
+
+	info, err := config.ReadDeploymentInfo(config.NewDeploymentDir(deploymentDir))
+	if err != nil {
+		t.Fatalf("expected deployment info, got %v", err)
+	}
+	if info.Backend != config.DeploymentBackendLocal || info.Runtime == nil {
+		t.Fatalf("expected local deployment info, got %#v", info)
+	}
+
+	return info
 }
 
 func containsAll(text string, parts ...string) bool {

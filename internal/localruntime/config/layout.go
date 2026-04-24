@@ -28,6 +28,7 @@ const (
 	runnerLogFileName         = "runner.log"
 	payloadExecutableFileName = "db.run"
 	payloadChecksumFileName   = "db.run.sha256"
+	machineSizingFileName     = "machine.json"
 )
 
 // Layout describes the deployment-owned on-disk layout for local runtime state.
@@ -125,4 +126,8 @@ func (l Layout) PayloadExecutablePath() string {
 
 func (l Layout) PayloadChecksumPath() string {
 	return filepath.Join(l.PayloadShareDir(), payloadChecksumFileName)
+}
+
+func (l Layout) MachineSizingPath() string {
+	return filepath.Join(l.ConfigDir(), machineSizingFileName)
 }

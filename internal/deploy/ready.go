@@ -15,10 +15,19 @@ import (
 )
 
 var verifyDatabaseConnectionFn = verifyDatabaseConnection
+var newExasolConnectionFn = connect.NewExasolConnection
 
 // verifyDatabaseConnection checks if the database service is accepting connections
 // by attempting a connection with invalid credentials and expecting an authentication error.
 func verifyDatabaseConnection(ctx context.Context, deployment config.DeploymentDir) error {
+	deploymentInfo, err := config.ReadDeploymentInfo(deployment)
+	if err != nil {
+		return err
+	}
+	if deploymentInfo.Backend == config.DeploymentBackendLocal {
+		return verifyLocalDatabaseConnection(ctx, deployment)
+	}
+
 	var dbErr error
 	// Suppress driver noise only for this probe (invalid creds, transient failures expected).
 	probeErr := connect.WithSilencedDriverErrors(func() error {
@@ -27,7 +36,7 @@ func verifyDatabaseConnection(ctx context.Context, deployment config.DeploymentD
 			return err
 		}
 
-		database, err := connect.NewExasolConnection(
+		database, err := newExasolConnectionFn(
 			deployment,
 			connectionInfo,
 			"invalid username",
@@ -65,6 +74,32 @@ func verifyDatabaseConnection(ctx context.Context, deployment config.DeploymentD
 	}
 
 	return probeErr
+}
+
+func verifyLocalDatabaseConnection(ctx context.Context, deployment config.DeploymentDir) error {
+	connectionInfo, err := config.ResolveConnectionInfo(deployment)
+	if err != nil {
+		return err
+	}
+
+	database, err := newExasolConnectionFn(
+		deployment,
+		connectionInfo,
+		localDefaultDatabaseUser,
+		"",
+		true,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := database.Connect(ctx); err != nil {
+		return err
+	}
+	defer database.Close()
+
+	_, err = database.Exec(ctx, "SELECT 1")
+	return err
 }
 
 // WaitForDatabaseStarted polls the database connection using verifyDatabaseConnection

@@ -41,7 +41,7 @@ func TestRuntimeEnsureRoot_CreatesDeploymentScopedLayout(t *testing.T) {
 	}
 }
 
-func TestRuntimeAllocatePort_PersistsAndReusesAssignments(t *testing.T) {
+func TestRuntimeEnsureConnectionPorts_PersistsAndReusesAssignments(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -62,30 +62,29 @@ func TestRuntimeAllocatePort_PersistsAndReusesAssignments(t *testing.T) {
 	}
 
 	// When
-	dbPort, err := runtime.AllocatePort("db")
+	ports, err := runtime.EnsureConnectionPorts()
 	if err != nil {
-		t.Fatalf("expected db port allocation to succeed, got %v", err)
+		t.Fatalf("expected connection port allocation to succeed, got %v", err)
 	}
-	dbPortAgain, err := runtime.AllocatePort("db")
+	portsAgain, err := runtime.EnsureConnectionPorts()
 	if err != nil {
-		t.Fatalf("expected db port reuse to succeed, got %v", err)
-	}
-	uiPort, err := runtime.AllocatePort("ui")
-	if err != nil {
-		t.Fatalf("expected ui port allocation to succeed, got %v", err)
+		t.Fatalf("expected connection port reuse to succeed, got %v", err)
 	}
 
 	// Then
-	if dbPort <= 0 {
-		t.Fatalf("expected positive db port, got %d", dbPort)
+	if ports.DB <= 0 {
+		t.Fatalf("expected positive db port, got %d", ports.DB)
 	}
-	if dbPort != dbPortAgain {
-		t.Fatalf("expected db port to be reused, got %d then %d", dbPort, dbPortAgain)
+	if ports.DB != portsAgain.DB {
+		t.Fatalf("expected db port to be reused, got %d then %d", ports.DB, portsAgain.DB)
 	}
-	if uiPort <= 0 {
-		t.Fatalf("expected positive ui port, got %d", uiPort)
+	if ports.UI <= 0 {
+		t.Fatalf("expected positive ui port, got %d", ports.UI)
 	}
-	if uiPort == dbPort {
-		t.Fatalf("expected different ports for ui and db, both were %d", uiPort)
+	if ports.UI != portsAgain.UI {
+		t.Fatalf("expected ui port to be reused, got %d then %d", ports.UI, portsAgain.UI)
+	}
+	if ports.UI == ports.DB {
+		t.Fatalf("expected different ports for ui and db, both were %d", ports.UI)
 	}
 }

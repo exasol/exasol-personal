@@ -13,16 +13,12 @@ DB_STDIN_FWD_PID=""
 DB_STDIN_FIFO=""
 DB_STDIN_EOF_WATCH_PID=""
 SHUTDOWN_ESCALATOR_PID=""
-DB_INITIAL_SCRIPT_LANGUAGES="${EXANANO_INITIAL_SCRIPT_LANGUAGES:-R=builtin_r:JAVA=builtin_java:PYTHON3=builtin_python3:RUST=builtin_rust}"
 DB_SANDBOX_PATH=""
 ENTRYPOINT_SELF_PID="$$"
 exec 8<&0
 
 sql_port="8563"
 ui_port="8443"
-jupyter_enabled="0"
-jupyter_port="8888"
-voila_port="8866"
 
 cleanup_stdin_forwarder() {
   cleanup_stdin_eof_watcher
@@ -191,16 +187,8 @@ ensure_sandbox_path() {
   fi
 }
 
-configure_udf_ccache() {
-  if [ -d /overlay-storage ]; then
-    export EXANANO_UDF_CCACHE="/overlay-storage/.exanano/.ccache"
-    export UDF_CCACHE="$EXANANO_UDF_CCACHE"
-    mkdir -p "$EXANANO_UDF_CCACHE" 2>/dev/null || true
-  fi
-}
-
 start_db_run() {
-  set -- -- -concurrentConnections=20 "-initialScriptLanguages=${DB_INITIAL_SCRIPT_LANGUAGES}"
+  set -- -- -concurrentConnections=20
   if [ -n "$DB_SANDBOX_PATH" ]; then
     set -- "$@" "-sandboxPath=${DB_SANDBOX_PATH}"
   fi
@@ -214,9 +202,6 @@ write_runtime_state() {
   {
     echo "sql_port=$sql_port"
     echo "ui_port=$ui_port"
-    echo "jupyter_enabled=$jupyter_enabled"
-    echo "jupyter_port=$jupyter_port"
-    echo "voila_port=$voila_port"
   } > "$RUNTIME_STATE_PATH"
   echo "$ENTRYPOINT_SELF_PID" > "$ENTRYPOINT_PID_PATH"
 }
@@ -234,15 +219,6 @@ for token in $(cat /proc/cmdline 2>/dev/null); do
     exa_ui_port=*)
       ui_port="${token#exa_ui_port=}"
       ;;
-    exa_jupyter_enabled=*)
-      jupyter_enabled="${token#exa_jupyter_enabled=}"
-      ;;
-    exa_jupyter_port=*)
-      jupyter_port="${token#exa_jupyter_port=}"
-      ;;
-    exa_voila_port=*)
-      voila_port="${token#exa_voila_port=}"
-      ;;
   esac
 done
 
@@ -253,7 +229,6 @@ fi
 
 build_db_run_controller_args
 ensure_sandbox_path
-configure_udf_ccache
 write_runtime_state
 
 RESTART_COUNT=0

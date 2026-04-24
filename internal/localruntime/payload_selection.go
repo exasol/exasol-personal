@@ -17,7 +17,8 @@ import (
 
 const (
 	PayloadMetadataURLEnvVar  = "EXASOL_LOCAL_RUNTIME_PAYLOAD_METADATA_URL"
-	DefaultPayloadMetadataURL = "https://downloads.exasol.com/exasol-personal/" +
+	DefaultPayloadMetadataURL = "https://personal-exanano-artifacts-" +
+		"686382907660-eu-central-1-an.s3.eu-central-1.amazonaws.com/" +
 		"localruntime/metadata.json"
 )
 

@@ -23,6 +23,7 @@ const (
 )
 
 type ConnectionDetails struct {
+	Backend         string
 	Hostname        string
 	DisplayHost     string
 	DBPort          string
@@ -38,6 +39,7 @@ type ConnectionDetails struct {
 	ClusterState    string
 	ClusterSize     int
 	ShellSupported  bool
+	AdminUISecured  bool
 }
 
 type DocumentationLink struct {
@@ -54,12 +56,21 @@ type Details struct {
 }
 
 func getConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails, error) {
-	connectionInfo, err := config.ResolveConnectionInfo(deployment)
+	deploymentInfo, err := config.ReadDeploymentInfo(deployment)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read deployment info: %w", err)
+	}
+	connectionInfo, err := deploymentInfo.ConnectionInfo(deployment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve deployment connection info: %w", err)
 	}
+	secrets, err := config.ReadSecrets(deployment)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read deployment secrets: %w", err)
+	}
 
 	return &ConnectionDetails{
+		Backend:         deploymentInfo.Backend,
 		DeploymentName:  connectionInfo.DeploymentName,
 		ClusterSize:     connectionInfo.ClusterSize,
 		ClusterState:    connectionInfo.ClusterState,
@@ -75,6 +86,7 @@ func getConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails, 
 		InsecureSkipTLS: connectionInfo.InsecureSkipCertValidation,
 		SecretsFilePath: connectionInfo.SecretsFilePath,
 		ShellSupported:  connectionInfo.ShellSupported,
+		AdminUISecured:  secrets.AdminUiPassword != "",
 	}, nil
 }
 
@@ -91,7 +103,7 @@ func GetSQLInstructions(connectionDetails *ConnectionDetails) string {
 			"use nocertcheck for the current deployment setup\n"
 	}
 
-	instructions := `
+	adminUIInstructions := `
 === How to Connect from a Graphical SQL Client ===
 To connect using a client of your choice:
 1. Create a new database connection.
@@ -109,9 +121,28 @@ To connect using the CLI:
 === How to open the Administration UI ===
 1. Open the following URL in the browser: ` + uiURL + `
 2. Accept certificate if necessary
-3. Login with username "admin" and password stored in ` + connectionDetails.SecretsFilePath + `
 
 `
+	adminUIUsername := ""
+	switch {
+	case connectionDetails.Backend == config.DeploymentBackendLocal:
+		adminUIUsername = connectionDetails.Username
+	case connectionDetails.AdminUISecured:
+		adminUIUsername = "admin"
+	default:
+	}
+
+	if adminUIUsername != "" {
+		adminUIInstructions += fmt.Sprintf(
+			"3. Login with username %q and password stored in %s\n\n",
+			adminUIUsername,
+			connectionDetails.SecretsFilePath,
+		)
+	}
+
+	instructions := `
+
+` + adminUIInstructions
 
 	if !connectionDetails.ShellSupported {
 		return instructions
