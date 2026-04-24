@@ -39,16 +39,27 @@ A cloud account on one of the supported platforms with permission to provision c
 
 ## 🏎️ Quick Start (macOS / Linux)
 
+
+1. Download the launcher
 ```bash
-# 1. Download the launcher
 curl https://downloads.exasol.com/exasol-personal/installer.sh | sh
+```
 
-# 2. Create a deployment directory
+2. Create a deployment directory
+```bash
 mkdir deployment && cd deployment
+``` 
+3. Install on your cloud of choice
 
-# 3. Install on your cloud of choice
+```bash
 exasol install aws        # Amazon Web Services
+```
+
+```bash
 exasol install azure      # Microsoft Azure
+```
+
+```bash
 exasol install exoscale   # Exoscale
 ```
 
