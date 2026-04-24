@@ -146,9 +146,6 @@ func TestControllerWaitForRuntimeState_ReturnsWhenStateAppears(t *testing.T) {
 		runtimeState := strings.Join([]string{
 			"sql_port=8563",
 			"ui_port=8443",
-			"jupyter_enabled=0",
-			"jupyter_port=8888",
-			"voila_port=8866",
 			"",
 		}, "\n")
 		_ = os.WriteFile(
@@ -184,11 +181,6 @@ func TestControllerReadRuntimeState_ParsesRuntimeMetadata(t *testing.T) {
 	runtimeState := strings.Join([]string{
 		"sql_port=8563",
 		"ui_port=8443",
-		"stack_enabled=marimo",
-		"stack_port=marimo,marimo,2718,2718",
-		"jupyter_enabled=1",
-		"jupyter_port=8888",
-		"voila_port=8866",
 		"",
 	}, "\n")
 	if err := os.WriteFile(
@@ -210,18 +202,6 @@ func TestControllerReadRuntimeState_ParsesRuntimeMetadata(t *testing.T) {
 	}
 	if state.UIPort != 8443 {
 		t.Fatalf("expected ui port 8443, got %d", state.UIPort)
-	}
-	if !state.JupyterEnabled {
-		t.Fatal("expected jupyter to be enabled")
-	}
-	if len(state.EnabledStacks) != 1 || state.EnabledStacks[0] != "marimo" {
-		t.Fatalf("expected marimo to be enabled, got %#v", state.EnabledStacks)
-	}
-	if len(state.StackPorts) != 1 {
-		t.Fatalf("expected one stack port entry, got %#v", state.StackPorts)
-	}
-	if state.StackPorts[0].HostPort != 2718 || state.StackPorts[0].GuestPort != 2718 {
-		t.Fatalf("expected stack ports to round-trip, got %#v", state.StackPorts[0])
 	}
 }
 

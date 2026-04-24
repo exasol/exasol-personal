@@ -27,7 +27,6 @@ const (
 	controlPollInterval    = 100 * time.Millisecond
 	controlDirMode         = 0o700
 	controlFileMode        = 0o600
-	stackPortPartCount     = 4
 )
 
 var (
@@ -50,20 +49,8 @@ type ControlPaths struct {
 }
 
 type GuestRuntimeState struct {
-	SQLPort        int
-	UIPort         int
-	JupyterEnabled bool
-	JupyterPort    int
-	VoilaPort      int
-	EnabledStacks  []string
-	StackPorts     []GuestStackPort
-}
-
-type GuestStackPort struct {
-	StackName   string
-	ServiceName string
-	HostPort    int
-	GuestPort   int
+	SQLPort int
+	UIPort  int
 }
 
 type Controller struct {
@@ -283,44 +270,6 @@ func parseRuntimeState(data string) (*GuestRuntimeState, error) {
 				)
 			}
 			state.UIPort = port
-		case "jupyter_enabled":
-			enabled, err := parseBoolFlag(value)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"%w: invalid jupyter_enabled value %q",
-					ErrRuntimeStateInvalid,
-					value,
-				)
-			}
-			state.JupyterEnabled = enabled
-		case "jupyter_port":
-			port, err := strconv.Atoi(value)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"%w: invalid jupyter_port value %q",
-					ErrRuntimeStateInvalid,
-					value,
-				)
-			}
-			state.JupyterPort = port
-		case "voila_port":
-			port, err := strconv.Atoi(value)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"%w: invalid voila_port value %q",
-					ErrRuntimeStateInvalid,
-					value,
-				)
-			}
-			state.VoilaPort = port
-		case "stack_enabled":
-			state.EnabledStacks = append(state.EnabledStacks, value)
-		case "stack_port":
-			stackPort, err := parseStackPort(value)
-			if err != nil {
-				return nil, err
-			}
-			state.StackPorts = append(state.StackPorts, stackPort)
 		default:
 		}
 	}
@@ -334,52 +283,6 @@ func parseRuntimeState(data string) (*GuestRuntimeState, error) {
 	}
 
 	return state, nil
-}
-
-func parseBoolFlag(value string) (bool, error) {
-	switch strings.TrimSpace(value) {
-	case "1", "true", "TRUE":
-		return true, nil
-	case "0", "false", "FALSE":
-		return false, nil
-	default:
-		return false, errors.New("invalid boolean flag")
-	}
-}
-
-func parseStackPort(value string) (GuestStackPort, error) {
-	parts := strings.Split(value, ",")
-	if len(parts) != stackPortPartCount {
-		return GuestStackPort{}, fmt.Errorf(
-			"%w: invalid stack_port value %q",
-			ErrRuntimeStateInvalid,
-			value,
-		)
-	}
-
-	hostPort, err := strconv.Atoi(parts[2])
-	if err != nil {
-		return GuestStackPort{}, fmt.Errorf(
-			"%w: invalid stack_port host port %q",
-			ErrRuntimeStateInvalid,
-			parts[2],
-		)
-	}
-	guestPort, err := strconv.Atoi(parts[3])
-	if err != nil {
-		return GuestStackPort{}, fmt.Errorf(
-			"%w: invalid stack_port guest port %q",
-			ErrRuntimeStateInvalid,
-			parts[3],
-		)
-	}
-
-	return GuestStackPort{
-		StackName:   parts[0],
-		ServiceName: parts[1],
-		HostPort:    hostPort,
-		GuestPort:   guestPort,
-	}, nil
 }
 
 func hasSocket(filePath string) (bool, error) {

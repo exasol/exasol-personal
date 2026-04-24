@@ -20,22 +20,19 @@ import (
 )
 
 const (
-	localRunnerCommandName       = "internal-local-runtime-runner"
-	localDefaultDatabaseUser     = "sys"
-	localDefaultDatabasePassword = "exasol"
-	localDefaultAdminUIPassword  = "exasol"
-	localClusterSize             = 1
-	localClusterStateStarting    = "starting"
-	localClusterStateRunning     = "running"
-	localClusterStateStopped     = "stopped"
-	localLoopbackHost            = "127.0.0.1"
-	localStopTimeout             = 60 * time.Second
-	localRunnerKillWaitTimeout   = 5 * time.Second
-	localRunnerStartupTimeout    = 3 * time.Second
-	localRunnerMaxBackoff        = 5
-	localRunnerLogDirMode        = 0o700
-	localRunnerLogFileMode       = 0o600
-	localRunnerPollInterval      = 100 * time.Millisecond
+	localRunnerCommandName     = "internal-local-runtime-runner"
+	localClusterSize           = 1
+	localClusterStateStarting  = "starting"
+	localClusterStateRunning   = "running"
+	localClusterStateStopped   = "stopped"
+	localLoopbackHost          = "127.0.0.1"
+	localStopTimeout           = 60 * time.Second
+	localRunnerKillWaitTimeout = 5 * time.Second
+	localRunnerStartupTimeout  = 3 * time.Second
+	localRunnerMaxBackoff      = 5
+	localRunnerLogDirMode      = 0o700
+	localRunnerLogFileMode     = 0o600
+	localRunnerPollInterval    = 100 * time.Millisecond
 )
 
 var localRunnerCommand = startLocalRunnerCommand
@@ -69,7 +66,9 @@ func (localBackend) Deploy(
 	_, _ io.Writer,
 	_ TofuLockfileMode,
 ) error {
-	return ensureLocalRuntimeStarted(ctx, deployment.Root(), StartedDefaultTimeoutSeconds)
+	runtime := localruntime.New(deployment.Root())
+
+	return ensureLocalRuntimeStarted(ctx, deployment, runtime, StartedDefaultTimeoutSeconds)
 }
 
 func (localBackend) Start(
@@ -79,7 +78,9 @@ func (localBackend) Start(
 	_, _ io.Writer,
 	waitTimeoutSeconds int,
 ) error {
-	return ensureLocalRuntimeStarted(ctx, deployment.Root(), waitTimeoutSeconds)
+	runtime := localruntime.New(deployment.Root())
+
+	return ensureLocalRuntimeStarted(ctx, deployment, runtime, waitTimeoutSeconds)
 }
 
 func (localBackend) Stop(
@@ -99,7 +100,7 @@ func (localBackend) Stop(
 			return err
 		}
 
-		return writeLocalArtifacts(deployment.Root(), localClusterStateStopped, StatusStopped)
+		return writeLocalArtifacts(deployment, runtime, localClusterStateStopped, StatusStopped)
 	}
 
 	stopCtx, cancel := context.WithTimeout(ctx, localStopTimeout)
@@ -133,7 +134,7 @@ func (localBackend) Stop(
 		return err
 	}
 
-	return writeLocalArtifacts(deployment.Root(), localClusterStateStopped, StatusStopped)
+	return writeLocalArtifacts(deployment, runtime, localClusterStateStopped, StatusStopped)
 }
 
 func (localBackend) Destroy(
@@ -176,25 +177,26 @@ func (localBackend) Destroy(
 
 func ensureLocalRuntimeStarted(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
+	runtime *localruntime.Runtime,
 	waitTimeoutSeconds int,
 ) error {
-	runtime := localruntime.New(deploymentDir)
 	if err := runtime.EnsureRoot(); err != nil {
 		return err
 	}
 	if _, err := runtime.EnsurePayloadSelected(ctx); err != nil {
 		return err
 	}
-	if _, err := runtime.AllocatePort("db"); err != nil {
+	if _, err := runtime.EnsureConnectionPorts(); err != nil {
 		return err
 	}
-	if _, err := runtime.AllocatePort("ui"); err != nil {
+	if _, err := ensureLocalSecrets(deployment); err != nil {
 		return err
 	}
 
 	if err := writeLocalArtifacts(
-		deploymentDir,
+		deployment,
+		runtime,
 		localClusterStateStarting,
 		StatusOperationInProgress,
 	); err != nil {
@@ -206,7 +208,7 @@ func ensureLocalRuntimeStarted(
 		return err
 	}
 	if !running {
-		if err := localRunnerCommand(deploymentDir, runtime.Layout().RunnerLogFile()); err != nil {
+		if err := localRunnerCommand(deployment, runtime); err != nil {
 			return err
 		}
 	}
@@ -218,24 +220,30 @@ func ensureLocalRuntimeStarted(
 	waitCtx, cancel := context.WithTimeout(ctx, time.Duration(waitTimeoutSeconds)*time.Second)
 	defer cancel()
 
-	if err := waitForLocalRuntimeStarted(waitCtx, deploymentDir, runtime); err != nil {
+	if err := waitForLocalRuntimeStarted(waitCtx, deployment, runtime); err != nil {
+		return err
+	}
+	if err := ensureLocalDatabaseCredentialsFn(waitCtx, deployment); err != nil {
 		return err
 	}
 
-	return writeLocalArtifacts(deploymentDir, localClusterStateRunning, StatusRunning)
+	return writeLocalArtifacts(deployment, runtime, localClusterStateRunning, StatusRunning)
 }
 
 func waitForLocalRuntimeStarted(
 	ctx context.Context,
-	deploymentDir string,
+	deployment config.DeploymentDir,
 	runtime *localruntime.Runtime,
 ) error {
-	deployment := config.NewDeploymentDir(deploymentDir)
-
 	return PollWithBackoff(ctx, func(ctx context.Context) (bool, error) {
-		running, _, err := runtime.RunnerRunning()
-		if err != nil {
-			return false, err
+		dbReadyErr := verifyDatabaseConnectionFn(ctx, deployment)
+		if dbReadyErr == nil {
+			return true, nil
+		}
+
+		running, pid, runnerErr := runtime.RunnerRunning()
+		if runnerErr != nil {
+			return false, runnerErr
 		}
 		if !running {
 			return false, fmt.Errorf(
@@ -244,9 +252,13 @@ func waitForLocalRuntimeStarted(
 			)
 		}
 
-		err = verifyDatabaseConnectionFn(ctx, deployment)
+		slog.Debug(
+			"local runtime database readiness probe not ready yet",
+			"pid", pid,
+			"error", dbReadyErr,
+		)
 
-		return err == nil, err
+		return false, dbReadyErr
 	}, WaitParams{
 		InitialBackoff: 1,
 		MaxBackoff:     localRunnerMaxBackoff,
@@ -256,12 +268,11 @@ func waitForLocalRuntimeStarted(
 }
 
 func writeLocalArtifacts(
-	deploymentDir string,
+	deployment config.DeploymentDir,
+	runtime *localruntime.Runtime,
 	clusterState string,
 	deploymentState string,
 ) error {
-	deployment := config.NewDeploymentDir(deploymentDir)
-	runtime := localruntime.New(deploymentDir)
 	state, err := runtime.LoadState()
 	if err != nil {
 		return err
@@ -278,11 +289,8 @@ func writeLocalArtifacts(
 		return errors.New("local runtime ports are not initialized")
 	}
 
-	if err := config.WriteSecrets(deploymentDir, &config.Secrets{
-		DbPassword:      localDefaultDatabasePassword,
-		AdminUiPassword: localDefaultAdminUIPassword,
-	}); err != nil {
-		return fmt.Errorf("failed to write local deployment secrets: %w", err)
+	if _, err := ensureLocalSecrets(deployment); err != nil {
+		return err
 	}
 
 	info := &config.DeploymentInfo{
@@ -315,18 +323,19 @@ func writeLocalArtifacts(
 		},
 	}
 
-	if err := config.WriteDeploymentInfo(deploymentDir, info); err != nil {
+	if err := config.WriteDeploymentInfo(deployment.Root(), info); err != nil {
 		return fmt.Errorf("failed to write local deployment info: %w", err)
 	}
 
 	return nil
 }
 
-func startLocalRunnerCommand(deploymentDir string, logPath string) error {
+func startLocalRunnerCommand(deployment config.DeploymentDir, runtime *localruntime.Runtime) error {
 	executable, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to resolve launcher executable: %w", err)
 	}
+	logPath := runtime.Layout().RunnerLogFile()
 
 	if err := os.MkdirAll(filepath.Dir(logPath), localRunnerLogDirMode); err != nil {
 		return fmt.Errorf("failed to create local runner log dir: %w", err)
@@ -347,7 +356,7 @@ func startLocalRunnerCommand(deploymentDir string, logPath string) error {
 		executable,
 		localRunnerCommandName,
 		"--deployment-dir",
-		deploymentDir,
+		deployment.Root(),
 	)
 	cmd.Stdin = nil
 	cmd.Stdout = logFile
@@ -362,7 +371,6 @@ func startLocalRunnerCommand(deploymentDir string, logPath string) error {
 		return err
 	}
 
-	runtime := localruntime.New(deploymentDir)
 	deadline := time.Now().Add(localRunnerStartupTimeout)
 	for time.Now().Before(deadline) {
 		running, _, err := runtime.RunnerRunning()

@@ -79,6 +79,13 @@ preset rather than just another cloud provider row.
 - common fields stay stable across backends
 - backend-specific sections use optional fields
 - launcher code reads one normalized schema instead of branching on backend-private file shapes
+- local deployments do not get a second local-only wrapper schema once the transition is complete
+
+Compatibility migration policy:
+
+- local compatibility shims may exist while older artifacts are still supported
+- new code paths should read and write the common deployment-info contract directly
+- compatibility helpers must not become a second steady-state abstraction layer
 
 ### Local runtime isolation
 
@@ -97,6 +104,41 @@ This includes:
 - local runtime state file
 
 Multiple deployment directories must run concurrently without sharing these paths.
+
+### Local credential policy
+
+V1 local mode uses a launcher-owned fixed local credential contract.
+
+- the launcher owns the credential interface for local deployments
+- the default local SQL credentials are fixed to `sys` / `exasol`
+- if the Linux `.run` payload requires explicit credential injection, that handoff must be modeled as
+  an explicit launcher-to-guest contract
+- connection instructions and `secrets.json` reflect that launcher-owned local credential contract
+- credential literals should be centralized in code rather than duplicated across the local backend
+
+### Local VM sizing policy
+
+Local VM sizing must be launcher-owned configuration rather than unexplained code constants.
+
+- CPU, memory, and persistent layer-disk sizing have documented defaults
+- sizing may be sourced from preset defaults, launcher-managed variables, or both
+- the runtime consumes normalized sizing inputs instead of encoding product policy directly inside VM
+  bootstrap helpers
+
+### Local guest scope for v1
+
+The v1 local guest scope is intentionally narrow.
+
+- required surface:
+  - database runtime
+  - admin UI
+- excluded from v1:
+  - Jupyter
+  - Voila
+  - UDF/runtime-stack provisioning extras
+
+This keeps the first launcher-owned VM path focused on running the Linux `.run` payload reliably
+before wider guest-side feature parity is considered.
 
 ### Host-side virtualization
 
@@ -187,5 +229,9 @@ Recommended implementation order:
 
 - macOS arm64 build will likely need different build settings than the current generic launcher path
 - deployment artifacts are currently cloud-shaped and need to become local-safe
+- if credential ownership is not made explicit, local mode will drift into unsafe or misleading
+  defaults
+- if VM sizing remains hardcoded, product policy will leak into low-level runtime code and become
+  difficult to evolve
 - if compatibility validation lands late, invalid preset combinations will leak across the codebase
 - if control transport details leak outside the local runtime subsystem, future changes will be expensive

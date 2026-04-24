@@ -138,3 +138,63 @@ The system SHALL use a single launcher-facing deployment-info schema for deploym
 - WHEN each backend writes `deployment.json`
 - THEN both files follow the same launcher-facing schema
 - AND fields without meaningful values may be omitted or null
+
+#### Scenario: Local deployments do not require a second steady-state schema
+
+- GIVEN the launcher reads or writes deployment metadata for a local deployment
+- WHEN it handles `deployment.json`
+- THEN it uses the common launcher-facing deployment-info contract directly
+- AND it does not require a separate local-only steady-state deployment-info schema
+
+### Requirement: Launcher-owned local default credentials
+
+The system SHALL provide a launcher-owned default local credential contract for v1 local deployments.
+
+#### Scenario: Local deployment uses the v1 default credentials
+
+- GIVEN the launcher prepares a local deployment for first start
+- WHEN it writes deployment-owned secrets and connection metadata
+- THEN it persists the launcher-owned local SQL credential pair `sys` / `exasol`
+- AND those defaults are represented through centralized launcher constants rather than scattered literals
+
+#### Scenario: Guest startup uses an explicit credential handoff
+
+- GIVEN the selected Linux `.run` payload requires credentials or password setup
+- WHEN the launcher starts the local guest runtime
+- THEN it passes the launcher-owned local credential values through an explicit launcher-to-guest contract
+- AND the contract is not represented only by duplicated string literals inside launcher code
+
+### Requirement: Launcher-owned local VM sizing
+
+The system SHALL source local VM sizing from launcher-owned configuration with documented defaults rather than relying only on fixed code constants.
+
+#### Scenario: Local deployment resolves VM sizing from launcher-owned inputs
+
+- GIVEN a local deployment is initialized
+- WHEN the launcher prepares the VM configuration
+- THEN CPU, memory, and persistent layer-disk sizing come from launcher-owned configuration or preset defaults
+- AND the runtime does not rely only on unexplained fixed constants embedded in VM bootstrap code
+
+#### Scenario: Omitted sizing uses documented defaults
+
+- GIVEN the user does not provide explicit local VM sizing
+- WHEN the launcher prepares the VM configuration
+- THEN it applies documented default sizing values for local mode
+- AND those defaults remain part of the launcher-owned local deployment contract
+
+### Requirement: Minimal v1 local guest scope
+
+The system SHALL keep the v1 local guest scope limited to the database and administration UI.
+
+#### Scenario: Local deployment exposes only in-scope endpoints
+
+- GIVEN a local deployment is running
+- WHEN the launcher renders connection details or runtime metadata
+- THEN it exposes the local database and admin UI endpoints
+- AND it does not imply support for notebook or UDF-related guest features in v1
+
+#### Scenario: Guest bootstrap excludes notebook and UDF extras
+
+- GIVEN the launcher boots the local guest runtime for v1 local mode
+- WHEN it prepares guest runtime arguments and bootstrap assets
+- THEN it does not enable Jupyter, Voila, or UDF/runtime-stack provisioning extras as part of the default local deployment flow

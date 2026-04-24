@@ -27,6 +27,7 @@ const closePanicMsg = "tried to call Close before Connect on an instance of Exas
 type Database struct {
 	connectionString string
 	connect          types.ConnectFunc
+	skipVersionCheck bool
 
 	conn types.ExasolConnector
 }
@@ -34,6 +35,7 @@ type Database struct {
 type opts struct {
 	validateServerCertificate bool
 	connect                   types.ConnectFunc
+	skipVersionCheck          bool
 }
 
 type OptFn func(*opts)
@@ -48,6 +50,11 @@ func WithConnectFunc(connect types.ConnectFunc) func(*opts) {
 	return func(opts *opts) {
 		opts.connect = connect
 	}
+}
+
+// SkipVersionCheck disables the post-connect version query.
+func SkipVersionCheck(opts *opts) {
+	opts.skipVersionCheck = true
 }
 
 func New(
@@ -73,6 +80,7 @@ func New(
 	return &Database{
 		connectionString: dsnConfigBuilder.String(),
 		connect:          opts.connect,
+		skipVersionCheck: opts.skipVersionCheck,
 	}, nil
 }
 
@@ -108,6 +116,10 @@ func (db *Database) Connect(ctx context.Context) error {
 	}
 
 	db.conn = conn
+
+	if db.skipVersionCheck {
+		return nil
+	}
 
 	version, err := db.version(ctx)
 	if err != nil {

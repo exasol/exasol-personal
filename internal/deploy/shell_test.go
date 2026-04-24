@@ -18,13 +18,13 @@ func TestOpenHostShell_RejectsLocalDeployments(t *testing.T) {
 
 	// Given
 	deploymentDir := t.TempDir()
-	if err := config.WriteLocalDeploymentInfo(deploymentDir, &config.LocalDeploymentInfo{
+	if err := config.WriteDeploymentInfo(deploymentDir, &config.DeploymentInfo{
 		Backend:         config.DeploymentBackendLocal,
-		DeploymentID:    "local-test",
+		DeploymentId:    "local-test",
 		DeploymentState: StatusRunning,
 		ClusterSize:     1,
 		ClusterState:    localClusterStateRunning,
-		Local: &config.LocalDeploymentRuntime{
+		Runtime: &config.DeploymentRuntime{
 			Host:                       "127.0.0.1",
 			DBPort:                     8563,
 			UIPort:                     8443,

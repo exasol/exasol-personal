@@ -17,6 +17,16 @@ type Runtime struct {
 	allocatePort func(excluded map[int]struct{}) (int, error)
 }
 
+type ConnectionPorts struct {
+	DB int
+	UI int
+}
+
+const (
+	dbPortName = "db"
+	uiPortName = "ui"
+)
+
 func New(deploymentDir string) *Runtime {
 	layout := localconfig.NewLayout(deploymentDir)
 
@@ -60,41 +70,58 @@ func (r *Runtime) SaveState(state *localstate.State) error {
 	return r.store.Write(state)
 }
 
-func (r *Runtime) AllocatePort(name string) (int, error) {
+func (r *Runtime) EnsureConnectionPorts() (*ConnectionPorts, error) {
 	if err := r.EnsureRoot(); err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	state, err := r.LoadState()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
+	changed := false
 
 	if state.Ports == nil {
 		state.Ports = make(map[string]int)
+		changed = true
 	}
-	if port, exists := state.Ports[name]; exists && port > 0 {
-		return port, nil
+	for _, name := range []string{dbPortName, uiPortName} {
+		if state.Ports[name] > 0 {
+			continue
+		}
+
+		port, err := r.allocatePort(excludedPorts(state.Ports))
+		if err != nil {
+			return nil, err
+		}
+
+		state.Ports[name] = port
+		changed = true
 	}
 
-	excluded := make(map[int]struct{}, len(state.Ports))
-	for _, port := range state.Ports {
-		if port > 0 {
-			excluded[port] = struct{}{}
+	if changed {
+		if err := r.SaveState(state); err != nil {
+			return nil, err
 		}
 	}
 
-	port, err := r.allocatePort(excluded)
-	if err != nil {
-		return 0, err
+	return &ConnectionPorts{
+		DB: state.Ports[dbPortName],
+		UI: state.Ports[uiPortName],
+	}, nil
+}
+
+func excludedPorts(ports map[string]int) map[int]struct{} {
+	excluded := make(map[int]struct{}, len(ports))
+	for _, port := range ports {
+		if port <= 0 {
+			continue
+		}
+
+		excluded[port] = struct{}{}
 	}
 
-	state.Ports[name] = port
-	if err := r.SaveState(state); err != nil {
-		return 0, err
-	}
-
-	return port, nil
+	return excluded
 }
 
 func (r *Runtime) Controller() Controller {

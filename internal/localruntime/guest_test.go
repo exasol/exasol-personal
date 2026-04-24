@@ -97,6 +97,24 @@ func TestRuntimePrepareGuest_BuildsMachineConfigFromSelectedRunPayload(t *testin
 			guest.Machine.KernelCommandLine,
 		)
 	}
+	if strings.Contains(guest.Machine.KernelCommandLine, "exa_jupyter_") {
+		t.Fatalf(
+			"expected command line to exclude jupyter settings, got %q",
+			guest.Machine.KernelCommandLine,
+		)
+	}
+	if strings.Contains(guest.Machine.KernelCommandLine, "exa_voila_") {
+		t.Fatalf(
+			"expected command line to exclude voila settings, got %q",
+			guest.Machine.KernelCommandLine,
+		)
+	}
+	if strings.Contains(guest.Machine.KernelCommandLine, "exa_udf_ccache") {
+		t.Fatalf(
+			"expected command line to exclude udf cache settings, got %q",
+			guest.Machine.KernelCommandLine,
+		)
+	}
 
 	bootstrapProfilePath := filepath.Join(runtime.Layout().BootstrapDir(), bootstrapProfileFileName)
 	bootstrapEntrypointPath := filepath.Join(
@@ -110,6 +128,9 @@ func TestRuntimePrepareGuest_BuildsMachineConfigFromSelectedRunPayload(t *testin
 	}
 	if _, err := os.Stat(bootstrapEntrypointPath); err != nil {
 		t.Fatalf("expected bootstrap entrypoint to exist, got %v", err)
+	}
+	if _, err := os.Stat(runtime.Layout().MachineSizingPath()); err != nil {
+		t.Fatalf("expected machine sizing config to exist, got %v", err)
 	}
 	payloadInfo, err := os.Stat(stagedPayloadPath)
 	if err != nil {

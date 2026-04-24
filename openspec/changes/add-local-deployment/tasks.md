@@ -30,6 +30,10 @@
 - [x] Generate local-safe `deployment.json`, `secrets.json`, and `connection-instructions.txt`.
 - [x] Make `info`, `connect`, `status`, and `diag info` local-aware.
 - [x] Make `shell host`, `shell container`, and `diag shell` fail with explicit local-unsupported messages.
+- [x] Centralize the v1 local SQL credential contract (`sys` / `exasol`) and keep any required launcher-to-guest handoff behind one launcher-owned interface.
+- [x] Finish the deployment-info cleanup so local mode reads and writes only the common launcher-facing `deployment.json` contract without a second steady-state local wrapper.
+- [x] Refactor local backend lifecycle helpers to pass `config.DeploymentDir` and `localruntime.Runtime` through the call chain instead of repeatedly reconstructing them.
+- [x] Flatten local port allocation into one launcher-owned persisted path instead of layered wrapper indirection.
 
 ## Phase 5: Build and release
 
@@ -37,6 +41,11 @@
 - [x] Add signing and notarization support required for the virtualization-enabled launcher.
 - [x] Publish Linux ExaNano `.run` payloads and any required guest boot assets as versioned artifacts to a product-owned HTTP location.
 - [x] Update installer and CI/release flows to support the `.run`-based local deployment payload contract on macOS arm64.
+
+## Phase 6: Runtime policy cleanup
+
+- [x] Add launcher-owned local VM sizing configuration/defaults for CPU, memory, and persistent layer-disk sizing.
+- [x] Remove Jupyter, Voila, and UDF/runtime-stack guest defaults from the v1 local deployment path.
 
 ## Validation
 

@@ -33,6 +33,40 @@ func NewExasolConnection(
 	password string,
 	insecureSkipCertValidation bool,
 ) (generaltypes.Databaser, error) {
+	return newExasolConnection(
+		deployment,
+		connectionInfo,
+		username,
+		password,
+		insecureSkipCertValidation,
+	)
+}
+
+func NewExasolProbeConnection(
+	deployment config.DeploymentDir,
+	connectionInfo *config.ConnectionInfo,
+	username string,
+	password string,
+	insecureSkipCertValidation bool,
+) (generaltypes.Databaser, error) {
+	return newExasolConnection(
+		deployment,
+		connectionInfo,
+		username,
+		password,
+		insecureSkipCertValidation,
+		exasol.SkipVersionCheck,
+	)
+}
+
+func newExasolConnection(
+	deployment config.DeploymentDir,
+	connectionInfo *config.ConnectionInfo,
+	username string,
+	password string,
+	insecureSkipCertValidation bool,
+	exasolOptFns ...exasol.OptFn,
+) (generaltypes.Databaser, error) {
 	if password == "" {
 		secrets, err := config.ReadSecrets(deployment)
 		if err != nil {
@@ -48,6 +82,7 @@ func NewExasolConnection(
 	if insecureSkipCertValidation || connectionInfo.InsecureSkipCertValidation {
 		optsFns = append(optsFns, exasol.WithoutValidateServerCertificate)
 	}
+	optsFns = append(optsFns, exasolOptFns...)
 
 	database, err := exasol.New(
 		username,
