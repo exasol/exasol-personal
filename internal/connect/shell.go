@@ -23,12 +23,19 @@ type ProcessInputFunc func(input string) error
 
 type ShellOpts struct {
 	ExecuteOnSemicolon bool
+	// FlushPendingOnEOF makes the shell execute any buffered (un-`;`-terminated)
+	// statement when the input stream closes. Intended for non-interactive stdin
+	// (pipes, redirected files) so the final statement is not silently dropped.
+	// Must stay false for interactive sessions, where Ctrl-D after typing an
+	// incomplete statement should discard the buffer rather than execute it.
+	FlushPendingOnEOF bool
 }
 
 type shell struct {
 	lineReader          types.LineReader
 	processInput        ProcessInputFunc
 	executeOnSemicolon  bool
+	flushPendingOnEOF   bool
 	pendingStatementBuf string
 }
 
@@ -37,11 +44,31 @@ func newShell(lineReader types.LineReader, processInput ProcessInputFunc, opts S
 		lineReader:         lineReader,
 		processInput:       processInput,
 		executeOnSemicolon: opts.ExecuteOnSemicolon,
+		flushPendingOnEOF:  opts.FlushPendingOnEOF,
 	}
 }
 
 func (sh *shell) close() error {
 	return sh.lineReader.Close()
+}
+
+func (sh *shell) execStatement(stmt string) {
+	if err := sh.processInput(stmt); err != nil {
+		slog.Error(err.Error())
+	}
+}
+
+func (sh *shell) handleEOF() {
+	if !sh.flushPendingOnEOF {
+		return
+	}
+
+	remaining := strings.TrimSpace(sh.pendingStatementBuf)
+	if remaining == "" {
+		return
+	}
+
+	sh.execStatement(remaining)
 }
 
 func (sh *shell) run() error {
@@ -53,6 +80,8 @@ func (sh *shell) run() error {
 			if errors.Is(err, types.ErrInterrupt) {
 				continue
 			} else if errors.Is(err, io.EOF) {
+				sh.handleEOF()
+
 				return nil
 			}
 
@@ -66,10 +95,7 @@ func (sh *shell) run() error {
 		}
 
 		if !sh.executeOnSemicolon {
-			if err := sh.processInput(trimmedLine); err != nil {
-				slog.Error(err.Error())
-			}
-
+			sh.execStatement(trimmedLine)
 			continue
 		}
 
@@ -87,9 +113,7 @@ func (sh *shell) processInputSemicolonMode(line string) {
 	sh.pendingStatementBuf = remainder
 
 	for _, statement := range statements {
-		if err := sh.processInput(strings.TrimSpace(statement)); err != nil {
-			slog.Error(err.Error())
-		}
+		sh.execStatement(strings.TrimSpace(statement))
 	}
 }
 

@@ -208,8 +208,8 @@ def test_file_import(reusable_deployment: Deployment) -> None:
         "OPEN SCHEMA test_file_import;",
         'CREATE TABLE Users ("id" INT PRIMARY KEY, "user_id" VARCHAR(32), '
         '"firstname" VARCHAR(100), "lastname" VARCHAR(100), '
-        '"sex" VARCHAR(10), "email" VARCHAR(255))',
-        f"IMPORT INTO Users FROM LOCAL CSV FILE '{people_csv_path.absolute()}'",
+        '"sex" VARCHAR(10), "email" VARCHAR(255));',
+        f"IMPORT INTO Users FROM LOCAL CSV FILE '{people_csv_path.absolute()}';",
         "SELECT * FROM Users",
     ]
 
