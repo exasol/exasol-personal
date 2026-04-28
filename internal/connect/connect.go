@@ -107,7 +107,10 @@ func Connect(ctx context.Context, opts *Opts, deployment config.DeploymentDir) e
 		}
 
 		return printResult(queryResult)
-	}, ShellOpts{ExecuteOnSemicolon: opts.ExecuteOnSemicolon})
+	}, ShellOpts{
+		ExecuteOnSemicolon: opts.ExecuteOnSemicolon,
+		FlushPendingOnEOF:  !util.IsInteractiveStdin(),
+	})
 }
 
 func printExitHint(output io.Writer) error {

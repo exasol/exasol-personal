@@ -5,6 +5,7 @@ package connect
 
 import (
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/connect/types"
@@ -73,6 +74,36 @@ func TestRunShell(t *testing.T) {
 				t.Helper()
 
 				require.ErrorIs(t, err, errTest)
+				require.Equal(t, 2, mocks.shell.ReadlineCallCount())
+				require.Equal(t, 0, mocks.inputsProcessor.callCount)
+			},
+		},
+		{
+			name: "non-interactive EOF flushes buffered statement without semicolon",
+			opts: ShellOpts{ExecuteOnSemicolon: true, FlushPendingOnEOF: true},
+			given: func(mocks *mocks) {
+				mocks.shell.ReadlineReturnsOnCall(0, "SELECT * FROM Dual", nil)
+				mocks.shell.ReadlineReturnsOnCall(1, "", io.EOF)
+			},
+			then: func(t *testing.T, mocks *mocks, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Equal(t, 2, mocks.shell.ReadlineCallCount())
+				require.Equal(t, []string{"SELECT * FROM Dual"}, mocks.inputsProcessor.inputs)
+			},
+		},
+		{
+			name: "interactive EOF discards buffered statement without semicolon",
+			opts: ShellOpts{ExecuteOnSemicolon: true, FlushPendingOnEOF: false},
+			given: func(mocks *mocks) {
+				mocks.shell.ReadlineReturnsOnCall(0, "DROP TABLE Foo", nil)
+				mocks.shell.ReadlineReturnsOnCall(1, "", io.EOF)
+			},
+			then: func(t *testing.T, mocks *mocks, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
 				require.Equal(t, 2, mocks.shell.ReadlineCallCount())
 				require.Equal(t, 0, mocks.inputsProcessor.callCount)
 			},
