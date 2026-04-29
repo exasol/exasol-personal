@@ -23,19 +23,12 @@ type ProcessInputFunc func(input string) error
 
 type ShellOpts struct {
 	ExecuteOnSemicolon bool
-	// FlushPendingOnEOF makes the shell execute any buffered (un-`;`-terminated)
-	// statement when the input stream closes. Intended for non-interactive stdin
-	// (pipes, redirected files) so the final statement is not silently dropped.
-	// Must stay false for interactive sessions, where Ctrl-D after typing an
-	// incomplete statement should discard the buffer rather than execute it.
-	FlushPendingOnEOF bool
 }
 
 type shell struct {
 	lineReader          types.LineReader
 	processInput        ProcessInputFunc
 	executeOnSemicolon  bool
-	flushPendingOnEOF   bool
 	pendingStatementBuf string
 }
 
@@ -44,7 +37,6 @@ func newShell(lineReader types.LineReader, processInput ProcessInputFunc, opts S
 		lineReader:         lineReader,
 		processInput:       processInput,
 		executeOnSemicolon: opts.ExecuteOnSemicolon,
-		flushPendingOnEOF:  opts.FlushPendingOnEOF,
 	}
 }
 
@@ -59,10 +51,6 @@ func (sh *shell) execStatement(stmt string) {
 }
 
 func (sh *shell) handleEOF() {
-	if !sh.flushPendingOnEOF {
-		return
-	}
-
 	remaining := strings.TrimSpace(sh.pendingStatementBuf)
 	if remaining == "" {
 		return
@@ -228,7 +216,9 @@ func runShellImpl(
 // RunShell runs the shell, processing incoming input
 // with the passed callback. Blocks until the shell exits.
 func RunShell(processInput ProcessInputFunc) error {
-	return RunShellWithOpts(processInput, ShellOpts{ExecuteOnSemicolon: true})
+	return RunShellWithOpts(processInput, ShellOpts{
+		ExecuteOnSemicolon: true,
+	})
 }
 
 func RunShellWithOpts(processInput ProcessInputFunc, opts ShellOpts) error {
