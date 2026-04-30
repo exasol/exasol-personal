@@ -24,8 +24,8 @@ const (
 Getting Started:
   To create and run an Exasol deployment, run "exasol install <infra preset name-or-path>".
 	This single command initializes your deployment directory, prepares the selected infrastructure,
-	and installs the database. It uses either a built-in infrastructure preset or a custom preset 
-	at a path you provide. Built-in presets are: aws, azure, and exoscale.
+	and installs the database. It uses either a built-in infrastructure preset or a custom preset
+	at a path you provide. Built-in presets are: aws, azure, exoscale, and stackit.
 
 	If you do not pass --deployment-dir and are not already inside a deployment directory,
 	Exasol Personal uses ~/.exasol/personal/deployments/default. Pass --deployment-dir
