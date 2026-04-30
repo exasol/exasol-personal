@@ -6,29 +6,30 @@ package config
 import "path/filepath"
 
 const (
-	RuntimeRootDirName  = "local-runtime"
-	stateFileName       = "state.json"
-	configDirName       = "config"
-	controlDirName      = "control"
-	dataDirName         = "data"
-	logDirName          = "logs"
-	vmDirName           = "vm"
-	payloadDirName      = "payload"
-	bootstrapDirName    = "bootstrap"
-	bootDirName         = "boot"
-	guestPayloadDirName = "guest"
+	RuntimeRootDirName = "local-runtime"
+	stateFileName      = "state.json"
+	configDirName      = "config"
+	controlDirName     = "control"
+	dataDirName        = "data"
+	logDirName         = "logs"
+	vmDirName          = "vm"
+
+	payloadShareDirName = "payload-share"
 
 	controlSocketFileName     = "control.sock"
 	runtimeStateFileName      = "runtime.state"
 	stopRequestFileName       = "stop.request"
 	pidFileName               = "exanano.pid"
 	machineIdentifierFileName = "machine-id.bin"
-	layerDiskImageFileName    = "layer.img"
+	diskImageFileName         = "disk.img"
+	efiVarsFileName           = "efi-vars.fd"
+	diskIdentityFileName      = "disk.identity"
 	consoleLogFileName        = "console.log"
 	runnerLogFileName         = "runner.log"
-	payloadExecutableFileName = "db.run"
-	payloadChecksumFileName   = "db.run.sha256"
 	machineSizingFileName     = "machine.json"
+	payloadRunFileName        = "db.run"
+	payloadStartScriptName    = "start.sh"
+	payloadRunChecksumName    = ".db.run.sha256"
 )
 
 // Layout describes the deployment-owned on-disk layout for local runtime state.
@@ -68,22 +69,6 @@ func (l Layout) VMDir() string {
 	return filepath.Join(l.RuntimeRoot(), vmDirName)
 }
 
-func (l Layout) PayloadDir() string {
-	return filepath.Join(l.VMDir(), payloadDirName)
-}
-
-func (l Layout) PayloadBootDir() string {
-	return filepath.Join(l.PayloadDir(), bootDirName)
-}
-
-func (l Layout) PayloadShareDir() string {
-	return filepath.Join(l.PayloadDir(), guestPayloadDirName)
-}
-
-func (l Layout) BootstrapDir() string {
-	return filepath.Join(l.ConfigDir(), bootstrapDirName)
-}
-
 func (l Layout) StateFile() string {
 	return filepath.Join(l.RuntimeRoot(), stateFileName)
 }
@@ -108,8 +93,16 @@ func (l Layout) MachineIdentifierFile() string {
 	return filepath.Join(l.VMDir(), machineIdentifierFileName)
 }
 
-func (l Layout) LayerDiskImageFile() string {
-	return filepath.Join(l.VMDir(), layerDiskImageFileName)
+func (l Layout) DiskImagePath() string {
+	return filepath.Join(l.VMDir(), diskImageFileName)
+}
+
+func (l Layout) EFIVarsPath() string {
+	return filepath.Join(l.VMDir(), efiVarsFileName)
+}
+
+func (l Layout) DiskIdentityPath() string {
+	return filepath.Join(l.VMDir(), diskIdentityFileName)
 }
 
 func (l Layout) ConsoleLogFile() string {
@@ -120,14 +113,22 @@ func (l Layout) RunnerLogFile() string {
 	return filepath.Join(l.LogsDir(), runnerLogFileName)
 }
 
-func (l Layout) PayloadExecutablePath() string {
-	return filepath.Join(l.PayloadShareDir(), payloadExecutableFileName)
-}
-
-func (l Layout) PayloadChecksumPath() string {
-	return filepath.Join(l.PayloadShareDir(), payloadChecksumFileName)
-}
-
 func (l Layout) MachineSizingPath() string {
 	return filepath.Join(l.ConfigDir(), machineSizingFileName)
+}
+
+func (l Layout) PayloadShareDir() string {
+	return filepath.Join(l.VMDir(), payloadShareDirName)
+}
+
+func (l Layout) PayloadRunPath() string {
+	return filepath.Join(l.PayloadShareDir(), payloadRunFileName)
+}
+
+func (l Layout) PayloadStartScriptPath() string {
+	return filepath.Join(l.PayloadShareDir(), payloadStartScriptName)
+}
+
+func (l Layout) PayloadRunChecksumPath() string {
+	return filepath.Join(l.PayloadShareDir(), payloadRunChecksumName)
 }

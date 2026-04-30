@@ -22,15 +22,14 @@ const (
 		"localruntime/metadata.json"
 )
 
-var ErrPayloadBootAssetsMissing = errors.New("local runtime payload boot assets are missing")
+var ErrPayloadAssetMissing = errors.New("local runtime payload asset is missing")
 
 type payloadManager interface {
 	Resolve(ctx context.Context, architecture string) (*localassets.Payload, error)
-	EnsureCached(ctx context.Context, payload *localassets.Payload) (string, error)
-	EnsureBootCached(
+	EnsureCached(
 		ctx context.Context,
 		payload *localassets.Payload,
-	) (*localassets.CachedBootAssets, error)
+	) (*localassets.CachedPayload, error)
 }
 
 var (
@@ -75,33 +74,21 @@ func (r *Runtime) EnsurePayloadSelected(ctx context.Context) (*localstate.Payloa
 	if err != nil {
 		return nil, err
 	}
-	if payload.Boot == nil || payload.Boot.Kernel == nil || payload.Boot.Initrd == nil {
-		return nil, fmt.Errorf(
-			"%w: payload %s/%s does not describe kernel and initrd assets",
-			ErrPayloadBootAssetsMissing,
-			strings.TrimSpace(payload.Version),
-			strings.TrimSpace(payload.Architecture),
-		)
-	}
-
-	cachePath, err := manager.EnsureCached(ctx, payload)
-	if err != nil {
+	if err := validatePayloadAssets(payload); err != nil {
 		return nil, err
 	}
-	bootAssets, err := manager.EnsureBootCached(ctx, payload)
+
+	cached, err := manager.EnsureCached(ctx, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	state.Payload = &localstate.PayloadRef{
-		Version:      strings.TrimSpace(payload.Version),
-		Architecture: strings.TrimSpace(payload.Architecture),
-		Checksum:     strings.TrimSpace(payload.SHA256),
-		CachePath:    cachePath,
-		Boot: &localstate.PayloadBootRef{
-			KernelPath: strings.TrimSpace(bootAssets.KernelPath),
-			InitrdPath: strings.TrimSpace(bootAssets.InitrdPath),
-		},
+		Version:       strings.TrimSpace(payload.Version),
+		Architecture:  strings.TrimSpace(payload.Architecture),
+		Checksum:      strings.TrimSpace(payload.Disk.SHA256),
+		DiskImagePath: cached.DiskImagePath,
+		RunPath:       cached.RunPath,
 	}
 	if err := r.SaveState(state); err != nil {
 		return nil, err
@@ -110,18 +97,39 @@ func (r *Runtime) EnsurePayloadSelected(ctx context.Context) (*localstate.Payloa
 	return state.Payload, nil
 }
 
+func validatePayloadAssets(payload *localassets.Payload) error {
+	if payload.Disk == nil ||
+		strings.TrimSpace(payload.Disk.URL) == "" ||
+		strings.TrimSpace(payload.Disk.SHA256) == "" {
+		return fmt.Errorf(
+			"%w: payload %s/%s does not describe a disk asset",
+			ErrPayloadAssetMissing,
+			strings.TrimSpace(payload.Version),
+			strings.TrimSpace(payload.Architecture),
+		)
+	}
+	if payload.Run == nil ||
+		strings.TrimSpace(payload.Run.URL) == "" ||
+		strings.TrimSpace(payload.Run.SHA256) == "" {
+		return fmt.Errorf(
+			"%w: payload %s/%s does not describe a run asset",
+			ErrPayloadAssetMissing,
+			strings.TrimSpace(payload.Version),
+			strings.TrimSpace(payload.Architecture),
+		)
+	}
+
+	return nil
+}
+
 func cachedPayloadRef(state *localstate.State) *localstate.PayloadRef {
 	if state == nil || state.Payload == nil {
 		return nil
 	}
-	if !isCachedFile(state.Payload.CachePath) {
+	if !isCachedFile(state.Payload.DiskImagePath) {
 		return nil
 	}
-	if state.Payload.Boot == nil {
-		return nil
-	}
-	if !isCachedFile(state.Payload.Boot.KernelPath) ||
-		!isCachedFile(state.Payload.Boot.InitrdPath) {
+	if !isCachedFile(state.Payload.RunPath) {
 		return nil
 	}
 

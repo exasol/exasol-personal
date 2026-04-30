@@ -45,13 +45,10 @@ func (r *Runtime) EnsureRoot() error {
 	for _, dir := range []string{
 		r.layout.RuntimeRoot(),
 		r.layout.ConfigDir(),
-		r.layout.BootstrapDir(),
 		r.layout.ControlDir(),
 		r.layout.DataDir(),
 		r.layout.LogsDir(),
 		r.layout.VMDir(),
-		r.layout.PayloadDir(),
-		r.layout.PayloadBootDir(),
 		r.layout.PayloadShareDir(),
 	} {
 		if err := os.MkdirAll(dir, localRuntimeDirMode); err != nil {

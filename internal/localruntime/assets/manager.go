@@ -37,23 +37,17 @@ type Asset struct {
 	Filename string `json:"filename,omitempty"`
 }
 
-type BootAssets struct {
-	Kernel *Asset `json:"kernel,omitempty"`
-	Initrd *Asset `json:"initrd,omitempty"`
-}
-
 type Payload struct {
-	Version      string      `json:"version"`
-	Architecture string      `json:"architecture"`
-	URL          string      `json:"url,omitempty"`
-	SHA256       string      `json:"sha256,omitempty"`
-	Filename     string      `json:"filename,omitempty"`
-	Boot         *BootAssets `json:"boot,omitempty"`
+	Version      string `json:"version"`
+	Architecture string `json:"architecture"`
+	Disk         *Asset `json:"disk,omitempty"`
+	Run          *Asset `json:"run,omitempty"`
 }
 
-type CachedBootAssets struct {
-	KernelPath string
-	InitrdPath string
+// CachedPayload describes the cached on-disk paths for a payload's assets.
+type CachedPayload struct {
+	DiskImagePath string
+	RunPath       string
 }
 
 func (m *Metadata) Resolve(architecture string) (*Payload, error) {
@@ -99,73 +93,50 @@ func (m *Manager) Resolve(ctx context.Context, architecture string) (*Payload, e
 	return metadata.Resolve(architecture)
 }
 
-func (m *Manager) EnsureCached(ctx context.Context, payload *Payload) (string, error) {
-	if payload == nil {
-		return "", fmt.Errorf("%w: nil payload", ErrPayloadNotFound)
-	}
-
-	return m.ensureAssetCached(
-		ctx,
-		strings.TrimSpace(payload.Version),
-		strings.TrimSpace(payload.Architecture),
-		"",
-		&Asset{
-			URL:      payload.URL,
-			SHA256:   payload.SHA256,
-			Filename: payload.Filename,
-		},
-	)
-}
-
-func (m *Manager) EnsureBootCached(
-	ctx context.Context,
-	payload *Payload,
-) (*CachedBootAssets, error) {
+func (m *Manager) EnsureCached(ctx context.Context, payload *Payload) (*CachedPayload, error) {
 	if payload == nil {
 		return nil, fmt.Errorf("%w: nil payload", ErrPayloadNotFound)
 	}
-	if payload.Boot == nil || payload.Boot.Kernel == nil || payload.Boot.Initrd == nil {
+	if payload.Disk == nil {
 		return nil, fmt.Errorf(
-			"%w: missing boot assets for %s/%s",
+			"%w: missing disk asset for %s/%s",
+			ErrPayloadNotFound,
+			payload.Version,
+			payload.Architecture,
+		)
+	}
+	if payload.Run == nil {
+		return nil, fmt.Errorf(
+			"%w: missing run asset for %s/%s",
 			ErrPayloadNotFound,
 			payload.Version,
 			payload.Architecture,
 		)
 	}
 
-	kernelPath, err := m.ensureAssetCached(
-		ctx,
-		strings.TrimSpace(payload.Version),
-		strings.TrimSpace(payload.Architecture),
-		"boot",
-		payload.Boot.Kernel,
-	)
+	version := strings.TrimSpace(payload.Version)
+	architecture := strings.TrimSpace(payload.Architecture)
+
+	diskWirePath, err := m.ensureAssetCached(ctx, version, architecture, payload.Disk)
+	if err != nil {
+		return nil, err
+	}
+	diskPath, err := resolveDiskImagePath(diskWirePath)
+	if err != nil {
+		return nil, err
+	}
+	runPath, err := m.ensureAssetCached(ctx, version, architecture, payload.Run)
 	if err != nil {
 		return nil, err
 	}
 
-	initrdPath, err := m.ensureAssetCached(
-		ctx,
-		strings.TrimSpace(payload.Version),
-		strings.TrimSpace(payload.Architecture),
-		"boot",
-		payload.Boot.Initrd,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &CachedBootAssets{
-		KernelPath: kernelPath,
-		InitrdPath: initrdPath,
-	}, nil
+	return &CachedPayload{DiskImagePath: diskPath, RunPath: runPath}, nil
 }
 
 func (m *Manager) ensureAssetCached(
 	ctx context.Context,
 	version string,
 	architecture string,
-	role string,
 	asset *Asset,
 ) (string, error) {
 	if asset == nil {
@@ -182,7 +153,7 @@ func (m *Manager) ensureAssetCached(
 		m.CacheDir,
 		version,
 		architecture,
-		cachedAssetRelativePath(role, asset.resolvedFilename()),
+		asset.resolvedFilename(),
 	)
 
 	if ok, err := verifyFileSHA256(cachePath, asset.SHA256); err == nil && ok {
@@ -279,14 +250,6 @@ func (m *Manager) client() *http.Client {
 	}
 
 	return http.DefaultClient
-}
-
-func cachedAssetRelativePath(role string, filename string) string {
-	if strings.TrimSpace(role) == "" {
-		return filename
-	}
-
-	return filepath.Join(role, filename)
 }
 
 func (a *Asset) resolvedFilename() string {

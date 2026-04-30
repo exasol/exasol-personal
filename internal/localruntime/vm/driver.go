@@ -32,10 +32,8 @@ type PortForward struct {
 
 type MachineConfig struct {
 	Name                  string
-	KernelPath            string
-	InitrdPath            string
-	KernelCommandLine     string
-	DiskImage             string
+	DiskImagePath         string
+	EFIVarsPath           string
 	CPUCount              int
 	MemoryBytes           uint64
 	MachineIdentifierPath string

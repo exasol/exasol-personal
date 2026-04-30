@@ -24,12 +24,10 @@ func TestRuntimeEnsureRoot_CreatesDeploymentScopedLayout(t *testing.T) {
 	for _, path := range []string{
 		runtime.Layout().RuntimeRoot(),
 		runtime.Layout().ConfigDir(),
-		runtime.Layout().BootstrapDir(),
 		runtime.Layout().ControlDir(),
 		runtime.Layout().DataDir(),
 		runtime.Layout().LogsDir(),
 		runtime.Layout().VMDir(),
-		runtime.Layout().PayloadDir(),
 	} {
 		info, statErr := os.Stat(path)
 		if statErr != nil {

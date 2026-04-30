@@ -36,14 +36,10 @@ func TestStoreWriteRoundTrip(t *testing.T) {
 	expected := &State{
 		Ports: map[string]int{"db": 8563},
 		Payload: &PayloadRef{
-			Version:      "1.2.3",
-			Architecture: "arm64",
-			Checksum:     "abc",
-			CachePath:    "/tmp/payload",
-			Boot: &PayloadBootRef{
-				KernelPath: "/tmp/kernel",
-				InitrdPath: "/tmp/initrd",
-			},
+			Version:       "1.2.3",
+			Architecture:  "arm64",
+			Checksum:      "abc",
+			DiskImagePath: "/tmp/disk.img",
 		},
 	}
 
@@ -76,21 +72,11 @@ func TestStoreWriteRoundTrip(t *testing.T) {
 			expected.Payload.Architecture,
 		)
 	}
-	if actual.Payload.Boot == nil {
-		t.Fatal("expected payload boot assets to be present")
-	}
-	if actual.Payload.Boot.KernelPath != expected.Payload.Boot.KernelPath {
+	if actual.Payload.DiskImagePath != expected.Payload.DiskImagePath {
 		t.Fatalf(
-			"unexpected payload kernel path: got %q expected %q",
-			actual.Payload.Boot.KernelPath,
-			expected.Payload.Boot.KernelPath,
-		)
-	}
-	if actual.Payload.Boot.InitrdPath != expected.Payload.Boot.InitrdPath {
-		t.Fatalf(
-			"unexpected payload initrd path: got %q expected %q",
-			actual.Payload.Boot.InitrdPath,
-			expected.Payload.Boot.InitrdPath,
+			"unexpected payload disk image path: got %q expected %q",
+			actual.Payload.DiskImagePath,
+			expected.Payload.DiskImagePath,
 		)
 	}
 }

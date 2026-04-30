@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,17 +32,15 @@ func TestManagerResolve_SelectsArchitectureFromMetadata(t *testing.T) {
 				{
 					"version":"1.2.3",
 					"architecture":"arm64",
-					"url":"https://example.invalid/arm64.run",
-					"sha256":"abc",
-					"boot":{
-						"kernel":{
-							"url":"https://example.invalid/kernel",
-							"sha256":"def"
-						},
-						"initrd":{
-							"url":"https://example.invalid/initrd",
-							"sha256":"ghi"
-						}
+					"disk":{
+						"url":"https://example.invalid/disk.img",
+						"sha256":"abc",
+						"filename":"disk.img"
+					},
+					"run":{
+						"url":"https://example.invalid/db.run",
+						"sha256":"def",
+						"filename":"db.run"
 					}
 				}
 			]
@@ -62,95 +61,25 @@ func TestManagerResolve_SelectsArchitectureFromMetadata(t *testing.T) {
 	if payload.Architecture != "arm64" {
 		t.Fatalf("unexpected architecture: %q", payload.Architecture)
 	}
-	if payload.Boot == nil || payload.Boot.Kernel == nil || payload.Boot.Initrd == nil {
-		t.Fatalf("expected boot assets to be present, got %#v", payload.Boot)
+	if payload.Disk == nil ||
+		payload.Disk.URL != "https://example.invalid/disk.img" ||
+		payload.Disk.SHA256 != "abc" {
+		t.Fatalf("expected disk asset to be present, got %#v", payload.Disk)
+	}
+	if payload.Run == nil ||
+		payload.Run.URL != "https://example.invalid/db.run" ||
+		payload.Run.SHA256 != "def" {
+		t.Fatalf("expected run asset to be present, got %#v", payload.Run)
 	}
 }
 
-func TestManagerEnsureCached_DownloadsVerifiesAndReusesPayload(t *testing.T) {
+func TestManagerEnsureCached_DownloadsAndReusesBothAssets(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	payloadBytes := []byte("payload-bytes")
-	checksum := sha256Hex(payloadBytes)
+	diskBytes := []byte("disk-image-bytes")
+	runBytes := []byte("run-binary-bytes")
 
-	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
-	var (
-		mutex       sync.Mutex
-		downloadHit int
-	)
-	manager.HTTPClient = testHTTPClient(func(req *http.Request) (*http.Response, error) {
-		if req.URL.String() != "https://example.invalid/payload.run" {
-			return nil, fmt.Errorf("unexpected URL %s", req.URL)
-		}
-
-		mutex.Lock()
-		downloadHit++
-		mutex.Unlock()
-
-		return newHTTPResponseBytes(http.StatusOK, payloadBytes), nil
-	})
-	payload := &Payload{
-		Version:      "1.2.3",
-		Architecture: "arm64",
-		URL:          "https://example.invalid/payload.run",
-		SHA256:       checksum,
-	}
-
-	// When
-	firstPath, err := manager.EnsureCached(context.Background(), payload)
-	if err != nil {
-		t.Fatalf("expected first cache fill to succeed, got %v", err)
-	}
-	secondPath, err := manager.EnsureCached(context.Background(), payload)
-	// Then
-	if err != nil {
-		t.Fatalf("expected cached reuse to succeed, got %v", err)
-	}
-	if firstPath != secondPath {
-		t.Fatalf("expected cached path reuse, got %q then %q", firstPath, secondPath)
-	}
-
-	mutex.Lock()
-	defer mutex.Unlock()
-	if downloadHit != 1 {
-		t.Fatalf("expected exactly one download, got %d", downloadHit)
-	}
-}
-
-func TestManagerEnsureCached_RejectsInvalidChecksum(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
-	manager.HTTPClient = testHTTPClient(func(*http.Request) (*http.Response, error) {
-		return newHTTPResponse(http.StatusOK, "payload-bytes"), nil
-	})
-	payload := &Payload{
-		Version:      "1.2.3",
-		Architecture: "arm64",
-		URL:          "https://example.invalid/payload.run",
-		SHA256:       strings.Repeat("0", 64),
-	}
-
-	// When
-	_, err := manager.EnsureCached(context.Background(), payload)
-
-	// Then
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), ErrPayloadVerificationFailed.Error()) {
-		t.Fatalf("expected verification error, got %v", err)
-	}
-}
-
-func TestManagerEnsureBootCached_DownloadsAndReusesBootAssets(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	kernelBytes := []byte("kernel")
-	initrdBytes := []byte("initrd")
 	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
 	var (
 		mutex sync.Mutex
@@ -162,10 +91,10 @@ func TestManagerEnsureBootCached_DownloadsAndReusesBootAssets(t *testing.T) {
 		mutex.Unlock()
 
 		switch req.URL.String() {
-		case "https://example.invalid/vmlinux.container":
-			return newHTTPResponseBytes(http.StatusOK, kernelBytes), nil
-		case "https://example.invalid/ubuntu-initrd.cpio.gz":
-			return newHTTPResponseBytes(http.StatusOK, initrdBytes), nil
+		case "https://example.invalid/disk.img":
+			return newHTTPResponseBytes(http.StatusOK, diskBytes), nil
+		case "https://example.invalid/db.run":
+			return newHTTPResponseBytes(http.StatusOK, runBytes), nil
 		default:
 			return nil, fmt.Errorf("unexpected URL %s", req.URL)
 		}
@@ -173,44 +102,139 @@ func TestManagerEnsureBootCached_DownloadsAndReusesBootAssets(t *testing.T) {
 	payload := &Payload{
 		Version:      "1.2.3",
 		Architecture: "arm64",
-		Boot: &BootAssets{
-			Kernel: &Asset{
-				URL:    "https://example.invalid/vmlinux.container",
-				SHA256: sha256Hex(kernelBytes),
-			},
-			Initrd: &Asset{
-				URL:    "https://example.invalid/ubuntu-initrd.cpio.gz",
-				SHA256: sha256Hex(initrdBytes),
-			},
+		Disk: &Asset{
+			URL:      "https://example.invalid/disk.img",
+			SHA256:   sha256Hex(diskBytes),
+			Filename: "disk.img",
+		},
+		Run: &Asset{
+			URL:      "https://example.invalid/db.run",
+			SHA256:   sha256Hex(runBytes),
+			Filename: "db.run",
 		},
 	}
 
 	// When
-	first, err := manager.EnsureBootCached(context.Background(), payload)
+	first, err := manager.EnsureCached(context.Background(), payload)
 	if err != nil {
-		t.Fatalf("expected boot asset cache fill to succeed, got %v", err)
+		t.Fatalf("expected first cache fill to succeed, got %v", err)
 	}
-	second, err := manager.EnsureBootCached(context.Background(), payload)
+	second, err := manager.EnsureCached(context.Background(), payload)
 	// Then
 	if err != nil {
-		t.Fatalf("expected cached boot asset reuse to succeed, got %v", err)
+		t.Fatalf("expected cached reuse to succeed, got %v", err)
 	}
-	if first.KernelPath != second.KernelPath || first.InitrdPath != second.InitrdPath {
-		t.Fatalf("expected cached boot asset paths to be reused, got %#v then %#v", first, second)
+	if first.DiskImagePath != second.DiskImagePath {
+		t.Fatalf("expected disk path reuse, got %q then %q",
+			first.DiskImagePath, second.DiskImagePath)
 	}
+	if first.RunPath != second.RunPath {
+		t.Fatalf("expected run path reuse, got %q then %q",
+			first.RunPath, second.RunPath)
+	}
+	if !strings.HasSuffix(first.DiskImagePath, "/1.2.3/arm64/disk.img") {
+		t.Fatalf("unexpected disk cache path: %q", first.DiskImagePath)
+	}
+	if !strings.HasSuffix(first.RunPath, "/1.2.3/arm64/db.run") {
+		t.Fatalf("unexpected run cache path: %q", first.RunPath)
+	}
+
 	mutex.Lock()
 	defer mutex.Unlock()
-	if hits["https://example.invalid/vmlinux.container"] != 1 {
-		t.Fatalf(
-			"expected exactly one kernel download, got %d",
-			hits["https://example.invalid/vmlinux.container"],
-		)
+	if hits["https://example.invalid/disk.img"] != 1 {
+		t.Fatalf("expected exactly one disk download, got %d",
+			hits["https://example.invalid/disk.img"])
 	}
-	if hits["https://example.invalid/ubuntu-initrd.cpio.gz"] != 1 {
-		t.Fatalf(
-			"expected exactly one initrd download, got %d",
-			hits["https://example.invalid/ubuntu-initrd.cpio.gz"],
-		)
+	if hits["https://example.invalid/db.run"] != 1 {
+		t.Fatalf("expected exactly one run download, got %d",
+			hits["https://example.invalid/db.run"])
+	}
+}
+
+func TestManagerEnsureCached_RejectsInvalidChecksum(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
+	manager.HTTPClient = testHTTPClient(func(*http.Request) (*http.Response, error) {
+		return newHTTPResponse(http.StatusOK, "disk-image-bytes"), nil
+	})
+	payload := &Payload{
+		Version:      "1.2.3",
+		Architecture: "arm64",
+		Disk: &Asset{
+			URL:      "https://example.invalid/disk.img",
+			SHA256:   strings.Repeat("0", 64),
+			Filename: "disk.img",
+		},
+		Run: &Asset{
+			URL:      "https://example.invalid/db.run",
+			SHA256:   strings.Repeat("0", 64),
+			Filename: "db.run",
+		},
+	}
+
+	// When
+	_, err := manager.EnsureCached(context.Background(), payload)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, ErrPayloadVerificationFailed) {
+		t.Fatalf("expected verification error, got %v", err)
+	}
+}
+
+func TestManagerEnsureCached_RejectsPayloadWithoutDiskAsset(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
+	payload := &Payload{
+		Version:      "1.2.3",
+		Architecture: "arm64",
+		Run: &Asset{
+			URL:    "https://example.invalid/db.run",
+			SHA256: "abc",
+		},
+	}
+
+	// When
+	_, err := manager.EnsureCached(context.Background(), payload)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, ErrPayloadNotFound) {
+		t.Fatalf("expected ErrPayloadNotFound, got %v", err)
+	}
+}
+
+func TestManagerEnsureCached_RejectsPayloadWithoutRunAsset(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
+	payload := &Payload{
+		Version:      "1.2.3",
+		Architecture: "arm64",
+		Disk: &Asset{
+			URL:    "https://example.invalid/disk.img",
+			SHA256: "abc",
+		},
+	}
+
+	// When
+	_, err := manager.EnsureCached(context.Background(), payload)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, ErrPayloadNotFound) {
+		t.Fatalf("expected ErrPayloadNotFound, got %v", err)
 	}
 }
 

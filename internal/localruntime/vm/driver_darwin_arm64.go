@@ -207,29 +207,6 @@ func isTerminalState(state vz.VirtualMachineState) bool {
 	return state == vz.VirtualMachineStateStopped || state == vz.VirtualMachineStateError
 }
 
-func validateMachineConfig(config MachineConfig) error {
-	if strings.TrimSpace(config.Name) == "" {
-		return errors.New("machine name is required")
-	}
-	if strings.TrimSpace(config.KernelPath) == "" {
-		return errors.New("machine kernel path is required")
-	}
-	if len(config.PortForwards) > 0 {
-		return fmt.Errorf("%w: use a host-side forwarder in the local runtime layer", ErrPortForwardUnsupported)
-	}
-
-	for index, sharedDir := range config.SharedDirs {
-		if strings.TrimSpace(sharedDir.Source) == "" {
-			return fmt.Errorf("shared directory %d source path is required", index+1)
-		}
-		if resolvedSharedDirTag(sharedDir, index) == "" {
-			return fmt.Errorf("shared directory %d resolved to an empty tag", index+1)
-		}
-	}
-
-	return nil
-}
-
 func buildVirtualMachineConfiguration(config MachineConfig) (*vz.VirtualMachineConfiguration, error) {
 	bootLoader, err := buildBootLoader(config)
 	if err != nil {
@@ -273,7 +250,7 @@ func buildVirtualMachineConfiguration(config MachineConfig) (*vz.VirtualMachineC
 	}
 	vmConfig.SetNetworkDevicesVirtualMachineConfiguration(networkDevices)
 
-	storageDevices, err := buildStorageDevices(config.DiskImage)
+	storageDevices, err := buildStorageDevices(config.DiskImagePath)
 	if err != nil {
 		return nil, err
 	}
@@ -306,19 +283,31 @@ func buildVirtualMachineConfiguration(config MachineConfig) (*vz.VirtualMachineC
 	return vmConfig, nil
 }
 
-func buildBootLoader(config MachineConfig) (*vz.LinuxBootLoader, error) {
-	options := make([]vz.LinuxBootLoaderOption, 0, 2)
-
-	if initrdPath := strings.TrimSpace(config.InitrdPath); initrdPath != "" {
-		options = append(options, vz.WithInitrd(initrdPath))
-	}
-	if kernelCommandLine := strings.TrimSpace(config.KernelCommandLine); kernelCommandLine != "" {
-		options = append(options, vz.WithCommandLine(kernelCommandLine))
+func buildBootLoader(config MachineConfig) (*vz.EFIBootLoader, error) {
+	efiVarsPath := strings.TrimSpace(config.EFIVarsPath)
+	if efiVarsPath == "" {
+		return nil, errors.New("machine EFI variable store path is required")
 	}
 
-	bootLoader, err := vz.NewLinuxBootLoader(strings.TrimSpace(config.KernelPath), options...)
+	if err := os.MkdirAll(filepath.Dir(efiVarsPath), 0o700); err != nil {
+		return nil, fmt.Errorf("failed to create EFI variable store dir: %w", err)
+	}
+
+	variableStoreOpts := []vz.NewEFIVariableStoreOption{}
+	if _, err := os.Stat(efiVarsPath); errors.Is(err, os.ErrNotExist) {
+		variableStoreOpts = append(variableStoreOpts, vz.WithCreatingEFIVariableStore())
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to stat EFI variable store: %w", err)
+	}
+
+	variableStore, err := vz.NewEFIVariableStore(efiVarsPath, variableStoreOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Linux boot loader: %w", err)
+		return nil, fmt.Errorf("failed to create EFI variable store: %w", err)
+	}
+
+	bootLoader, err := vz.NewEFIBootLoader(vz.WithEFIVariableStore(variableStore))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create EFI boot loader: %w", err)
 	}
 
 	return bootLoader, nil

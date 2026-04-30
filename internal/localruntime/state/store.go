@@ -12,16 +12,11 @@ import (
 )
 
 type PayloadRef struct {
-	Version      string          `json:"version,omitempty"`
-	Architecture string          `json:"architecture,omitempty"`
-	Checksum     string          `json:"checksum,omitempty"`
-	CachePath    string          `json:"cachePath,omitempty"`
-	Boot         *PayloadBootRef `json:"boot,omitempty"`
-}
-
-type PayloadBootRef struct {
-	KernelPath string `json:"kernelPath,omitempty"`
-	InitrdPath string `json:"initrdPath,omitempty"`
+	Version       string `json:"version,omitempty"`
+	Architecture  string `json:"architecture,omitempty"`
+	Checksum      string `json:"checksum,omitempty"`
+	DiskImagePath string `json:"diskImagePath,omitempty"`
+	RunPath       string `json:"runPath,omitempty"`
 }
 
 type State struct {

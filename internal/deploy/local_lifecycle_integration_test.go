@@ -329,17 +329,13 @@ func initializeLocalLifecycleDeployment(t *testing.T, deploymentDir string) {
 
 	runtime := localruntime.New(deploymentDir)
 	fixtureDir := t.TempDir()
-	payloadPath := filepath.Join(fixtureDir, "exasol-nano-db-test-arm64.run")
-	kernelPath := filepath.Join(fixtureDir, "vmlinux.container")
-	initrdPath := filepath.Join(fixtureDir, "ubuntu-initrd.cpio.gz")
-	for path, content := range map[string]string{
-		payloadPath: "payload",
-		kernelPath:  "kernel",
-		initrdPath:  "initrd",
-	} {
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatalf("expected fake runtime fixture %q, got %v", path, err)
-		}
+	diskImagePath := filepath.Join(fixtureDir, "exasol-nano-vm.img")
+	if err := os.WriteFile(diskImagePath, []byte("disk-image"), 0o600); err != nil {
+		t.Fatalf("expected fake disk image fixture, got %v", err)
+	}
+	runPath := filepath.Join(fixtureDir, "exasol-nano-db.run")
+	if err := os.WriteFile(runPath, []byte("run-binary"), 0o600); err != nil {
+		t.Fatalf("expected fake run binary fixture, got %v", err)
 	}
 
 	if err := runtime.SaveState(&localstate.State{
@@ -348,13 +344,11 @@ func initializeLocalLifecycleDeployment(t *testing.T, deploymentDir string) {
 			"ui": 18443,
 		},
 		Payload: &localstate.PayloadRef{
-			Version:      "1.2.3",
-			Architecture: "arm64",
-			CachePath:    payloadPath,
-			Boot: &localstate.PayloadBootRef{
-				KernelPath: kernelPath,
-				InitrdPath: initrdPath,
-			},
+			Version:       "1.2.3",
+			Architecture:  "arm64",
+			Checksum:      "abc",
+			DiskImagePath: diskImagePath,
+			RunPath:       runPath,
 		},
 	}); err != nil {
 		t.Fatalf("expected local runtime state to be saved, got %v", err)
