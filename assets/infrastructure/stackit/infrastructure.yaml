@@ -1,0 +1,11 @@
+name: Exasol in STACKIT on Ubuntu
+description: Provisioning in STACKIT. Ubuntu, S3 archive volume, public IPs.
+backend: tofu
+
+compatibility:
+  provides:
+    - remote-exec
+
+tofu:
+  variablesFile: variables_public.tf
+  varsOutputFile: vars.tfvars
