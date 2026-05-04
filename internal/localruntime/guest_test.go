@@ -92,6 +92,15 @@ func TestRuntimePrepareGuest_BuildsMachineConfigFromSelectedAssets(t *testing.T)
 	if share.ReadOnly {
 		t.Fatal("expected payload share to be read-write")
 	}
+	if guest.MACAddress == "" {
+		t.Fatal("expected GuestConfig.MACAddress to be populated")
+	}
+	if guest.Machine.MACAddress != guest.MACAddress {
+		t.Fatalf(
+			"expected MachineConfig.MACAddress to match GuestConfig.MACAddress, got %q vs %q",
+			guest.Machine.MACAddress, guest.MACAddress,
+		)
+	}
 	if _, err := os.Stat(guest.Machine.DiskImagePath); err != nil {
 		t.Fatalf("expected staged disk image to exist, got %v", err)
 	}

@@ -38,6 +38,7 @@ type MachineConfig struct {
 	MemoryBytes           uint64
 	MachineIdentifierPath string
 	ConsoleLogPath        string
+	MACAddress            string
 	SharedDirs            []SharedDir
 	PortForwards          []PortForward
 }

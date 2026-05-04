@@ -67,11 +67,15 @@ func (r *Runtime) Run(ctx context.Context) error {
 		return err
 	}
 
-	guestIP, err := r.DiscoverGuestIPv4(ctx, guestIPDiscoveryTimeout)
+	guestIP, err := r.DiscoverGuestIPv4(ctx, guest.MACAddress, guestIPDiscoveryTimeout)
 	if err != nil {
 		return fmt.Errorf("failed to discover guest IP: %w", err)
 	}
-	slog.Info("discovered local runtime guest IP", "ip", guestIP)
+	slog.Info(
+		"discovered local runtime guest IP",
+		"ip", guestIP,
+		"mac", guest.MACAddress,
+	)
 
 	sqlForwarder, err := StartLoopbackForwarder(
 		ctx,

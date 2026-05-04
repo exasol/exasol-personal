@@ -22,6 +22,12 @@ fi
 
 mkdir -p "$LOG_DIR"
 
+# Clean up Makeself extraction directories left behind by previous boots.
+# /tmp persists across reboots in the Alpine cloud image, and the .run
+# binary's upfront disk-space check refuses to extract a ~640 MB payload
+# when /tmp is dirty with last boot's selfgz<PID> directory.
+rm -rf /tmp/selfgz* 2>/dev/null || true
+
 # Detach so OpenRC's load script returns immediately; the database keeps
 # running. The DB's controller reads from stdin and treats EOF as a
 # clean-shutdown signal (Ctrl+D). Redirecting from /dev/null still produces

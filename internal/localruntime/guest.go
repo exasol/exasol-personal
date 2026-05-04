@@ -5,7 +5,9 @@ package localruntime
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -23,6 +25,7 @@ var ErrPayloadSelectionMissing = errors.New("local runtime payload selection is 
 type GuestConfig struct {
 	Controller Controller
 	Machine    vm.MachineConfig
+	MACAddress string
 }
 
 func (r *Runtime) PrepareGuest(ctx context.Context) (*GuestConfig, error) {
@@ -56,6 +59,11 @@ func (r *Runtime) PrepareGuest(ctx context.Context) (*GuestConfig, error) {
 		return nil, err
 	}
 
+	mac, err := generateLocallyAdministeredMAC()
+	if err != nil {
+		return nil, err
+	}
+
 	machineConfig := vm.MachineConfig{
 		Name:                  deploymentMachineName(r.layout.DeploymentDir()),
 		DiskImagePath:         stagedDiskPath,
@@ -64,6 +72,7 @@ func (r *Runtime) PrepareGuest(ctx context.Context) (*GuestConfig, error) {
 		MemoryBytes:           sizing.MemoryBytes,
 		MachineIdentifierPath: r.layout.MachineIdentifierFile(),
 		ConsoleLogPath:        r.layout.ConsoleLogFile(),
+		MACAddress:            mac,
 		SharedDirs: []vm.SharedDir{{
 			Tag:         guestPayloadShareTag,
 			Source:      r.layout.PayloadShareDir(),
@@ -75,7 +84,30 @@ func (r *Runtime) PrepareGuest(ctx context.Context) (*GuestConfig, error) {
 	return &GuestConfig{
 		Controller: r.Controller(),
 		Machine:    machineConfig,
+		MACAddress: mac,
 	}, nil
+}
+
+// generateLocallyAdministeredMAC produces a random MAC with the
+// locally-administered bit set and the multicast bit cleared so the
+// resulting address is valid for unicast frames on a private bridge.
+func generateLocallyAdministeredMAC() (string, error) {
+	const (
+		// IEEE 802 first-octet bits.
+		locallyAdministeredBit byte = 0x02
+		multicastBit           byte = 0x01
+	)
+
+	var bytes [6]byte
+	if _, err := rand.Read(bytes[:]); err != nil {
+		return "", fmt.Errorf("failed to generate MAC address: %w", err)
+	}
+	bytes[0] = (bytes[0] | locallyAdministeredBit) &^ multicastBit
+
+	return fmt.Sprintf(
+		"%02x:%02x:%02x:%02x:%02x:%02x",
+		bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
+	), nil
 }
 
 func deploymentMachineName(deploymentDir string) string {

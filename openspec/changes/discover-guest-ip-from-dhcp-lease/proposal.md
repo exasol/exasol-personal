@@ -25,25 +25,39 @@ The fix is to read the active guest's IPv4 address from
 `/var/db/dhcpd_leases` at runtime, after the VM has booted and the guest's
 DHCP client has obtained a lease, and use that address for the forwarders.
 
+The launcher generates the VM's MAC address itself (a random
+locally-administered unicast address) before the VM boots, passes it to the
+VZ driver, and uses the same MAC as the lookup key when reading the lease
+database. The first heuristic considered — picking the lease with the most
+recent expiration — proved unreliable: stale entries from prior VMs can
+have later expirations than freshly issued leases when the previous VM was
+running long enough to renew its lease multiple times. Matching by MAC is
+deterministic because each VM's MAC is unique within the host's bridge.
+
 ## What Changes
 
-- Add a new helper that reads `/var/db/dhcpd_leases`, picks the entry with
-  the most recently-issued lease (highest `lease=` hex timestamp), and
-  returns its `ip_address=`.
+- Add a new helper that reads `/var/db/dhcpd_leases`, finds the entry whose
+  `hw_address=` matches the launcher-supplied MAC, and returns its
+  `ip_address=`.
+- Generate the VM's MAC address in the launcher (random
+  locally-administered unicast) and pass it to the VZ driver via
+  `MachineConfig.MACAddress`. The driver uses this MAC instead of calling
+  `vz.NewRandomLocallyAdministeredMACAddress()` itself, so the launcher
+  knows the running VM's MAC for lease lookup.
 - Wire the helper into `runner.Run` so the host-side loopback forwarders use
-  the discovered IP instead of `defaultGuestIPv4`.
+  the discovered IP instead of a hardcoded address. The helper takes the
+  generated MAC as input.
 - Poll the lease file after `driver.Start` succeeds — the guest needs a few
   seconds after boot to obtain its lease — with a bounded timeout. If the
-  timeout elapses with no lease, fail fast with a clear error rather than
-  spin forever in the readiness probe.
-- Keep the `defaultGuestIPv4` constant as the documented fallback for hosts
-  where `/var/db/dhcpd_leases` is unavailable (non-darwin, restricted
-  permissions, file deleted by the user). The fallback preserves the prior
-  behavior so we do not regress existing single-VM-per-host setups whose
-  guest happens to be at `.2`.
+  timeout elapses with no matching lease, fail fast with a clear error
+  rather than spin forever in the readiness probe.
 - Reorder `runner.Run` so the loopback forwarders are created **after**
   `driver.Start` succeeds, with the discovered IP already in hand. The
   forwarder API itself does not change.
+- Remove the `defaultGuestIPv4 = "192.168.64.2"` constant. Discovery is
+  always required on the supported darwin/arm64 platform; the existing
+  `validateLocalHostPlatform` check gates non-darwin builds out of this
+  code path.
 
 ## Impact
 
@@ -54,33 +68,36 @@ the guest. After this change:
 - `exasol install local` works regardless of which IP VZ NAT assigns the
   guest, as long as bootpd records the lease in `/var/db/dhcpd_leases`.
 - `exasol destroy` followed by another `exasol install local` works on the
-  same host without manual edits to launcher constants.
-- Multiple deployments per host remain a single-VM-per-host design (the
-  most-recent-lease heuristic does not match by deployment identity); a
-  future change can plumb the VM's MAC address through `MachineConfig` if
-  multi-VM-per-host becomes a requirement.
+  same host without manual edits to launcher constants, regardless of
+  what stale leases for prior VMs remain in the DHCP database.
 
 Out of scope:
 
-- MAC-based lease matching. Today VZ generates a random locally-administered
-  MAC inside the framework that the launcher does not track. Plumbing the
-  MAC through `MachineConfig` is a follow-up; the most-recent-lease
-  heuristic is sufficient for the current single-VM-per-host product
-  semantics.
-- Guest-side static IP assignment. We continue to rely on bootpd's NAT and
-  DHCP rather than configuring the guest with a known address.
-- Lease file management or cleanup. macOS owns that file; the launcher only
-  reads it.
+- Concurrent multi-VM-per-host. The MAC-matching scheme is correct for
+  multiple VMs because each gets a distinct MAC, but the launcher's
+  per-deployment state (deployment dir, port allocation) still assumes
+  one local deployment at a time. True concurrent multi-VM is a separate
+  state-isolation effort.
+- Guest-side static IP assignment. We continue to rely on bootpd's NAT
+  and DHCP rather than configuring the guest with a known address.
+- Lease file management or cleanup. macOS owns that file; the launcher
+  only reads it.
 
 Impacted capability areas:
 
-- local deployment lifecycle (forwarder target resolution)
+- local deployment lifecycle (forwarder target resolution, MAC
+  assignment)
 
 Impacted code areas:
 
-- `internal/localruntime/runner.go` (forwarder ordering, discovered IP
-  replaces hardcoded constant)
+- `internal/localruntime/vm/driver.go` (`MachineConfig.MACAddress`)
+- `internal/localruntime/vm/driver_darwin_arm64.go` (use the supplied
+  MAC in `buildNetworkDevices`)
+- `internal/localruntime/guest.go` (generate the MAC in `PrepareGuest`,
+  populate `GuestConfig.MACAddress` and `MachineConfig.MACAddress`)
+- `internal/localruntime/runner.go` (forwarder ordering; discovered IP
+  replaces hardcoded constant; pass `guest.MACAddress` to discovery)
 - New `internal/localruntime/dhcp.go` (lease-file reader, pure Go, no
-  platform build tags — file simply doesn't exist on non-darwin and the
-  reader returns the timeout error after polling)
+  platform build tags — file simply doesn't exist on non-darwin and
+  the reader returns the timeout error after polling)
 - Tests under those packages

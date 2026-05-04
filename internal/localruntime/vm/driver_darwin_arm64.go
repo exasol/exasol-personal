@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -244,7 +245,7 @@ func buildVirtualMachineConfiguration(config MachineConfig) (*vz.VirtualMachineC
 		vmConfig.SetSerialPortsVirtualMachineConfiguration(serialPorts)
 	}
 
-	networkDevices, err := buildNetworkDevices()
+	networkDevices, err := buildNetworkDevices(config.MACAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +397,7 @@ func buildSerialPorts(consoleLogPath string) ([]*vz.VirtioConsoleDeviceSerialPor
 	return []*vz.VirtioConsoleDeviceSerialPortConfiguration{serialPort}, nil
 }
 
-func buildNetworkDevices() ([]*vz.VirtioNetworkDeviceConfiguration, error) {
+func buildNetworkDevices(requestedMAC string) ([]*vz.VirtioNetworkDeviceConfiguration, error) {
 	attachment, err := vz.NewNATNetworkDeviceAttachment()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NAT network attachment: %w", err)
@@ -407,13 +408,36 @@ func buildNetworkDevices() ([]*vz.VirtioNetworkDeviceConfiguration, error) {
 		return nil, fmt.Errorf("failed to create virtio network device configuration: %w", err)
 	}
 
-	macAddress, err := vz.NewRandomLocallyAdministeredMACAddress()
+	macAddress, err := buildMACAddress(requestedMAC)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create MAC address: %w", err)
+		return nil, err
 	}
 	networkDevice.SetMACAddress(macAddress)
 
 	return []*vz.VirtioNetworkDeviceConfiguration{networkDevice}, nil
+}
+
+func buildMACAddress(requested string) (*vz.MACAddress, error) {
+	requested = strings.TrimSpace(requested)
+	if requested == "" {
+		mac, err := vz.NewRandomLocallyAdministeredMACAddress()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create MAC address: %w", err)
+		}
+
+		return mac, nil
+	}
+
+	parsed, err := net.ParseMAC(requested)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse requested MAC %q: %w", requested, err)
+	}
+	mac, err := vz.NewMACAddress(parsed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MAC address from %q: %w", requested, err)
+	}
+
+	return mac, nil
 }
 
 func buildStorageDevices(diskImagePath string) ([]vz.StorageDeviceConfiguration, error) {
