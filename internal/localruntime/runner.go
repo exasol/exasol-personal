@@ -14,11 +14,10 @@ import (
 	"github.com/exasol/exasol-personal/internal/localruntime/vm"
 )
 
-const defaultGuestIPv4 = "192.168.64.2"
-
 const (
-	defaultGuestSQLPort = 8563
-	defaultGuestUIPort  = 8443
+	defaultGuestSQLPort     = 8563
+	defaultGuestUIPort      = 8443
+	guestIPDiscoveryTimeout = 60 * time.Second
 )
 
 var newVMDriver = vm.New
@@ -63,10 +62,21 @@ func (r *Runtime) Run(ctx context.Context) error {
 		return errors.New("local runtime ports are not initialized")
 	}
 
+	driver := newVMDriver()
+	if err := driver.Start(ctx, guest.Machine); err != nil {
+		return err
+	}
+
+	guestIP, err := r.DiscoverGuestIPv4(ctx, guestIPDiscoveryTimeout)
+	if err != nil {
+		return fmt.Errorf("failed to discover guest IP: %w", err)
+	}
+	slog.Info("discovered local runtime guest IP", "ip", guestIP)
+
 	sqlForwarder, err := StartLoopbackForwarder(
 		ctx,
 		dbPort,
-		defaultGuestIPv4,
+		guestIP,
 		defaultGuestSQLPort,
 	)
 	if err != nil {
@@ -77,18 +87,13 @@ func (r *Runtime) Run(ctx context.Context) error {
 	uiForwarder, err := StartLoopbackForwarder(
 		ctx,
 		uiPort,
-		defaultGuestIPv4,
+		guestIP,
 		defaultGuestUIPort,
 	)
 	if err != nil {
 		return err
 	}
 	defer uiForwarder.Close()
-
-	driver := newVMDriver()
-	if err := driver.Start(ctx, guest.Machine); err != nil {
-		return err
-	}
 
 	stopCtx, stopCancel := context.WithCancel(ctx)
 	defer stopCancel()
