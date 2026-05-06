@@ -33,6 +33,7 @@ markers = [
   "infrastructure_e2e: End-to-end tests focused on cloud infrastructure behavior.",
   "provider_aws: Tests that assert AWS-specific behavior.",
   "provider_azure: Tests that assert Azure-specific behavior.",
+  "provider_stackit: Tests that assert STACKIT-specific behavior.",
 ]
 
 [tool.mypy]

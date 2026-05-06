@@ -19,8 +19,16 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         required=False,
         action="store",
         default="aws",
-        choices=["aws", "azure", "exoscale"],
+        choices=["aws", "azure", "exoscale", "stackit"],
         help="Infrastructure preset to use for deployment tests",
+    )
+    parser.addoption(
+        "--stackit-project-id",
+        type=str,
+        required=False,
+        action="store",
+        default=None,
+        help="STACKIT project ID to put resources into",
     )
 
 
@@ -32,3 +40,11 @@ def exasol_path(request: pytest.FixtureRequest) -> str:
 @pytest.fixture(scope="session")
 def infra(request: pytest.FixtureRequest) -> str:
     return str(request.config.getoption("--infra"))
+
+
+@pytest.fixture(scope="session")
+def stackit_project_id(request: pytest.FixtureRequest) -> str | None:
+    project_id = request.config.getoption("--stackit-project-id")
+    if project_id is not None:
+        return str(project_id)
+    return None
