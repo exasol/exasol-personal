@@ -23,6 +23,7 @@ class DeploymentConfig:
     data_volume_size: int | None = None
     db_password: str | None = None
     adminui_password: str | None = None
+    stackit_project_id: str | None = None
     location: str | None = None
 
 
@@ -100,6 +101,8 @@ class Launcher:
             init_args.extend(["--db-password", config.db_password])
         if config.adminui_password is not None:
             init_args.extend(["--adminui-password", config.adminui_password])
+        if config.stackit_project_id is not None:
+            init_args.extend(["--project-id", config.stackit_project_id])
         if config.infra == "azure":
             location = config.location
             if location is None:

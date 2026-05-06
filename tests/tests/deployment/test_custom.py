@@ -28,6 +28,7 @@ def instance_type(request: pytest.FixtureRequest) -> str | None:
 def custom_deployment(
     exasol_path: str,
     infra: str,
+    stackit_project_id: str | None,
     instance_type: str | None,
 ) -> Iterator[tuple[Deployment, DeploymentConfig]]:
     """Deployment with custom parameters to test all customization options."""
@@ -35,12 +36,15 @@ def custom_deployment(
     test_admin_pw: Final = "MyAdminUI!Pass123"
 
     if instance_type is None:
-        if infra == "aws":
-            instance_type = "t3.xlarge"
-        elif infra == "exoscale":
-            # Use a non-default Exoscale instance type in custom deployment tests
-            # to validate instance-type customization works.
-            instance_type = "standard.large"
+        # Use a non-default instance type in custom deployment tests to
+        # validate instance-type customization works.
+        instance_types = {
+            "aws": "t3.xlarge",
+            "exoscale": "standard.large",
+            "stackit": "g2i.4",
+        }
+        if infra in instance_types:
+            instance_type = instance_types[infra]
 
     config = DeploymentConfig(
         infra=infra,
@@ -49,6 +53,7 @@ def custom_deployment(
         data_volume_size=120,
         db_password=test_pw,
         adminui_password=test_admin_pw,
+        stackit_project_id=stackit_project_id,
     )
 
     deployment = Deployment(
@@ -84,6 +89,12 @@ def custom_deployment(
             "Standard_B2s",
             marks=pytest.mark.provider_azure,
             id="azure-Standard_B2s",
+        ),
+        pytest.param(
+            "stackit",
+            "g2i.1",
+            marks=pytest.mark.provider_stackit,
+            id="stackit-g2i.1",
         ),
     ],
     indirect=["instance_type"],

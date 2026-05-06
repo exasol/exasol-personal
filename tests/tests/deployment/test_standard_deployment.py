@@ -17,6 +17,7 @@ if not sys.platform.startswith("win"):
     import termios
 import textwrap
 import time
+from collections.abc import Generator
 from multiprocessing import Process
 from pathlib import Path
 from typing import Final
@@ -53,9 +54,13 @@ def _connect_worker(launcher_path: str, deployment_dir: str) -> None:
 
 
 @pytest.fixture(scope="session")
-def reusable_deployment(exasol_path: str, infra: str) -> Deployment:  # type: ignore[misc]
+def reusable_deployment(
+    exasol_path: str, infra: str, stackit_project_id: str | None
+) -> Generator[Deployment]:
     cluster_size = 2 if infra == "aws" else 1
-    config = DeploymentConfig(infra=infra, cluster_size=cluster_size)
+    config = DeploymentConfig(
+        infra=infra, cluster_size=cluster_size, stackit_project_id=stackit_project_id
+    )
     deployment = Deployment(Launcher(exasol_path), config=config)
     try:
         deployment_proc = deployment.deploy_no_block()
@@ -547,6 +552,7 @@ def test_start_interrupt_sets_interrupted_state(
 @pytest.mark.infrastructure_e2e
 @pytest.mark.provider_aws
 @pytest.mark.provider_azure
+@pytest.mark.provider_stackit
 def test_remote_archive_registered(
     reusable_deployment: Deployment,
     infra: str,
@@ -560,7 +566,7 @@ def test_remote_archive_registered(
     Then we should receive a successful response
     And the response should contain the 'default_archive' backup option
     """
-    if infra not in {"aws", "azure"}:
+    if infra not in {"aws", "azure", "stackit"}:
         pytest.skip("Remote archive verification is only supported for AWS/Azure today")
 
     # ========== GIVEN ==========
