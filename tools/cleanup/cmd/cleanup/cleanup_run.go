@@ -13,6 +13,7 @@ import (
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/stackit"
 	"github.com/spf13/cobra"
 )
 
@@ -41,7 +42,7 @@ var cleanupRunCmd = &cobra.Command{
 			if awsRegion == "" {
 				awsRegion = "us-east-1" // Default region
 			}
-			
+
 			awsOwnerFilter := ""
 			cfg, err := config.LoadDefaultConfig(cmd.Context())
 			if err == nil {
@@ -62,11 +63,19 @@ var cleanupRunCmd = &cobra.Command{
 				exoscale.NewCollector(cleanupOpts.ExoscaleZone, "", false))
 		}
 
-		// Find which provider has this deployment
-		collector, err := shared.FindDeployment(cmd.Context(), collectors, deploymentID)
-		if err != nil {
-			return err
+		if shouldUseProvider(stackit.ProviderName) {
+			collectors = append(collectors,
+				stackit.NewCollector(cleanupOpts.STACKITProjectId, cleanupOpts.STACKITRegion))
 		}
+
+		collector :=
+			stackit.NewCollector(cleanupOpts.STACKITProjectId, cleanupOpts.STACKITRegion)
+
+		// Find which provider has this deployment
+		// collector, err := shared.FindDeployment(cmd.Context(), collectors, deploymentID)
+		// if err != nil {
+		// 	return err
+		// }
 
 		// Use the found collector to get details
 		details, err := collector.CollectDeploymentDetails(cmd.Context(), deploymentID)

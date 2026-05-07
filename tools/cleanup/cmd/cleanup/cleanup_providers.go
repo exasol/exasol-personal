@@ -10,6 +10,7 @@ import (
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/stackit"
 	"github.com/spf13/cobra"
 )
 
@@ -43,6 +44,10 @@ var cleanupProvidersCmd = &cobra.Command{
 			collectors = append(collectors, exoscale.NewCollector(exoscaleZone, "", false))
 		}
 
+		if shouldUseProvider(stackit.ProviderName) {
+			collectors = append(collectors, stackit.NewCollector(cleanupOpts.STACKITProjectId, cleanupOpts.STACKITRegion))
+		}
+
 		for _, collector := range collectors {
 			providerName := collector.Name()
 			// Capitalize and pad provider name for alignment
@@ -51,6 +56,8 @@ var cleanupProvidersCmd = &cobra.Command{
 				displayName = "AWS"
 			} else if displayName == "exoscale" {
 				displayName = "Exoscale"
+			} else if displayName == "stackit" {
+				displayName = "STACKIT"
 			}
 
 			// Pad to 11 characters for alignment

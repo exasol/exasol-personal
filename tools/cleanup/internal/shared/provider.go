@@ -13,7 +13,7 @@ import (
 // Each collector is initialized with all necessary configuration,
 // including provider-specific defaults for owner filtering.
 type ProviderCollector interface {
-	// Name returns the provider identifier (e.g., "aws", "exoscale")
+	// Name returns the provider identifier (e.g., "aws", "exoscale", "stackit")
 	Name() string
 
 	// CollectDeploymentSummaries discovers all deployments for this provider

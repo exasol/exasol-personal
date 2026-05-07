@@ -16,7 +16,7 @@ import (
 const shortDescription = "Exasol Personal cleanup tool"
 
 const description = shortDescription + `
-Specific providers can be targeted using the --aws and --exoscale flags. If no provider flags are set, all providers will be used.
+Specific providers can be targeted using the --aws, --exoscale, and --stackit flags. If no provider flags are set, all providers will be used.
 `
 
 var rootCmd = &cobra.Command{
@@ -25,13 +25,12 @@ var rootCmd = &cobra.Command{
 	Long:  description,
 }
 
-
 func configureLogger() {
 	level := slog.LevelInfo
 	if cleanupOpts.Verbose {
 		level = slog.LevelDebug
 	}
-	
+
 	var handler slog.Handler
 	if term.IsTerminal(int(os.Stderr.Fd())) {
 		// When attached to a terminal, use human-friendly colored logs
@@ -45,7 +44,7 @@ func configureLogger() {
 			Level: level,
 		})
 	}
-	
+
 	slog.SetDefault(slog.New(handler))
 }
 

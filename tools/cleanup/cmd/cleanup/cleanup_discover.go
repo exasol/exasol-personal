@@ -16,6 +16,7 @@ import (
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/stackit"
 	"github.com/spf13/cobra"
 )
 
@@ -36,18 +37,18 @@ var cleanupDiscoverCmd = &cobra.Command{
 	PreRun: func(_ *cobra.Command, _ []string) { configureLogger() },
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		
+
 		var collectors []shared.ProviderCollector
-		
+
 		// AWS Collector - default owner to caller identity
 		if shouldUseProvider(aws.ProviderName) {
 			awsRegion := cleanupOpts.AWSRegion
 			if awsRegion == "" {
 				awsRegion = "us-east-1" // Default region
 			}
-			
+
 			awsOwnerFilter := cleanupDiscoverOpts.OwnerFilter
-			
+
 			// AWS-specific default: use caller identity if no filter provided
 			if awsOwnerFilter == "" {
 				cfg, err := config.LoadDefaultConfig(cmd.Context())
@@ -60,20 +61,25 @@ var cleanupDiscoverCmd = &cobra.Command{
 					}
 				}
 			}
-			
+
 			collectors = append(collectors,
 				aws.NewCollector(awsRegion, awsOwnerFilter, cleanupDiscoverOpts.Legacy))
 		}
-		
+
 		// Exoscale Collector - use provided owner filter or empty for all
 		if shouldUseProvider(exoscale.ProviderName) {
 			exoOwnerFilter := cleanupDiscoverOpts.OwnerFilter
 			// Exoscale default: empty means all deployments (no caller identity equivalent)
-			
+
 			collectors = append(collectors,
 				exoscale.NewCollector(cleanupOpts.ExoscaleZone, exoOwnerFilter, cleanupDiscoverOpts.Legacy))
 		}
-		
+
+		if shouldUseProvider(stackit.ProviderName) {
+			collectors = append(collectors,
+				stackit.NewCollector(cleanupOpts.STACKITProjectId, cleanupOpts.STACKITRegion))
+		}
+
 		// Collect from all providers
 		res, err := shared.CollectAllProviders(cmd.Context(), collectors)
 		if err != nil {
