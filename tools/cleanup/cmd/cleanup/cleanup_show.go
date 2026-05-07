@@ -13,6 +13,7 @@ import (
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/stackit"
 	"github.com/spf13/cobra"
 )
 
@@ -39,7 +40,7 @@ var cleanupShowCmd = &cobra.Command{
 			if awsRegion == "" {
 				awsRegion = "us-east-1" // Default region
 			}
-			
+
 			awsOwnerFilter := ""
 			cfg, err := config.LoadDefaultConfig(cmd.Context())
 			if err == nil {
@@ -58,6 +59,11 @@ var cleanupShowCmd = &cobra.Command{
 		if shouldUseProvider(exoscale.ProviderName) {
 			collectors = append(collectors,
 				exoscale.NewCollector(cleanupOpts.ExoscaleZone, "", false))
+		}
+
+		if shouldUseProvider(stackit.ProviderName) {
+			collectors = append(collectors,
+				stackit.NewCollector(cleanupOpts.STACKITProjectId, cleanupOpts.STACKITRegion))
 		}
 
 		// Find which provider has this deployment

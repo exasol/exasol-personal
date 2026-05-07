@@ -14,6 +14,8 @@ require (
 	github.com/exoscale/egoscale/v3 v3.1.34
 	github.com/lmittmann/tint v1.1.3
 	github.com/spf13/cobra v1.10.2
+	github.com/stackitcloud/stackit-sdk-go/services/iaas v1.11.1
+	github.com/stackitcloud/stackit-sdk-go/services/objectstorage v1.9.0
 	golang.org/x/term v0.41.0
 )
 
@@ -111,6 +113,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/godoc-lint/godoc-lint v0.11.2 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golangci/asciicheck v0.5.0 // indirect
 	github.com/golangci/dupl v0.0.0-20250308024227-f665c8d69b32 // indirect
@@ -210,6 +213,8 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.18.2 // indirect
 	github.com/ssgreg/nlreturn/v2 v2.2.1 // indirect
+	github.com/stackitcloud/stackit-sdk-go/core v0.26.0 // indirect
+	github.com/stackitcloud/stackit-sdk-go/services/resourcemanager v0.23.0 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.3.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect

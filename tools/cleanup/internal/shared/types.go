@@ -11,7 +11,7 @@ type ResourceType string
 // DeploymentSummary is a high-level view of a tagged deployment.
 type DeploymentSummary struct {
 	ID        string    `json:"id"`
-	Provider  string    `json:"provider"` // e.g. aws|exoscale
+	Provider  string    `json:"provider"` // e.g. aws|exoscale|stackit
 	Region    string    `json:"region"`
 	Owner     string    `json:"owner"`
 	CreatedAt time.Time `json:"createdAt"`
