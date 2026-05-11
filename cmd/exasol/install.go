@@ -50,13 +50,20 @@ func init() {
 		"\n\t" + presetNamesForHelp(presets.PresetTypeInstallation,
 		presets.ListEmbeddedInstallationsPresets())
 
+	if matrix := embeddedPresetCompatibilityMatrix(); matrix != "" {
+		installCmd.Long += "\n\n\t" + strings.ReplaceAll(matrix, "\n", "\n\t")
+	}
+
 	// Run initialization
 	installCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		deployment := commonFlags.Deployment()
 		infraVars := collectInfrastructureVariableOverrides(cmd)
 		installVars := collectInstallationVariableOverrides(cmd)
 		infraPreset := presetRefFromArg(args[0])
-		installPreset := defaultedPresetRefFromOptionalArg(args, 1, defaultInstallationPresetRef())
+		installPreset, err := resolveInstallationPresetRef(args, 1, infraPreset)
+		if err != nil {
+			return err
+		}
 
 		safePrint(deploy.EulaNoticeText)
 

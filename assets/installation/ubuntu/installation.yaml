@@ -1,6 +1,10 @@
 name: Exasol on Ubuntu
 description:  Installs Exasol on Ubuntu distributions.
 
+compatibility:
+  requires:
+    - remote-exec
+
 variables:
   outputFile: files/etc/exasol_launcher/installation.json
   vars:

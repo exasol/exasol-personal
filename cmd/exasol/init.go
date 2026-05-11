@@ -36,8 +36,7 @@ var initCmd = &cobra.Command{
 	Use:   "init <infra preset name-or-path> [install preset name-or-path]",
 	Short: initCmdShortDesc,
 	Long:  initCmdLongDesc,
-	Example: "  exasol init " +
-		presets.DefaultInfrastructure + "\n" +
+	Example: "  exasol init " + presets.DefaultInfrastructure + "\n" +
 		"  exasol init " + presets.DefaultInfrastructure + " " +
 		presets.DefaultInstallation + "\n" +
 		"  exasol init ./my-infra-preset ./my-install-preset",
@@ -60,16 +59,23 @@ func init() {
 		"\n\t" + presetNamesForHelp(presets.PresetTypeInstallation,
 		presets.ListEmbeddedInstallationsPresets())
 
+	if matrix := embeddedPresetCompatibilityMatrix(); matrix != "" {
+		initCmd.Long += "\n\n\t" + strings.ReplaceAll(matrix, "\n", "\n\t")
+	}
+
 	initCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		deployment := commonFlags.Deployment()
 		infraVars := collectInfrastructureVariableOverrides(cmd)
 		installVars := collectInstallationVariableOverrides(cmd)
 		infraPreset := presetRefFromArg(args[0])
-		installPreset := defaultedPresetRefFromOptionalArg(args, 1, defaultInstallationPresetRef())
+		installPreset, err := resolveInstallationPresetRef(args, 1, infraPreset)
+		if err != nil {
+			return err
+		}
 
 		safePrint(deploy.EulaNoticeText)
 
-		err := deploy.InitDeployment(
+		err = deploy.InitDeployment(
 			cmd.Context(),
 			infraPreset,
 			installPreset,

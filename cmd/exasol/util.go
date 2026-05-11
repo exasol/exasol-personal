@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
-	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/zclconf/go-cty/cty"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
 )
@@ -93,23 +92,16 @@ func presetRefFromArg(arg string) deploy.PresetRef {
 	return deploy.PresetRef{Name: arg}
 }
 
-func defaultInstallationPresetRef() deploy.PresetRef {
-	return deploy.PresetRef{Name: presets.DefaultInstallation}
-}
-
-func defaultedPresetRefFromOptionalArg(
+func resolveInstallationPresetRef(
 	args []string,
 	index int,
-	def deploy.PresetRef,
-) deploy.PresetRef {
-	if index < 0 || index >= len(args) {
-		return def
-	}
-	if strings.TrimSpace(args[index]) == "" {
-		return def
+	infrastructurePreset deploy.PresetRef,
+) (deploy.PresetRef, error) {
+	if index >= 0 && index < len(args) && strings.TrimSpace(args[index]) != "" {
+		return presetRefFromArg(args[index]), nil
 	}
 
-	return presetRefFromArg(args[index])
+	return deploy.ResolveDefaultInstallationPreset(infrastructurePreset)
 }
 
 func presetNamesForHelp(listname string, names []string) string {
