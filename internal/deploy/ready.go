@@ -14,14 +14,29 @@ import (
 	"github.com/exasol/exasol-personal/internal/connect"
 )
 
+var (
+	verifyDatabaseConnectionFn = verifyDatabaseConnection
+	newExasolConnectionFn      = connect.NewExasolConnection
+)
+
 // verifyDatabaseConnection checks if the database service is accepting connections
 // by attempting a connection with invalid credentials and expecting an authentication error.
 func verifyDatabaseConnection(ctx context.Context, deployment config.DeploymentDir) error {
 	var dbErr error
 	// Suppress driver noise only for this probe (invalid creds, transient failures expected).
 	probeErr := connect.WithSilencedDriverErrors(func() error {
-		database, err := connect.NewExasolConnection(
-			deployment, "invalid username", "invalid password", true)
+		connectionInfo, err := config.ResolveConnectionInfo(deployment)
+		if err != nil {
+			return err
+		}
+
+		database, err := newExasolConnectionFn(
+			deployment,
+			connectionInfo,
+			"invalid username",
+			"invalid password",
+			true,
+		)
 		if err != nil {
 			return err
 		}
@@ -80,7 +95,7 @@ func waitForDatabaseState(
 	params WaitParams,
 ) error {
 	return PollWithBackoff(ctx, func(ctx context.Context) (bool, error) {
-		err := verifyDatabaseConnection(ctx, deployment)
+		err := verifyDatabaseConnectionFn(ctx, deployment)
 		conditionMet := (params.ReadyMode && err == nil) || (!params.ReadyMode && err != nil)
 
 		return conditionMet, err

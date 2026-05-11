@@ -6,7 +6,6 @@ package deploy
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -25,10 +24,12 @@ const (
 
 type ConnectionDetails struct {
 	Hostname        string
+	DisplayHost     string
 	DBPort          string
 	UIPort          string
 	Username        string
 	CertFingerprint string
+	InsecureSkipTLS bool
 	SecretsFilePath string
 	DeploymentName  string
 	PublicIp        string
@@ -36,6 +37,8 @@ type ConnectionDetails struct {
 	SSHPort         string
 	ClusterState    string
 	ClusterSize     int
+	ShellSupported  bool
+	AdminUISecured  bool
 }
 
 type DocumentationLink struct {
@@ -52,57 +55,62 @@ type Details struct {
 }
 
 func getConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails, error) {
-	nodeDetails, err := config.ReadNodeDetails(deployment)
+	deploymentInfo, err := config.ReadDeploymentInfo(deployment)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get node details: %w", err)
+		return nil, fmt.Errorf("failed to read deployment info: %w", err)
 	}
-
-	certFingerprint, err := nodeDetails.GetCertFingerprint()
+	connectionInfo, err := deploymentInfo.ConnectionInfo(deployment)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get deployment tls certificate: %w", err)
+		return nil, fmt.Errorf("failed to resolve deployment connection info: %w", err)
 	}
-
-	nodes := nodeDetails.ListNodes()
-	if len(nodes) == 0 {
-		return nil, errors.New("no nodes found in deployment")
-	}
-	mainNode := nodeDetails.Nodes[nodes[0]]
-
-	secretsFilePath, err := config.SecretsFilePath(deployment)
+	secrets, err := config.ReadSecrets(deployment)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read deployment secrets: %w", err)
 	}
 
 	return &ConnectionDetails{
-		DeploymentName:  nodeDetails.DeploymentId,
-		ClusterSize:     nodeDetails.ClusterSize,
-		ClusterState:    nodeDetails.ClusterState,
-		Hostname:        mainNode.DnsName,
-		PublicIp:        mainNode.PublicIp,
-		DBPort:          mainNode.Database.DbPort,
-		UIPort:          mainNode.Database.UiPort,
-		SSHCommand:      mainNode.Ssh.Command,
-		SSHPort:         mainNode.Ssh.Port,
-		Username:        "sys",
-		CertFingerprint: certFingerprint,
-		SecretsFilePath: secretsFilePath,
+		DeploymentName:  connectionInfo.DeploymentName,
+		ClusterSize:     connectionInfo.ClusterSize,
+		ClusterState:    connectionInfo.ClusterState,
+		Hostname:        connectionInfo.Host,
+		DisplayHost:     connectionInfo.DisplayHost,
+		PublicIp:        connectionInfo.PublicIP,
+		DBPort:          strconv.Itoa(connectionInfo.DBPort),
+		UIPort:          strconv.Itoa(connectionInfo.UIPort),
+		SSHCommand:      connectionInfo.SSHCommand,
+		SSHPort:         connectionInfo.SSHPort,
+		Username:        connectionInfo.Username,
+		CertFingerprint: connectionInfo.CertFingerprint,
+		InsecureSkipTLS: connectionInfo.InsecureSkipCertValidation,
+		SecretsFilePath: connectionInfo.SecretsFilePath,
+		ShellSupported:  connectionInfo.ShellSupported,
+		AdminUISecured:  secrets.AdminUiPassword != "",
 	}, nil
 }
 
 func GetSQLInstructions(connectionDetails *ConnectionDetails) string {
-	uiURL := "https://" + net.JoinHostPort(connectionDetails.Hostname, connectionDetails.UIPort)
+	uiURL := "https://" + net.JoinHostPort(
+		displayHostname(connectionDetails),
+		connectionDetails.UIPort,
+	)
+	certificateLine := ""
+	if connectionDetails.CertFingerprint != "" {
+		certificateLine = "  - Certificate Fingerprint: " + connectionDetails.CertFingerprint + "\n"
+	} else if connectionDetails.InsecureSkipTLS {
+		certificateLine = "  - Certificate Validation: disable validation / " +
+			"use nocertcheck for the current deployment setup\n"
+	}
 
-	return `
+	adminUIInstructions := `
 === How to Connect from a Graphical SQL Client ===
 To connect using a client of your choice:
 1. Create a new database connection.
 2. Choose 'Exasol' as the driver.
 3. Enter the following values below in 'Database':
-  - Server: ` + connectionDetails.Hostname + `
+  - Server: ` + displayHostname(connectionDetails) + `
   - Port: ` + connectionDetails.DBPort + `
   - UserId: ` + connectionDetails.Username + `
-  - Certificate Fingerprint: ` + connectionDetails.CertFingerprint + `
-  - Password: <stored in ` + connectionDetails.SecretsFilePath + `>
+` + certificateLine + `  - Password: <stored in ` + connectionDetails.SecretsFilePath + `>
 
 === CLI Connection Instructions ===
 To connect using the CLI:
@@ -111,9 +119,30 @@ To connect using the CLI:
 === How to open the Administration UI ===
 1. Open the following URL in the browser: ` + uiURL + `
 2. Accept certificate if necessary
-3. Login with username "admin" and password stored in ` + connectionDetails.SecretsFilePath + `
 
-=== SSH Connection Instructions ===
+`
+	adminUIUsername := ""
+	if connectionDetails.AdminUISecured {
+		adminUIUsername = "admin"
+	}
+
+	if adminUIUsername != "" {
+		adminUIInstructions += fmt.Sprintf(
+			"3. Login with username %q and password stored in %s\n\n",
+			adminUIUsername,
+			connectionDetails.SecretsFilePath,
+		)
+	}
+
+	instructions := `
+
+` + adminUIInstructions
+
+	if !connectionDetails.ShellSupported {
+		return instructions
+	}
+
+	return instructions + `=== SSH Connection Instructions ===
   Public IP: ` + connectionDetails.PublicIp + `
   Primary admin shell (COS): exasol shell container
   Host shell (OS): exasol shell host
@@ -247,27 +276,32 @@ func printConnectionInsInJSONUnsafe(
 
 	encoder := json.NewEncoder(writer)
 	encoder.SetIndent("", "  ")
-
-	switch wfState {
-	case StatusRunning:
-		nodeDetails, err := config.ReadNodeDetails(deployment)
-		nodeDetails.DeploymentState = wfState
+	if wfState == StatusRunning || wfState == StatusStopped {
+		info, err := config.ReadDeploymentInfo(deployment)
 		if err != nil {
 			return err
 		}
+		info.DeploymentState = wfState
 
-		return encoder.Encode(nodeDetails)
-	case StatusStopped:
-		connectionDetails, err := getConnectionDetails(deployment)
-		if err != nil {
-			return err
-		}
-		details.DeploymentID = connectionDetails.DeploymentName
-		details.ClusterSize = connectionDetails.ClusterSize
-		details.ClusterState = connectionDetails.ClusterState
-
-		return encoder.Encode(details)
-	default:
-		return encoder.Encode(details)
+		return encoder.Encode(info)
 	}
+
+	return encoder.Encode(details)
+}
+
+func displayHostname(connectionDetails *ConnectionDetails) string {
+	if connectionDetails == nil {
+		return ""
+	}
+	if connectionDetails.DisplayHost != "" {
+		return connectionDetails.DisplayHost
+	}
+	if connectionDetails.Hostname != "" {
+		return connectionDetails.Hostname
+	}
+	if connectionDetails.PublicIp != "" {
+		return connectionDetails.PublicIp
+	}
+
+	return connectionDetails.Hostname
 }
