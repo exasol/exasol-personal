@@ -5,10 +5,12 @@ package connect
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/connect/exasol"
@@ -17,12 +19,50 @@ import (
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
+type JSONFormat string
+
+const (
+	JSONFormatPretty  JSONFormat = "pretty"
+	JSONFormatCompact JSONFormat = "compact"
+)
+
+func (format JSONFormat) String() string {
+	return string(format)
+}
+
+func ParseJSONFormat(format string) (JSONFormat, error) {
+	normalized := JSONFormat(strings.ToLower(strings.TrimSpace(format)))
+
+	switch normalized {
+	case "", JSONFormatPretty:
+		return JSONFormatPretty, nil
+	case JSONFormatCompact:
+		return JSONFormatCompact, nil
+	default:
+		return "", fmt.Errorf(
+			"invalid json format %q (expected one of: %s, %s)",
+			format,
+			JSONFormatPretty,
+			JSONFormatCompact,
+		)
+	}
+}
+
 type Opts struct {
 	Username                   string
 	Password                   string
 	InsecureSkipCertValidation bool
 	ExecuteOnSemicolon         bool
+	OutputJSON                 bool
+	JSONFormat                 JSONFormat
 }
+
+type jsonQueryResult struct {
+	Columns []string   `json:"columns"`
+	Rows    [][]string `json:"rows"`
+}
+
+type resultPrinter func(io.Writer, generaltypes.QueryResulter) error
 
 //nolint:revive
 func NewExasolConnection(
@@ -89,6 +129,12 @@ func Connect(ctx context.Context, opts *Opts, deployment config.DeploymentDir) e
 
 	defer database.Close()
 
+	output := os.Stdout
+	printer := printResultTable
+	if opts.OutputJSON {
+		printer = newJSONResultPrinter(opts.JSONFormat)
+	}
+
 	if util.IsInteractiveStdin() {
 		if err := printExitHint(os.Stderr); err != nil {
 			return err
@@ -106,7 +152,7 @@ func Connect(ctx context.Context, opts *Opts, deployment config.DeploymentDir) e
 			return err
 		}
 
-		return printResult(queryResult)
+		return printer(output, queryResult)
 	}, ShellOpts{ExecuteOnSemicolon: opts.ExecuteOnSemicolon})
 }
 
@@ -116,12 +162,47 @@ func printExitHint(output io.Writer) error {
 	return err
 }
 
-func printResult(queryResult generaltypes.QueryResulter) error {
+func normalizeJSONFormat(format JSONFormat) JSONFormat {
+	switch JSONFormat(strings.ToLower(strings.TrimSpace(format.String()))) {
+	case JSONFormatPretty:
+		return JSONFormatPretty
+	case JSONFormatCompact:
+		return JSONFormatCompact
+	default:
+		return JSONFormatPretty
+	}
+}
+
+func newJSONResultPrinter(jsonFormat JSONFormat) resultPrinter {
+	format := normalizeJSONFormat(jsonFormat)
+
+	return func(output io.Writer, queryResult generaltypes.QueryResulter) error {
+		return printResultJSON(output, queryResult, format)
+	}
+}
+
+func printResultJSON(
+	output io.Writer,
+	queryResult generaltypes.QueryResulter,
+	jsonFormat JSONFormat,
+) error {
+	encoder := json.NewEncoder(output)
+	if normalizeJSONFormat(jsonFormat) == JSONFormatPretty {
+		encoder.SetIndent("", "  ")
+	}
+
+	return encoder.Encode(jsonQueryResult{
+		Columns: queryResult.ColumnNames(),
+		Rows:    queryResult.Rows(),
+	})
+}
+
+func printResultTable(output io.Writer, queryResult generaltypes.QueryResulter) error {
 	rows := queryResult.Rows()
 
 	slog.Debug("printing query result", "num_rows", len(rows))
 
-	table := tablewriter.New(os.Stdout)
+	table := tablewriter.New(output)
 	table.SetHeader(queryResult.ColumnNames())
 
 	if err := table.SetRows(rows); err != nil {
