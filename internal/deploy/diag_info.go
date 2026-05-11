@@ -22,7 +22,7 @@ func DumpDeploymentInfo(
 }
 
 func dumpDeploymentInfoUnsafe(deployment config.DeploymentDir, writer io.Writer) error {
-	details, err := config.ReadNodeDetails(deployment)
+	details, err := config.ReadDeploymentInfo(deployment)
 	if err != nil {
 		return err
 	}

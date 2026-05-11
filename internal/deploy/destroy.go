@@ -11,8 +11,6 @@ import (
 	"os"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/task_runner"
-	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
@@ -51,9 +49,9 @@ func Destroy(ctx context.Context, deployment config.DeploymentDir, verbose bool)
 			if err != nil {
 				return err
 			}
-			if manifest.Tofu == nil {
-				slog.Info("no tofu configuration defined; skipping destroy")
-				return nil
+			backend, err := resolveBackendForManifest(manifest)
+			if err != nil {
+				return err
 			}
 
 			var externalCommandStandardOut io.Writer
@@ -61,21 +59,14 @@ func Destroy(ctx context.Context, deployment config.DeploymentDir, verbose bool)
 				externalCommandStandardOut = os.Stderr
 			}
 
-			if manifest.Tofu != nil {
-				tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
-				logBuffer := task_runner.NewLogBuffer()
-				err = tofu.Destroy(
-					ctx,
-					*tofuCfg,
-					util.CombineWriters(logBuffer, externalCommandStandardOut),
-					util.CombineWriters(logBuffer, externalCommandStandardOut),
-				)
-				if err != nil {
-					logBuffer.ReplayLogMessages(ctx)
-					slog.Error("failed to destroy cloud resources")
-
-					return err
-				}
+			if err := backend.Destroy(
+				ctx,
+				deployment,
+				manifest,
+				externalCommandStandardOut,
+				externalCommandStandardOut,
+			); err != nil {
+				return err
 			}
 
 			// Stop handling interrupts before committing final initialized state
