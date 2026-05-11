@@ -138,7 +138,7 @@ Implications:
 Within that installation preset directory, AWS currently expects two subdirectories:
 
 - `cloudconf/` – **cloud-config YAML parts** (flat directory)
-- `files/` – a **filesystem overlay** copied to the instance via cloud-init `write_files`
+- `files/` – a **filesystem overlay** materialized onto the instance via cloud-init `write_files` (either inline `content` or remote `source.uri`)
 
 The AWS preset loads these with globs:
 
@@ -186,7 +186,7 @@ Security note:
 
 ### 3) How installation preset files map onto the host filesystem
 
-The AWS preset copies every file under `installation/files/**` onto the host, preserving relative paths as absolute paths:
+The AWS preset materializes every file under `installation/files/**` onto the host, preserving relative paths as absolute paths:
 
 - `installation/files/<relpath>` -> `/<relpath>`
 
@@ -211,7 +211,7 @@ Infrastructure preset overlay (optional):
 The AWS preset constructs multipart cloud-init user-data as:
 
 1. One part per file in `installation/cloudconf/*` (stable lexicographic order)
-2. A final part that appends `write_files` for JSON config and `installation/files/**`
+2. A final part that appends `write_files` for JSON config and the host file overlays
 
 The final part is intentionally last so it can override earlier cloud-config values.
 

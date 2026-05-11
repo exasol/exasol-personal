@@ -34,6 +34,14 @@ resource "random_string" "archive_storage_suffix" {
   special = false
 }
 
+resource "random_string" "bootstrap_storage_suffix" {
+  length  = 6
+  upper   = false
+  lower   = true
+  numeric = true
+  special = false
+}
+
 # Fetch specs of specified VM size from Azure
 data "azapi_resource_list" "vm_sizes" {
   type                   = "Microsoft.Compute/locations/vmSizes@2024-11-01"
@@ -58,15 +66,17 @@ data "azuread_service_principal" "current" {
 }
 
 locals {
-  vm_sizes       = data.azapi_resource_list.vm_sizes.output.value
-  selected_vm    = one([for s in local.vm_sizes : s if s.name == var.instance_type])
-  instance_vcpus = local.selected_vm != null ? local.selected_vm.numberOfCores : 0
+  vm_sizes        = data.azapi_resource_list.vm_sizes.output.value
+  selected_vm     = one([for s in local.vm_sizes : s if s.name == var.instance_type])
+  instance_vcpus  = local.selected_vm != null ? local.selected_vm.numberOfCores : 0
   instance_ram_gb = local.selected_vm != null ? local.selected_vm.memoryInMB / 1024 : 0
 
-  archive_storage_account_name = var.blob_archive_enabled ? "exa${var.deployment_id}${random_string.archive_storage_suffix[0].result}" : ""
-  archive_container_name       = "archive"
-  archive_container_url        = var.blob_archive_enabled ? "https://${local.archive_storage_account_name}.blob.core.windows.net/${local.archive_container_name}" : ""
-  archive_volume_name          = "default_archive"
+  archive_storage_account_name   = var.blob_archive_enabled ? "exa${var.deployment_id}${random_string.archive_storage_suffix[0].result}" : ""
+  archive_container_name         = "archive"
+  archive_container_url          = var.blob_archive_enabled ? "https://${local.archive_storage_account_name}.blob.core.windows.net/${local.archive_container_name}" : ""
+  archive_volume_name            = "default_archive"
+  bootstrap_storage_account_name = "exb${var.deployment_id}${random_string.bootstrap_storage_suffix.result}"
+  bootstrap_container_name       = "boostrap"
 }
 
 resource "azurerm_resource_group" "rg" {
@@ -107,21 +117,21 @@ resource "azurerm_storage_account" "remote_archive" {
   account_replication_type = "LRS"
   account_kind             = "StorageV2"
 
-  https_traffic_only_enabled      = true
+  https_traffic_only_enabled = true
 
   # Enforce a modern transport baseline for archive access.
-  min_tls_version                 = "TLS1_2"
+  min_tls_version = "TLS1_2"
 
   # Prevent anonymous public access to blobs in this storage account.
   allow_nested_items_to_be_public = false
 
   # Exasol currently authenticates Azure remote archive volumes with the
   # storage account name and an access key, so shared key auth must stay enabled.
-  shared_access_key_enabled       = true
+  shared_access_key_enabled = true
 
   # Keep the standard blob endpoint reachable and rely on network_rules below
   # to restrict access to the deployment subnet.
-  public_network_access_enabled   = true
+  public_network_access_enabled = true
 
   network_rules {
     default_action             = "Deny"
@@ -137,6 +147,40 @@ resource "azurerm_storage_container" "remote_archive" {
   name                  = local.archive_container_name
   storage_account_id    = azurerm_storage_account.remote_archive[0].id
   container_access_type = "private"
+}
+
+resource "azurerm_storage_account" "bootstrap_assets" {
+  name                     = local.bootstrap_storage_account_name
+  resource_group_name      = azurerm_resource_group.rg.name
+  location                 = azurerm_resource_group.rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  account_kind             = "StorageV2"
+
+  https_traffic_only_enabled      = true
+  min_tls_version                 = "TLS1_2"
+  allow_nested_items_to_be_public = true
+  public_network_access_enabled   = true
+
+  tags = local.common_tags
+}
+
+resource "azurerm_storage_container" "bootstrap_assets" {
+  name                  = local.bootstrap_container_name
+  storage_account_id    = azurerm_storage_account.bootstrap_assets.id
+  container_access_type = "blob"
+}
+
+resource "azurerm_storage_blob" "bootstrap_assets" {
+  for_each = local.bootstrap_node_files_by_key
+
+  name                   = each.key
+  storage_account_name   = azurerm_storage_account.bootstrap_assets.name
+  storage_container_name = azurerm_storage_container.bootstrap_assets.name
+  type                   = "Block"
+  source                 = each.value.src_path
+  content_md5            = filemd5(each.value.src_path)
+  content_type           = "text/plain"
 }
 
 resource "azurerm_public_ip" "nodes" {
@@ -207,7 +251,7 @@ resource "azurerm_linux_virtual_machine" "nodes" {
   ]
   disable_password_authentication = true
 
-  tags                            = local.common_tags
+  tags = local.common_tags
 
   admin_ssh_key {
     username   = "ubuntu"

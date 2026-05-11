@@ -64,11 +64,11 @@ resource "random_shuffle" "az_selection" {
 
 # Fetch specs of specified instance type from AWS
 data "aws_ec2_instance_type" "instance" {
-    instance_type = var.instance_type
+  instance_type = var.instance_type
 }
 
 locals {
-  instance_vcpus = data.aws_ec2_instance_type.instance.default_vcpus
+  instance_vcpus  = data.aws_ec2_instance_type.instance.default_vcpus
   instance_ram_gb = data.aws_ec2_instance_type.instance.memory_size / 1024
 }
 
@@ -83,8 +83,8 @@ resource "aws_vpc" "vpc" {
   enable_dns_support   = true
 
   tags = {
-    Name         = "${local.deployment_id}-vpc"
-    Owner        = data.aws_caller_identity.current.arn
+    Name  = "${local.deployment_id}-vpc"
+    Owner = data.aws_caller_identity.current.arn
   }
 }
 
@@ -96,8 +96,8 @@ resource "aws_subnet" "subnet" {
   availability_zone = local.selected_az
 
   tags = {
-    Name         = "${local.deployment_id}-subnet"
-    Owner        = data.aws_caller_identity.current.arn
+    Name  = "${local.deployment_id}-subnet"
+    Owner = data.aws_caller_identity.current.arn
   }
 
   lifecycle {
@@ -112,8 +112,8 @@ resource "aws_internet_gateway" "gateway" {
   vpc_id = aws_vpc.vpc.id
 
   tags = {
-    Name         = "${local.deployment_id}-igw"
-    Owner        = data.aws_caller_identity.current.arn
+    Name  = "${local.deployment_id}-igw"
+    Owner = data.aws_caller_identity.current.arn
   }
 }
 
@@ -126,8 +126,8 @@ resource "aws_route_table" "route_table" {
   }
 
   tags = {
-    Name         = "${local.deployment_id}-rt"
-    Owner        = data.aws_caller_identity.current.arn
+    Name  = "${local.deployment_id}-rt"
+    Owner = data.aws_caller_identity.current.arn
   }
 }
 
@@ -140,10 +140,13 @@ resource "aws_route_table_association" "route_table_assoc" {
 # We use a uuid as the s3 bucket name as it must be globally unique
 # If a user needs to find the bucket, they can use the tag containing the deployment id
 resource "random_uuid" "archive_bucket_uuid" {}
+resource "random_uuid" "bootstrap_assets_bucket_uuid" {}
 
 locals {
-  archive_bucket_tag_name = "${local.deployment_id}-s3-archive"
-  archive_bucket_id = "${local.archive_bucket_tag_name}-${random_uuid.archive_bucket_uuid.result}"
+  archive_bucket_tag_name          = "${local.deployment_id}-s3-archive"
+  archive_bucket_id                = "${local.archive_bucket_tag_name}-${random_uuid.archive_bucket_uuid.result}"
+  bootstrap_assets_bucket_tag_name = "${local.deployment_id}-boostrap"
+  bootstrap_assets_bucket_id       = "${local.bootstrap_assets_bucket_tag_name}-${random_uuid.bootstrap_assets_bucket_uuid.result}"
 }
 
 resource "aws_s3_bucket" "remote_archive_volume" {
@@ -151,21 +154,70 @@ resource "aws_s3_bucket" "remote_archive_volume" {
   bucket = local.archive_bucket_id
 
   # Without this, a bucket that isn't empty can't be deleted by Terraform
-  force_destroy = true 
+  force_destroy = true
 
   tags = {
-    Name         = local.archive_bucket_tag_name
-    Owner        = data.aws_caller_identity.current.arn
+    Name  = local.archive_bucket_tag_name
+    Owner = data.aws_caller_identity.current.arn
   }
+}
+
+resource "aws_s3_bucket" "bootstrap_assets" {
+  bucket = local.bootstrap_assets_bucket_id
+
+  # Without this, a bucket that isn't empty can't be deleted by Terraform
+  force_destroy = true
+
+  tags = {
+    Name  = local.bootstrap_assets_bucket_tag_name
+    Owner = data.aws_caller_identity.current.arn
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "bootstrap_assets" {
+  bucket = aws_s3_bucket.bootstrap_assets.id
+
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = false
+  restrict_public_buckets = false
+}
+
+resource "aws_s3_bucket_policy" "bootstrap_assets" {
+  bucket = aws_s3_bucket.bootstrap_assets.id
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "AllowPublicReadBootstrapAssets",
+        Effect    = "Allow",
+        Principal = "*",
+        Action    = ["s3:GetObject"],
+        Resource  = ["${aws_s3_bucket.bootstrap_assets.arn}/*"]
+      }
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.bootstrap_assets]
+}
+
+resource "aws_s3_object" "bootstrap_assets" {
+  for_each = local.bootstrap_node_files_by_key
+
+  bucket       = aws_s3_bucket.bootstrap_assets.id
+  key          = each.key
+  source       = each.value.src_path
+  etag         = filemd5(each.value.src_path)
+  content_type = "text/plain"
 }
 
 # Optional: create an S3 Gateway VPC endpoint if deploying into private networks
 resource "aws_vpc_endpoint" "s3_gateway" {
-  count               = var.s3_archive_enabled ? 1 : 0
-  vpc_id              = aws_vpc.vpc.id
-  service_name        = "com.amazonaws.${data.aws_region.current.id}.s3"
-  vpc_endpoint_type   = "Gateway"
-  route_table_ids     = [aws_route_table.route_table.id]
+  count             = var.s3_archive_enabled ? 1 : 0
+  vpc_id            = aws_vpc.vpc.id
+  service_name      = "com.amazonaws.${data.aws_region.current.id}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [aws_route_table.route_table.id]
 
   tags = {
     Name  = "${local.deployment_id}-s3-endpoint"
@@ -176,7 +228,7 @@ resource "aws_vpc_endpoint" "s3_gateway" {
 ## Archive IAM resources are created only when archive setup is enabled
 resource "aws_iam_role" "exasol_instance_role" {
   count = var.s3_archive_enabled ? 1 : 0
-  name               = "${local.deployment_id}-instance-role"
+  name  = "${local.deployment_id}-instance-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
@@ -196,9 +248,9 @@ resource "aws_iam_role" "exasol_instance_role" {
 }
 
 resource "aws_iam_role_policy" "exasol_instance_role_s3" {
-  count  = var.s3_archive_enabled ? 1 : 0
-  name   = "${local.deployment_id}-s3-access"
-  role   = aws_iam_role.exasol_instance_role[0].id
+  count = var.s3_archive_enabled ? 1 : 0
+  name  = "${local.deployment_id}-s3-access"
+  role  = aws_iam_role.exasol_instance_role[0].id
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
@@ -263,14 +315,14 @@ resource "aws_instance" "nodes" {
     volume_type = var.volume_type
     volume_size = var.os_volume_size
     tags = {
-      Name         = "${local.deployment_id}-${each.key}-root"
-      Owner        = data.aws_caller_identity.current.arn
+      Name  = "${local.deployment_id}-${each.key}-root"
+      Owner = data.aws_caller_identity.current.arn
     }
   }
 
   tags = {
-    Name         = "${local.deployment_id}-${each.key}"
-    Owner        = data.aws_caller_identity.current.arn
+    Name  = "${local.deployment_id}-${each.key}"
+    Owner = data.aws_caller_identity.current.arn
   }
 
   user_data_base64 = data.cloudinit_config.cloud_config[each.key].rendered
@@ -285,10 +337,10 @@ resource "aws_ebs_volume" "data_disks" {
   encrypted         = true
 
   tags = {
-    Name         = "${local.deployment_id}-${each.key}-data"
-    Node         = each.key
-    Role         = "data"
-    Owner        = data.aws_caller_identity.current.arn
+    Name  = "${local.deployment_id}-${each.key}-data"
+    Node  = each.key
+    Role  = "data"
+    Owner = data.aws_caller_identity.current.arn
   }
 }
 
