@@ -68,11 +68,11 @@ The following inbound ports are opened from `var.allowed_cidr`:
    - creates the resource group, network, NSG, public IPs, NICs, VMs, and managed data disks
    - creates an Azure Key Vault with an access policy and stores the SSH private key as a secret
    - creates Azure Blob Storage resources for the remote archive volume when `blob_archive_enabled` is true
-   - creates a separate bootstrap storage account and a blob container named `boostrap` for cloud-init file overlays
+   - creates a separate bootstrap storage account and a private blob container named `boostrap` for cloud-init file overlays
    - renders cloud-init for each node
 2. Cloud-init on each node:
    - writes deployment metadata and node metadata under `/etc/exasol_launcher/`
-   - fetches the launcher scripts and systemd units from the bootstrap blob container
+   - fetches the launcher scripts and systemd units from the bootstrap blob container through signed HTTPS blob URLs
    - prepares the Azure data disk and exposes it as `/dev/exasol_data_01`
 3. Node initialization:
    - systemd runs the shared preparation and installation workflow
@@ -103,7 +103,7 @@ The following inbound ports are opened from `var.allowed_cidr`:
   - managed disks
   - Key Vaults (with access policies)
 - Storage Accounts and Blob containers
-- Bootstrap asset delivery uses a dedicated public blob container that is separate from the archive container.
+- Bootstrap asset delivery uses a dedicated private blob container that is separate from the archive container and restricted to the deployment subnet.
 - The deployment identity must also be able to read storage account keys because Exasol's Azure remote archive integration uses shared-key authentication.
 - For broad access, Azure built-in `Contributor` scoped to the target resource group is usually sufficient.
 - For least privilege, use a custom Azure RBAC role that covers the resource types above.

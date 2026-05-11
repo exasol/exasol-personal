@@ -11,6 +11,7 @@ This change is cross-cutting because all three provider presets already have dis
 - Use `write_files.source.uri` over HTTPS for all uploaded host file assets.
 - Preserve the existing bootstrap phase model by leaving embedded cloud-config parts and embedded machine-readable JSON payloads unchanged.
 - Keep lifecycle ownership inside the infrastructure presets so creation, update, and destroy remain part of normal OpenTofu operations.
+- Use provider-native private-access controls for bootstrap storage where the provider supports instance- or subnet-scoped access.
 
 **Non-Goals:**
 - Changing the launcher-owned deployment directory contract.
@@ -61,16 +62,28 @@ Alternatives considered:
 
 ### Use HTTPS object URLs that match each provider implementation
 
-Cloud-init fetches bootstrap assets over HTTPS `write_files.source.uri` values. AWS uses the bucket regional domain name, Azure uses the blob resource URL, and Exoscale keeps the explicit SOS endpoint URL shape.
+Cloud-init fetches bootstrap assets over HTTPS `write_files.source.uri` values. AWS uses the bucket regional domain name with bucket access restricted to the deployment S3 VPC endpoint, Azure uses blob URLs with signed access into a private container, and Exoscale keeps the explicit SOS endpoint URL shape.
 
 Rationale:
 - This keeps the cloud-init contract uniform while still letting each provider use its most practical URL form.
 - Azure already exposes a full blob URL, AWS exposes a bucket regional domain name, and Exoscale relies on a custom S3-compatible endpoint.
-- The scripts are not sensitive, so HTTPS-readable bootstrap storage is acceptable for this implementation.
+- AWS and Azure have provider-native controls that keep bootstrap object reads scoped to the deployment network path without changing the cloud-init contract.
 
 Alternatives considered:
-- Provider-native private signed URL flows.
-  Rejected because they would diverge significantly across AWS, Azure, and Exoscale and were not necessary for non-sensitive bootstrap assets.
+- Uniform private transport across all providers.
+  Rejected because Exoscale SOS does not provide an instance-scoped private-access mechanism analogous to S3 VPC endpoint policies or Azure Storage firewall and SAS combinations.
+
+### Use direct HTTPS SOS object URLs on Exoscale
+
+The Exoscale preset uses the direct HTTPS SOS object URL flow and does not attempt to mirror the AWS or Azure private-access controls.
+
+Rationale:
+- Exoscale SOS uses S3-compatible object URLs but does not expose an instance-scoped network restriction equivalent to the AWS or Azure mechanisms used here.
+- Forcing a different transport just for Exoscale would add a second bootstrap model and increase operational complexity.
+
+Alternatives considered:
+- Presigned SOS URLs or per-instance authenticated bootstrap downloads.
+  Rejected for now because they add extra signing or credential-distribution logic and were not accepted for this implementation.
 
 ### Keep lifecycle fully inside provider presets
 
@@ -86,7 +99,7 @@ Alternatives considered:
 
 ## Risks / Trade-offs
 
-- [Public-readable bootstrap storage may not fit every deployment posture] -> Keep archive storage separate, document the bootstrap transport clearly, and revisit private transport only if deployment requirements demand it.
+- [Exoscale cannot match the AWS/Azure private-access posture in the current design] -> Document the limitation explicitly and keep the Exoscale transport isolated from the AWS and Azure private-access assumptions.
 - [Provider URL generation differs across AWS, Azure, and Exoscale] -> Keep the high-level cloud-init contract identical and use provider-native conveniences where they exist.
 - [Object updates may not propagate if Terraform resource dependencies are incomplete] -> Derive upload resources directly from file enumerations and content hashes so asset changes force object and URL refresh.
 - [Destroy can fail if object stores are not emptied first] -> Use provider resource settings or explicit object resources so Terraform can remove objects before deleting the bucket or container.

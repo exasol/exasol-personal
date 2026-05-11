@@ -61,9 +61,9 @@ The following ports must be reachable from the operator’s network, controlled 
 1. Terraform plan/apply:
    - Generates a deployment ID and a new RSA SSH key pair.
    - Stores the private key as a sensitive output, writes it to a local PEM file, and stores it in SSM Parameter Store at `/${deployment_id}/ssh_private_key`.
-   - Provisions the VPC, subnet, route table, IGW, security group, data volumes, EC2 instances, and the S3 VPC endpoint (automatically when `var.s3_archive_enabled` is true).
+   - Provisions the VPC, subnet, route table, IGW, security group, data volumes, EC2 instances, and an S3 VPC endpoint used for bootstrap asset fetches.
    - Creates a per-deployment S3 bucket for archive storage (when `var.s3_archive_enabled` is true).
-   - Creates a separate per-deployment S3 bucket named with the `boostrap` suffix and uploads the installation and infrastructure file overlays used by cloud-init.
+   - Creates a separate per-deployment S3 bucket named with the `boostrap` suffix, uploads the installation and infrastructure file overlays used by cloud-init, and restricts bootstrap object reads to the deployment S3 VPC endpoint.
    - Creates an EC2 instance role and instance profile granting scoped S3 access to the archive bucket; no IAM users or access keys are created.
    - Attaches the data EBS volume to each node; cloud-init user data is injected.
 
@@ -110,5 +110,5 @@ Choose the policy that matches your environment’s security posture. The minima
 ## Notes and Limitations
 - Security groups expose only the required ports; restrict `allowed_cidr` for secure use.
 - Public connectivity currently uses instance public IPs/DNS from the public subnet. Elastic IPs can be introduced if static addressing is desired.
-- Cloud-init asset delivery relies on a separate bootstrap bucket with HTTPS object fetches.
+- Cloud-init asset delivery relies on a separate bootstrap bucket with HTTPS object fetches that are only allowed through the deployment S3 VPC endpoint.
 - The operator identity running Terraform must be permitted to manage: S3 buckets, bucket policies, uploaded objects, IAM roles/instance profiles, and VPC endpoints.
