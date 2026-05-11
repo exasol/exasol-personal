@@ -19,10 +19,19 @@ import (
 // InstallManifest represents the installation preset workflow and metadata.
 // It is read from <deploymentDir>/installation/installation.yaml (extracted from assets).
 type InstallManifest struct {
-	Name        string       `yaml:"name"`
-	Description string       `yaml:"description"`
-	Variables   *Variables   `yaml:"variables"`
-	Install     InstallSteps `yaml:"install"`
+	Name          string         `yaml:"name"`
+	Description   string         `yaml:"description"`
+	Compatibility *Compatibility `yaml:"compatibility,omitempty"`
+	Variables     *Variables     `yaml:"variables"`
+	Install       InstallSteps   `yaml:"install"`
+}
+
+func (m *InstallManifest) RequiredCapabilities() []string {
+	if m == nil || m.Compatibility == nil {
+		return nil
+	}
+
+	return normalizedCapabilities(m.Compatibility.Requires)
 }
 
 // Variables defines installation-preset-owned variables.
@@ -221,14 +230,6 @@ type RemoteExecTask struct {
 	ExecuteInParallel bool        `yaml:"executeInParallel"`
 	Node              string      `yaml:"node"`
 	RegexLog          []*RegexLog `yaml:"regexLog"`
-}
-
-// LocalCommandTask describes a local command task.
-type LocalCommandTask struct {
-	Description string      `yaml:"description"`
-	Command     []string    `yaml:"command"`
-	Node        string      `yaml:"node"`
-	RegexLog    []*RegexLog `yaml:"regexLog"`
 }
 
 // ReadInstallManifest loads the installation manifest from embedded assets.

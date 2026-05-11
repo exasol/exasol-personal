@@ -26,11 +26,13 @@ Getting Started:
   into that directory, e.g., with "cd deployment".
 
   To create and run an Exasol deployment, run "exasol install <infra preset name-or-path>".
-  This single command initializes your deployment directory, provisions cloud infrastructure,
-  and installs the database. It uses either a built-in infrastructure preset or a custom preset 
-  at a path you provide. Built-in presets are: aws, azure, and exoscale.
+	This single command initializes your deployment directory, prepares the selected infrastructure,
+	and installs the database. It uses either a built-in infrastructure preset or a custom preset 
+	at a path you provide. Built-in presets are: aws, azure, and exoscale.
 
-  Note: Ensure your cloud provider credentials are configured in your environment before running.`
+	Note: Cloud presets require provider credentials in your environment.
+  Use "exasol init --help", "exasol install --help", or "exasol presets list" to see the preset
+  compatibility matrix.`
 
 	rootCmdExample = `  exasol install aws`
 
@@ -78,7 +80,7 @@ var rootCmd = &cobra.Command{
 
 		// Best-effort version update hint (non-blocking; logs only when an update is available).
 		// Design decision: never block commands on this.
-		if cmd.Name() != "version" {
+		if cmd.Name() != "version" && !cmd.Hidden {
 			deploy.MaybeLogVersionUpdateHint(
 				cmd.Context(), deployment,
 				CurrentLauncherVersion,
