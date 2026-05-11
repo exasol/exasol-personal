@@ -189,11 +189,16 @@ resource "aws_s3_bucket_policy" "bootstrap_assets" {
     Version = "2012-10-17",
     Statement = [
       {
-        Sid       = "AllowPublicReadBootstrapAssets",
+        Sid       = "AllowBootstrapReadsViaDeploymentVpcEndpoint",
         Effect    = "Allow",
         Principal = "*",
         Action    = ["s3:GetObject"],
-        Resource  = ["${aws_s3_bucket.bootstrap_assets.arn}/*"]
+        Resource  = ["${aws_s3_bucket.bootstrap_assets.arn}/*"],
+        Condition = {
+          StringEquals = {
+            "aws:sourceVpce" = aws_vpc_endpoint.s3_gateway.id
+          }
+        }
       }
     ]
   })
@@ -213,7 +218,6 @@ resource "aws_s3_object" "bootstrap_assets" {
 
 # Optional: create an S3 Gateway VPC endpoint if deploying into private networks
 resource "aws_vpc_endpoint" "s3_gateway" {
-  count             = var.s3_archive_enabled ? 1 : 0
   vpc_id            = aws_vpc.vpc.id
   service_name      = "com.amazonaws.${data.aws_region.current.id}.s3"
   vpc_endpoint_type = "Gateway"

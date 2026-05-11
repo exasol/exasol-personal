@@ -80,7 +80,7 @@ Additionally, internal traffic (TCP/UDP/ICMP) is allowed between cluster nodes v
    - Updates packages and installs minimal tools.
    - Downloads the `c4` installer binary and marks it executable.
    - Writes udev rules to expose the data volume as `/dev/exasol_data_01` and reloads rules.
-   - Fetches preparation and installation assets from the bootstrap bucket, writes them to the target paths on the host, and creates a readiness marker `/var/lib/exasol_launcher/state/cloud-init.complete`.
+   - Fetches preparation and installation assets from direct HTTPS SOS object URLs, writes them to the target paths on the host, and creates a readiness marker `/var/lib/exasol_launcher/state/cloud-init.complete`.
    - Writes SOS credentials (access key and secret key) from cloud-init metadata for archive volume registration.
 
 3. Node initialization:
@@ -125,3 +125,4 @@ Note: Exoscale IAM policies are configured via the Exoscale Portal or API, not a
 - Instance state (`running`/`stopped`) is managed directly on the compute instance resource; no separate instance state resource.
 - IAM roles are scoped to SOS-only access; instances receive explicit access key/secret via cloud-init.
 - Bootstrap asset delivery uses a separate HTTPS-readable SOS bucket so cloud-init payload size stays small.
+- Exoscale SOS does not currently provide an instance-scoped private-access mechanism analogous to the AWS or Azure presets, so bootstrap assets continue to use direct HTTPS object URLs.

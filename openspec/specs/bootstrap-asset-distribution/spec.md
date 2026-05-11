@@ -21,6 +21,16 @@ For uploaded bootstrap assets, provider presets SHALL render cloud-init `write_f
 - **WHEN** a node boots from a deployment created by a supported provider preset
 - **THEN** cloud-init retrieves each bootstrap overlay file from a provider-generated HTTPS source URI and writes it to the expected target path on the host
 
+#### Scenario: Restrict AWS and Azure bootstrap storage to deployment-local access
+- **WHEN** a deployment is created with the AWS or Azure preset
+- **THEN** the bootstrap object store is not publicly readable from the internet
+- **AND** the generated HTTPS source URIs remain usable from the deployed instances through provider-managed private access controls
+
+#### Scenario: Use direct HTTPS bootstrap object URLs on Exoscale
+- **WHEN** a deployment is created with the Exoscale preset
+- **THEN** the preset uses HTTPS SOS object URLs for bootstrap assets
+- **AND** the provider design artifacts document that Exoscale SOS does not provide an instance-scoped private-access mechanism analogous to the AWS and Azure presets
+
 #### Scenario: Preserve bootstrap metadata as embedded content
 - **WHEN** cloud-init is rendered for a deployment
 - **THEN** the preset still embeds `installation/cloudconf/*`, `/etc/exasol_launcher/infrastructure.json`, and `/etc/exasol_launcher/node.json` directly in cloud-init instead of moving them to object storage

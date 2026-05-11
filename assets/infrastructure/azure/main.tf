@@ -105,7 +105,7 @@ resource "azurerm_subnet" "subnet" {
   resource_group_name  = azurerm_resource_group.rg.name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = [var.subnet_cidr]
-  service_endpoints    = var.blob_archive_enabled ? ["Microsoft.Storage"] : []
+  service_endpoints    = ["Microsoft.Storage"]
 }
 
 resource "azurerm_storage_account" "remote_archive" {
@@ -157,10 +157,18 @@ resource "azurerm_storage_account" "bootstrap_assets" {
   account_replication_type = "LRS"
   account_kind             = "StorageV2"
 
-  https_traffic_only_enabled      = true
-  min_tls_version                 = "TLS1_2"
-  allow_nested_items_to_be_public = true
+  https_traffic_only_enabled = true
+  min_tls_version            = "TLS1_2"
+
+  allow_nested_items_to_be_public = false
   public_network_access_enabled   = true
+  shared_access_key_enabled       = true
+
+  network_rules {
+    default_action             = "Deny"
+    bypass                     = ["AzureServices"]
+    virtual_network_subnet_ids = [azurerm_subnet.subnet.id]
+  }
 
   tags = local.common_tags
 }
@@ -168,7 +176,7 @@ resource "azurerm_storage_account" "bootstrap_assets" {
 resource "azurerm_storage_container" "bootstrap_assets" {
   name                  = local.bootstrap_container_name
   storage_account_id    = azurerm_storage_account.bootstrap_assets.id
-  container_access_type = "blob"
+  container_access_type = "private"
 }
 
 resource "azurerm_storage_blob" "bootstrap_assets" {
@@ -181,6 +189,40 @@ resource "azurerm_storage_blob" "bootstrap_assets" {
   source                 = each.value.src_path
   content_md5            = filemd5(each.value.src_path)
   content_type           = "text/plain"
+}
+
+data "azurerm_storage_account_sas" "bootstrap_assets" {
+  connection_string = azurerm_storage_account.bootstrap_assets.primary_connection_string
+  https_only        = true
+  signed_version    = "2022-11-02"
+  start             = var.deployment_created_at
+  expiry            = timeadd(var.deployment_created_at, "87600h")
+
+  resource_types {
+    service   = false
+    container = false
+    object    = true
+  }
+
+  services {
+    blob  = true
+    queue = false
+    table = false
+    file  = false
+  }
+
+  permissions {
+    read    = true
+    write   = false
+    delete  = false
+    list    = false
+    add     = false
+    create  = false
+    update  = false
+    process = false
+    tag     = false
+    filter  = false
+  }
 }
 
 resource "azurerm_public_ip" "nodes" {

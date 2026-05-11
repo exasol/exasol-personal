@@ -211,7 +211,7 @@ data "cloudinit_config" "cloud_config" {
             path        = f.dest_path
             permissions = f.permissions
             source = {
-              uri = azurerm_storage_blob.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].url
+              uri = "${azurerm_storage_blob.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].url}?${data.azurerm_storage_account_sas.bootstrap_assets.sas}"
             }
           }
         ],
@@ -220,7 +220,7 @@ data "cloudinit_config" "cloud_config" {
             path        = f.dest_path
             permissions = f.permissions
             source = {
-              uri = azurerm_storage_blob.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].url
+              uri = "${azurerm_storage_blob.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].url}?${data.azurerm_storage_account_sas.bootstrap_assets.sas}"
             }
           }
         ]
