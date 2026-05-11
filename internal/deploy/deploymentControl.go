@@ -8,11 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/task_runner"
-	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
@@ -95,84 +92,28 @@ func Start(
 			// Fallback cleanup
 			defer unregister()
 
+			manifest, err := config.ReadInfrastructureManifest(deployment)
+			if err != nil {
+				return err
+			}
+			backend, err := resolveBackendForManifest(manifest)
+			if err != nil {
+				return err
+			}
+
 			var externalCommandOutput io.Writer
 			if verbose {
 				externalCommandOutput = os.Stderr
 			}
 
-			logBuffer := task_runner.NewLogBuffer()
-
-			err = applyAction(
+			if err := backend.Start(
 				ctx,
 				deployment,
-				"power_state=running",
-				util.CombineWriters(logBuffer, externalCommandOutput),
-				util.CombineWriters(logBuffer, externalCommandOutput),
-			)
-			if err != nil {
-				logBuffer.ReplayLogMessages(ctx)
-				slog.Error("failed to start deployment")
-
-				return err
-			}
-
-			// Attempt to refresh config/infrastructure
-			instPollCond := func(ctx context.Context) (bool, error) {
-				n11Details, err := Getn11Details(deployment)
-				if err != nil {
-					return false, err
-				}
-				if n11Details.Host != "" {
-					// Resources up-to-date
-					return true, nil
-				}
-				err = applyAction(
-					ctx,
-					deployment,
-					"", // No Arg needed for refresh
-					util.CombineWriters(logBuffer, externalCommandOutput),
-					util.CombineWriters(logBuffer, externalCommandOutput),
-				)
-				if err != nil {
-					logBuffer.ReplayLogMessages(ctx)
-					slog.Error("ApplyAction failed while refreshing", "error", err)
-
-					return false, err
-				}
-
-				return false, nil
-			}
-
-			waitCtx, cancel := context.WithTimeout(
-				ctx,
-				time.Duration(InstanceRefreshTimeoutSeconds)*time.Second,
-			)
-			defer cancel()
-
-			err = PollWithBackoff(waitCtx, instPollCond, WaitParams{
-				InitialBackoff: StartedInitialBackoff,
-				MaxBackoff:     StartedMaxBackoff,
-				LogPrefix:      "waiting to update EC2 Resources",
-			})
-			if err != nil {
-				slog.Error("Updated EC2 resources not available in time")
-				return err
-			}
-
-			// Use provided timeout if > 0; otherwise fallback to default (seconds)
-			if waitTimeoutSeconds <= 0 {
-				waitTimeoutSeconds = StartedDefaultTimeoutSeconds
-			}
-
-			// After starting the instance, wait until the database is ready for connections
-			// Enforce the provided timeout using a child context with deadline
-			waitCtx, cancel = context.WithTimeout(ctx,
-				time.Duration(waitTimeoutSeconds)*time.Second,
-			)
-			defer cancel()
-
-			if err := WaitForDatabaseStarted(waitCtx, deployment); err != nil {
-				slog.Error("database did not become operational with timeout", "error", err.Error())
+				manifest,
+				externalCommandOutput,
+				externalCommandOutput,
+				waitTimeoutSeconds,
+			); err != nil {
 				return err
 			}
 
@@ -276,24 +217,27 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 			// Fallback cleanup
 			defer unregister()
 
+			manifest, err := config.ReadInfrastructureManifest(deployment)
+			if err != nil {
+				return err
+			}
+			backend, err := resolveBackendForManifest(manifest)
+			if err != nil {
+				return err
+			}
+
 			var externalCommandOutput io.Writer
 			if verbose {
 				externalCommandOutput = os.Stderr
 			}
 
-			logBuffer := task_runner.NewLogBuffer()
-
-			err = applyAction(
+			if err := backend.Stop(
 				ctx,
 				deployment,
-				"power_state=stopped",
-				util.CombineWriters(logBuffer, externalCommandOutput),
-				util.CombineWriters(logBuffer, externalCommandOutput),
-			)
-			if err != nil {
-				logBuffer.ReplayLogMessages(ctx)
-				slog.Error("failed to stop the deployment")
-				// should this be a failure state that requires destroy?
+				manifest,
+				externalCommandOutput,
+				externalCommandOutput,
+			); err != nil {
 				return err
 			}
 
@@ -309,34 +253,4 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 
 			return nil
 		})
-}
-
-func applyAction(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	startStopArg string,
-	out, outErr io.Writer,
-) error {
-	manifest, err := config.ReadInfrastructureManifest(deployment)
-	if err != nil {
-		return err
-	}
-	if manifest.Tofu == nil {
-		slog.Info("no tofu configuration defined; skipping apply action")
-		return nil
-	}
-
-	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
-	if err := tofu.ApplyAction(
-		ctx,
-		*tofuCfg,
-		startStopArg,
-		out,
-		outErr,
-	); err != nil {
-		slog.Error("Tofu Apply Failed:", "error", err.Error())
-		return err
-	}
-
-	return nil
 }

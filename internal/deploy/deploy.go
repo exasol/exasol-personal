@@ -15,20 +15,8 @@ import (
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/remote"
 	"github.com/exasol/exasol-personal/internal/task_runner"
-	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/exasol/exasol-personal/internal/util"
 	"github.com/gobwas/glob"
-)
-
-// TofuLockfileMode controls whether OpenTofu is allowed to update .terraform.lock.hcl during init.
-//
-// This is an alias to the enum in the tofu package to avoid exposing internal/tofu details
-// to the CLI layer, while still using a strongly typed enum throughout the deploy pipeline.
-type TofuLockfileMode = tofu.LockfileMode
-
-const (
-	TofuLockfileReadonly = tofu.LockfileReadonly
-	TofuLockfileUpdate   = tofu.LockfileUpdate
 )
 
 const (
@@ -37,12 +25,32 @@ const (
 		"Fix the problem and run `deploy` again, or run `destroy` to clean up."
 )
 
-func appendDeployFailureResourceHint(err error) error {
+func appendDeployFailureHint(
+	deployment config.DeploymentDir,
+	err error,
+) error {
 	if err == nil {
 		return nil
 	}
 
-	return fmt.Errorf("%w\n\n%s", err, deployFailureResourceHint)
+	return fmt.Errorf(
+		"%w\n\nInspect launcher logs at %s for details. %s%s",
+		err,
+		deployment.Resolve("deployment.log"),
+		deployFailureResourceHint,
+		deployFailureResourceHintSuffix(deployment),
+	)
+}
+
+func deployFailureResourceHintSuffix(deployment config.DeploymentDir) string {
+	if _, statErr := os.Stat(deployment.NodeDetailsPath()); statErr == nil {
+		return fmt.Sprintf(
+			" Additional deployment diagnostics are stored in %s.",
+			deployment.NodeDetailsPath(),
+		)
+	}
+
+	return ""
 }
 
 //nolint:revive
@@ -145,6 +153,10 @@ func deployFromManifests(
 			if err != nil {
 				return err
 			}
+			backend, err := resolveBackendForManifest(infrastructureManifest)
+			if err != nil {
+				return err
+			}
 
 			installManifest, err := config.ReadInstallManifest(deployment)
 			if err != nil {
@@ -156,8 +168,7 @@ func deployFromManifests(
 				externalCommandOutput = os.Stderr
 			}
 
-			// Provision infrastructure via tofu when declared in infrastructure manifest
-			if err := runInfrastructureProvision(
+			if err := backend.Deploy(
 				ctx,
 				deployment,
 				infrastructureManifest,
@@ -167,7 +178,7 @@ func deployFromManifests(
 			); err != nil {
 				unregister()
 
-				deployErr := appendDeployFailureResourceHint(err)
+				deployErr := appendDeployFailureHint(deployment, err)
 				if stateErr := exasolState.SetWorkflowStateAndWrite(
 					&config.WorkflowStateDeploymentFailed{
 						Error: deployErr.Error(),
@@ -184,7 +195,7 @@ func deployFromManifests(
 			if err := runInstallSteps(ctx, deployment, installManifest,
 				externalCommandOutput, externalCommandOutput); err != nil {
 				unregister()
-				deployErr := appendDeployFailureResourceHint(err)
+				deployErr := appendDeployFailureHint(deployment, err)
 				if stateErr := exasolState.SetWorkflowStateAndWrite(
 					&config.WorkflowStateDeploymentFailed{
 						Error: deployErr.Error(),
@@ -317,73 +328,13 @@ func (builder *nodeListBuilder) getRemote(node string) (*remote.SSHConnectionOpt
 	}, nil
 }
 
-// Helpers to execute manifests
-
-func runInfrastructureProvision(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	manifest *presets.InfrastructureManifest,
-	out, outErr io.Writer,
-	tofuLockfileMode TofuLockfileMode,
-) error {
-	if manifest.Tofu == nil {
-		slog.Info("tofu: no configuration defined; skipping")
-		return nil
-	}
-
-	slog.Info("beginning deployment with tofu")
-
-	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
-	logBuffer := task_runner.NewLogBuffer()
-	stdOutWriter := util.CombineWriters(logBuffer, out)
-	stdErrWriter := util.CombineWriters(logBuffer, outErr)
-
-	if err := tofu.Initialize(ctx, *tofuCfg,
-		stdOutWriter, stdErrWriter, tofuLockfileMode); err != nil {
-		logBuffer.ReplayLogMessages(ctx)
-		slog.Error("tofu: failed to init", "error", err)
-
-		return err
-	}
-
-	if err := tofu.Plan(ctx, *tofuCfg, stdOutWriter, stdErrWriter); err != nil {
-		logBuffer.ReplayLogMessages(ctx)
-		slog.Error("tofu: failed to plan")
-
-		return err
-	}
-
-	if err := tofu.ApplyPlan(ctx, *tofuCfg, stdOutWriter, stdErrWriter); err != nil {
-		logBuffer.ReplayLogMessages(ctx)
-		slog.Error("tofu: failed to apply")
-
-		return err
-	}
-
-	return nil
-}
-
-// Helpers to execute manifests
-
 func runInstallSteps(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	im *presets.InstallManifest,
 	out, outErr io.Writer,
 ) error {
-	// Translate remoteExec steps to tasks
-	tasks := []config.Task{}
-	for _, step := range im.Install {
-		if step.RemoteExec != nil {
-			// The filenames in the installation manifest are relative
-			// to the installation directory.
-			// Make them relative to the deployment directory here.
-			if step.RemoteExec.Filename != "" {
-				step.RemoteExec.Filename = filepath.Join("installation", step.RemoteExec.Filename)
-			}
-			tasks = append(tasks, config.Task{RemoteExec: step.RemoteExec})
-		}
-	}
+	tasks := buildInstallTasks(im)
 	if len(tasks) == 0 {
 		slog.Info("no installation steps defined; skipping")
 		return nil
@@ -394,4 +345,27 @@ func runInstallSteps(
 		&task_runner.RemoteScriptRunnerImpl{},
 		NewNodeLookup(deployment),
 	).RunTasks(ctx, tasks, deployment, out, outErr)
+}
+
+func buildInstallTasks(installManifest *presets.InstallManifest) []config.Task {
+	if installManifest == nil {
+		return nil
+	}
+
+	tasks := []config.Task{}
+	for _, step := range installManifest.Install {
+		if step.RemoteExec != nil {
+			remoteExec := *step.RemoteExec
+			if remoteExec.Filename != "" {
+				remoteExec.Filename = filepath.Join("installation", remoteExec.Filename)
+			}
+			tasks = append(tasks, config.Task{RemoteExec: &remoteExec})
+		}
+		if step.LocalCommand != nil {
+			localCommand := *step.LocalCommand
+			tasks = append(tasks, config.Task{LocalCommand: &localCommand})
+		}
+	}
+
+	return tasks
 }

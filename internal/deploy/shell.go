@@ -22,26 +22,24 @@ func OpenHostShell(
 	selectedNode string,
 ) error {
 	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
-		sshRemote, err := sshRemoteForNodeUnsafe(deployment, selectedNode)
+		backend, err := resolveBackendForDeployment(deployment)
 		if err != nil {
 			return err
 		}
 
-		return sshRemote.Shell(ctx, os.Stdout, os.Stderr)
+		return backend.OpenHostShell(ctx, deployment, selectedNode)
 	})
 }
 
 // OpenCOSShell opens an interactive COS session via the access node (n11).
 func OpenCOSShell(ctx context.Context, deployment config.DeploymentDir) error {
 	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
-		sshRemote, err := sshRemoteForNodeUnsafe(deployment, "n11")
+		backend, err := resolveBackendForDeployment(deployment)
 		if err != nil {
 			return err
 		}
 
-		cosCommand := "/usr/bin/env bash /opt/exasol_launcher/scripts/connectCos.sh"
-
-		return sshRemote.RunInteractiveCommand(ctx, cosCommand, os.Stdout, os.Stderr)
+		return backend.OpenCOSShell(ctx, deployment)
 	})
 }
 
