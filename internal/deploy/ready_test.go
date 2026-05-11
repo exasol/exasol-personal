@@ -37,8 +37,6 @@ func (s stubDatabase) Close() error {
 }
 
 func TestVerifyDatabaseConnection_UsesRealCredentialsForLocalBackend(t *testing.T) {
-	t.Parallel()
-
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := config.WriteSecrets(deployment.Root(), &config.Secrets{
 		DbPassword: localDefaultDatabasePassword,
@@ -109,8 +107,6 @@ func TestVerifyDatabaseConnection_UsesRealCredentialsForLocalBackend(t *testing.
 }
 
 func TestVerifyDatabaseConnection_LocalBackendDoesNotCloseBeforeConnectSucceeds(t *testing.T) {
-	t.Parallel()
-
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := config.WriteSecrets(deployment.Root(), &config.Secrets{
 		DbPassword: localDefaultDatabasePassword,
@@ -163,8 +159,6 @@ func TestVerifyDatabaseConnection_LocalBackendDoesNotCloseBeforeConnectSucceeds(
 }
 
 func TestVerifyDatabaseConnection_LocalBackendRequiresSuccessfulQuery(t *testing.T) {
-	t.Parallel()
-
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := config.WriteSecrets(deployment.Root(), &config.Secrets{
 		DbPassword: localDefaultDatabasePassword,

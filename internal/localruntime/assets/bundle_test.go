@@ -17,10 +17,14 @@ func TestPrepareBundle_UsesExistingDirectoryLayout(t *testing.T) {
 
 	// Given
 	sourceDir := t.TempDir()
+	runPath := filepath.Join(sourceDir, "payload", "exasol-nano-db.run")
 	kernelPath := filepath.Join(sourceDir, "payload", "vmlinux.container")
 	initrdPath := filepath.Join(sourceDir, "payload", "ubuntu-initrd.cpio.gz")
 	if err := os.MkdirAll(filepath.Dir(kernelPath), 0o700); err != nil {
 		t.Fatalf("expected kernel dir to be created, got %v", err)
+	}
+	if err := os.WriteFile(runPath, []byte("runfile"), 0o700); err != nil {
+		t.Fatalf("expected run fixture to be written, got %v", err)
 	}
 	if err := os.WriteFile(kernelPath, []byte("kernel"), 0o600); err != nil {
 		t.Fatalf("expected kernel fixture to be written, got %v", err)
@@ -34,6 +38,9 @@ func TestPrepareBundle_UsesExistingDirectoryLayout(t *testing.T) {
 	// Then
 	if err != nil {
 		t.Fatalf("expected directory bundle preparation to succeed, got %v", err)
+	}
+	if bundle.RunPath != runPath {
+		t.Fatalf("expected run path %q, got %q", runPath, bundle.RunPath)
 	}
 	if bundle.KernelPath != kernelPath {
 		t.Fatalf("expected kernel path %q, got %q", kernelPath, bundle.KernelPath)
@@ -49,6 +56,7 @@ func TestPrepareBundle_ExtractsTarGzArchive(t *testing.T) {
 	// Given
 	archivePath := filepath.Join(t.TempDir(), "payload.tar.gz")
 	if err := writeTarGzArchive(archivePath, map[string]string{
+		"bundle/exasol-nano-db.run":    "runfile",
 		"bundle/vmlinux.container":     "kernel",
 		"bundle/ubuntu-initrd.cpio.gz": "initrd",
 	}); err != nil {
@@ -76,11 +84,11 @@ func TestPrepareBundle_RejectsMissingRequiredFiles(t *testing.T) {
 	// Given
 	sourceDir := t.TempDir()
 	if err := os.WriteFile(
-		filepath.Join(sourceDir, "vmlinux.container"),
-		[]byte("kernel"),
+		filepath.Join(sourceDir, "exasol-nano-db.run"),
+		[]byte("runfile"),
 		0o600,
 	); err != nil {
-		t.Fatalf("expected kernel fixture to be written, got %v", err)
+		t.Fatalf("expected run fixture to be written, got %v", err)
 	}
 
 	// When
@@ -88,7 +96,7 @@ func TestPrepareBundle_RejectsMissingRequiredFiles(t *testing.T) {
 
 	// Then
 	if err == nil {
-		t.Fatal("expected missing initrd to fail")
+		t.Fatal("expected missing kernel/initrd to fail")
 	}
 	if !errors.Is(err, ErrPayloadBundleInvalid) {
 		t.Fatalf("expected payload bundle invalid error, got %v", err)

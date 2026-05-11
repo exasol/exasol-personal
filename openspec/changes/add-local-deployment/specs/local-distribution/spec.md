@@ -12,6 +12,12 @@ The system SHALL support local mode through the macOS arm64 launcher distributio
 - WHEN the user runs local deployment commands
 - THEN the launcher provides the host-side virtualization and orchestration layer itself
 
+#### Scenario: Launcher contains embedded local runtime payload artifacts
+
+- GIVEN the user installs the macOS arm64 launcher distribution
+- WHEN the launcher is built for local mode
+- THEN the launcher also contains the compressed embedded local runtime payload bundle required for the local VM guest baseline
+
 ### Requirement: Platform-isolated virtualization build
 
 The system SHALL isolate local virtualization support to the macOS arm64 launcher build.
@@ -28,19 +34,18 @@ The system SHALL isolate local virtualization support to the macOS arm64 launche
 - WHEN local deployment support is included
 - THEN the build uses the platform bridge required for the virtualization layer
 
-### Requirement: Local-mode release support
+### Requirement: Local-mode release packaging support
 
-The system SHALL publish the local runtime payload artifacts and the launcher in a coordinated release flow.
+The system SHALL package the embedded local runtime payload bundle and the launcher in a coordinated build and release flow.
 
-#### Scenario: Publish payload artifacts for launcher use
+#### Scenario: Build local-mode launcher with embedded guest payload
 
 - GIVEN a release includes local deployment support
-- WHEN release artifacts are published
-- THEN the versioned Linux ExaNano `.run` payloads needed by local mode are published to the product-owned HTTP location
-- AND any supporting guest boot assets required to start the launcher-owned VM are published alongside them
+- WHEN the macOS arm64 launcher is built
+- THEN the Linux ExaNano `.run` payload and required boot assets are compressed and embedded into that launcher build
 
 #### Scenario: Installer-ready launcher release
 
 - GIVEN a supported macOS arm64 user installs the launcher
 - WHEN they run `exasol install local`
-- THEN the launcher can resolve the required local payload artifacts through the configured distribution flow
+- THEN the launcher can resolve the required local payload artifacts from the embedded bundle and the local cache without a remote payload fetch

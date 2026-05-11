@@ -45,7 +45,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean       
+          args: release --clean --draft
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MACOS_SIGN_P12: ${{ steps.macos-signing.outputs.p12-path }}
@@ -57,4 +57,108 @@ jobs:
           SSLCOM_PASSWORD: ${{ secrets.ESIGN_PASSWORD }}
           SSLCOM_CREDENTIAL_ID: ${{ secrets.ESIGN_CREDENTIAL_ID }}
           SSLCOM_TOTP_SECRET: ${{ secrets.ESIGN_TOTP_SECRET }}
-      
+
+  macos-local-arm64:
+    runs-on: macos-15
+    needs:
+      - goreleaser
+    environment:
+      name: release
+    permissions:
+      contents: write
+    env:
+      LOCAL_RUNTIME_PAYLOAD_VERSION: ${{ vars.LOCAL_RUNTIME_PAYLOAD_VERSION }}
+      LOCAL_RUNTIME_RUNFILE_URL: ${{ vars.LOCAL_RUNTIME_RUNFILE_URL }}
+      LOCAL_RUNTIME_RUNFILE_SHA256: ${{ vars.LOCAL_RUNTIME_RUNFILE_SHA256 }}
+      LOCAL_RUNTIME_KERNEL_URL: ${{ vars.LOCAL_RUNTIME_KERNEL_URL }}
+      LOCAL_RUNTIME_KERNEL_SHA256: ${{ vars.LOCAL_RUNTIME_KERNEL_SHA256 }}
+      LOCAL_RUNTIME_INITRD_URL: ${{ vars.LOCAL_RUNTIME_INITRD_URL }}
+      LOCAL_RUNTIME_INITRD_SHA256: ${{ vars.LOCAL_RUNTIME_INITRD_SHA256 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+      - name: Setup macOS signing certificate
+        id: macos-signing
+        uses: ./.github/actions/setup-macos-signing
+        with:
+          p12-key: ${{ secrets.IOS_PKCS12_IDENTITY_CERTIFICATE_BASE64_ENCODED }}
+          p12-password: ${{ secrets.IOS_PKCS12_IDENTITY_CERTIFICATE_PASSWORD }}
+          application-cert: ${{ secrets.IOS_CER_DEVELOPERID_APPLICATION_BASE64_ENCODED }}
+      - name: Prepare embedded local runtime bundle
+        shell: bash
+        run: ./.github/scripts/prepare-local-runtime-bundle.sh
+      - name: Build macOS arm64 launcher
+        shell: bash
+        run: task build-macos-local-release
+      - name: Sign macOS launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          codesign \
+            --force \
+            --timestamp \
+            --options runtime \
+            --keychain "${{ steps.macos-signing.outputs.keychain-path }}" \
+            --entitlements ./entitlements.plist \
+            --sign "${{ steps.macos-signing.outputs.signing-identity }}" \
+            ./bin/exasol
+      - name: Verify virtualization entitlement
+        shell: bash
+        run: |
+          set -euo pipefail
+          codesign -d --entitlements :- ./bin/exasol 2>&1 | tee /tmp/exasol.entitlements
+          grep -q '<key>com.apple.security.virtualization</key>' /tmp/exasol.entitlements
+      - name: Package macOS arm64 artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          ditto -c -k --keepParent ./bin/exasol ./dist/exasol-personal_macOS_arm64.zip
+          shasum -a 256 ./dist/exasol-personal_macOS_arm64.zip > ./dist/exasol-personal_macOS_arm64.zip.sha256
+      - name: Notarize macOS arm64 artifact
+        shell: bash
+        env:
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.IOS_APPSTORECONNECTAPI_ISSUERID }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.IOS_APPSTORECONNECTAPI_KEYID }}
+          MACOS_NOTARY_KEY: ${{ secrets.IOS_APPSTORECONNECTAPI_AUTHKEY }}
+        run: |
+          set -euo pipefail
+          KEY_PATH="$(mktemp /tmp/notary-key.XXXXXX.p8)"
+          trap 'rm -f "$KEY_PATH"' EXIT
+          printf '%s' "$MACOS_NOTARY_KEY" > "$KEY_PATH"
+          xcrun notarytool submit \
+            ./dist/exasol-personal_macOS_arm64.zip \
+            --issuer "$MACOS_NOTARY_ISSUER_ID" \
+            --key-id "$MACOS_NOTARY_KEY_ID" \
+            --key "$KEY_PATH" \
+            --wait
+      - name: Upload macOS arm64 artifact to draft release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "$GITHUB_REF_NAME" \
+            ./dist/exasol-personal_macOS_arm64.zip \
+            ./dist/exasol-personal_macOS_arm64.zip.sha256 \
+            --clobber
+
+  publish-release:
+    runs-on: ubuntu-latest
+    needs:
+      - goreleaser
+      - macos-local-arm64
+    environment:
+      name: release
+    permissions:
+      contents: write
+    steps:
+      - name: Publish draft release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false

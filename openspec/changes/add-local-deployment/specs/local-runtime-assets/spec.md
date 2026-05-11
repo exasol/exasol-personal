@@ -2,15 +2,17 @@
 
 ## ADDED Requirements
 
-### Requirement: Versioned local runtime payload distribution
+### Requirement: Build-time embedded local runtime payload bundle
 
-The system SHALL obtain Linux ExaNano `.run` payloads for local mode as versioned artifacts from a product-owned HTTP location.
+The system SHALL include a build-time embedded local runtime payload bundle for supported local launcher builds.
 
-#### Scenario: Resolve payload metadata for local deployment
+#### Scenario: Launcher contains the local payload baseline
 
-- GIVEN the user is preparing a local deployment
-- WHEN the launcher resolves the required ExaNano payload
-- THEN it uses product-owned payload metadata that identifies a versioned Linux `.run` artifact for the selected guest architecture
+- GIVEN the launcher is built for a supported local deployment target
+- WHEN the local runtime payload is packaged at build time
+- THEN the launcher binary contains the Linux ExaNano `.run` payload for the selected guest architecture
+- AND contains the guest kernel and initrd required to boot the launcher-owned VM
+- AND contains metadata required to identify and verify those embedded artifacts
 
 ### Requirement: Launcher-owned guest execution
 
@@ -24,28 +26,28 @@ The system SHALL execute the selected Linux `.run` payload inside the launcher-o
 - THEN it invokes the selected `.run` payload inside the guest
 - AND the launcher remains the owner of the host-side virtualization lifecycle
 
-### Requirement: Payload verification and caching
+### Requirement: Embedded payload cache seeding and verification
 
-The system SHALL verify and cache downloaded local runtime payloads before using them.
+The system SHALL verify and cache embedded local runtime payload artifacts before using them.
 
-#### Scenario: Download and verify payload
+#### Scenario: Seed cache from embedded payload bundle
 
-- GIVEN the required payload is not present in the local cache
-- WHEN the launcher downloads the payload
-- THEN it verifies the payload against expected integrity metadata
-- AND stores the verified payload in an Exasol-owned cache location
-
-#### Scenario: Reuse cached payload
-
-- GIVEN the required payload is already present in the local cache
+- GIVEN the required embedded payload artifacts are not present in the local cache
 - WHEN the launcher prepares the local runtime
-- THEN it reuses the cached payload instead of downloading it again
+- THEN it extracts the embedded payload bundle into an Exasol-owned cache location
+- AND verifies the extracted `.run`, kernel, and initrd against the embedded metadata before use
 
-#### Scenario: Reject invalid payload
+#### Scenario: Reuse cached embedded payload
 
-- GIVEN a downloaded payload fails integrity verification
-- WHEN the launcher validates the payload
-- THEN it refuses to use the payload
+- GIVEN the required embedded payload artifacts are already present in the local cache
+- WHEN the launcher prepares the local runtime
+- THEN it reuses the cached payload artifacts instead of re-extracting them
+
+#### Scenario: Reject invalid embedded payload extraction
+
+- GIVEN an extracted embedded payload artifact fails integrity verification
+- WHEN the launcher validates the embedded payload cache entry
+- THEN it refuses to use that cache entry
 - AND reports a clear verification error
 
 ### Requirement: Deployment records selected payload identity
@@ -58,3 +60,14 @@ The system SHALL persist the selected payload identity into deployment-owned loc
 - WHEN it writes deployment-owned local runtime state
 - THEN that state records the payload version
 - AND records the selected guest architecture or equivalent payload identity
+
+### Requirement: Remote payload downloading is disabled for the embedded baseline
+
+The system SHALL not require runtime HTTP payload downloading for the current embedded local payload model.
+
+#### Scenario: Start local mode without remote payload fetch
+
+- GIVEN the launcher contains the embedded local runtime payload baseline
+- WHEN the user starts a new local deployment
+- THEN the launcher resolves the payload from the embedded bundle and local cache only
+- AND does not fetch the local runtime payload from a remote HTTP endpoint

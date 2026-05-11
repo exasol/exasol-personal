@@ -54,3 +54,10 @@
 - [x] Add integration tests for local lifecycle commands without cloud credentials.
 - [x] Add concurrent local deployment tests using two deployment directories.
 - [x] Add macOS arm64 platform validation for build, runtime, and installer behavior with the `.run`-based guest payload flow.
+
+## Embedded payload transition
+
+- [x] Replace runtime HTTP payload resolution with build-time embedded local runtime payload seeding into the local cache.
+- [x] Add build-time local runtime bundle embedding and packaging hooks for the macOS arm64 launcher.
+- [x] Update local runtime payload tests to cover embedded bundle extraction, verification, and cache reuse.
+- [x] Update local deployment documentation to describe the embedded-only payload baseline and the disabled remote download path.

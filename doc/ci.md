@@ -22,17 +22,20 @@ All CI jobs declare explicit minimal permissions.
 
 Triggered automatically when a version tag is pushed (e.g., `v1.2.3`):
 
-- Builds binaries for all platforms (Linux, macOS, Windows)
+- Builds non-macOS artifacts through the Linux-hosted GoReleaser path
+- Builds the Apple Silicon macOS local-mode launcher on a macOS runner
 - Runs tests
-- Creates GitHub release with artifacts
+- Creates a draft GitHub release first, then publishes it only after the macOS release slice succeeds
 - Uses a protected `release` environment for release/signing approval gates
+- Requires pinned local-runtime payload inputs plus Apple signing and notarization secrets for the macOS release slice
 - See [Release Process](release.md) for details
 
 ### Merge Workflow (`merge.yml`)
 
 Runs automatically on every push to `main`:
 
-- Builds binaries for Windows and macOS platforms
+- Builds the Windows launcher
+- Builds the Apple Silicon macOS local-mode launcher with the generated embedded payload bundle
 - Uploads build artifacts for verification
 
 This ensures multi-platform compatibility is validated on the main branch.

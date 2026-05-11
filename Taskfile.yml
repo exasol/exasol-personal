@@ -107,6 +107,43 @@ tasks:
         go build -o {{.BUILD_DIR_NAME}}/{{.OUTPUT_NAME}} \
           -ldflags "-X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}
 
+  local-runtime-bundle:
+    desc: Package the embedded local runtime payload bundle for the macOS arm64 launcher
+    requires:
+      vars:
+        - LOCAL_RUNTIME_VERSION
+        - LOCAL_RUNTIME_RUNFILE
+        - LOCAL_RUNTIME_KERNEL
+        - LOCAL_RUNTIME_INITRD
+    cmds:
+      - >-
+        go run ./tools/packagelocalruntime/main.go
+        -version "{{.LOCAL_RUNTIME_VERSION}}"
+        -architecture "arm64"
+        -run "{{.LOCAL_RUNTIME_RUNFILE}}"
+        -kernel "{{.LOCAL_RUNTIME_KERNEL}}"
+        -initrd "{{.LOCAL_RUNTIME_INITRD}}"
+        -out-dir "./assets/localruntimebin/generated/darwin/arm64"
+
+  build-macos-local-release:
+    desc: Build the macOS arm64 local-mode launcher using the generated embedded payload bundle
+    env:
+      GOOS: darwin
+      GOARCH: arm64
+      CGO_ENABLED: "1"
+    cmds:
+      - go generate ./...
+      - >-
+        go run ./tools/downloadtofu/main.go
+        -goos="darwin"
+        -goarch="arm64"
+        -dir "./assets/tofubin/generated/"
+      - |
+        version=$(git describe --tags --abbrev=0) # First character is "v".
+        go build -o {{.BUILD_DIR_NAME}}/{{.COMMAND_NAME}} \
+          -tags=official_release \
+          -ldflags "-X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}
+
 
   deps-update-golang:
     desc: Update all Go dependencies

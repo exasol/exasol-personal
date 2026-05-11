@@ -5,6 +5,7 @@ package assets
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ const (
 
 type Bundle struct {
 	RootDir    string
+	RunPath    string
 	KernelPath string
 	InitrdPath string
 }
@@ -56,7 +58,31 @@ func PrepareBundle(sourcePath string, destinationRoot string) (*Bundle, error) {
 	return discoverBundle(destinationRoot)
 }
 
+func PrepareBundleBytes(source []byte, destinationRoot string) (*Bundle, error) {
+	if bundle, err := discoverBundle(destinationRoot); err == nil {
+		return bundle, nil
+	}
+
+	if err := os.RemoveAll(destinationRoot); err != nil {
+		return nil, fmt.Errorf("failed to reset payload extraction dir: %w", err)
+	}
+	if err := os.MkdirAll(destinationRoot, bundleDirMode); err != nil {
+		return nil, fmt.Errorf("failed to create payload extraction dir: %w", err)
+	}
+
+	if err := extractTarGzReader(bytes.NewReader(source), destinationRoot); err != nil {
+		return nil, err
+	}
+
+	return discoverBundle(destinationRoot)
+}
+
 func discoverBundle(rootDir string) (*Bundle, error) {
+	runPath, err := findBundleRunFile(rootDir)
+	if err != nil {
+		return nil, err
+	}
+
 	kernelPath, err := findBundleFile(rootDir, "vmlinux.container")
 	if err != nil {
 		return nil, err
@@ -69,6 +95,7 @@ func discoverBundle(rootDir string) (*Bundle, error) {
 
 	return &Bundle{
 		RootDir:    rootDir,
+		RunPath:    runPath,
 		KernelPath: kernelPath,
 		InitrdPath: initrdPath,
 	}, nil
@@ -101,6 +128,33 @@ func findBundleFile(rootDir string, targetName string) (string, error) {
 	return resolvedPath, nil
 }
 
+func findBundleRunFile(rootDir string) (string, error) {
+	var runPath string
+
+	err := filepath.WalkDir(rootDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(filepath.Base(path), ".run") {
+			runPath = path
+			return filepath.SkipAll
+		}
+
+		return nil
+	})
+	if err != nil && !errors.Is(err, filepath.SkipAll) {
+		return "", fmt.Errorf("failed to inspect payload bundle: %w", err)
+	}
+	if runPath == "" {
+		return "", fmt.Errorf("%w: missing .run payload", ErrPayloadBundleInvalid)
+	}
+
+	return runPath, nil
+}
+
 func extractTarGz(sourcePath string, destinationRoot string) error {
 	sourceFile, err := os.Open(sourcePath)
 	if err != nil {
@@ -108,7 +162,11 @@ func extractTarGz(sourcePath string, destinationRoot string) error {
 	}
 	defer sourceFile.Close()
 
-	gzipReader, err := gzip.NewReader(sourceFile)
+	return extractTarGzReader(sourceFile, destinationRoot)
+}
+
+func extractTarGzReader(source io.Reader, destinationRoot string) error {
+	gzipReader, err := gzip.NewReader(source)
 	if err != nil {
 		return fmt.Errorf(
 			"%w: payload bundle is not a gzip archive: %w",

@@ -15,7 +15,9 @@ The key constraint is that the ExaNano runtime already exists as Linux `.run` ar
 - Add a dedicated local deployment backend rather than routing local through Tofu, SSH, or cloud power-state helpers.
 - Add a deployment-scoped local runtime model under the deployment directory.
 - Add a launcher-owned v1 local credential contract with fixed defaults (`sys` / `exasol`).
-- Add versioned Linux ExaNano `.run` payload download, verification, and caching from a product-owned HTTP location.
+- Add build-time embedding of the Linux ExaNano `.run` payload and required guest boot assets into the macOS arm64 launcher.
+- Add launcher-owned extraction, verification, and cache seeding for the embedded local runtime payload bundle.
+- Temporarily disable runtime HTTP payload downloading so local mode relies only on the embedded payload baseline and the local cache.
 - Add local-safe deployment artifacts and command behavior for `info`, `connect`, `status`, `start`, `stop`, and `destroy`.
 - Finish the common `deployment.json` contract so local mode does not depend on a second local-only deployment-info schema.
 - Add launcher-owned local VM sizing configuration instead of relying only on fixed code constants.
@@ -32,6 +34,7 @@ Impacted capability areas:
 - deployment artifacts and connection rendering
 - credential management
 - local runtime sizing and guest-scope policy
+- embedded local runtime payload packaging and cache seeding
 - macOS arm64 build and release flow
 
 Impacted code areas:

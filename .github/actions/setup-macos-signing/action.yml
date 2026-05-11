@@ -14,6 +14,12 @@ outputs:
   p12-path:
     description: 'Path to the prepared signing certificate'
     value: /tmp/signing_certificate.p12
+  keychain-path:
+    description: 'Path to the temporary macOS signing keychain'
+    value: ${{ steps.import-certificate.outputs.keychain-path }}
+  signing-identity:
+    description: 'Detected Developer ID Application signing identity'
+    value: ${{ steps.import-certificate.outputs.signing-identity }}
 runs:
   using: 'composite'
   steps:
@@ -44,3 +50,36 @@ runs:
           # Read cert and key from PEM and export as pkcs12
           openssl pkcs12 -export -inkey /tmp/private_key.pem -in /tmp/developerID_application.crt -out /tmp/signing_certificate.p12 -name "Developer ID Application" -passout "pass:${{ inputs.p12-password }}"
         fi
+    - name: Import signing certificate into temporary keychain
+      if: runner.os == 'macOS'
+      id: import-certificate
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        KEYCHAIN_PATH="/tmp/build-signing.keychain-db"
+        KEYCHAIN_PASSWORD="$(openssl rand -hex 12)"
+
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security import /tmp/signing_certificate.p12 \
+          -k "$KEYCHAIN_PATH" \
+          -P "${{ inputs.p12-password }}" \
+          -T /usr/bin/codesign \
+          -T /usr/bin/security \
+          -T /usr/bin/productbuild
+        security set-key-partition-list \
+          -S apple-tool:,apple:,codesign: \
+          -s \
+          -k "$KEYCHAIN_PASSWORD" \
+          "$KEYCHAIN_PATH"
+
+        SIGNING_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -n 's/.*\"\\(Developer ID Application[^\"]*\\)\".*/\\1/p' | head -n1)"
+        if [[ -z "$SIGNING_IDENTITY" ]]; then
+          echo "failed to locate Developer ID Application signing identity" >&2
+          exit 1
+        fi
+
+        echo "keychain-path=$KEYCHAIN_PATH" >> "$GITHUB_OUTPUT"
+        echo "signing-identity=$SIGNING_IDENTITY" >> "$GITHUB_OUTPUT"

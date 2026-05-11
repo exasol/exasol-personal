@@ -7,9 +7,10 @@ Security requirements for release automation are defined in [Repository Security
 ## Overview
 
 Releases are fully automated using [GoReleaser](https://goreleaser.com/) and GitHub Actions. When a version tag is pushed, the release workflow automatically:
-- Builds binaries for all supported platforms
+- Builds non-macOS artifacts through the Linux-hosted GoReleaser path
+- Builds the Apple Silicon macOS local-mode launcher on a macOS runner from pinned embedded-payload inputs
 - Runs the test suite
-- Creates a GitHub release
+- Creates a draft GitHub release and publishes it only after every required release slice succeeds
 - Uploads release artifacts
 
 Release safety gates:
@@ -17,6 +18,7 @@ Release safety gates:
 - Publishing and signing run in a protected release environment.
 - Third-party release actions are pinned to immutable commit SHAs.
 - Downloaded signing tooling is version-pinned and checksum-verified in CI.
+- The macOS local-mode launcher requires pinned runtime payload URLs and checksums, plus Apple signing and notarization credentials.
 
 Tag governance controls (for example restricting who can create `v*` tags and what refs are allowed) are enforced through repository rulesets/settings.
 
@@ -41,11 +43,11 @@ git push origin v1.2.3
 
 GitHub Actions will automatically:
 1. Checkout the tagged commit
-2. Run tests to ensure quality
-3. Build binaries for all target platforms
-4. Create checksums and archives
-5. Generate release notes
-6. Publish the release on GitHub
+2. Build the draft release for the Linux-hosted artifact set
+3. Build the macOS local-mode launcher on a macOS runner
+4. Sign and notarize the shipped macOS launcher artifact
+5. Attach all release artifacts to the same release
+6. Publish the draft release on GitHub
 
 ### 3. Monitor the Release
 
@@ -64,6 +66,12 @@ The release process is configured in `.goreleaser.yaml`, which defines:
 - **Checksums**: SHA256 checksums for verification
 - **Release notes**: Automatically generated from commits
 
+The Apple Silicon macOS local-mode launcher also depends on protected CI configuration for:
+
+- embedded local-runtime payload URLs and checksums
+- Apple signing credentials
+- Apple notarization credentials
+
 ## Supported Platforms
 
 Releases are built for:
@@ -80,7 +88,7 @@ To test the release process without publishing:
 goreleaser release --snapshot --clean
 ```
 
-This creates a local build in the `dist/` directory without creating a GitHub release.
+This creates a local build in the `dist/` directory without creating a GitHub release. The Apple Silicon macOS local-mode launcher still needs a macOS build environment and the embedded local-runtime payload inputs.
 
 ## Versioning
 

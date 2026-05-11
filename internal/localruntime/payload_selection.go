@@ -6,11 +6,11 @@ package localruntime
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"runtime"
 	"strings"
 
+	embeddedpayload "github.com/exasol/exasol-personal/assets/localruntimebin"
 	localassets "github.com/exasol/exasol-personal/internal/localruntime/assets"
 	localstate "github.com/exasol/exasol-personal/internal/localruntime/state"
 )
@@ -24,21 +24,16 @@ const (
 
 var ErrPayloadBootAssetsMissing = errors.New("local runtime payload boot assets are missing")
 
-type payloadManager interface {
-	Resolve(ctx context.Context, architecture string) (*localassets.Payload, error)
-	EnsureCached(ctx context.Context, payload *localassets.Payload) (string, error)
-	EnsureBootCached(
-		ctx context.Context,
-		payload *localassets.Payload,
-	) (*localassets.CachedBootAssets, error)
-}
-
 var (
 	defaultPayloadCacheDir = localassets.DefaultCacheDir
-	newPayloadManager      = func(metadataURL string, cacheDir string) payloadManager {
-		return localassets.NewManager(metadataURL, cacheDir)
+	resolveEmbeddedPayload = func(architecture string) (*localassets.EmbeddedPayload, error) {
+		return localassets.LoadEmbeddedPayload(
+			embeddedpayload.PayloadMetadata,
+			embeddedpayload.PayloadBundle,
+			architecture,
+		)
 	}
-	resolvePayloadMetadataURL = GetPayloadMetadataURL
+	seedEmbeddedPayload = localassets.SeedEmbeddedPayload
 )
 
 func GetPayloadMetadataURL() string {
@@ -70,37 +65,23 @@ func (r *Runtime) EnsurePayloadSelected(ctx context.Context) (*localstate.Payloa
 		return nil, err
 	}
 
-	manager := newPayloadManager(resolvePayloadMetadataURL(), cacheDir)
-	payload, err := manager.Resolve(ctx, localPayloadArchitecture())
+	payload, err := resolveEmbeddedPayload(localPayloadArchitecture())
 	if err != nil {
 		return nil, err
 	}
-	if payload.Boot == nil || payload.Boot.Kernel == nil || payload.Boot.Initrd == nil {
-		return nil, fmt.Errorf(
-			"%w: payload %s/%s does not describe kernel and initrd assets",
-			ErrPayloadBootAssetsMissing,
-			strings.TrimSpace(payload.Version),
-			strings.TrimSpace(payload.Architecture),
-		)
-	}
-
-	cachePath, err := manager.EnsureCached(ctx, payload)
-	if err != nil {
-		return nil, err
-	}
-	bootAssets, err := manager.EnsureBootCached(ctx, payload)
+	seeded, err := seedEmbeddedPayload(cacheDir, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	state.Payload = &localstate.PayloadRef{
-		Version:      strings.TrimSpace(payload.Version),
-		Architecture: strings.TrimSpace(payload.Architecture),
-		Checksum:     strings.TrimSpace(payload.SHA256),
-		CachePath:    cachePath,
+		Version:      seeded.Version,
+		Architecture: seeded.Architecture,
+		Checksum:     seeded.RunChecksum,
+		CachePath:    seeded.RunPath,
 		Boot: &localstate.PayloadBootRef{
-			KernelPath: strings.TrimSpace(bootAssets.KernelPath),
-			InitrdPath: strings.TrimSpace(bootAssets.InitrdPath),
+			KernelPath: strings.TrimSpace(seeded.Boot.KernelPath),
+			InitrdPath: strings.TrimSpace(seeded.Boot.InitrdPath),
 		},
 	}
 	if err := r.SaveState(state); err != nil {
