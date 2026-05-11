@@ -6,7 +6,6 @@ variable "cluster_size" {
   type        = number
   default     = 1
 }
-
 variable "instance_type" {
   description = "EC2 instance type"
   type        = string
@@ -50,4 +49,3 @@ variable "s3_archive_enabled" {
   type        = bool
   default     = true
 }
-

@@ -5,8 +5,8 @@
 #   2) dynamically generated write_files entries:
 #        - deployment metadata JSON (common for all nodes)
 #        - node metadata JSON (specific to the current node)
-#        - installation preset files (plain files; no Terraform-side templating)
-#        - infrastructure preset files (optional; plain files)
+#        - installation preset files (fetched from bootstrap object storage)
+#        - infrastructure preset files (optional; fetched from bootstrap object storage)
 
 locals {
   # --- Path "constants" ---
@@ -49,6 +49,11 @@ locals {
       permissions = endswith(rel, ".sh") ? "0755" : "0644"
     }
   ]
+
+  bootstrap_node_files_by_key = {
+    for f in concat(local.installation_node_files, local.infrastructure_node_files) :
+    trimsuffix(trimprefix(f.dest_path, "/"), "/") => f
+  }
 
   # Cluster addressing helpers (also used for JSON payload values).
   node_ips           = [for n in local.nodes : n.ip]
@@ -205,14 +210,18 @@ data "cloudinit_config" "cloud_config" {
           for f in local.installation_node_files : {
             path        = f.dest_path
             permissions = f.permissions
-            content     = file(f.src_path)
+            source = {
+              uri = azurerm_storage_blob.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].url
+            }
           }
         ],
         [
           for f in local.infrastructure_node_files : {
             path        = f.dest_path
             permissions = f.permissions
-            content     = file(f.src_path)
+            source = {
+              uri = azurerm_storage_blob.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].url
+            }
           }
         ]
       )

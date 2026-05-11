@@ -72,6 +72,7 @@ Additionally, internal traffic (TCP/UDP/ICMP) is allowed between cluster nodes v
    - Provisions the private network, security group/rules, compute instances, and block storage volumes.
    - Registers the SSH public key with Exoscale.
    - Creates a per-deployment SOS bucket for archive storage (when `var.s3_archive_enabled` is true) using the AWS S3 provider with a custom endpoint.
+   - Creates a separate per-deployment SOS bucket named with the `boostrap` suffix and uploads the installation and infrastructure file overlays used by cloud-init.
    - Creates an IAM role and API key granting scoped SOS access to the archive bucket; credentials are delivered via cloud-init.
    - Attaches the data block storage volume to each instance; cloud-init user data is injected.
 
@@ -79,11 +80,11 @@ Additionally, internal traffic (TCP/UDP/ICMP) is allowed between cluster nodes v
    - Updates packages and installs minimal tools.
    - Downloads the `c4` installer binary and marks it executable.
    - Writes udev rules to expose the data volume as `/dev/exasol_data_01` and reloads rules.
-   - Writes preparation and installation scripts to `/opt` and creates a readiness marker `/var/lib/exasol_launcher/state/cloud-init.complete`.
+   - Fetches preparation and installation assets from the bootstrap bucket, writes them to the target paths on the host, and creates a readiness marker `/var/lib/exasol_launcher/state/cloud-init.complete`.
    - Writes SOS credentials (access key and secret key) from cloud-init metadata for archive volume registration.
 
 3. Node initialization:
-   - Cloud-init renders the assets from the installation preset into `/opt/exasol_launcher/`.
+   - Cloud-init renders embedded metadata and downloads bootstrap assets into `/opt/exasol_launcher/` and other target paths.
    - systemd units drive the unattended install via `exasol_launcher.target`.
    - Scripts and templates encapsulate preparation, installation, readiness checks, and remote archive registration (using the generated SOS credentials).
 
@@ -123,3 +124,4 @@ Note: Exoscale IAM policies are configured via the Exoscale Portal or API, not a
 - SOS buckets are managed via the AWS S3 API (S3-compatible). Object tagging is not supported.
 - Instance state (`running`/`stopped`) is managed directly on the compute instance resource; no separate instance state resource.
 - IAM roles are scoped to SOS-only access; instances receive explicit access key/secret via cloud-init.
+- Bootstrap asset delivery uses a separate HTTPS-readable SOS bucket so cloud-init payload size stays small.

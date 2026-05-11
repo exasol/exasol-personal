@@ -63,6 +63,7 @@ The following ports must be reachable from the operator’s network, controlled 
    - Stores the private key as a sensitive output, writes it to a local PEM file, and stores it in SSM Parameter Store at `/${deployment_id}/ssh_private_key`.
    - Provisions the VPC, subnet, route table, IGW, security group, data volumes, EC2 instances, and the S3 VPC endpoint (automatically when `var.s3_archive_enabled` is true).
    - Creates a per-deployment S3 bucket for archive storage (when `var.s3_archive_enabled` is true).
+   - Creates a separate per-deployment S3 bucket named with the `boostrap` suffix and uploads the installation and infrastructure file overlays used by cloud-init.
    - Creates an EC2 instance role and instance profile granting scoped S3 access to the archive bucket; no IAM users or access keys are created.
    - Attaches the data EBS volume to each node; cloud-init user data is injected.
 
@@ -70,10 +71,10 @@ The following ports must be reachable from the operator’s network, controlled 
    - Updates packages and installs minimal tools.
    - Downloads the `c4` installer binary and marks it executable.
    - Writes udev rules to expose the data volume as `/dev/exasol_data_01` and reloads rules.
-   - Writes preparation and installation scripts to `/opt` and creates a readiness marker `/var/lib/exasol_launcher/state/cloud-init.complete`.
+   - Fetches preparation and installation assets from the bootstrap bucket, writes them to the target paths on the host, and creates a readiness marker `/var/lib/exasol_launcher/state/cloud-init.complete`.
 
 3. Node initialization:
-   - Cloud-init renders the assets from the installation preset into `/opt/exasol_launcher/`.
+   - Cloud-init renders embedded metadata and downloads bootstrap assets into `/opt/exasol_launcher/` and other target paths.
    - systemd units drive the unattended install via `exasol_launcher.target`.
    - Scripts and templates encapsulate preparation, installation, readiness checks, and remote archive registration (using the generated S3 credentials).
 
@@ -93,7 +94,7 @@ The following ports must be reachable from the operator’s network, controlled 
 ## IAM Policy Files
 To run this module, the operator identity (the AWS principal applying Terraform) needs permissions to manage EC2/VPC, S3 (archive bucket), IAM roles/instance profiles, SSM parameters, and S3 VPC endpoints. This repository includes example policies:
 
-- `assets/infrastructure/aws/iam-policy.minimal.json` — Least-privilege policy scoped to Exasol resources (roles/instance profiles named `exasol-*`, SSM params under `/${deployment_id}/…`, S3 buckets named `exasol-*`).
+- `assets/infrastructure/aws/iam-policy.minimal.json` — Least-privilege policy scoped to Exasol resources (roles/instance profiles named `exasol-*`, SSM params under `/${deployment_id}/…`, S3 buckets named `exasol-*`, including bootstrap asset bucket policy and object uploads).
 - `assets/infrastructure/aws/iam-policy.broad.json` — Broad but scoped: full access to key services (EC2, S3, IAM, SSM) constrained to Exasol resource naming patterns where possible.
 
 Choose the policy that matches your environment’s security posture. The minimal policy is recommended for production.
@@ -109,5 +110,5 @@ Choose the policy that matches your environment’s security posture. The minima
 ## Notes and Limitations
 - Security groups expose only the required ports; restrict `allowed_cidr` for secure use.
 - Public connectivity currently uses instance public IPs/DNS from the public subnet. Elastic IPs can be introduced if static addressing is desired.
-- No EC2 instance role is required for S3 access; Exasol uses generated IAM user credentials.
-- The operator identity running Terraform must be permitted to manage: S3 buckets, IAM users and access keys (for the per-deployment S3 writer), and VPC endpoints.
+- Cloud-init asset delivery relies on a separate bootstrap bucket with HTTPS object fetches.
+- The operator identity running Terraform must be permitted to manage: S3 buckets, bucket policies, uploaded objects, IAM roles/instance profiles, and VPC endpoints.

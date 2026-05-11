@@ -3,7 +3,7 @@ locals {
 
   # Node configuration
   node_start_num = 11
-  ip_start_octet = 20  # IPs start at .20 (DHCP range begins here)
+  ip_start_octet = 20 # IPs start at .20 (DHCP range begins here)
   nodes = [
     for i in range(var.cluster_size) : {
       name = "n${local.node_start_num + i}"
@@ -36,8 +36,9 @@ resource "exoscale_private_network" "cluster" {
 # Archive volume SOS bucket
 # Exoscale SOS is S3-compatible — we use the AWS provider with a custom endpoint.
 locals {
-  archive_bucket_id       = "${local.deployment_id}-sos-archive"
-  sos_endpoint            = "https://sos-${var.zone}.exo.io"
+  archive_bucket_id          = "${local.deployment_id}-sos-archive"
+  bootstrap_assets_bucket_id = "${local.deployment_id}-boostrap"
+  sos_endpoint               = "https://sos-${var.zone}.exo.io"
 }
 
 resource "aws_s3_bucket" "remote_archive_volume" {
@@ -47,6 +48,26 @@ resource "aws_s3_bucket" "remote_archive_volume" {
 
   # Without this, a bucket that isn't empty can't be deleted by Terraform
   force_destroy = true
+}
+
+resource "aws_s3_bucket" "bootstrap_assets" {
+  provider = aws.sos
+  bucket   = local.bootstrap_assets_bucket_id
+
+  # Without this, a bucket that isn't empty can't be deleted by Terraform
+  force_destroy = true
+}
+
+resource "aws_s3_object" "bootstrap_assets" {
+  provider = aws.sos
+  for_each = local.bootstrap_node_files_by_key
+
+  bucket       = aws_s3_bucket.bootstrap_assets.id
+  key          = each.key
+  source       = each.value.src_path
+  etag         = filemd5(each.value.src_path)
+  acl          = "public-read"
+  content_type = "text/plain"
 }
 
 # IAM role scoped to SOS-only access for archive operations
