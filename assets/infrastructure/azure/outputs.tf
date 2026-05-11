@@ -6,6 +6,7 @@ locals {
   key_file_path               = "${local.infrastructure_artifact_dir}/${local.key_file_name}"
 
   deployment_info = {
+    backend          = "tofu"
     deploymentId     = local.deployment_id
     region           = azurerm_resource_group.rg.location
     availabilityZone = ""
@@ -14,6 +15,17 @@ locals {
     instanceType     = var.instance_type
     vpcId            = azurerm_virtual_network.vnet.id
     subnetId         = azurerm_subnet.subnet.id
+    connection = length(values(azurerm_linux_virtual_machine.nodes)) > 0 ? {
+      host           = values(azurerm_public_ip.nodes)[0].fqdn
+      displayHost    = values(azurerm_public_ip.nodes)[0].fqdn
+      publicIp       = values(azurerm_public_ip.nodes)[0].ip_address
+      dbPort         = 8563
+      uiPort         = 8443
+      username       = "sys"
+      sshCommand     = "ssh -i ${local.key_file_relative_path} ubuntu@${values(azurerm_public_ip.nodes)[0].ip_address} -p 22"
+      sshPort        = "22"
+      shellSupported = true
+    } : null
     nodes = {
       for k, vm in azurerm_linux_virtual_machine.nodes :
       k => {

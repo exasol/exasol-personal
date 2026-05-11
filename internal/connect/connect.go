@@ -6,6 +6,7 @@ package connect
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -67,6 +68,7 @@ type resultPrinter func(io.Writer, generaltypes.QueryResulter) error
 //nolint:revive
 func NewExasolConnection(
 	deployment config.DeploymentDir,
+	connectionInfo *config.ConnectionInfo,
 	username string,
 	password string,
 	insecureSkipCertValidation bool,
@@ -78,27 +80,23 @@ func NewExasolConnection(
 		}
 		password = secrets.DbPassword
 	}
-
-	nodeDetails, err := config.ReadNodeDetails(deployment)
-	if err != nil {
-		return nil, fmt.Errorf("reading node details: %w", err)
-	}
-
-	host, port, err := nodeDetails.GetDeploymentHostPort()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get deployment host-port: %w", err)
-	}
-	certFingerprint, err := nodeDetails.GetCertFingerprint()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get deployment tls certificate: %w", err)
+	if connectionInfo == nil {
+		return nil, errors.New("reading deployment connection info: missing connection info")
 	}
 
 	optsFns := []exasol.OptFn{}
-	if insecureSkipCertValidation {
+	if insecureSkipCertValidation || connectionInfo.InsecureSkipCertValidation {
 		optsFns = append(optsFns, exasol.WithoutValidateServerCertificate)
 	}
 
-	database, err := exasol.New(username, password, host, certFingerprint, port, optsFns...)
+	database, err := exasol.New(
+		username,
+		password,
+		connectionInfo.Host,
+		connectionInfo.CertFingerprint,
+		connectionInfo.DBPort,
+		optsFns...,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -106,19 +104,29 @@ func NewExasolConnection(
 	slog.Debug(
 		"connecting to database",
 		"username", username,
-		"host", host,
-		"port", port,
+		"host", connectionInfo.Host,
+		"port", connectionInfo.DBPort,
 		"insecure_skip_cert_validation", insecureSkipCertValidation,
 	)
 
 	return database, nil
 }
 
-func Connect(ctx context.Context, opts *Opts, deployment config.DeploymentDir) error {
+func Connect(
+	ctx context.Context,
+	opts *Opts,
+	deployment config.DeploymentDir,
+	connectionInfo *config.ConnectionInfo,
+) error {
 	slog.Debug("running connect")
 
 	database, err := NewExasolConnection(
-		deployment, opts.Username, opts.Password, opts.InsecureSkipCertValidation)
+		deployment,
+		connectionInfo,
+		opts.Username,
+		opts.Password,
+		opts.InsecureSkipCertValidation,
+	)
 	if err != nil {
 		return err
 	}

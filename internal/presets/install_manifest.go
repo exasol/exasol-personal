@@ -114,9 +114,10 @@ func (d *VariableDef) EffectiveType() (string, error) {
 	}
 }
 
-// InstallStep supports remoteExec tasks.
+// InstallStep supports exactly one task type per step.
 type InstallStep struct {
-	RemoteExec *RemoteExecTask `yaml:"remoteExec"`
+	RemoteExec   *RemoteExecTask   `yaml:"remoteExec"`
+	LocalCommand *LocalCommandTask `yaml:"localCommand"`
 }
 
 // UnmarshalYAML allows InstallStep to be defined in two YAML styles:
@@ -139,7 +140,11 @@ func (s *InstallStep) UnmarshalYAML(value *yaml.Node) error {
 	}
 	*s = InstallStep(tmp)
 
-	if s.RemoteExec != nil {
+	if s.RemoteExec != nil && s.LocalCommand != nil {
+		return errors.New("install step must set exactly one task type")
+	}
+
+	if s.RemoteExec != nil || s.LocalCommand != nil {
 		return nil
 	}
 
@@ -230,6 +235,14 @@ type RemoteExecTask struct {
 	ExecuteInParallel bool        `yaml:"executeInParallel"`
 	Node              string      `yaml:"node"`
 	RegexLog          []*RegexLog `yaml:"regexLog"`
+}
+
+// LocalCommandTask describes a local command task.
+type LocalCommandTask struct {
+	Description string      `yaml:"description"`
+	Command     []string    `yaml:"command"`
+	Node        string      `yaml:"node"`
+	RegexLog    []*RegexLog `yaml:"regexLog"`
 }
 
 // ReadInstallManifest loads the installation manifest from embedded assets.

@@ -84,10 +84,7 @@ func InitDeployment(
 
 	// Proactively validate the preset selection to produce friendly errors.
 	slog.Info("validating presets")
-	if err := validateInfrastructurePreset(infrastructurePreset); err != nil {
-		return err
-	}
-	if err := validateInstallationPreset(installationPreset); err != nil {
+	if err := validatePresetSelection(infrastructurePreset, installationPreset); err != nil {
 		return err
 	}
 

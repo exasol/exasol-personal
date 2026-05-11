@@ -21,7 +21,7 @@ const deploymentInfoCmdLongDesc = deploymentInfoCmdShortDesc + `
 Shows key deployment attributes in plain text, including:
 
 - Deployment name, Deployment State, Cluster size and Cluster State
-- Node details (public IP, Admin UI, DB port, DNS, SSH info)
+- Connection details appropriate for the active deployment backend
 
 You can use the '--json' option to print the output in JSON format.
 
