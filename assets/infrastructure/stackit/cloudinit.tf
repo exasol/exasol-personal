@@ -5,8 +5,8 @@
 #   2) dynamically generated write_files entries:
 #        - deployment metadata JSON (common for all nodes)
 #        - node metadata JSON (specific to the current node)
-#        - installation preset files (plain files; no Terraform-side templating)
-#        - infrastructure preset files (optional; plain files)
+#        - installation preset files (fetched from bootstrap object storage)
+#        - infrastructure preset files (optional; fetched from bootstrap object storage)
 
 locals {
   # --- Path "constants" ---
@@ -49,6 +49,11 @@ locals {
       permissions = endswith(rel, ".sh") ? "0755" : "0644"
     }
   ]
+
+  bootstrap_node_files_by_key = {
+    for f in concat(local.installation_node_files, local.infrastructure_node_files) :
+    trimsuffix(trimprefix(f.dest_path, "/"), "/") => f
+  }
 
   # Cluster addressing helpers (also used for JSON payload values).
   node_ips_space_sep = join(" ", local.node_ips)
@@ -126,7 +131,9 @@ locals {
 }
 
 data "cloudinit_config" "cloud_config" {
-  for_each      = { for node in local.nodes : node.name => node }
+  for_each   = { for node in local.nodes : node.name => node }
+  depends_on = [minio_s3_bucket_anonymous_access.bootstrap_assets]
+
   gzip          = false
   base64_encode = false
 
@@ -145,28 +152,39 @@ data "cloudinit_config" "cloud_config" {
     content_type = "text/cloud-config"
     # Keep this last so it can intentionally override earlier preset cloud-config values.
     filename = "99-write-files.yaml"
-    # Not using yamlencode(...) because it doesn't support the !!binary tag.
-    content = <<YAML
-write_files:
-  - path: ${local.infrastructure_json_target_path}
-    permissions: "0644"
-    encoding: gzip
-    content: !!binary ${base64gzip(jsonencode(local.infrastructure_payload))}
-  - path: ${local.node_json_target_path}
-    permissions: "0644"
-    encoding: gzip
-    content: !!binary ${base64gzip(jsonencode(local.node_payload_by_name[each.key]))}
-
-${join("",
-    [
-      for f in concat(local.installation_node_files, local.infrastructure_node_files) : <<INNER
-  - path: ${f.dest_path}
-    permissions: ${f.permissions}
-    encoding: gzip
-    content: !!binary ${base64gzip(file(f.src_path))}
-INNER
-    ]
-)}
-YAML
-}
+    content = yamlencode({
+      write_files = concat(
+        [
+          {
+            path        = local.infrastructure_json_target_path
+            permissions = "0644"
+            content     = jsonencode(local.infrastructure_payload)
+          },
+          {
+            path        = local.node_json_target_path
+            permissions = "0644"
+            content     = jsonencode(local.node_payload_by_name[each.key])
+          }
+        ],
+        [
+          for f in local.installation_node_files : {
+            path        = f.dest_path
+            permissions = f.permissions
+            source = {
+              uri = "https://${minio_s3_bucket.bootstrap_assets.bucket}.object.storage.${var.region}.onstackit.cloud/${minio_s3_object.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].object_name}"
+            }
+          }
+        ],
+        [
+          for f in local.infrastructure_node_files : {
+            path        = f.dest_path
+            permissions = f.permissions
+            source = {
+              uri = "https://${minio_s3_bucket.bootstrap_assets.bucket}.object.storage.${var.region}.onstackit.cloud/${minio_s3_object.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].object_name}"
+            }
+          }
+        ]
+      )
+    })
+  }
 }

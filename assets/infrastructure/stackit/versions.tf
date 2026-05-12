@@ -17,6 +17,10 @@ terraform {
       source  = "hashicorp/cloudinit"
       version = "~> 2.3"
     }
+    minio = {
+      source  = "aminueza/minio"
+      version = "~> 3.34"
+    }
     stackit = {
       source  = "stackitcloud/stackit"
       version = "~> 0.93"

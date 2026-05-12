@@ -1,8 +1,5 @@
-# bootstrap-asset-distribution Specification
+## MODIFIED Requirements
 
-## Purpose
-Reduce provider cloud-init payload size by distributing installation and infrastructure file overlays through provider-managed HTTPS object storage while keeping bootstrap metadata embedded.
-## Requirements
 ### Requirement: Provider presets SHALL externalize bootstrap file overlays through deployment object storage
 Each infrastructure preset for AWS, Azure, Exoscale, and STACKIT SHALL upload all files from the selected installation preset `files/**` tree and the provider preset `files/**` tree into a deployment-scoped bootstrap object store during infrastructure provisioning, using the host `dest_path` with its leading `/` stripped as the object key.
 
