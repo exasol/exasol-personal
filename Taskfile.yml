@@ -311,11 +311,20 @@ tasks:
       - poetry run ruff format
       - poetry run ruff check --fix
 
+  fmt-terraform:
+    desc: Format Terraform code with OpenTofu
+    deps: [generate]
+    vars:
+      TOFU_COMMAND: 'assets/tofubin/generated/{{OS}}/{{ARCH}}/tofu{{.BINARY_SUFFIX}}'
+    cmds:
+      - echo {{.TOFU_COMMAND}} fmt -recursive assets/infrastructure
+
   fmt:
     desc: Format code
     deps:
       - fmt-golang
       - fmt-ruff
+      - fmt-terraform
 
   all:
     desc: Run all tasks (lint, build, test)
