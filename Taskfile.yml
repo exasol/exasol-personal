@@ -32,7 +32,7 @@ tasks:
         darwin/arm64/tofu
         linux/amd64/tofu
         linux/arm64/tofu
-        windows/amd64/tofu.exe        
+        windows/amd64/tofu.exe
     cmds:
       - for:
           var: TARGETS
@@ -107,6 +107,18 @@ tasks:
         go build -o {{.BUILD_DIR_NAME}}/{{.OUTPUT_NAME}} \
           -ldflags "-X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}
 
+  build-image:
+    desc: Build the container image
+    vars:
+      IMAGE_NAME: exasol-launcher
+      PODMAN_BIN: podman
+      TARGET_GOARCH: '{{default "amd64" .GOARCH}}'
+    cmds:
+      - |
+        version=$(git describe --tags --abbrev=0) # First character is "v".
+        {{.PODMAN_BIN}} build \
+          --platform "linux/{{.TARGET_GOARCH}}" \
+          -t "{{.IMAGE_NAME}}:${version:1}" .
 
   deps-update-golang:
     desc: Update all Go dependencies
@@ -274,9 +286,9 @@ tasks:
       - go tool tflint --recursive --format=default --chdir=./assets/infrastructure
 
   lint-licenses:
-    desc: Run addlicense on check mode for all source files    
+    desc: Run addlicense on check mode for all source files
     cmds:
-      - go tool addlicense -l mit -c "Exasol AG" -check -s=only $(find . -type f -iregex ".*\.\(go\|py\)$")      
+      - go tool addlicense -l mit -c "Exasol AG" -check -s=only $(find . -type f -iregex ".*\.\(go\|py\)$")
 
   lint-licenses-fix:
     desc: Run addlicense to add the correct license header for all source files
@@ -332,4 +344,4 @@ tasks:
       - task: lint
       - task: build
       - task: tests-unit
-      - task: tests-integration      
+      - task: tests-integration
