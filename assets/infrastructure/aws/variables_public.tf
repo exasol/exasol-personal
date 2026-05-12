@@ -9,7 +9,7 @@ variable "cluster_size" {
 variable "instance_type" {
   description = "EC2 instance type"
   type        = string
-  default     = "r6i.xlarge"  # Default to memory-optimized instance suitable for database
+  default     = "r6i.xlarge" # Default to memory-optimized instance suitable for database
 }
 
 variable "volume_type" {

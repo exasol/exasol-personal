@@ -8,8 +8,8 @@ resource "aws_key_pair" "instance_key" {
   public_key = tls_private_key.ssh_key.public_key_openssh
 
   tags = {
-    Name         = "${local.deployment_id}-key"
-    Owner        = data.aws_caller_identity.current.arn    
+    Name  = "${local.deployment_id}-key"
+    Owner = data.aws_caller_identity.current.arn
   }
 }
 
@@ -19,8 +19,8 @@ resource "aws_ssm_parameter" "ssh_private_key" {
   value = tls_private_key.ssh_key.private_key_pem
 
   tags = {
-    Name         = "${local.deployment_id}-ssh-key"
-    Owner        = data.aws_caller_identity.current.arn    
+    Name  = "${local.deployment_id}-ssh-key"
+    Owner = data.aws_caller_identity.current.arn
   }
 }
 

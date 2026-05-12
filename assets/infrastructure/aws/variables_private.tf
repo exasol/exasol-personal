@@ -17,7 +17,7 @@ variable "subnet_cidr" {
 variable "allowed_cidr" {
   description = "CIDR block allowed to access the instance (e.g., your IP address)"
   type        = string
-  default     = "0.0.0.0/0"  # Warning: Should be restricted in production
+  default     = "0.0.0.0/0" # Warning: Should be restricted in production
 }
 
 variable "min_vcpus" {
@@ -47,7 +47,7 @@ variable "data_disk_device_name" {
 variable "ubuntu_version" {
   description = "Ubuntu version to use (codename)"
   type        = string
-  default     = "jammy"  # Ubuntu 22.04 LTS
+  default     = "jammy" # Ubuntu 22.04 LTS
 }
 
 variable "ami_id" {
