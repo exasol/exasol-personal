@@ -6,7 +6,7 @@ This document describes the Infrastructure as Code (IaC) implementation for Exas
 ## Prerequisites and STACKIT Provider
 - The service account key is taken from the environment variable `STACKIT_SERVICE_ACCOUNT_KEY_PATH`.
 - The project ID is taken from the tofu variable `var.project_id`.
-- The provider configuration in `providers.tf` uses this environment variable and does not define credentials inline.
+- The STACKIT provider uses this environment variable, while the S3-compatible bootstrap provider uses deployment-scoped object storage credentials created by the preset.
 
 ## Infrastructure Components
 
@@ -21,6 +21,9 @@ This document describes the Infrastructure as Code (IaC) implementation for Exas
 - Volume performance class for OS and database configurable via `var.volume_performance_class`.
 - OS disk size configurable via `var.os_volume_size` (minimum 10 GB).
 - Data volume size configurable via `var.data_volume_size` (in GB).
+- A dedicated bootstrap object storage bucket is created for installation and infrastructure overlay files.
+  - Bootstrap credentials are created per deployment and used through an S3-compatible provider to upload the overlay objects.
+  - Bootstrap object reads are limited by bucket policy to the deployment servers' public IP addresses.
 - A remote archive volume on STACKIT object storage (S3-compatible object storage) is created and registered automatically if `var.s3_archive_enabled` is true (default).
   - A per-deployment object storage bucket is created using a globally unique name.
   - Access to the bucket is granted via an API key pair delivered to servers via cloud-init.
@@ -67,6 +70,7 @@ The following ports must be reachable from the operator’s network, controlled 
    - Stores the private key as a sensitive output, writes it to a local PEM file.
    - Provisions the private network, security group/rules, compute instances, and block storage volumes.
    - Starts servers, with the SSH public key attached.
+   - Creates a per-deployment bootstrap object storage bucket and uploads the installation and infrastructure overlay files needed at first boot.
    - Creates a per-deployment object storage bucket for archive storage (when `var.s3_archive_enabled` is true).
    - Attaches the data block storage volume to each server; cloud-init user data is injected.
 
@@ -74,10 +78,10 @@ The following ports must be reachable from the operator’s network, controlled 
    - Updates packages and installs minimal tools.
    - Downloads the `c4` installer binary and marks it executable.
    - Writes udev rules to expose the data volume as `/dev/exasol_data_01` and reloads rules.
-   - Writes preparation and installation scripts to `/opt` and creates a readiness marker `/var/lib/exasol_launcher/state/cloud-init.complete`.
+   - Fetches the installation and infrastructure overlay files from the bootstrap bucket and creates a readiness marker `/var/lib/exasol_launcher/state/cloud-init.complete`.
 
 3. Node initialization:
-   - Cloud-init renders the assets from the installation preset into `/opt/exasol_launcher/`.
+   - Cloud-init keeps the installation cloud-config fragments and JSON metadata embedded, and fetches the larger host file overlays over HTTPS from object storage.
    - systemd units drive the unattended install via `exasol_launcher.target`.
    - Scripts and templates encapsulate preparation, installation, readiness checks, and remote archive registration (using the generated S3 credentials).
 
@@ -92,6 +96,7 @@ The following ports must be reachable from the operator’s network, controlled 
 
 ## Credentials
 - Exasol Database and Admin UI passwords are generated and injected; outputs are sensitive.
+- Bootstrap object storage uses deployment-scoped credentials created by the preset; servers consume the objects through HTTPS URLs constrained by bucket policy to the servers' public IPs.
 - Remote archive access uses the object storage credentials delivered via cloud-init as `stackit.archive.*` configuration; no user-supplied keys are required.
 
 ## Configuration (Key Variables)
@@ -105,5 +110,5 @@ The following ports must be reachable from the operator’s network, controlled 
 ## Notes and Limitations
 - Security groups expose required ports publicly; restrict via security group rules or configure network policies as needed (e.g. `var.allowed_cidr`).
 - Server state (`running`/`stopped`) is managed directly on the server resource; no separate server state resource.
-- STACKIT does not support for creating IAM policies or roles from a file.
-- There are no IAM roles to limit access to object storage; instances receive explicit access key/secret via cloud-init.
+- STACKIT bootstrap storage access is scoped by public IP because the preset has no provider feature equivalent to AWS VPC endpoints or Azure subnet-restricted blob access for cloud-init bootstrap reads.
+- STACKIT does not support creating IAM roles or policies for this flow, so bootstrap and archive access rely on object storage credentials and bucket policy instead.

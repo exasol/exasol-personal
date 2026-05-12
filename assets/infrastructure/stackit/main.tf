@@ -129,10 +129,16 @@ resource "stackit_server_volume_attach" "attach_volume" {
 # We use a UUID as the S3 bucket name as it must be globally unique
 # If a user needs to find the bucket, they can use the tag containing the deployment ID
 resource "random_uuid" "archive_bucket_uuid" {}
+resource "random_uuid" "bootstrap_bucket_uuid" {}
 
 locals {
-  archive_bucket_name = "${local.deployment_id}-s3-archive"
-  archive_bucket_id   = "${local.archive_bucket_name}-${random_uuid.archive_bucket_uuid.result}"
+  archive_bucket_name   = "${local.deployment_id}-s3-archive"
+  archive_bucket_id     = "${local.archive_bucket_name}-${random_uuid.archive_bucket_uuid.result}"
+  bootstrap_bucket_name = "${local.deployment_id}-boostrap"
+  bootstrap_bucket_id   = "${local.bootstrap_bucket_name}-${random_uuid.bootstrap_bucket_uuid.result}"
+  bootstrap_source_cidrs = sort([
+    for ip in stackit_public_ip.public_ips : "${ip.ip}/32"
+  ])
 }
 
 resource "stackit_objectstorage_credentials_group" "credentials_group" {
@@ -155,4 +161,56 @@ resource "stackit_objectstorage_bucket" "remote_archive" {
 
   project_id = var.project_id
   name       = local.archive_bucket_id
+}
+
+resource "stackit_objectstorage_credentials_group" "bootstrap_assets" {
+  project_id = var.project_id
+  name       = "${local.deployment_id}-bootstrap-cg"
+}
+
+resource "stackit_objectstorage_credential" "bootstrap_assets" {
+  project_id           = var.project_id
+  credentials_group_id = stackit_objectstorage_credentials_group.bootstrap_assets.credentials_group_id
+}
+
+resource "minio_s3_bucket" "bootstrap_assets" {
+  provider = minio.bootstrap
+
+  bucket        = local.bootstrap_bucket_id
+  acl           = "private"
+  force_destroy = true
+}
+
+resource "minio_s3_bucket_anonymous_access" "bootstrap_assets" {
+  provider = minio.bootstrap
+
+  bucket = minio_s3_bucket.bootstrap_assets.bucket
+  policy = jsonencode({
+    Statement = [
+      {
+        Sid       = "AllowBootstrapReadFromDeploymentIps"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "urn:sgws:s3:::${minio_s3_bucket.bootstrap_assets.bucket}/*"
+        Condition = {
+          IpAddress = {
+            "aws:SourceIp" = local.bootstrap_source_cidrs
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "minio_s3_object" "bootstrap_assets" {
+  provider = minio.bootstrap
+
+  for_each = local.bootstrap_node_files_by_key
+
+  bucket_name  = minio_s3_bucket.bootstrap_assets.bucket
+  object_name  = each.key
+  source       = each.value.src_path
+  etag         = filemd5(each.value.src_path)
+  content_type = "text/plain"
 }
