@@ -10,7 +10,7 @@
 
 variable "deployment_id" {
   description = "Launcher-generated deployment identifier"
-  type        = string    
+  type        = string
   # The Exasol Personal Launcher injects an randomly generated identifier like "a3e712fa"
 }
 
@@ -35,6 +35,6 @@ variable "infrastructure_artifact_dir" {
 
 variable "installation_preset_dir" {
   description = "Directory where installation preset can be found; launcher supplies a path relative to the extracted infrastructure preset directory"
-  type        = string  
+  type        = string
   default     = ".."
 }

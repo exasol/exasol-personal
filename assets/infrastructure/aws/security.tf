@@ -43,7 +43,7 @@ resource "aws_security_group" "exasol_instance" {
   }
 
   tags = {
-    Name         = "${local.deployment_id}-sg"
-    Owner        = data.aws_caller_identity.current.arn    
+    Name  = "${local.deployment_id}-sg"
+    Owner = data.aws_caller_identity.current.arn
   }
 }
