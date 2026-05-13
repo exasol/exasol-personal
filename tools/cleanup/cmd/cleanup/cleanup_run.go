@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/hetzner"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 	"github.com/spf13/cobra"
 )
@@ -60,6 +61,12 @@ var cleanupRunCmd = &cobra.Command{
 		if shouldUseProvider(exoscale.ProviderName) {
 			collectors = append(collectors,
 				exoscale.NewCollector(cleanupOpts.ExoscaleZone, "", false))
+		}
+
+		// Hetzner Collector
+		if shouldUseProvider(hetzner.ProviderName) {
+			collectors = append(collectors,
+				hetzner.NewCollector(cleanupOpts.HetznerLocation, "", false))
 		}
 
 		// Find which provider has this deployment

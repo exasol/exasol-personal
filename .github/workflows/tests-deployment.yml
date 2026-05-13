@@ -43,7 +43,10 @@ jobs:
             {"enabled": false,  "infra": "azure",    "os": "macos-latest",   "task": "tests-deployment-infrastructure"},
             {"enabled": false,  "infra": "exoscale", "os": "ubuntu-latest",  "task": "tests-deployment-infrastructure"},
             {"enabled": false,  "infra": "exoscale", "os": "windows-latest", "task": "tests-deployment-infrastructure"},
-            {"enabled": true,   "infra": "exoscale", "os": "macos-latest",   "task": "tests-deployment-infrastructure"}
+            {"enabled": true,   "infra": "exoscale", "os": "macos-latest",   "task": "tests-deployment-infrastructure"},
+            {"enabled": false,  "infra": "hetzner",  "os": "ubuntu-latest",  "task": "tests-deployment-infrastructure"},
+            {"enabled": false,  "infra": "hetzner",  "os": "windows-latest", "task": "tests-deployment-infrastructure"},
+            {"enabled": false,  "infra": "hetzner",  "os": "macos-latest",   "task": "tests-deployment-infrastructure"}
           ]'
 
           filtered_plan_json="$(jq -c --arg os "${selected_os}" '
@@ -121,6 +124,12 @@ jobs:
           # The Exoscale preset uses an aliased AWS provider for SOS endpoint resources.
           echo "AWS_ACCESS_KEY_ID=${{ secrets.EXOSCALE_API_KEY }}" >> "$GITHUB_ENV"
           echo "AWS_SECRET_ACCESS_KEY=${{ secrets.EXOSCALE_API_SECRET }}" >> "$GITHUB_ENV"
+
+      - name: Setup Hetzner Cloud credentials
+        if: ${{ matrix.infra == 'hetzner' }}
+        shell: bash
+        run: |
+          echo "HCLOUD_TOKEN=${{ secrets.HCLOUD_TOKEN }}" >> "$GITHUB_ENV"
 
       # Doing a second build here again. In theory, we could
       # upload the build artifact from the ci.yml workflow

@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/hetzner"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 	"github.com/spf13/cobra"
 )
@@ -72,6 +73,15 @@ var cleanupDiscoverCmd = &cobra.Command{
 			
 			collectors = append(collectors,
 				exoscale.NewCollector(cleanupOpts.ExoscaleZone, exoOwnerFilter, cleanupDiscoverOpts.Legacy))
+		}
+		
+		// Hetzner Collector - use provided owner filter or empty for all
+		if shouldUseProvider(hetzner.ProviderName) {
+			hetznerOwnerFilter := cleanupDiscoverOpts.OwnerFilter
+			// Hetzner default: empty means all deployments (token is project-scoped)
+			
+			collectors = append(collectors,
+				hetzner.NewCollector(cleanupOpts.HetznerLocation, hetznerOwnerFilter, cleanupDiscoverOpts.Legacy))
 		}
 		
 		// Collect from all providers
