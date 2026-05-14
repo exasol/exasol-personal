@@ -211,8 +211,20 @@ func validateMachineConfig(config MachineConfig) error {
 	if strings.TrimSpace(config.Name) == "" {
 		return errors.New("machine name is required")
 	}
-	if strings.TrimSpace(config.KernelPath) == "" {
-		return errors.New("machine kernel path is required")
+	switch config.BootMode {
+	case BootModeLinux:
+		if strings.TrimSpace(config.KernelPath) == "" {
+			return errors.New("machine kernel path is required for Linux boot mode")
+		}
+	case BootModeEFI:
+		if strings.TrimSpace(config.DiskImage) == "" {
+			return errors.New("disk image path is required for EFI boot mode")
+		}
+		if strings.TrimSpace(config.EFIVariableStorePath) == "" {
+			return errors.New("EFI variable store path is required for EFI boot mode")
+		}
+	default:
+		return fmt.Errorf("unsupported boot mode %d", config.BootMode)
 	}
 	if len(config.PortForwards) > 0 {
 		return fmt.Errorf("%w: use a host-side forwarder in the local runtime layer", ErrPortForwardUnsupported)
@@ -306,7 +318,18 @@ func buildVirtualMachineConfiguration(config MachineConfig) (*vz.VirtualMachineC
 	return vmConfig, nil
 }
 
-func buildBootLoader(config MachineConfig) (*vz.LinuxBootLoader, error) {
+func buildBootLoader(config MachineConfig) (vz.BootLoader, error) {
+	switch config.BootMode {
+	case BootModeLinux:
+		return buildLinuxBootLoader(config)
+	case BootModeEFI:
+		return buildEFIBootLoader(config)
+	default:
+		return nil, fmt.Errorf("unsupported boot mode %d", config.BootMode)
+	}
+}
+
+func buildLinuxBootLoader(config MachineConfig) (*vz.LinuxBootLoader, error) {
 	options := make([]vz.LinuxBootLoaderOption, 0, 2)
 
 	if initrdPath := strings.TrimSpace(config.InitrdPath); initrdPath != "" {
@@ -322,6 +345,43 @@ func buildBootLoader(config MachineConfig) (*vz.LinuxBootLoader, error) {
 	}
 
 	return bootLoader, nil
+}
+
+func buildEFIBootLoader(config MachineConfig) (*vz.EFIBootLoader, error) {
+	storePath := strings.TrimSpace(config.EFIVariableStorePath)
+	if err := os.MkdirAll(filepath.Dir(storePath), 0o700); err != nil {
+		return nil, fmt.Errorf("failed to create EFI variable store dir: %w", err)
+	}
+
+	store, err := openOrCreateEFIVariableStore(storePath)
+	if err != nil {
+		return nil, err
+	}
+
+	bootLoader, err := vz.NewEFIBootLoader(vz.WithEFIVariableStore(store))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create EFI boot loader: %w", err)
+	}
+
+	return bootLoader, nil
+}
+
+func openOrCreateEFIVariableStore(path string) (*vz.EFIVariableStore, error) {
+	if _, err := os.Stat(path); err == nil {
+		store, loadErr := vz.NewEFIVariableStore(path)
+		if loadErr != nil {
+			return nil, fmt.Errorf("failed to load EFI variable store at %q: %w", path, loadErr)
+		}
+		return store, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("failed to inspect EFI variable store at %q: %w", path, err)
+	}
+
+	store, err := vz.NewEFIVariableStore(path, vz.WithCreatingEFIVariableStore())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create EFI variable store at %q: %w", path, err)
+	}
+	return store, nil
 }
 
 func buildPlatformConfiguration(machineIdentifierPath string) (*vz.GenericPlatformConfiguration, error) {

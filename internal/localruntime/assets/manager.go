@@ -4,6 +4,8 @@
 package assets
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -17,6 +19,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/ulikunitz/xz"
 )
 
 var (
@@ -35,11 +39,29 @@ type Asset struct {
 	URL      string `json:"url"`
 	SHA256   string `json:"sha256"`
 	Filename string `json:"filename,omitempty"`
+	// Format optionally indicates that the downloaded bytes are an archive
+	// that should be extracted before use. Supported values: "tar.xz",
+	// "tar.gz". Empty (or "raw") means the downloaded file is used as-is.
+	Format string `json:"format,omitempty"`
+	// ExtractPath is the path inside the archive to extract when Format is
+	// set. The extracted regular file becomes the cached asset that this
+	// manager returns. Required when Format is non-empty.
+	ExtractPath string `json:"extractPath,omitempty"`
 }
 
 type BootAssets struct {
 	Kernel *Asset `json:"kernel,omitempty"`
 	Initrd *Asset `json:"initrd,omitempty"`
+}
+
+// Container describes an optional containerized DB runtime that is shipped
+// alongside the disk-image payload. The container tarball is loaded by the
+// guest's podman + load-shared-container service.
+type Container struct {
+	Image    *Asset `json:"image,omitempty"`
+	ShmSize  string `json:"shmSize,omitempty"`
+	Ports    []int  `json:"ports,omitempty"`
+	Args     []string `json:"args,omitempty"`
 }
 
 type Payload struct {
@@ -49,11 +71,29 @@ type Payload struct {
 	SHA256       string      `json:"sha256,omitempty"`
 	Filename     string      `json:"filename,omitempty"`
 	Boot         *BootAssets `json:"boot,omitempty"`
+	// Disk, when set, selects the EFI-boot disk-image flow. Mutually exclusive
+	// with Boot in practice: payloads either describe kernel+initrd direct
+	// boot, or a UEFI disk image.
+	Disk *Asset `json:"disk,omitempty"`
+	// Container, when set, ships a podman container tarball that the guest
+	// loads and runs in addition to (or instead of) executing the .run
+	// payload directly. Only consumed by the EFI/disk-image flow.
+	Container *Container `json:"container,omitempty"`
 }
 
 type CachedBootAssets struct {
 	KernelPath string
 	InitrdPath string
+}
+
+// CachedDiskAsset is the cache result for a UEFI disk-image payload.
+type CachedDiskAsset struct {
+	Path string
+}
+
+// CachedContainerAsset is the cache result for a guest container image.
+type CachedContainerAsset struct {
+	Path string
 }
 
 func (m *Metadata) Resolve(architecture string) (*Payload, error) {
@@ -117,6 +157,66 @@ func (m *Manager) EnsureCached(ctx context.Context, payload *Payload) (string, e
 	)
 }
 
+// EnsureDiskCached downloads and verifies the UEFI disk-image asset, returning
+// the local cache path. The disk image is what vz boots from in BootModeEFI.
+func (m *Manager) EnsureDiskCached(
+	ctx context.Context,
+	payload *Payload,
+) (*CachedDiskAsset, error) {
+	if payload == nil {
+		return nil, fmt.Errorf("%w: nil payload", ErrPayloadNotFound)
+	}
+	if payload.Disk == nil {
+		return nil, fmt.Errorf(
+			"%w: missing disk image asset for %s/%s",
+			ErrPayloadNotFound,
+			payload.Version,
+			payload.Architecture,
+		)
+	}
+
+	diskPath, err := m.ensureAssetCached(
+		ctx,
+		strings.TrimSpace(payload.Version),
+		strings.TrimSpace(payload.Architecture),
+		"disk",
+		payload.Disk,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CachedDiskAsset{Path: diskPath}, nil
+}
+
+// EnsureContainerCached downloads and verifies the optional guest container
+// image asset, returning the local cache path. Returns nil with no error when
+// the payload does not declare a container.
+func (m *Manager) EnsureContainerCached(
+	ctx context.Context,
+	payload *Payload,
+) (*CachedContainerAsset, error) {
+	if payload == nil {
+		return nil, fmt.Errorf("%w: nil payload", ErrPayloadNotFound)
+	}
+	if payload.Container == nil || payload.Container.Image == nil {
+		return nil, nil
+	}
+
+	containerPath, err := m.ensureAssetCached(
+		ctx,
+		strings.TrimSpace(payload.Version),
+		strings.TrimSpace(payload.Architecture),
+		"container",
+		payload.Container.Image,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CachedContainerAsset{Path: containerPath}, nil
+}
+
 func (m *Manager) EnsureBootCached(
 	ctx context.Context,
 	payload *Payload,
@@ -178,18 +278,34 @@ func (m *Manager) ensureAssetCached(
 		return "", fmt.Errorf("%w: empty asset checksum", ErrPayloadVerificationFailed)
 	}
 
-	cachePath := filepath.Join(
+	archivePath := filepath.Join(
 		m.CacheDir,
 		version,
 		architecture,
 		cachedAssetRelativePath(role, asset.resolvedFilename()),
 	)
 
-	if ok, err := verifyFileSHA256(cachePath, asset.SHA256); err == nil && ok {
-		return cachePath, nil
+	extractedPath, err := resolveExtractedPath(archivePath, asset)
+	if err != nil {
+		return "", err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(cachePath), payloadCacheDirMode); err != nil {
+	if archiveOk, _ := verifyFileSHA256(archivePath, asset.SHA256); archiveOk {
+		if extractedPath == "" {
+			return archivePath, nil
+		}
+		if _, statErr := os.Stat(extractedPath); statErr == nil {
+			return extractedPath, nil
+		}
+		if extractErr := extractArchiveEntry(
+			archivePath, asset.Format, asset.ExtractPath, extractedPath,
+		); extractErr != nil {
+			return "", extractErr
+		}
+		return extractedPath, nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(archivePath), payloadCacheDirMode); err != nil {
 		return "", fmt.Errorf("failed to create payload cache dir: %w", err)
 	}
 
@@ -207,7 +323,7 @@ func (m *Manager) ensureAssetCached(
 		return "", fmt.Errorf("failed to download payload: unexpected HTTP status %s", resp.Status)
 	}
 
-	tempFile, err := os.CreateTemp(filepath.Dir(cachePath), "payload-*.tmp")
+	tempFile, err := os.CreateTemp(filepath.Dir(archivePath), "payload-*.tmp")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary payload file: %w", err)
 	}
@@ -238,11 +354,167 @@ func (m *Manager) ensureAssetCached(
 		)
 	}
 
-	if err := os.Rename(tempPath, cachePath); err != nil {
+	if err := os.Rename(tempPath, archivePath); err != nil {
 		return "", fmt.Errorf("failed to store verified payload in cache: %w", err)
 	}
 
-	return cachePath, nil
+	if extractedPath == "" {
+		return archivePath, nil
+	}
+
+	if err := extractArchiveEntry(
+		archivePath, asset.Format, asset.ExtractPath, extractedPath,
+	); err != nil {
+		return "", err
+	}
+	return extractedPath, nil
+}
+
+// resolveExtractedPath computes where the extracted asset file lives, if the
+// asset declares an archive Format. Returns "" for raw assets.
+func resolveExtractedPath(archivePath string, asset *Asset) (string, error) {
+	format := strings.TrimSpace(asset.Format)
+	if format == "" || strings.EqualFold(format, "raw") {
+		return "", nil
+	}
+	if !supportedArchiveFormat(format) {
+		return "", fmt.Errorf("%w: unsupported archive format %q", ErrPayloadBundleInvalid, format)
+	}
+	if strings.TrimSpace(asset.ExtractPath) == "" {
+		return "", fmt.Errorf(
+			"%w: archive format %q requires extractPath",
+			ErrPayloadBundleInvalid, format,
+		)
+	}
+
+	dir := filepath.Dir(archivePath)
+	base := filepath.Base(strings.TrimSpace(asset.ExtractPath))
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		return "", fmt.Errorf(
+			"%w: invalid extractPath %q",
+			ErrPayloadBundleInvalid, asset.ExtractPath,
+		)
+	}
+	// Guard against an extractPath whose basename collides with the archive
+	// filename — that would overwrite the archive on the next cache hit.
+	if base == filepath.Base(archivePath) {
+		base = base + ".extracted"
+	}
+	return filepath.Join(dir, base), nil
+}
+
+func supportedArchiveFormat(format string) bool {
+	switch strings.ToLower(format) {
+	case "tar.xz", "tar.gz":
+		return true
+	}
+	return false
+}
+
+// extractArchiveEntry streams a single regular file out of a (possibly
+// compressed) tar archive into targetPath atomically. Memory usage is
+// bounded; we never buffer the whole archive or entry.
+func extractArchiveEntry(archivePath, format, entryPath, targetPath string) error {
+	file, err := os.Open(archivePath)
+	if err != nil {
+		return fmt.Errorf("failed to open archive: %w", err)
+	}
+	defer file.Close()
+
+	tarStream, closeFn, err := openTarStream(file, format)
+	if err != nil {
+		return err
+	}
+	if closeFn != nil {
+		defer closeFn()
+	}
+
+	wantPath := filepath.Clean(entryPath)
+	reader := tar.NewReader(tarStream)
+	for {
+		header, err := reader.Next()
+		if errors.Is(err, io.EOF) {
+			return fmt.Errorf(
+				"%w: archive %q does not contain entry %q",
+				ErrPayloadBundleInvalid, archivePath, entryPath,
+			)
+		}
+		if err != nil {
+			return fmt.Errorf(
+				"%w: failed to read archive %q: %w",
+				ErrPayloadBundleInvalid, archivePath, err,
+			)
+		}
+		if filepath.Clean(header.Name) != wantPath {
+			continue
+		}
+		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+			return fmt.Errorf(
+				"%w: entry %q is not a regular file (type %d)",
+				ErrPayloadBundleInvalid, entryPath, header.Typeflag,
+			)
+		}
+
+		if err := writeExtractedFile(reader, header.Size, targetPath); err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+func openTarStream(source io.Reader, format string) (io.Reader, func() error, error) {
+	switch strings.ToLower(format) {
+	case "tar.xz":
+		reader, err := xz.NewReader(source)
+		if err != nil {
+			return nil, nil, fmt.Errorf(
+				"%w: not a valid xz stream: %w",
+				ErrPayloadBundleInvalid, err,
+			)
+		}
+		return reader, nil, nil
+	case "tar.gz":
+		reader, err := gzip.NewReader(source)
+		if err != nil {
+			return nil, nil, fmt.Errorf(
+				"%w: not a valid gzip stream: %w",
+				ErrPayloadBundleInvalid, err,
+			)
+		}
+		return reader, reader.Close, nil
+	default:
+		return nil, nil, fmt.Errorf(
+			"%w: unsupported archive format %q",
+			ErrPayloadBundleInvalid, format,
+		)
+	}
+}
+
+func writeExtractedFile(source io.Reader, size int64, targetPath string) error {
+	if err := os.MkdirAll(filepath.Dir(targetPath), payloadCacheDirMode); err != nil {
+		return fmt.Errorf("failed to create extraction target dir: %w", err)
+	}
+
+	tempPath := targetPath + ".tmp"
+	out, err := os.OpenFile(tempPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, bundleFileMode)
+	if err != nil {
+		return fmt.Errorf("failed to create extraction target: %w", err)
+	}
+
+	if _, copyErr := io.CopyN(out, source, size); copyErr != nil {
+		_ = out.Close()
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("failed to extract archive entry: %w", copyErr)
+	}
+	if err := out.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("failed to finalize extracted asset: %w", err)
+	}
+	if err := os.Rename(tempPath, targetPath); err != nil {
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("failed to publish extracted asset: %w", err)
+	}
+	return nil
 }
 
 func (m *Manager) fetchMetadata(ctx context.Context) (*Metadata, error) {

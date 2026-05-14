@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -28,11 +29,16 @@ const (
 	defaultGuestPayloadMount   = "/.exanano/payload"
 	defaultGuestLogsTag        = "exa-logs"
 	defaultGuestLogsMount      = "/.exanano/logs"
-	entrypointWrapperFileName  = "exasol-localruntime-entrypoint.sh"
-	bootstrapProfileFileName   = "profile.sh"
-	localRuntimeDirMode        = 0o700
-	localRuntimeFileMode       = 0o600
-	localRuntimeExecFileMode   = 0o700
+	// defaultHostShareTag is the single virtio-fs tag the exasol-nano-vm
+	// disk-image guest mounts at /mnt/host. The guest's existing
+	// load-shared-container.sh reads its container tarball + manifest from
+	// that directory.
+	defaultHostShareTag       = "hostshare"
+	entrypointWrapperFileName = "exasol-localruntime-entrypoint.sh"
+	bootstrapProfileFileName  = "profile.sh"
+	localRuntimeDirMode       = 0o700
+	localRuntimeFileMode      = 0o600
+	localRuntimeExecFileMode  = 0o700
 )
 
 var ErrPayloadSelectionMissing = errors.New("local runtime payload selection is missing")
@@ -76,13 +82,26 @@ func (r *Runtime) PrepareGuest(ctx context.Context) (*GuestConfig, error) {
 		return nil, err
 	}
 
-	boot, err := resolveBootAssets(state.Payload)
-	if err != nil {
+	controller := r.Controller()
+	if err := controller.Ensure(); err != nil {
 		return nil, err
 	}
 
-	controller := r.Controller()
-	if err := controller.Ensure(); err != nil {
+	if state.Payload.Disk != nil {
+		return r.prepareEFIDiskGuest(state, sizing, ports, controller)
+	}
+
+	return r.prepareLinuxBootGuest(state, sizing, ports, controller)
+}
+
+func (r *Runtime) prepareLinuxBootGuest(
+	state *localstate.State,
+	sizing *MachineSizing,
+	ports *ConnectionPorts,
+	controller Controller,
+) (*GuestConfig, error) {
+	boot, err := resolveBootAssets(state.Payload)
+	if err != nil {
 		return nil, err
 	}
 
@@ -114,6 +133,7 @@ func (r *Runtime) PrepareGuest(ctx context.Context) (*GuestConfig, error) {
 
 	machineConfig := vm.MachineConfig{
 		Name:       deploymentMachineName(r.layout.DeploymentDir()),
+		BootMode:   vm.BootModeLinux,
 		KernelPath: boot.KernelPath,
 		InitrdPath: boot.InitrdPath,
 		KernelCommandLine: buildKernelCommandLine(
@@ -134,6 +154,221 @@ func (r *Runtime) PrepareGuest(ctx context.Context) (*GuestConfig, error) {
 		Controller: controller,
 		Machine:    machineConfig,
 	}, nil
+}
+
+// prepareEFIDiskGuest builds the guest config for booting a UEFI disk image
+// produced by exasol-nano-vm. The disk image already contains Alpine + podman
+// + a load-shared-container service that reads /mnt/host. We stage the
+// container tarball and a JSON manifest into a single "hostshare" virtio-fs
+// share. The guest's existing OpenRC service picks them up and runs the
+// container.
+func (r *Runtime) prepareEFIDiskGuest(
+	state *localstate.State,
+	sizing *MachineSizing,
+	ports *ConnectionPorts,
+	controller Controller,
+) (*GuestConfig, error) {
+	disk, err := resolveDiskAsset(state.Payload)
+	if err != nil {
+		return nil, err
+	}
+
+	bootDisk, err := r.stageBootDiskImage(disk.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	hostShare, err := r.prepareHostShare(state.Payload, ports)
+	if err != nil {
+		return nil, err
+	}
+
+	sharedDirs := []vm.SharedDir{hostShare}
+
+	machineConfig := vm.MachineConfig{
+		Name:                  deploymentMachineName(r.layout.DeploymentDir()),
+		BootMode:              vm.BootModeEFI,
+		DiskImage:             bootDisk,
+		EFIVariableStorePath:  r.layout.EFIVariableStoreFile(),
+		CPUCount:              sizing.CPUCount,
+		MemoryBytes:           sizing.MemoryBytes,
+		MachineIdentifierPath: r.layout.MachineIdentifierFile(),
+		ConsoleLogPath:        r.layout.ConsoleLogFile(),
+		SharedDirs:            sharedDirs,
+	}
+
+	return &GuestConfig{
+		Controller: controller,
+		Machine:    machineConfig,
+	}, nil
+}
+
+func resolveDiskAsset(payload *localstate.PayloadRef) (*localstate.PayloadDiskRef, error) {
+	if payload == nil {
+		return nil, ErrPayloadSelectionMissing
+	}
+	if payload.Disk == nil {
+		return nil, fmt.Errorf("%w: payload does not describe a disk image", ErrPayloadBootAssetsMissing)
+	}
+	if !isCachedFile(payload.Disk.Path) {
+		return nil, fmt.Errorf(
+			"%w: disk image not cached at %q",
+			ErrPayloadBootAssetsMissing,
+			payload.Disk.Path,
+		)
+	}
+
+	return payload.Disk, nil
+}
+
+// stageBootDiskImage hard-links (or copies) the cached disk image into the
+// deployment's VM dir so vz reads from a stable, deployment-owned path. We
+// also use the staged path as the rw target for vz, leaving the asset cache
+// pristine.
+func (r *Runtime) stageBootDiskImage(sourcePath string) (string, error) {
+	targetPath := r.layout.BootDiskImagePath()
+
+	if info, err := os.Stat(targetPath); err == nil && !info.IsDir() {
+		return targetPath, nil
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("failed to stat staged boot disk image: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(targetPath), localRuntimeDirMode); err != nil {
+		return "", fmt.Errorf("failed to create VM dir: %w", err)
+	}
+
+	if err := os.Link(sourcePath, targetPath); err == nil {
+		return targetPath, nil
+	}
+
+	if err := copyFile(sourcePath, targetPath, localRuntimeFileMode); err != nil {
+		return "", fmt.Errorf("failed to stage boot disk image: %w", err)
+	}
+	return targetPath, nil
+}
+
+// prepareHostShare stages a container tarball + container-manifest.json into
+// the deployment's host-share dir so the guest's load-shared-container
+// service finds them at /mnt/host. Refreshes the staged tarball when the
+// cached source has changed (sha256 mismatch).
+func (r *Runtime) prepareHostShare(
+	payload *localstate.PayloadRef,
+	ports *ConnectionPorts,
+) (vm.SharedDir, error) {
+	if err := os.MkdirAll(r.layout.HostShareDir(), localRuntimeDirMode); err != nil {
+		return vm.SharedDir{}, fmt.Errorf("failed to create host share dir: %w", err)
+	}
+
+	if payload.Container != nil && strings.TrimSpace(payload.Container.Path) != "" {
+		if err := r.stageContainerArchive(payload.Container); err != nil {
+			return vm.SharedDir{}, err
+		}
+		if err := r.writeContainerManifest(payload.Container, ports); err != nil {
+			return vm.SharedDir{}, err
+		}
+	}
+
+	return vm.SharedDir{
+		Tag:         defaultHostShareTag,
+		Source:      r.layout.HostShareDir(),
+		Destination: "/mnt/host",
+		ReadOnly:    false,
+	}, nil
+}
+
+func (r *Runtime) stageContainerArchive(container *localstate.PayloadContainerRef) error {
+	target := r.layout.ContainerImageArchivePath()
+	checksumPath := r.layout.ContainerImageChecksumPath()
+
+	currentSha, err := sha256File(container.Path)
+	if err != nil {
+		return fmt.Errorf("failed to hash container archive: %w", err)
+	}
+
+	if existing, err := os.ReadFile(checksumPath); err == nil &&
+		strings.TrimSpace(string(existing)) == currentSha {
+		if _, statErr := os.Stat(target); statErr == nil {
+			return nil
+		}
+	}
+
+	if err := os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to reset staged container archive: %w", err)
+	}
+
+	if err := os.Link(container.Path, target); err != nil {
+		if err := copyFile(container.Path, target, localRuntimeFileMode); err != nil {
+			return fmt.Errorf("failed to stage container archive: %w", err)
+		}
+	}
+
+	if err := os.WriteFile(
+		checksumPath,
+		[]byte(currentSha+"\n"),
+		localRuntimeFileMode,
+	); err != nil {
+		return fmt.Errorf("failed to write container archive checksum: %w", err)
+	}
+	return nil
+}
+
+func (r *Runtime) writeContainerManifest(
+	container *localstate.PayloadContainerRef,
+	_ *ConnectionPorts,
+) error {
+	type manifest struct {
+		ContainerFile string   `json:"containerFile"`
+		Ports         []int    `json:"ports"`
+		Args          []string `json:"args"`
+		ShmSize       string   `json:"shmSize,omitempty"`
+	}
+
+	args := container.Args
+	if args == nil {
+		args = []string{}
+	}
+	ports := container.Ports
+	if len(ports) == 0 {
+		// The guest container publishes on the same ports the host expects to
+		// forward to. exasol-nano-vm's load-shared-container declares ports
+		// for documentation/logging; the actual binding happens inside the
+		// container via --network host.
+		ports = []int{8563, 8443}
+	}
+
+	body, err := json.MarshalIndent(manifest{
+		ContainerFile: filepath.Base(r.layout.ContainerImageArchivePath()),
+		Ports:         ports,
+		Args:          args,
+		ShmSize:       container.ShmSize,
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to encode container manifest: %w", err)
+	}
+
+	if err := os.WriteFile(
+		r.layout.ContainerManifestPath(),
+		append(body, '\n'),
+		localRuntimeFileMode,
+	); err != nil {
+		return fmt.Errorf("failed to write container manifest: %w", err)
+	}
+	return nil
+}
+
+func sha256File(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func resolveBootAssets(payload *localstate.PayloadRef) (*bootAssets, error) {

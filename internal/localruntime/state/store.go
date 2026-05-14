@@ -12,16 +12,32 @@ import (
 )
 
 type PayloadRef struct {
-	Version      string          `json:"version,omitempty"`
-	Architecture string          `json:"architecture,omitempty"`
-	Checksum     string          `json:"checksum,omitempty"`
-	CachePath    string          `json:"cachePath,omitempty"`
-	Boot         *PayloadBootRef `json:"boot,omitempty"`
+	Version      string               `json:"version,omitempty"`
+	Architecture string               `json:"architecture,omitempty"`
+	Checksum     string               `json:"checksum,omitempty"`
+	CachePath    string               `json:"cachePath,omitempty"`
+	Boot         *PayloadBootRef      `json:"boot,omitempty"`
+	Disk         *PayloadDiskRef      `json:"disk,omitempty"`
+	Container    *PayloadContainerRef `json:"container,omitempty"`
 }
 
 type PayloadBootRef struct {
 	KernelPath string `json:"kernelPath,omitempty"`
 	InitrdPath string `json:"initrdPath,omitempty"`
+}
+
+// PayloadDiskRef records the cached path of a UEFI disk-image payload.
+type PayloadDiskRef struct {
+	Path string `json:"path,omitempty"`
+}
+
+// PayloadContainerRef records the cached path and runtime metadata for a
+// guest container image shipped with the payload.
+type PayloadContainerRef struct {
+	Path    string   `json:"path,omitempty"`
+	ShmSize string   `json:"shmSize,omitempty"`
+	Ports   []int    `json:"ports,omitempty"`
+	Args    []string `json:"args,omitempty"`
 }
 
 type State struct {

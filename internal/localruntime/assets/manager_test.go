@@ -4,12 +4,16 @@
 package assets
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -212,6 +216,141 @@ func TestManagerEnsureBootCached_DownloadsAndReusesBootAssets(t *testing.T) {
 			hits["https://example.invalid/ubuntu-initrd.cpio.gz"],
 		)
 	}
+}
+
+func TestManagerEnsureCached_ExtractsTarGzEntry(t *testing.T) {
+	t.Parallel()
+
+	innerBytes := []byte("hello-disk-image-bytes")
+	archiveBytes := buildTarGz(t, "release/exasol-vm.img", innerBytes)
+	archiveSHA := sha256Hex(archiveBytes)
+
+	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
+	var hits int
+	var mu sync.Mutex
+	manager.HTTPClient = testHTTPClient(func(req *http.Request) (*http.Response, error) {
+		if req.URL.String() != "https://example.invalid/release.tar.gz" {
+			return nil, fmt.Errorf("unexpected URL %s", req.URL)
+		}
+		mu.Lock()
+		hits++
+		mu.Unlock()
+		return newHTTPResponseBytes(http.StatusOK, archiveBytes), nil
+	})
+	payload := &Payload{
+		Version:      "1.2.3",
+		Architecture: "arm64",
+		Disk: &Asset{
+			URL:         "https://example.invalid/release.tar.gz",
+			SHA256:      archiveSHA,
+			Filename:    "release.tar.gz",
+			Format:      "tar.gz",
+			ExtractPath: "release/exasol-vm.img",
+		},
+	}
+
+	first, err := manager.EnsureDiskCached(context.Background(), payload)
+	if err != nil {
+		t.Fatalf("first call failed: %v", err)
+	}
+	got, err := os.ReadFile(first.Path)
+	if err != nil {
+		t.Fatalf("read extracted: %v", err)
+	}
+	if string(got) != string(innerBytes) {
+		t.Fatalf("extracted bytes mismatch: got %q", got)
+	}
+
+	second, err := manager.EnsureDiskCached(context.Background(), payload)
+	if err != nil {
+		t.Fatalf("second call failed: %v", err)
+	}
+	if second.Path != first.Path {
+		t.Fatalf("cache path drifted: %q vs %q", first.Path, second.Path)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if hits != 1 {
+		t.Fatalf("expected exactly one download, got %d", hits)
+	}
+}
+
+func TestManagerEnsureCached_TarGzMissingEntryFails(t *testing.T) {
+	t.Parallel()
+
+	archiveBytes := buildTarGz(t, "release/exasol-vm.img", []byte("payload"))
+	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
+	manager.HTTPClient = testHTTPClient(func(*http.Request) (*http.Response, error) {
+		return newHTTPResponseBytes(http.StatusOK, archiveBytes), nil
+	})
+	payload := &Payload{
+		Version:      "1.2.3",
+		Architecture: "arm64",
+		Disk: &Asset{
+			URL:         "https://example.invalid/release.tar.gz",
+			SHA256:      sha256Hex(archiveBytes),
+			Filename:    "release.tar.gz",
+			Format:      "tar.gz",
+			ExtractPath: "release/missing.img",
+		},
+	}
+
+	if _, err := manager.EnsureDiskCached(context.Background(), payload); err == nil {
+		t.Fatalf("expected extraction to fail on missing entry")
+	}
+}
+
+func TestManagerEnsureCached_RejectsUnsupportedFormat(t *testing.T) {
+	t.Parallel()
+
+	archiveBytes := []byte("not really an archive")
+	manager := NewManager("https://example.invalid/metadata.json", t.TempDir())
+	manager.HTTPClient = testHTTPClient(func(*http.Request) (*http.Response, error) {
+		return newHTTPResponseBytes(http.StatusOK, archiveBytes), nil
+	})
+	payload := &Payload{
+		Version:      "1.2.3",
+		Architecture: "arm64",
+		Disk: &Asset{
+			URL:         "https://example.invalid/release.unknown",
+			SHA256:      sha256Hex(archiveBytes),
+			Filename:    "release.unknown",
+			Format:      "tar.bz2",
+			ExtractPath: "release/foo.img",
+		},
+	}
+
+	if _, err := manager.EnsureDiskCached(context.Background(), payload); err == nil {
+		t.Fatalf("expected unsupported format to fail validation")
+	}
+}
+
+func buildTarGz(t *testing.T, entryName string, body []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+
+	header := &tar.Header{
+		Name:     entryName,
+		Mode:     0o600,
+		Size:     int64(len(body)),
+		Typeflag: tar.TypeReg,
+	}
+	if err := tw.WriteHeader(header); err != nil {
+		t.Fatalf("write tar header: %v", err)
+	}
+	if _, err := tw.Write(body); err != nil {
+		t.Fatalf("write tar body: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	return buf.Bytes()
 }
 
 type roundTripFunc func(req *http.Request) (*http.Response, error)

@@ -30,11 +30,23 @@ type PortForward struct {
 	GuestPort int
 }
 
+// BootMode selects how the guest is booted.
+type BootMode int
+
+const (
+	// BootModeLinux direct-boots a kernel + initrd with a kernel command line.
+	BootModeLinux BootMode = iota
+	// BootModeEFI boots a UEFI disk image and uses a persistent EFI variable store.
+	BootModeEFI
+)
+
 type MachineConfig struct {
 	Name                  string
+	BootMode              BootMode
 	KernelPath            string
 	InitrdPath            string
 	KernelCommandLine     string
+	EFIVariableStorePath  string
 	DiskImage             string
 	CPUCount              int
 	MemoryBytes           uint64

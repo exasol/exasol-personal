@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/localruntime/vm"
 )
@@ -16,8 +17,9 @@ import (
 const defaultGuestIPv4 = "192.168.64.2"
 
 const (
-	defaultGuestSQLPort = 8563
-	defaultGuestUIPort  = 8443
+	defaultGuestSQLPort      = 8563
+	defaultGuestUIPort       = 8443
+	stopRequestPollInterval  = 200 * time.Millisecond
 )
 
 var newVMDriver = vm.New
@@ -85,9 +87,45 @@ func (r *Runtime) Run(ctx context.Context) error {
 		return err
 	}
 
+	// In EFI mode the guest does not mount a control share, so it can't read
+	// stop.request itself. Watch it on the host and trigger a vz ACPI stop
+	// (driver.Stop) so the guest's acpid + OpenRC shutdown runs cleanly.
+	if guest.Machine.BootMode == vm.BootModeEFI {
+		watcherCtx, cancelWatcher := context.WithCancel(ctx)
+		defer cancelWatcher()
+		go r.watchStopRequest(watcherCtx, driver)
+	}
+
 	if err := driver.Wait(ctx); err != nil {
 		return fmt.Errorf("local runtime terminated unexpectedly: %w", err)
 	}
 
 	return nil
+}
+
+func (r *Runtime) watchStopRequest(ctx context.Context, driver vm.Driver) {
+	ticker := time.NewTicker(stopRequestPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		if _, err := os.Stat(r.layout.StopRequestPath()); err == nil {
+			if stopErr := driver.Stop(ctx); stopErr != nil &&
+				!errors.Is(stopErr, context.Canceled) {
+				slog.Warn(
+					"failed to send ACPI stop to local VM",
+					"error", stopErr,
+				)
+			}
+			return
+		} else if !errors.Is(err, os.ErrNotExist) {
+			slog.Warn("failed to poll local runtime stop request", "error", err)
+			return
+		}
+	}
 }

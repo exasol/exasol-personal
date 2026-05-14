@@ -31,6 +31,14 @@ type payloadManager interface {
 		ctx context.Context,
 		payload *localassets.Payload,
 	) (*localassets.CachedBootAssets, error)
+	EnsureDiskCached(
+		ctx context.Context,
+		payload *localassets.Payload,
+	) (*localassets.CachedDiskAsset, error)
+	EnsureContainerCached(
+		ctx context.Context,
+		payload *localassets.Payload,
+	) (*localassets.CachedContainerAsset, error)
 }
 
 var (
@@ -75,15 +83,28 @@ func (r *Runtime) EnsurePayloadSelected(ctx context.Context) (*localstate.Payloa
 	if err != nil {
 		return nil, err
 	}
-	if payload.Boot == nil || payload.Boot.Kernel == nil || payload.Boot.Initrd == nil {
+
+	switch {
+	case payload.Disk != nil:
+		return r.persistDiskPayload(ctx, manager, payload, state)
+	case payload.Boot != nil && payload.Boot.Kernel != nil && payload.Boot.Initrd != nil:
+		return r.persistLinuxPayload(ctx, manager, payload, state)
+	default:
 		return nil, fmt.Errorf(
-			"%w: payload %s/%s does not describe kernel and initrd assets",
+			"%w: payload %s/%s describes neither a disk image nor kernel+initrd assets",
 			ErrPayloadBootAssetsMissing,
 			strings.TrimSpace(payload.Version),
 			strings.TrimSpace(payload.Architecture),
 		)
 	}
+}
 
+func (r *Runtime) persistLinuxPayload(
+	ctx context.Context,
+	manager payloadManager,
+	payload *localassets.Payload,
+	state *localstate.State,
+) (*localstate.PayloadRef, error) {
 	cachePath, err := manager.EnsureCached(ctx, payload)
 	if err != nil {
 		return nil, err
@@ -110,6 +131,48 @@ func (r *Runtime) EnsurePayloadSelected(ctx context.Context) (*localstate.Payloa
 	return state.Payload, nil
 }
 
+func (r *Runtime) persistDiskPayload(
+	ctx context.Context,
+	manager payloadManager,
+	payload *localassets.Payload,
+	state *localstate.State,
+) (*localstate.PayloadRef, error) {
+	diskAsset, err := manager.EnsureDiskCached(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	ref := &localstate.PayloadRef{
+		Version:      strings.TrimSpace(payload.Version),
+		Architecture: strings.TrimSpace(payload.Architecture),
+		Checksum:     strings.TrimSpace(payload.Disk.SHA256),
+		CachePath:    diskAsset.Path,
+		Disk:         &localstate.PayloadDiskRef{Path: diskAsset.Path},
+	}
+
+	if payload.Container != nil {
+		containerAsset, err := manager.EnsureContainerCached(ctx, payload)
+		if err != nil {
+			return nil, err
+		}
+		if containerAsset != nil {
+			ref.Container = &localstate.PayloadContainerRef{
+				Path:    containerAsset.Path,
+				ShmSize: strings.TrimSpace(payload.Container.ShmSize),
+				Ports:   payload.Container.Ports,
+				Args:    payload.Container.Args,
+			}
+		}
+	}
+
+	state.Payload = ref
+	if err := r.SaveState(state); err != nil {
+		return nil, err
+	}
+
+	return state.Payload, nil
+}
+
 func cachedPayloadRef(state *localstate.State) *localstate.PayloadRef {
 	if state == nil || state.Payload == nil {
 		return nil
@@ -117,15 +180,25 @@ func cachedPayloadRef(state *localstate.State) *localstate.PayloadRef {
 	if !isCachedFile(state.Payload.CachePath) {
 		return nil
 	}
-	if state.Payload.Boot == nil {
-		return nil
-	}
-	if !isCachedFile(state.Payload.Boot.KernelPath) ||
-		!isCachedFile(state.Payload.Boot.InitrdPath) {
-		return nil
-	}
 
-	return state.Payload
+	switch {
+	case state.Payload.Disk != nil:
+		if !isCachedFile(state.Payload.Disk.Path) {
+			return nil
+		}
+		if state.Payload.Container != nil && !isCachedFile(state.Payload.Container.Path) {
+			return nil
+		}
+		return state.Payload
+	case state.Payload.Boot != nil:
+		if !isCachedFile(state.Payload.Boot.KernelPath) ||
+			!isCachedFile(state.Payload.Boot.InitrdPath) {
+			return nil
+		}
+		return state.Payload
+	default:
+		return nil
+	}
 }
 
 func isCachedFile(path string) bool {
