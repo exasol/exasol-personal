@@ -140,7 +140,9 @@ data "cloudinit_config" "cloud_config" {
     content {
       content_type = "text/cloud-config"
       filename = "05-infra-cloudconf-${part.value}"
-      content  = file("${local.infrastructure_cloudconf_dir}/${part.value}")
+      content  = templatefile("${local.infrastructure_cloudconf_dir}/${part.value}", {
+        admin_ssh_public_key = tls_private_key.ssh_key.public_key_openssh
+      })
     }
   }
 

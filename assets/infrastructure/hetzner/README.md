@@ -47,6 +47,12 @@ Additionally, internal traffic (TCP/UDP/ICMP) is allowed between cluster nodes v
 - All resources carry labels: `managed_by=opentofu`, `project=exasol-personal`, `deployment_id=exasol-<id>`.
 - The cleanup tool uses these labels to discover and manage deployments.
 
+## Power State Management
+
+`exasol stop` and `exasol start` control VM power state directly via the Hetzner Cloud API using the server IDs stored in `deployment.json`. No Terraform resources are involved in stop/start — the Go launcher calls the Hetzner API (`/v1/servers/{id}/actions/shutdown` and `/v1/servers/{id}/actions/poweron`) and waits for the action to complete. This avoids Terraform state drift that would occur with provisioner-based approaches.
+
+`HCLOUD_TOKEN` must be set in the environment when running `exasol stop` or `exasol start`.
+
 ## Deployment Artifacts
 After a successful apply, the following files are written to the deployment directory:
 - `deployment.json` — connection info (IPs, ports, instance IDs)

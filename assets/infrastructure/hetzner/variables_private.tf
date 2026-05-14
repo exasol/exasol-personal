@@ -26,12 +26,3 @@ variable "os_image" {
   default     = "ubuntu-22.04"
 }
 
-variable "power_state" {
-  description = "Target power state for instances"
-  type        = string
-  default     = "running"
-  validation {
-    condition     = contains(["running", "stopped"], var.power_state)
-    error_message = "Allowed values are: running, stopped"
-  }
-}

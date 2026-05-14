@@ -9,7 +9,7 @@ locals {
     deploymentId     = local.deployment_id
     region       = var.location
     clusterSize  = var.cluster_size
-    clusterState = var.power_state
+    clusterState = "running"
     instanceType = var.server_type
     vpcId            = hcloud_network.cluster.id
     subnetId         = hcloud_network_subnet.cluster.id

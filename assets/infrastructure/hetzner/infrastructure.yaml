@@ -4,3 +4,6 @@ description: Provisioning on Hetzner Cloud. Ubuntu, block storage data volume, p
 tofu:
   variablesFile: variables_public.tf
   varsOutputFile: vars.tfvars
+
+powerControl:
+  provider: hetzner

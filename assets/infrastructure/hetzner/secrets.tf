@@ -1,17 +1,21 @@
 resource "random_password" "db" {
-  length      = 8
-  special     = false
-  min_upper   = 1
-  min_lower   = 1
-  min_numeric = 1
+  length           = 20
+  special          = true
+  override_special = "!#$%&*-_=+?"
+  min_upper        = 2
+  min_lower        = 2
+  min_numeric      = 2
+  min_special      = 2
 }
 
 resource "random_password" "adminui" {
-  length      = 8
-  special     = false
-  min_upper   = 1
-  min_lower   = 1
-  min_numeric = 1
+  length           = 20
+  special          = true
+  override_special = "!#$%&*-_=+?"
+  min_upper        = 2
+  min_lower        = 2
+  min_numeric      = 2
+  min_special      = 2
 }
 
 resource "tls_private_key" "tls_ca_key" {
