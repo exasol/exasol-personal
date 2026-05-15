@@ -26,3 +26,13 @@ variable "os_image" {
   default     = "ubuntu-22.04"
 }
 
+variable "power_state" {
+  description = "Target power state for instances. Accepted for API compatibility; power control is handled externally via the Hetzner Cloud API."
+  type        = string
+  default     = "running"
+  validation {
+    condition     = contains(["running", "stopped"], var.power_state)
+    error_message = "Allowed values are: running, stopped"
+  }
+}
+

@@ -113,7 +113,7 @@ func Start(
 			err = applyAction(
 				ctx,
 				deployment,
-				"",
+				"power_state=running",
 				util.CombineWriters(logBuffer, externalCommandOutput),
 				util.CombineWriters(logBuffer, externalCommandOutput),
 			)
@@ -294,7 +294,7 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 			err = applyAction(
 				ctx,
 				deployment,
-				"",
+				"power_state=stopped",
 				util.CombineWriters(logBuffer, externalCommandOutput),
 				util.CombineWriters(logBuffer, externalCommandOutput),
 			)
