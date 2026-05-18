@@ -1,0 +1,28 @@
+#cloud-config
+# Hetzner Ubuntu images use 'root' as the default user, but the Exasol
+# installation scripts expect a 'ubuntu' user. Create it here.
+
+# The public SSH key is injected via cloud-config to avoid timing issues
+# with Hetzner's SSH key injection mechanism.
+ssh_authorized_keys:
+  - ${admin_ssh_public_key}
+
+users:
+  - name: ubuntu
+    gecos: Ubuntu User
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    groups: sudo
+    ssh_authorized_keys:
+      - ${admin_ssh_public_key}
+
+# Populate known_hosts so the barrier client can SSH to itself without host key prompts.
+# The private network may not be up immediately, so retry with a delay.
+runcmd:
+  - |
+    for i in $(seq 1 30); do
+      ssh-keyscan -H 172.16.0.20 >> /home/ubuntu/.ssh/known_hosts 2>/dev/null && break
+      sleep 2
+    done
+  - "ssh-keyscan -H localhost >> /home/ubuntu/.ssh/known_hosts 2>/dev/null || true"
+  - "chown ubuntu:ubuntu /home/ubuntu/.ssh/known_hosts"

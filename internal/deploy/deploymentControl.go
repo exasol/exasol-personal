@@ -5,6 +5,7 @@ package deploy
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -101,6 +102,13 @@ func Start(
 			}
 
 			logBuffer := task_runner.NewLogBuffer()
+
+			if err = doPowerControl(ctx, deployment, powerStart); err != nil {
+				logBuffer.ReplayLogMessages(ctx)
+				slog.Error("failed to start VMs")
+
+				return err
+			}
 
 			err = applyAction(
 				ctx,
@@ -293,7 +301,14 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 			if err != nil {
 				logBuffer.ReplayLogMessages(ctx)
 				slog.Error("failed to stop the deployment")
-				// should this be a failure state that requires destroy?
+
+				return err
+			}
+
+			if err = doPowerControl(ctx, deployment, powerStop); err != nil {
+				logBuffer.ReplayLogMessages(ctx)
+				slog.Error("failed to stop VMs")
+
 				return err
 			}
 
@@ -309,6 +324,51 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 
 			return nil
 		})
+}
+
+type powerAction int
+
+const (
+	powerStop  powerAction = iota
+	powerStart powerAction = iota
+)
+
+func doPowerControl(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	action powerAction,
+) error {
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return fmt.Errorf("failed to read infrastructure manifest for power control: %w", err)
+	}
+
+	if manifest.PowerControl == nil {
+		return nil
+	}
+
+	nodeDetails, err := config.ReadNodeDetails(deployment)
+	if err != nil {
+		return fmt.Errorf("failed to read node details for power control: %w", err)
+	}
+
+	instanceIDs := make([]string, 0, len(nodeDetails.Nodes))
+	for _, node := range nodeDetails.Nodes {
+		if node.InstanceId != "" {
+			instanceIDs = append(instanceIDs, node.InstanceId)
+		}
+	}
+
+	switch manifest.PowerControl.Provider {
+	case "hetzner":
+		if action == powerStop {
+			return hetznerStopServers(ctx, instanceIDs)
+		}
+
+		return hetznerStartServers(ctx, instanceIDs)
+	default:
+		return fmt.Errorf("unknown power control provider: %q", manifest.PowerControl.Provider)
+	}
 }
 
 func applyAction(

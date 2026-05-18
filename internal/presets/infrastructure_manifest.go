@@ -20,11 +20,17 @@ type InfrastructureTofu struct {
 	VarsOutputFile string `yaml:"varsOutputFile"`
 }
 
+// InfrastructurePowerControl captures optional power control configuration from the manifest.
+type InfrastructurePowerControl struct {
+	Provider string `yaml:"provider"`
+}
+
 // InfrastructureManifest represents the infrastructure metadata and optional tofu configuration.
 type InfrastructureManifest struct {
-	Name        string              `yaml:"name"`
-	Description string              `yaml:"description"`
-	Tofu        *InfrastructureTofu `yaml:"tofu,omitempty"`
+	Name         string                      `yaml:"name"`
+	Description  string                      `yaml:"description"`
+	Tofu         *InfrastructureTofu         `yaml:"tofu,omitempty"`
+	PowerControl *InfrastructurePowerControl `yaml:"powerControl,omitempty"`
 }
 
 var (

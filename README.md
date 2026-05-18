@@ -24,7 +24,7 @@
 - ♾️ **Unlimited Data** — Store and analyze unlimited amounts of data with no artificial limits
 - 📈 **Scalable Architecture** — Scale up to any number of nodes using Exasol's MPP (Massively Parallel Processing) architecture
 - 🤖 **Built-in AI Functions** — Leverage native AI/ML capabilities with GPU acceleration
-- ⚙️ **Simple Deployment** — Spin up a distributed cluster on AWS, Azure, or Exoscale with just a few commands
+- ⚙️ **Simple Deployment** — Spin up a distributed cluster on AWS, Azure, Exoscale, or Hetzner Cloud with just a few commands
 - 🖥️ **Cross-Platform CLI** — Install and manage your cluster using the Exasol Launcher on Linux, macOS, or Windows
 
 
@@ -35,6 +35,7 @@ A cloud account on one of the supported platforms with permission to provision c
 - **AWS** — [Set up an AWS account for Exasol Personal](./HOWTO_SETUP_AWS_ACCOUNT.md)
 - **Azure** — [Set up an Azure account for Exasol Personal](./HOWTO_SETUP_AZURE_ACCOUNT.md)
 - **Exoscale** — [Set up an Exoscale account for Exasol Personal](./HOWTO_SETUP_EXOSCALE_ACCOUNT.md)
+- **Hetzner Cloud** — [Set up a Hetzner Cloud account for Exasol Personal](./HOWTO_SETUP_HETZNER_ACCOUNT.md)
 
 
 ## 🏎️ Quick Start (macOS / Linux)
@@ -61,6 +62,10 @@ exasol install azure      # Microsoft Azure
 
 ```bash
 exasol install exoscale   # Exoscale
+```
+
+```bash
+exasol install hetzner    # Hetzner Cloud
 ```
 
 Read on for Windows instructions and full details.
@@ -92,6 +97,7 @@ Read on for Windows instructions and full details.
    exasol install aws        # Amazon Web Services
    exasol install azure      # Microsoft Azure
    exasol install exoscale   # Exoscale
+   exasol install hetzner    # Hetzner Cloud
    ```
    The `exasol install` command does the following:
    - Generates OpenTofu files in the deployment directory

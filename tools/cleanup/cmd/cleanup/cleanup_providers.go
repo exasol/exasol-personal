@@ -9,6 +9,7 @@ import (
 
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/hetzner"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 	"github.com/spf13/cobra"
 )
@@ -43,6 +44,15 @@ var cleanupProvidersCmd = &cobra.Command{
 			collectors = append(collectors, exoscale.NewCollector(exoscaleZone, "", false))
 		}
 
+		// Hetzner provider
+		if shouldUseProvider(hetzner.ProviderName) {
+			hetznerLocation := cleanupOpts.HetznerLocation
+			if hetznerLocation == "" {
+				hetznerLocation = "fsn1"
+			}
+			collectors = append(collectors, hetzner.NewCollector(hetznerLocation, "", false))
+		}
+
 		for _, collector := range collectors {
 			providerName := collector.Name()
 			// Capitalize and pad provider name for alignment
@@ -51,6 +61,8 @@ var cleanupProvidersCmd = &cobra.Command{
 				displayName = "AWS"
 			} else if displayName == "exoscale" {
 				displayName = "Exoscale"
+			} else if displayName == "hetzner" {
+				displayName = "Hetzner"
 			}
 
 			// Pad to 11 characters for alignment

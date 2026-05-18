@@ -6,15 +6,18 @@ package main
 import (
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/hetzner"
 	"github.com/spf13/cobra"
 )
 
 var cleanupOpts = struct {
-	AWSRegion    string
-	ExoscaleZone string
-	Verbose      bool
-	AWS          bool
-	Exoscale     bool
+	AWSRegion       string
+	ExoscaleZone    string
+	HetznerLocation string
+	Verbose         bool
+	AWS             bool
+	Exoscale        bool
+	Hetzner         bool
 }{}
 
 // getSelectedProviders returns a list of provider names that should be used.
@@ -29,10 +32,13 @@ func getSelectedProviders() []string {
 	if cleanupOpts.Exoscale {
 		selected = append(selected, exoscale.ProviderName)
 	}
+	if cleanupOpts.Hetzner {
+		selected = append(selected, hetzner.ProviderName)
+	}
 	
 	// If none selected, use all available providers
 	if len(selected) == 0 {
-		return []string{aws.ProviderName, exoscale.ProviderName}
+		return []string{aws.ProviderName, exoscale.ProviderName, hetzner.ProviderName}
 	}
 	
 	return selected
@@ -67,6 +73,12 @@ func registerRootFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().
 		BoolVar(&cleanupOpts.Exoscale, "exoscale", false,
 			"Use Exoscale provider")
+	cmd.PersistentFlags().
+		StringVar(&cleanupOpts.HetznerLocation, "hetzner-location", "fsn1",
+			"Hetzner Cloud location containing the deployment resources (default: fsn1)")
+	cmd.PersistentFlags().
+		BoolVar(&cleanupOpts.Hetzner, "hetzner", false,
+			"Use Hetzner provider")
 }
 
 // nolint: gochecknoinits
