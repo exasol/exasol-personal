@@ -44,11 +44,15 @@ func PlanActions(details *DeploymentDetails, typeFilter []ResourceType) ([]Actio
 	var actions []Action
 	for _, phase := range plan.Phases {
 		for _, resource := range details.Resources {
+			name, _ := resource.Attr["name"].(string)
+			state, _ := resource.Attr["state"].(string)
 			if !containsType(phase.Types, resource.Ref.Type) {
+				slog.Debug("PlanActions: skipping resource (type not in phase)", "type", resource.Ref.Type, "name", name, "state", state)
 				continue
 			}
 			if len(filter) > 0 {
 				if _, ok := filter[resource.Ref.Type]; !ok {
+					slog.Debug("PlanActions: skipping resource (type filtered)", "type", resource.Ref.Type, "name", name, "state", state)
 					continue
 				}
 			}
@@ -56,7 +60,9 @@ func PlanActions(details *DeploymentDetails, typeFilter []ResourceType) ([]Actio
 			if resource.Protected {
 				act.Op = OpSkip
 				act.Reason = "protected"
+				slog.Debug("PlanActions: skipping resource (protected)", "type", resource.Ref.Type, "name", name, "state", state)
 			}
+			slog.Debug("PlanActions: adding action", "type", resource.Ref.Type, "name", name, "state", state, "op", act.Op)
 			actions = append(actions, act)
 		}
 	}
@@ -104,7 +110,7 @@ func ExecuteActions(ctx context.Context, zone string, actions []Action, execute 
 				)
 			} else {
 				res.Status = "success"
-				slog.Info("cleanup success", "op", action.Op, "id",
+				slog.Debug("cleanup success", "op", action.Op, "id",
 					action.Ref.ID, "type", action.Ref.Type)
 			}
 		} else if action.Op == OpSkip {

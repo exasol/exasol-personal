@@ -125,6 +125,7 @@ func CollectDeploymentDetails(
 			
 			nameStr := fullInst.Name
 			labels := fullInst.Labels
+			slog.Info("discovered instance", "id", instID, "name", nameStr, "labels", labels, "deploymentID", deploymentID)
 			
 			if !matchesDeployment(&nameStr, labels, deploymentID) {
 				continue
@@ -171,6 +172,8 @@ func CollectDeploymentDetails(
 			case StateStopped:
 				hasStopped = true
 			}
+			
+			details.Resources = append(details.Resources, meta)
 		}
 	}
 
@@ -433,9 +436,28 @@ func CollectDeploymentSummaries(
 	}
 
 	summaries := make(map[string]*DeploymentSummary)
-	deploymentIDRegex := regexp.MustCompile(`^exasol-[a-f0-9]{8}$`)
 
-	// Discover deployments via compute instances (primary resource)
+	// Helper to get or create deployment summary entry
+	getOrCreateSummary := func(depID, owner string, createdAt time.Time) *DeploymentSummary {
+		if sum, ok := summaries[depID]; ok {
+			return sum
+		}
+		sum := &DeploymentSummary{
+			ID:        depID,
+			Provider:  "exoscale",
+			Region:    zone,
+			Owner:     owner,
+			CreatedAt: createdAt,
+			State:     StateUnknown,
+		}
+		summaries[depID] = sum
+		return sum
+	}
+
+	// Phase 1: Discover deployments from resources with deployment_id labels
+	// These are the authoritative sources for deployment existence
+	
+	// Discover from compute instances
 	instancesResp, err := client.ListInstances(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list instances: %w", err)
@@ -443,30 +465,17 @@ func CollectDeploymentSummaries(
 
 	if instancesResp != nil && instancesResp.Instances != nil {
 		for _, inst := range instancesResp.Instances {
-			depID := extractDeploymentID(&inst.Name, inst.Labels, deploymentIDRegex)
-			if depID == "" {
+			depID, ok := inst.Labels["deployment_id"]
+			if !ok || depID == "" {
 				continue
 			}
 
 			owner := inst.Labels["owner"]
-
 			if !ownerMatchesFilter(owner, ownerFilter) {
 				continue
 			}
 
-			sum := summaries[depID]
-			if sum == nil {
-				sum = &DeploymentSummary{
-					ID:        depID,
-					Provider:  "exoscale",
-					Region:    zone,
-					Owner:     owner,
-					CreatedAt: time.Time{},
-					State:     StateUnknown,
-				}
-				summaries[depID] = sum
-			}
-
+			sum := getOrCreateSummary(depID, owner, inst.CreatedAT)
 			sum.Resources++
 
 			if !inst.CreatedAT.IsZero() && (sum.CreatedAt.IsZero() || inst.CreatedAT.Before(sum.CreatedAt)) {
@@ -488,34 +497,60 @@ func CollectDeploymentSummaries(
 		}
 	}
 
-	// Block storage volumes
+	// Discover from block storage volumes
 	volumesResp, _ := client.ListBlockStorageVolumes(ctx)
 	if volumesResp != nil && volumesResp.BlockStorageVolumes != nil {
 		for _, vol := range volumesResp.BlockStorageVolumes {
-			depID := extractDeploymentIDFromLabels(vol.Labels, deploymentIDRegex)
-			if sum, ok := summaries[depID]; ok {
-				sum.Resources++
+			depID, ok := vol.Labels["deployment_id"]
+			if !ok || depID == "" {
+				continue
+			}
+
+			owner := vol.Labels["owner"]
+			if !ownerMatchesFilter(owner, ownerFilter) {
+				continue
+			}
+
+			sum := getOrCreateSummary(depID, owner, vol.CreatedAT)
+			sum.Resources++
+
+			if !vol.CreatedAT.IsZero() && (sum.CreatedAt.IsZero() || vol.CreatedAT.Before(sum.CreatedAt)) {
+				sum.CreatedAt = vol.CreatedAT
 			}
 		}
 	}
 	
-	// Count other resources for each deployment
+	// Discover from private networks
 	networksResp, _ := client.ListPrivateNetworks(ctx)
 	if networksResp != nil && networksResp.PrivateNetworks != nil {
 		for _, net := range networksResp.PrivateNetworks {
-			depID := extractDeploymentID(&net.Name, net.Labels, deploymentIDRegex)
-			if sum, ok := summaries[depID]; ok {
-				sum.Resources++
+			depID, ok := net.Labels["deployment_id"]
+			if !ok || depID == "" {
+				continue
 			}
+
+			owner := net.Labels["owner"]
+			if !ownerMatchesFilter(owner, ownerFilter) {
+				continue
+			}
+
+			sum := getOrCreateSummary(depID, owner, time.Time{})
+			sum.Resources++
 		}
 	}
 
+	// Phase 2: Count other resources only if their deployment already exists
+	// These resources don't have deployment_id labels, so we only count them
+	
 	securityGroupsResp, _ := client.ListSecurityGroups(ctx)
 	if securityGroupsResp != nil && securityGroupsResp.SecurityGroups != nil {
 		for _, sg := range securityGroupsResp.SecurityGroups {
-			depID := extractDeploymentIDFromName(&sg.Name, deploymentIDRegex)
-			if sum, ok := summaries[depID]; ok {
-				sum.Resources++
+			// Only count if deployment already discovered
+			for depID, sum := range summaries {
+				if matchesDeploymentName(&sg.Name, depID) {
+					sum.Resources++
+					break
+				}
 			}
 		}
 	}
@@ -523,9 +558,12 @@ func CollectDeploymentSummaries(
 	sshKeysResp, _ := client.ListSSHKeys(ctx)
 	if sshKeysResp != nil && sshKeysResp.SSHKeys != nil {
 		for _, key := range sshKeysResp.SSHKeys {
-			depID := extractDeploymentIDFromName(&key.Name, deploymentIDRegex)
-			if sum, ok := summaries[depID]; ok {
-				sum.Resources++
+			// Only count if deployment already discovered
+			for depID, sum := range summaries {
+				if matchesDeploymentName(&key.Name, depID) {
+					sum.Resources++
+					break
+				}
 			}
 		}
 	}
@@ -533,9 +571,12 @@ func CollectDeploymentSummaries(
 	iamRolesResp, _ := client.ListIAMRoles(ctx)
 	if iamRolesResp != nil && iamRolesResp.IAMRoles != nil {
 		for _, role := range iamRolesResp.IAMRoles {
-			depID := extractDeploymentID(&role.Name, role.Labels, deploymentIDRegex)
-			if sum, ok := summaries[depID]; ok {
-				sum.Resources++
+			// Only count if deployment already discovered
+			for depID, sum := range summaries {
+				if matchesDeploymentName(&role.Name, depID) {
+					sum.Resources++
+					break
+				}
 			}
 		}
 	}
@@ -543,9 +584,12 @@ func CollectDeploymentSummaries(
 	apiKeysResp, _ := client.ListAPIKeys(ctx)
 	if apiKeysResp != nil && apiKeysResp.APIKeys != nil {
 		for _, key := range apiKeysResp.APIKeys {
-			depID := extractDeploymentIDFromName(&key.Name, deploymentIDRegex)
-			if sum, ok := summaries[depID]; ok {
-				sum.Resources++
+			// Only count if deployment already discovered
+			for depID, sum := range summaries {
+				if matchesDeploymentName(&key.Name, depID) {
+					sum.Resources++
+					break
+				}
 			}
 		}
 	}
