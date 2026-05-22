@@ -87,3 +87,18 @@ func TestNewDeploymentBackend_AcceptsTofuManifestWithoutTofuSectionAsNoop(t *tes
 		t.Fatal("expected non-nil backend")
 	}
 }
+
+func TestNewDeploymentBackend_ReturnsLocalBackendForLocalManifest(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	manifest := &presets.InfrastructureManifest{Backend: backendTypeLocal}
+
+	backend, err := newDeploymentBackend(deployment, manifest)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if _, ok := backend.(*localBackend); !ok {
+		t.Fatalf("expected *localBackend, got %T", backend)
+	}
+}

@@ -12,7 +12,7 @@ from .conftest import get_version_check_count
 from .helpers import (
     export_preset,
     first_infrastructure_preset_id_or_skip,
-    first_installation_preset_id_or_skip,
+    installation_preset_id_or_skip,
     run_command,
 )
 
@@ -251,7 +251,7 @@ def test_init_accepts_install_preset_path_as_second_arg(
 ) -> None:
     # Given an installation preset exported to a directory
     infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
-    install_id = first_installation_preset_id_or_skip(exasol_path)
+    install_id = installation_preset_id_or_skip(exasol_path, "ubuntu")
 
     install_dir = tmp_path / "install_export"
     install_dir.mkdir()

@@ -19,6 +19,7 @@ type ConnectionInfo struct {
 	DisplayHost                string
 	DBPort                     int
 	UIPort                     int
+	AdminUI                    *DeploymentAdminUI
 	Username                   string
 	CertFingerprint            string
 	InsecureSkipCertValidation bool
@@ -58,9 +59,6 @@ func (info *DeploymentInfo) ConnectionInfo(deployment DeploymentDir) (*Connectio
 	if info.Connection.DBPort <= 0 {
 		return nil, errors.New("deployment database port is missing")
 	}
-	if info.Connection.UIPort <= 0 {
-		return nil, errors.New("deployment UI port is missing")
-	}
 
 	displayHost := strings.TrimSpace(info.Connection.DisplayHost)
 	if displayHost == "" {
@@ -83,6 +81,7 @@ func (info *DeploymentInfo) ConnectionInfo(deployment DeploymentDir) (*Connectio
 		DisplayHost:                displayHost,
 		DBPort:                     info.Connection.DBPort,
 		UIPort:                     info.Connection.UIPort,
+		AdminUI:                    cloneDeploymentAdminUI(info.Connection.AdminUI),
 		Username:                   username,
 		CertFingerprint:            certFingerPrint,
 		InsecureSkipCertValidation: info.Connection.InsecureSkipCertValidation,
@@ -92,6 +91,19 @@ func (info *DeploymentInfo) ConnectionInfo(deployment DeploymentDir) (*Connectio
 		SSHPort:                    strings.TrimSpace(info.Connection.SSHPort),
 		ShellSupported:             info.Connection.ShellSupported,
 	}, nil
+}
+
+func cloneDeploymentAdminUI(adminUI *DeploymentAdminUI) *DeploymentAdminUI {
+	if adminUI == nil || strings.TrimSpace(adminUI.URL) == "" {
+		return nil
+	}
+
+	clone := *adminUI
+	clone.URL = strings.TrimSpace(clone.URL)
+	clone.Username = strings.TrimSpace(clone.Username)
+	clone.CertFingerprint = strings.TrimSpace(clone.CertFingerprint)
+
+	return &clone
 }
 
 func resolveConnectionCertFingerprint(info *DeploymentInfo) string {

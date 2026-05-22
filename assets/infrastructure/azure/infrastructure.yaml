@@ -4,6 +4,7 @@ backend: tofu
 
 compatibility:
   provides:
+    - admin-ui
     - remote-exec
 
 tofu:

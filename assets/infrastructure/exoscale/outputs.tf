@@ -16,11 +16,16 @@ locals {
     vpcId            = exoscale_private_network.cluster.id
     subnetId         = exoscale_private_network.cluster.id
     connection = length(exoscale_compute_instance.nodes) > 0 ? {
-      host           = values(exoscale_compute_instance.nodes)[0].public_ip_address
-      displayHost    = values(exoscale_compute_instance.nodes)[0].public_ip_address
-      publicIp       = values(exoscale_compute_instance.nodes)[0].public_ip_address
-      dbPort         = 8563
-      uiPort         = 8443
+      host        = values(exoscale_compute_instance.nodes)[0].public_ip_address
+      displayHost = values(exoscale_compute_instance.nodes)[0].public_ip_address
+      publicIp    = values(exoscale_compute_instance.nodes)[0].public_ip_address
+      dbPort      = 8563
+      uiPort      = 8443
+      adminUi = {
+        url                        = "https://${values(exoscale_compute_instance.nodes)[0].public_ip_address}:8443"
+        username                   = "admin"
+        insecureSkipCertValidation = true
+      }
       username       = "sys"
       sshCommand     = "ssh -i ${local.key_file_relative_path} ubuntu@${values(exoscale_compute_instance.nodes)[0].public_ip_address} -p 22"
       sshPort        = "22"

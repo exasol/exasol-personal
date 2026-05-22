@@ -20,13 +20,23 @@ type InfrastructureTofu struct {
 	VarsOutputFile string `yaml:"varsOutputFile"`
 }
 
+// InfrastructureLocal captures Exasol Local VM sizing configuration.
+//
+//nolint:tagliatelle // These YAML keys are part of the preset contract.
+type InfrastructureLocal struct {
+	CPUCount   int `yaml:"cpuCount,omitempty"`
+	MemoryMB   int `yaml:"memoryMB,omitempty"`
+	DataSizeGB int `yaml:"dataSizeGB,omitempty"`
+}
+
 // InfrastructureManifest represents the infrastructure metadata and optional tofu configuration.
 type InfrastructureManifest struct {
-	Name          string              `yaml:"name"`
-	Description   string              `yaml:"description"`
-	Backend       string              `yaml:"backend,omitempty"`
-	Compatibility *Compatibility      `yaml:"compatibility,omitempty"`
-	Tofu          *InfrastructureTofu `yaml:"tofu,omitempty"`
+	Name          string               `yaml:"name"`
+	Description   string               `yaml:"description"`
+	Backend       string               `yaml:"backend,omitempty"`
+	Compatibility *Compatibility       `yaml:"compatibility,omitempty"`
+	Tofu          *InfrastructureTofu  `yaml:"tofu,omitempty"`
+	Local         *InfrastructureLocal `yaml:"local,omitempty"`
 }
 
 func (m *InfrastructureManifest) ProvidedCapabilities() []string {

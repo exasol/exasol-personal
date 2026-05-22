@@ -5,9 +5,6 @@ runs:
   steps:
     - name: Setup Go and Task
       uses: ./.github/actions/setup-go
-    - name: Generate
-      shell: bash
-      run: task generate
     - name: Build
       shell: bash
       run: task build

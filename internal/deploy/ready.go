@@ -76,12 +76,38 @@ func WaitForDatabaseStarted(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 ) error {
+	return waitForDatabaseStartedWithBackoff(
+		ctx,
+		deployment,
+		StartedInitialBackoff,
+		StartedMaxBackoff,
+	)
+}
+
+func WaitForLocalDatabaseStarted(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+) error {
+	return waitForDatabaseStartedWithBackoff(
+		ctx,
+		deployment,
+		LocalDatabaseStartedInitialBackoff,
+		LocalDatabaseStartedMaxBackoff,
+	)
+}
+
+func waitForDatabaseStartedWithBackoff(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	initialBackoff int,
+	maxBackoff int,
+) error {
 	return waitForDatabaseState(
 		ctx,
 		deployment,
 		WaitParams{
-			InitialBackoff: StartedInitialBackoff,
-			MaxBackoff:     StartedMaxBackoff,
+			InitialBackoff: initialBackoff,
+			MaxBackoff:     maxBackoff,
 			ReadyMode:      true,
 			LogPrefix:      "waiting for database to start",
 		},

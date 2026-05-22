@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -26,10 +25,11 @@ const (
 type ConnectionDetails struct {
 	DeploymentOverview
 
+	Backend         string
 	Hostname        string
 	DisplayHost     string
 	DBPort          string
-	UIPort          string
+	AdminUI         *config.DeploymentAdminUI
 	Username        string
 	CertFingerprint string
 	InsecureSkipTLS bool
@@ -81,11 +81,12 @@ func readConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails,
 			ClusterSize:    connectionInfo.ClusterSize,
 			ClusterState:   connectionInfo.ClusterState,
 		},
+		Backend:         deploymentInfo.Backend,
 		Hostname:        connectionInfo.Host,
 		DisplayHost:     connectionInfo.DisplayHost,
 		PublicIp:        connectionInfo.PublicIP,
 		DBPort:          strconv.Itoa(connectionInfo.DBPort),
-		UIPort:          strconv.Itoa(connectionInfo.UIPort),
+		AdminUI:         connectionInfo.AdminUI,
 		SSHCommand:      connectionInfo.SSHCommand,
 		SSHPort:         connectionInfo.SSHPort,
 		Username:        connectionInfo.Username,
@@ -98,10 +99,6 @@ func readConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails,
 }
 
 func GetSQLInstructions(connectionDetails *ConnectionDetails) string {
-	uiURL := "https://" + net.JoinHostPort(
-		displayHostname(connectionDetails),
-		connectionDetails.UIPort,
-	)
 	certificateLine := ""
 	if connectionDetails.CertFingerprint != "" {
 		certificateLine = "  - Certificate Fingerprint: " + connectionDetails.CertFingerprint + "\n"
@@ -110,7 +107,7 @@ func GetSQLInstructions(connectionDetails *ConnectionDetails) string {
 			"use nocertcheck for the current deployment setup\n"
 	}
 
-	adminUIInstructions := `
+	instructions := `
 === How to Connect from a Graphical SQL Client ===
 To connect using a client of your choice:
 1. Create a new database connection.
@@ -125,30 +122,24 @@ To connect using a client of your choice:
 To connect using the CLI:
   exasol connect
 
-=== How to open the Administration UI ===
-1. Open the following URL in the browser: ` + uiURL + `
-2. Accept certificate if necessary
-
 `
-	adminUIUsername := ""
-	if connectionDetails.AdminUISecured {
-		adminUIUsername = "admin"
-	}
 
-	if adminUIUsername != "" {
-		adminUIInstructions += fmt.Sprintf(
-			"3. Login with username %q and password stored in %s\n\n",
-			adminUIUsername,
-			connectionDetails.SecretsFilePath,
-		)
-	}
-
-	instructions := `
-
-` + adminUIInstructions
+	instructions += getAdminUIInstructions(connectionDetails)
 
 	if !connectionDetails.ShellSupported {
 		return instructions
+	}
+
+	if connectionDetails.Backend == localDeploymentBackend {
+		return instructions + `=== Local Shell Instructions ===
+  Local endpoint: ` + displayHostname(connectionDetails) + `
+  Exasol Local database container shell: exasol shell container
+  Host shell (VM OS): exasol shell host
+  Alternative: ` + connectionDetails.SSHCommand + `
+
+Note: exasol destroy deletes the local VM disk/data and launcher-managed share for this deployment.
+
+`
 	}
 
 	return instructions + `=== SSH Connection Instructions ===
@@ -158,6 +149,32 @@ To connect using the CLI:
   Alternative: ` + connectionDetails.SSHCommand + `
 
 `
+}
+
+func getAdminUIInstructions(connectionDetails *ConnectionDetails) string {
+	if connectionDetails == nil || connectionDetails.AdminUI == nil ||
+		connectionDetails.AdminUI.URL == "" {
+		return ""
+	}
+
+	instructions := `
+=== How to open the Administration UI ===
+  URL: ` + connectionDetails.AdminUI.URL + `
+`
+	if connectionDetails.AdminUI.Username != "" {
+		instructions += "  Username: " + connectionDetails.AdminUI.Username + "\n"
+	}
+	if connectionDetails.AdminUISecured {
+		instructions += "  Password: <stored in " + connectionDetails.SecretsFilePath + ">\n"
+	}
+	if connectionDetails.AdminUI.CertFingerprint != "" {
+		instructions += "  Certificate Fingerprint: " +
+			connectionDetails.AdminUI.CertFingerprint + "\n"
+	} else if connectionDetails.AdminUI.InsecureSkipCertValidation {
+		instructions += "  Certificate Validation: accept the certificate if necessary\n"
+	}
+
+	return instructions + "\n"
 }
 
 func GetDocumentationLink() string {

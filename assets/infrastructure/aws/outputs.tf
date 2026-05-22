@@ -22,14 +22,19 @@ locals {
     vpcId            = aws_vpc.vpc.id
     subnetId         = aws_subnet.subnet.id
     connection = length(values(data.aws_instance.nodes)) > 0 ? {
-      host          = values(data.aws_instance.nodes)[0].public_dns
-      displayHost   = values(data.aws_instance.nodes)[0].public_dns
-      publicIp      = values(data.aws_instance.nodes)[0].public_ip
-      dbPort        = 8563
-      uiPort        = 8443
-      username      = "sys"
-      sshCommand    = "ssh -i ${local.key_file_relative_path} ubuntu@${values(data.aws_instance.nodes)[0].public_dns} -p 22"
-      sshPort       = "22"
+      host        = values(data.aws_instance.nodes)[0].public_dns
+      displayHost = values(data.aws_instance.nodes)[0].public_dns
+      publicIp    = values(data.aws_instance.nodes)[0].public_ip
+      dbPort      = 8563
+      uiPort      = 8443
+      adminUi = {
+        url                        = "https://${values(data.aws_instance.nodes)[0].public_dns}:8443"
+        username                   = "admin"
+        insecureSkipCertValidation = true
+      }
+      username       = "sys"
+      sshCommand     = "ssh -i ${local.key_file_relative_path} ubuntu@${values(data.aws_instance.nodes)[0].public_dns} -p 22"
+      sshPort        = "22"
       shellSupported = true
     } : null
     nodes = {

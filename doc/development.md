@@ -47,7 +47,7 @@ These tools are invoked via Task commands and don't need manual installation.
 git clone https://github.com/exasol/exasol-personal.git
 cd exasol-personal
 
-# Generate code
+# Generate code and stage embedded assets
 task generate
 
 # Build the binary
@@ -62,7 +62,7 @@ task build
 ### Standard Build
 
 ```bash
-# Generate code
+# Generate code and stage platform-specific embedded assets
 task generate
 
 # Build the binary
@@ -83,6 +83,12 @@ GOOS=windows GOARCH=amd64 task build
 GOOS=darwin GOARCH=arm64 task build
 ```
 
+**Note:** The launcher resolves [OpenTofu](https://opentofu.org/) at runtime, so builds no longer need platform-specific OpenTofu downloads. For macOS Apple Silicon builds, `task generate` stages the Exasol Local runner from `RUNNER_PATH`, a cached runner, or the public Exasol Local VM release download.
+
+```bash
+GOOS=darwin GOARCH=arm64 task generate RUNNER_PATH=/path/to/launcher
+```
+
 ### Building Without Task
 
 If you prefer to use Go commands directly (or Task is unavailable):
@@ -90,6 +96,10 @@ If you prefer to use Go commands directly (or Task is unavailable):
 ```bash
 # Generate code
 go generate ./...
+
+# For macOS Apple Silicon builds, stage the Exasol Local runner for embedding.
+# This uses RUNNER_PATH, a cached runner, or the release download.
+go run ./tools/localrunner stage
 
 # Build the binary
 go build -o bin/exasol ./cmd/exasol

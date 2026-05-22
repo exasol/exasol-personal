@@ -23,10 +23,51 @@ tasks:
     cmds:
       - "task --list"
 
+  local-runner-placeholders:
+    desc: Create placeholder files for local runtime binaries required by go:embed
+    cmds:
+      - >-
+        go run ./tools/localrunner placeholder
+        -target assets/localruntimebin/generated/darwin/arm64/mac-runner-aarch64
+
+  local-runner-stage:
+    desc: Stage Exasol Local runner binary for go:embed when targeting macOS Apple Silicon
+    vars:
+      RUNNER_PATH: '{{default "" .RUNNER_PATH}}'
+      LOCAL_RUNNER_REPO: '{{default "exasol/exasol-local-vm" .LOCAL_RUNNER_REPO}}'
+      LOCAL_RUNNER_VERSION: '{{default "v1.0.0-rc1" .LOCAL_RUNNER_VERSION}}'
+      LOCAL_RUNNER_ASSET: '{{default "mac-runner-aarch64.zip" .LOCAL_RUNNER_ASSET}}'
+    cmds:
+      - >-
+        go run ./tools/localrunner stage
+        -repo {{.LOCAL_RUNNER_REPO}}
+        -version {{.LOCAL_RUNNER_VERSION}}
+        -asset {{.LOCAL_RUNNER_ASSET}}
+        -runner-path "{{.RUNNER_PATH}}"
+        -target assets/localruntimebin/generated/darwin/arm64/mac-runner-aarch64
+        -download-dir assets/localruntimebin/downloads/darwin/arm64
+
+  local-runner-download:
+    desc: Download the macOS Exasol Local runner release asset for go:embed
+    vars:
+      LOCAL_RUNNER_REPO: '{{default "exasol/exasol-local-vm" .LOCAL_RUNNER_REPO}}'
+      LOCAL_RUNNER_VERSION: '{{default "v1.0.0-rc1" .LOCAL_RUNNER_VERSION}}'
+      LOCAL_RUNNER_ASSET: '{{default "mac-runner-aarch64.zip" .LOCAL_RUNNER_ASSET}}'
+    cmds:
+      - >-
+        go run ./tools/localrunner download
+        -repo {{.LOCAL_RUNNER_REPO}}
+        -version {{.LOCAL_RUNNER_VERSION}}
+        -asset {{.LOCAL_RUNNER_ASSET}}
+        -download-dir assets/localruntimebin/downloads/darwin/arm64
+
   generate:
     desc: run generation for all packages
+    deps:
+      - local-runner-placeholders
     cmds:
       - go generate ./...
+      - task: local-runner-stage
 
   tofu-lock-update:
     desc: Regenerate multi-platform .terraform.lock.hcl files (no temp files in assets)
@@ -46,6 +87,8 @@ tasks:
   # with Windows path.
   build:
     desc: Build the binary
+    deps:
+      - generate
     cmds:
       - |
         version=$(git describe --tags --abbrev=0) # First character is "v".
@@ -104,6 +147,8 @@ tasks:
 
   tests-unit:
     desc: Run unit tests (`task tests-unit TEST=Ready` or `task tests-unit TEST=*Ready*`)
+    deps:
+      - local-runner-placeholders
     vars:
       TEST: '{{default "" .TEST}}'
     cmds:
@@ -218,11 +263,15 @@ tasks:
 
   lint-golang:
     desc: Run golangci-lint linters
+    deps:
+      - local-runner-placeholders
     cmds:
       - go tool golangci-lint run ./...
 
   lint-golang-fix:
     desc: Run golangci-lint linters and apply automatic fixes
+    deps:
+      - local-runner-placeholders
     cmds:
       - go tool golangci-lint run ./... --fix
 
@@ -235,12 +284,12 @@ tasks:
   lint-licenses:
     desc: Run addlicense on check mode for all source files
     cmds:
-      - go tool addlicense -l mit -c "Exasol AG" -check -s=only $(find . -type f -iregex ".*\.\(go\|py\)$")
+      - go tool addlicense -l mit -c "Exasol AG" -check -s=only $(git ls-files '*.go' '*.py')
 
   lint-licenses-fix:
     desc: Run addlicense to add the correct license header for all source files
     cmds:
-      - go tool addlicense -l mit -c "Exasol AG" -s=only $(find . -type f -iregex ".*\.\(go\|py\)$")
+      - go tool addlicense -l mit -c "Exasol AG" -s=only $(git ls-files '*.go' '*.py')
 
   lint:
     desc: Run linters
