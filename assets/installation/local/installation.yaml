@@ -1,0 +1,8 @@
+name: Exasol Local
+description: Uses the Exasol Local database container started by the local VM image.
+
+compatibility:
+  requires:
+    - local-exasol
+
+install: []

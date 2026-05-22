@@ -13,7 +13,10 @@ import (
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
-const backendTypeTofu = "tofu"
+const (
+	backendTypeTofu  = "tofu"
+	backendTypeLocal = "local"
+)
 
 // DeployOptions carries backend-agnostic options for a single deploy invocation.
 // Individual backends interpret the options they understand and ignore the rest.
@@ -62,6 +65,8 @@ func resolveBackendKind(manifest *presets.InfrastructureManifest) (string, error
 	switch backend {
 	case backendTypeTofu:
 		return backend, nil
+	case backendTypeLocal:
+		return backend, nil
 	case "":
 		return "", fmt.Errorf(
 			"%w: infrastructure manifest does not declare a supported backend",
@@ -95,6 +100,8 @@ func newDeploymentBackend(
 	switch kind {
 	case backendTypeTofu:
 		return newTofuBackend(deployment, manifest), nil
+	case backendTypeLocal:
+		return newLocalBackend(deployment, manifest), nil
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnknownDeploymentType, kind)
 	}
@@ -121,6 +128,8 @@ func readInfrastructurePresetConfigVariables(
 		}
 
 		return readTofuPresetConfigVariables(preset, *manifest.Tofu)
+	case backendTypeLocal:
+		return localConfigVariableDefinitions(manifest), nil
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnknownDeploymentType, kind)
 	}

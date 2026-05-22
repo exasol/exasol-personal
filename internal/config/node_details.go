@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -17,10 +18,11 @@ import (
 )
 
 const (
-	nodeDetailsFileName   = "deployment.json"
-	ConnectionInstruction = "connection-instructions.txt"
-	primaryNodeName       = "n11"
-	defaultUsername       = "sys"
+	nodeDetailsFileName    = "deployment.json"
+	ConnectionInstruction  = "connection-instructions.txt"
+	primaryNodeName        = "n11"
+	defaultUsername        = "sys"
+	defaultAdminUIUsername = "admin"
 )
 
 type DeploymentInfo struct {
@@ -64,17 +66,25 @@ type DeploymentSSH struct {
 }
 
 type DeploymentConnection struct {
-	Host                       string `json:"host,omitempty"`
-	DisplayHost                string `json:"displayHost,omitempty"`
-	PublicIp                   string `json:"publicIp,omitempty"`
-	DBPort                     int    `json:"dbPort,omitempty"`
-	UIPort                     int    `json:"uiPort,omitempty"`
+	Host                       string             `json:"host,omitempty"`
+	DisplayHost                string             `json:"displayHost,omitempty"`
+	PublicIp                   string             `json:"publicIp,omitempty"`
+	DBPort                     int                `json:"dbPort,omitempty"`
+	UIPort                     int                `json:"uiPort,omitempty"`
+	AdminUI                    *DeploymentAdminUI `json:"adminUi,omitempty"`
+	Username                   string             `json:"username,omitempty"`
+	CertFingerprint            string             `json:"certFingerprint,omitempty"`
+	InsecureSkipCertValidation bool               `json:"insecureSkipCertValidation,omitempty"`
+	SSHCommand                 string             `json:"sshCommand,omitempty"`
+	SSHPort                    string             `json:"sshPort,omitempty"`
+	ShellSupported             bool               `json:"shellSupported,omitempty"`
+}
+
+type DeploymentAdminUI struct {
+	URL                        string `json:"url,omitempty"`
 	Username                   string `json:"username,omitempty"`
 	CertFingerprint            string `json:"certFingerprint,omitempty"`
 	InsecureSkipCertValidation bool   `json:"insecureSkipCertValidation,omitempty"`
-	SSHCommand                 string `json:"sshCommand,omitempty"`
-	SSHPort                    string `json:"sshPort,omitempty"`
-	ShellSupported             bool   `json:"shellSupported,omitempty"`
 }
 
 type (
@@ -291,6 +301,7 @@ func normalizeDeploymentInfo(info *DeploymentInfo) {
 		if strings.TrimSpace(info.Connection.Username) == "" {
 			info.Connection.Username = defaultUsername
 		}
+		normalizeAdminUIConnection(info.Connection)
 	}
 
 	if info.Backend == "" {
@@ -342,10 +353,72 @@ func deriveConnectionFromNodes(info *DeploymentInfo) *DeploymentConnection {
 		SSHPort:        mainNode.Ssh.Port,
 		ShellSupported: true,
 	}
+	if adminUI := deriveAdminUIFromNode(mainNode, host); adminUI != nil {
+		connection.AdminUI = adminUI
+	}
 
 	if certFingerprint, err := info.GetCertFingerprint(); err == nil {
 		connection.CertFingerprint = certFingerprint
 	}
 
 	return connection
+}
+
+func normalizeAdminUIConnection(connection *DeploymentConnection) {
+	if connection == nil {
+		return
+	}
+
+	if connection.AdminUI == nil && connection.UIPort > 0 {
+		connection.AdminUI = &DeploymentAdminUI{
+			URL: makeAdminUIURL(
+				firstNonEmpty(connection.DisplayHost, connection.Host, connection.PublicIp),
+				connection.UIPort,
+			),
+			Username: defaultAdminUIUsername,
+		}
+	}
+
+	if connection.AdminUI == nil {
+		return
+	}
+
+	connection.AdminUI.URL = strings.TrimSpace(connection.AdminUI.URL)
+	connection.AdminUI.Username = strings.TrimSpace(connection.AdminUI.Username)
+	connection.AdminUI.CertFingerprint = strings.TrimSpace(connection.AdminUI.CertFingerprint)
+	if connection.AdminUI.URL == "" {
+		connection.AdminUI = nil
+		return
+	}
+	if connection.AdminUI.Username == "" {
+		connection.AdminUI.Username = defaultAdminUIUsername
+	}
+}
+
+func deriveAdminUIFromNode(node DeploymentNode, host string) *DeploymentAdminUI {
+	url := strings.TrimSpace(node.Database.Url)
+	if url == "" {
+		uiPort := parseConnectionPort(node.Database.UiPort)
+		if uiPort <= 0 {
+			return nil
+		}
+		url = makeAdminUIURL(host, uiPort)
+	}
+	if url == "" {
+		return nil
+	}
+
+	return &DeploymentAdminUI{
+		URL:      url,
+		Username: defaultAdminUIUsername,
+	}
+}
+
+func makeAdminUIURL(host string, port int) string {
+	host = strings.TrimSpace(host)
+	if host == "" || port <= 0 {
+		return ""
+	}
+
+	return "https://" + net.JoinHostPort(host, strconv.Itoa(port))
 }

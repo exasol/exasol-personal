@@ -14,7 +14,7 @@ const secretsFileName = "secrets.json"
 
 type Secrets struct {
 	DbPassword      string `json:"dbPassword"`
-	AdminUiPassword string `json:"adminUiPassword"`
+	AdminUiPassword string `json:"adminUiPassword,omitempty"`
 }
 
 func SecretsFilePath(deployment DeploymentDir) (string, error) {

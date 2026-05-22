@@ -47,6 +47,25 @@ def first_installation_preset_id_or_skip(exasol_path: str) -> str:
     return first_preset_id_or_skip(exasol_path, "installations")
 
 
+def preset_id_or_skip(exasol_path: str, preset_type: str, preset_id: str) -> str:
+    """Return an embedded preset ID if present, or skip."""
+    result = run_command([exasol_path, "presets", "list", "--json"])
+    data = json.loads(result.stdout)
+    presets_list = data.get(preset_type)
+    if not isinstance(presets_list, list):
+        pytest.skip(f"no presets found for type {preset_type!r}")
+
+    for preset in presets_list:
+        if preset.get("id") == preset_id:
+            return preset_id
+
+    pytest.skip(f"preset {preset_id!r} not found for type {preset_type!r}")
+
+
+def installation_preset_id_or_skip(exasol_path: str, preset_id: str) -> str:
+    return preset_id_or_skip(exasol_path, "installations", preset_id)
+
+
 def export_preset(
     exasol_path: str, preset_id: str, preset_type: str, to_dir: str
 ) -> None:

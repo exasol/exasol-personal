@@ -32,12 +32,14 @@ var (
 
 // Default timeout configs for waiting.
 const (
-	StartedDefaultTimeoutInMinutes = 30
-	InstanceRefreshTimeoutMinutes  = 5
-	StartedDefaultTimeoutSeconds   = StartedDefaultTimeoutInMinutes * 60
-	InstanceRefreshTimeoutSeconds  = InstanceRefreshTimeoutMinutes * 60
-	StartedInitialBackoff          = 10
-	StartedMaxBackoff              = 60
+	StartedDefaultTimeoutInMinutes     = 30
+	InstanceRefreshTimeoutMinutes      = 5
+	StartedDefaultTimeoutSeconds       = StartedDefaultTimeoutInMinutes * 60
+	InstanceRefreshTimeoutSeconds      = InstanceRefreshTimeoutMinutes * 60
+	LocalDatabaseStartedInitialBackoff = 2
+	LocalDatabaseStartedMaxBackoff     = 8
+	StartedInitialBackoff              = 10
+	StartedMaxBackoff                  = 60
 )
 
 func Getn11Details(deployment config.DeploymentDir) (*config.SSHDetails, error) {

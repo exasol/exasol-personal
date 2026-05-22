@@ -70,6 +70,15 @@ func TestResolveConnectionInfo_UsesNormalizedDeploymentConnection(t *testing.T) 
 	if info.Username != "sys" {
 		t.Fatalf("expected username %q, got %q", "sys", info.Username)
 	}
+	if info.AdminUI == nil {
+		t.Fatal("expected legacy UI port to derive Admin UI metadata")
+	}
+	if info.AdminUI.URL != "https://example.local:8443" {
+		t.Fatalf("expected Admin UI URL %q, got %q", "https://example.local:8443", info.AdminUI.URL)
+	}
+	if info.AdminUI.Username != "admin" {
+		t.Fatalf("expected Admin UI username %q, got %q", "admin", info.AdminUI.Username)
+	}
 	if !info.ShellSupported {
 		t.Fatal("expected shell support to be preserved")
 	}
@@ -79,6 +88,75 @@ func TestResolveConnectionInfo_UsesNormalizedDeploymentConnection(t *testing.T) 
 			deployment.Resolve(secretsFileName),
 			info.SecretsFilePath,
 		)
+	}
+}
+
+func TestResolveConnectionInfo_UsesExplicitAdminUIMetadata(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := NewDeploymentDir(t.TempDir())
+	writeConnectionInfoTestFiles(t, deployment, &DeploymentInfo{
+		DeploymentId: "dep-1",
+		Connection: &DeploymentConnection{
+			Host:   "example.local",
+			DBPort: 8563,
+			AdminUI: &DeploymentAdminUI{
+				URL:                        " https://admin.example.local/ui ",
+				Username:                   " admin-user ",
+				CertFingerprint:            " admin-fingerprint ",
+				InsecureSkipCertValidation: true,
+			},
+		},
+	})
+
+	// When
+	info, err := ResolveConnectionInfo(deployment)
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if info.UIPort != 0 {
+		t.Fatalf("expected legacy UI port to be optional, got %d", info.UIPort)
+	}
+	if info.AdminUI == nil {
+		t.Fatal("expected Admin UI metadata")
+	}
+	if info.AdminUI.URL != "https://admin.example.local/ui" {
+		t.Fatalf("expected explicit Admin UI URL, got %q", info.AdminUI.URL)
+	}
+	if info.AdminUI.Username != "admin-user" {
+		t.Fatalf("expected explicit Admin UI username, got %q", info.AdminUI.Username)
+	}
+	if info.AdminUI.CertFingerprint != "admin-fingerprint" {
+		t.Fatalf("expected explicit Admin UI fingerprint, got %q", info.AdminUI.CertFingerprint)
+	}
+	if !info.AdminUI.InsecureSkipCertValidation {
+		t.Fatal("expected Admin UI certificate validation metadata to be preserved")
+	}
+}
+
+func TestResolveConnectionInfo_AllowsMissingAdminUIMetadata(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := NewDeploymentDir(t.TempDir())
+	writeConnectionInfoTestFiles(t, deployment, &DeploymentInfo{
+		DeploymentId: "dep-1",
+		Connection: &DeploymentConnection{
+			Host:   "example.local",
+			DBPort: 8563,
+		},
+	})
+
+	// When
+	info, err := ResolveConnectionInfo(deployment)
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if info.AdminUI != nil {
+		t.Fatalf("expected no Admin UI metadata, got %#v", info.AdminUI)
 	}
 }
 

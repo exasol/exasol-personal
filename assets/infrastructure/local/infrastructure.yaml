@@ -1,0 +1,12 @@
+name: Exasol Local on macOS
+description: Exasol Local deployment using the macOS Apple Silicon VM runner.
+backend: local
+
+local:
+  cpuCount: 2
+  memoryMB: 2048
+  dataSizeGB: 100
+
+compatibility:
+  provides:
+    - local-exasol

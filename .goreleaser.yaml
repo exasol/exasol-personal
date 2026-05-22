@@ -9,6 +9,7 @@ project_name: exasol-personal
 before:
   hooks:
     - go mod tidy
+    - task local-runner-placeholders
     - go generate ./...
 
 builds:
@@ -30,8 +31,8 @@ builds:
     # Name of the output binary
     binary: exasol
     hooks:
-      pre:        
-        - cmd: go run ./tools/downloadtofu/main.go -goos="{{ .Os }}" -goarch="{{ .Arch }}" -dir "./assets/tofubin/generated/"      
+      pre:
+        - cmd: GOOS="{{ .Os }}" GOARCH="{{ .Arch }}" task local-runner-stage
           output: true
       post:
         - cmd: ./.github/scripts/sign-windows-binary.sh "{{ .Path }}"

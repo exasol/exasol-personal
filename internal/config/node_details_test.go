@@ -121,6 +121,39 @@ func TestGetSSHDetails_AllowsAbsoluteLegacyKeyPath(t *testing.T) {
 	require.Equal(t, absoluteKeyPath, sshDetails.KeyFile)
 }
 
+func TestReadDeploymentInfo_DerivesAdminUIFromLegacyNodeMetadata(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deploymentDir := t.TempDir()
+	deployment := NewDeploymentDir(deploymentDir)
+	err := os.WriteFile(filepath.Join(deploymentDir, nodeDetailsFileName), []byte(`{
+		"deploymentId": "dep-1",
+		"nodes": {
+			"n11": {
+				"publicIp": "1.2.3.4",
+				"dnsName": "db.example.local",
+				"database": {
+					"dbPort": "8563",
+					"uiPort": "8443",
+					"url": "https://db.example.local:8443"
+				}
+			}
+		}
+	}`), 0o600)
+	require.NoError(t, err)
+
+	// When
+	info, err := ReadDeploymentInfo(deployment)
+
+	// Then
+	require.NoError(t, err)
+	require.NotNil(t, info.Connection)
+	require.NotNil(t, info.Connection.AdminUI)
+	require.Equal(t, "https://db.example.local:8443", info.Connection.AdminUI.URL)
+	require.Equal(t, "admin", info.Connection.AdminUI.Username)
+}
+
 func TestGetDeploymentHostPort_NoNodes(t *testing.T) {
 	t.Parallel()
 

@@ -20,10 +20,11 @@ import (
 )
 
 const (
-	deployFailureResourceHint = "Deployment may have created cloud resources " +
+	cloudDeployFailureResourceHint = "Deployment may have created cloud resources " +
 		"that can incur costs. " +
-		"Fix the problem and run `deploy` or the same `install` command again, " +
-		"or run `destroy` to clean up."
+		"Fix the problem and run `deploy` again, or run `destroy` to clean up."
+	localDeployFailureResourceHint = "Deployment may have created local VM runtime files. " +
+		"Fix the problem and run `deploy` again, or run `destroy` to clean up."
 )
 
 func appendDeployFailureHint(
@@ -38,9 +39,25 @@ func appendDeployFailureHint(
 		"%w\n\nInspect launcher logs at %s for details. %s%s",
 		err,
 		deployment.Resolve("deployment.log"),
-		deployFailureResourceHint,
+		deployFailureResourceHint(deployment),
 		deployFailureResourceHintSuffix(deployment),
 	)
+}
+
+func deployFailureResourceHint(deployment config.DeploymentDir) string {
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return cloudDeployFailureResourceHint
+	}
+	backend, err := resolveBackendKind(manifest)
+	if err != nil {
+		return cloudDeployFailureResourceHint
+	}
+	if backend == backendTypeLocal {
+		return localDeployFailureResourceHint
+	}
+
+	return cloudDeployFailureResourceHint
 }
 
 func deployFailureResourceHintSuffix(deployment config.DeploymentDir) string {

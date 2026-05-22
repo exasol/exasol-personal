@@ -1,12 +1,17 @@
 # Copyright 2026 Exasol AG
 # SPDX-License-Identifier: MIT
 
+import json
+import os
+import sys
 from pathlib import Path
 from subprocess import CalledProcessError
 
 import pytest
 
 from .helpers import first_infrastructure_preset_id_or_skip, run_command
+
+LOCAL_TEST_DB_PORT = 28563
 
 
 def test_install_requires_infra_preset_arg(exasol_path: str) -> None:
@@ -68,3 +73,140 @@ def test_install_executes_init_step(exasol_path: str, tmp_path: Path) -> None:
     stderr = (excinfo.value.stderr or "").lower()
     assert "initialization failed" in stderr
     assert "deployment directory is not empty" in stderr
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="fake local runner script is POSIX-only",
+)
+def test_deploy_local_with_prestaged_fake_runner(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a fake local runner that implements the runner contract without a VM
+    runner = tmp_path / "fake-mac-runner-aarch64"
+    runner.write_text(
+        """#!/usr/bin/env sh
+set -eu
+case "$1" in
+  init)
+    mkdir -p vm vm-shared
+    ;;
+  start)
+    if [ "$2" != "2" ] || [ "$3" != "2048" ] || [ "$4" != "100" ]; then
+      echo "unexpected sizing args: $*" >&2
+      exit 3
+    fi
+    mkdir -p vm vm-shared
+    cat > vm-state.json <<'JSON'
+{"vm_name":"exasol-local-vm","vm_ip":"192.168.64.2","ports":{"ssh":20022,"db":28563,"ui":0}}
+JSON
+    ;;
+  stop)
+    exit 0
+    ;;
+  *)
+    echo "unexpected command: $1" >&2
+    exit 2
+    ;;
+esac
+"""
+    )
+    runner.chmod(0o700)
+
+    deployment_dir = tmp_path / "deployment"
+    deployment_dir.mkdir()
+    env = {
+        **os.environ,
+        "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM": "1",
+        "EXASOL_LOCAL_SKIP_DB_WAIT": "1",
+    }
+
+    # Given a local deployment directory
+    init_result = run_command(
+        [
+            exasol_path,
+            "init",
+            "local",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+    assert init_result.returncode == 0
+
+    runner_target = deployment_dir / "local" / "runtime" / "mac-runner-aarch64"
+    runner_target.parent.mkdir(parents=True)
+    runner_target.write_bytes(runner.read_bytes())
+    runner_target.chmod(0o700)
+
+    # When local deploy is invoked
+    result = run_command(
+        [
+            exasol_path,
+            "deploy",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+
+    # Then the deployment is initialized and local connection artifacts are written
+    assert result.returncode == 0
+    deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
+    assert deployment_data["backend"] == "local"
+    assert "nodes" not in deployment_data
+    assert deployment_data["connection"]["host"] == "127.0.0.1"
+    assert deployment_data["connection"]["dbPort"] == LOCAL_TEST_DB_PORT
+    assert "adminUi" not in deployment_data["connection"]
+    assert "uiPort" not in deployment_data["connection"]
+    assert deployment_data["connection"]["insecureSkipCertValidation"] is True
+
+    secrets_data = json.loads((deployment_dir / "secrets.json").read_text())
+    assert secrets_data["dbPassword"] == "exasol"
+    assert "adminUiPassword" not in secrets_data
+
+    # Then info can consume the local artifacts without cloud-specific assumptions
+    info_result = run_command(
+        [
+            exasol_path,
+            "info",
+            "--json",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+    info_data = json.loads(info_result.stdout)
+    assert info_data["backend"] == "local"
+    assert info_data["connection"]["dbPort"] == LOCAL_TEST_DB_PORT
+    assert "adminUi" not in info_data["connection"]
+    assert "uiPort" not in info_data["connection"]
+
+    # Then status also handles the local artifacts even though the fake DB is absent
+    status_result = run_command(
+        [
+            exasol_path,
+            "status",
+            "--json",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+    status_data = json.loads(status_result.stdout)
+    assert status_data["status"] == "database_connection_failed"
+
+    # Then stop updates the persisted local deployment state
+    stop_result = run_command(
+        [
+            exasol_path,
+            "stop",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+    assert stop_result.returncode == 0
+    deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
+    assert deployment_data["deploymentState"] == "stopped"
+    assert deployment_data["clusterState"] == "stopped"

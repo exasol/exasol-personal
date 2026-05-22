@@ -16,11 +16,16 @@ locals {
     vpcId            = azurerm_virtual_network.vnet.id
     subnetId         = azurerm_subnet.subnet.id
     connection = length(values(azurerm_linux_virtual_machine.nodes)) > 0 ? {
-      host           = values(azurerm_public_ip.nodes)[0].fqdn
-      displayHost    = values(azurerm_public_ip.nodes)[0].fqdn
-      publicIp       = values(azurerm_public_ip.nodes)[0].ip_address
-      dbPort         = 8563
-      uiPort         = 8443
+      host        = values(azurerm_public_ip.nodes)[0].fqdn
+      displayHost = values(azurerm_public_ip.nodes)[0].fqdn
+      publicIp    = values(azurerm_public_ip.nodes)[0].ip_address
+      dbPort      = 8563
+      uiPort      = 8443
+      adminUi = {
+        url                        = "https://${values(azurerm_public_ip.nodes)[0].ip_address}:8443"
+        username                   = "admin"
+        insecureSkipCertValidation = true
+      }
       username       = "sys"
       sshCommand     = "ssh -i ${local.key_file_relative_path} ubuntu@${values(azurerm_public_ip.nodes)[0].ip_address} -p 22"
       sshPort        = "22"
