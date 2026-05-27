@@ -27,8 +27,10 @@ jobs:
     steps:
       - id: plan
         shell: bash
+        env:
+          SELECTED_OS_INPUT: ${{ inputs.os }}
         run: |
-          selected_os="${{ inputs.os }}"
+          selected_os="${SELECTED_OS_INPUT:-}"
           if [ -z "${selected_os}" ]; then
             selected_os="all"
           fi
