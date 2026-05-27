@@ -17,9 +17,14 @@ runs:
   using: "composite"
   steps:
     - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        STATUS_INPUT: ${{ inputs.status }}
+        DESCRIPTION_INPUT: ${{ inputs.description }}
+        TARGET_URL_INPUT: ${{ inputs.target-url }}
+        CONTEXT_INPUT: ${{ inputs.context }}
       with:
         script: |
-          let state = '${{ inputs.status }}';
+          let state = process.env.STATUS_INPUT;
           if (state !== 'success' && state !== 'pending') {
             state = 'failure';
           }
@@ -29,7 +34,7 @@ runs:
             repo: context.repo.repo,
             sha: context.sha,
             state: state,
-            description: '${{ inputs.description }}',
-            target_url: '${{ inputs.target-url }}',
-            context: '${{ inputs.context }}',
+            description: process.env.DESCRIPTION_INPUT,
+            target_url: process.env.TARGET_URL_INPUT,
+            context: process.env.CONTEXT_INPUT,
           })

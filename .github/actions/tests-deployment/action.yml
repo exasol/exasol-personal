@@ -16,4 +16,7 @@ runs:
       uses: ./.github/actions/setup-python
     - name: Run Deployment Tests
       shell: bash
-      run: task ${{ inputs.task }} INFRA=${{ inputs.infra }}
+      env:
+        TASK_INPUT: ${{ inputs.task }}
+        INFRA_INPUT: ${{ inputs.infra }}
+      run: task "${TASK_INPUT}" "INFRA=${INFRA_INPUT}"
