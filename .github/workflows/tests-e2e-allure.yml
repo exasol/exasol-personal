@@ -1,0 +1,185 @@
+name: E2E Tests (Allure)
+
+on:
+  workflow_dispatch:
+    inputs:
+      infra:
+        description: Infrastructure preset
+        required: false
+        default: aws
+        type: choice
+        options:
+          - aws
+          - azure
+          - exoscale
+
+permissions: {}
+
+env:
+  STATUS_DESC: "E2E tests with Allure report"
+  ALLURE_RESULTS: tests/allure-results
+  ALLURE_REPORT: tests/allure-report
+  ALLURE_GH_PAGES_SUBDIR: tests-e2e
+
+jobs:
+  tests-e2e:
+    environment:
+      name: deployment-tests
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # Required for cloud OIDC auth
+      contents: write   # Required for actions-gh-pages to push to gh-pages branch
+      statuses: write   # Required for status updates
+      pages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # `git describe` needs full history for the version test
+          fetch-depth: 0
+
+      - uses: ./.github/actions/status-set
+        with:
+          context: tests-e2e-${{ inputs.infra }}-allure
+          status: pending
+          description: ${{ env.STATUS_DESC }}
+          target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - uses: ./.github/actions/setup-aws
+        if: ${{ inputs.infra == 'aws' }}
+        with:
+          aws-ci-role: ${{ vars.AWS_CI_ROLE_PLATFORM }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Azure credentials
+        if: ${{ inputs.infra == 'azure' }}
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate Azure location input
+        if: ${{ inputs.infra == 'azure' }}
+        shell: bash
+        run: |
+          location="${{ vars.AZURE_LOCATION }}"
+          if [ -z "${location}" ]; then
+            location="${{ secrets.AZURE_LOCATION }}"
+          fi
+          if [ -z "${location}" ]; then
+            echo "AZURE_LOCATION is required for Azure e2e tests (set vars.AZURE_LOCATION or secrets.AZURE_LOCATION)."
+            exit 1
+          fi
+          echo "TF_VAR_location=${location}" >> "$GITHUB_ENV"
+
+      - name: Setup Exoscale credentials
+        if: ${{ inputs.infra == 'exoscale' }}
+        shell: bash
+        run: |
+          echo "EXOSCALE_API_KEY=${{ secrets.EXOSCALE_API_KEY }}" >> "$GITHUB_ENV"
+          echo "EXOSCALE_API_SECRET=${{ secrets.EXOSCALE_API_SECRET }}" >> "$GITHUB_ENV"
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.EXOSCALE_API_KEY }}" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.EXOSCALE_API_SECRET }}" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/build
+
+      - uses: ./.github/actions/setup-python
+
+      - name: Run E2E tests (collecting Allure results)
+        env:
+          ARM_USE_OIDC: ${{ inputs.infra == 'azure' && 'true' || '' }}
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        # `continue-on-error` so we always publish the report even when tests fail.
+        # The job's final status is set by the explicit failure check below.
+        continue-on-error: true
+        id: run-tests
+        run: |
+          task tests-e2e INFRA=${{ inputs.infra }} ALLURE_DIR=${{ env.ALLURE_RESULTS }}
+
+      - name: Upload raw Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ inputs.infra }}
+          path: ${{ env.ALLURE_RESULTS }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fetch previous Allure history from gh-pages
+        if: always()
+        uses: actions/checkout@v6
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages-checkout
+
+      - name: Stage Allure history for the next report
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "${ALLURE_RESULTS}/history"
+          prev_history="gh-pages-checkout/${ALLURE_GH_PAGES_SUBDIR}/${{ inputs.infra }}/history"
+          if [ -d "${prev_history}" ]; then
+            cp -r "${prev_history}/." "${ALLURE_RESULTS}/history/"
+            echo "Restored Allure history from gh-pages."
+          else
+            echo "No previous history found at ${prev_history}; starting fresh."
+          fi
+
+      - name: Generate Allure HTML report
+        if: always()
+        uses: simple-elf/allure-report-action@v1.12
+        with:
+          allure_results: ${{ env.ALLURE_RESULTS }}
+          allure_report: ${{ env.ALLURE_REPORT }}
+          gh_pages: gh-pages-checkout
+          allure_history: ${{ env.ALLURE_GH_PAGES_SUBDIR }}/${{ inputs.infra }}
+          subfolder: ${{ inputs.infra }}
+          keep_reports: 20
+
+      - name: Publish Allure report to gh-pages
+        if: always() && github.event_name == 'workflow_dispatch'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
+          destination_dir: ${{ env.ALLURE_GH_PAGES_SUBDIR }}
+          keep_files: true
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: "docs(e2e): publish Allure report for ${{ inputs.infra }} run ${{ github.run_id }}"
+
+      - name: Surface report URL in job summary
+        if: always()
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repo="${GITHUB_REPOSITORY##*/}"
+          url="https://${owner}.github.io/${repo}/${ALLURE_GH_PAGES_SUBDIR}/${{ inputs.infra }}/"
+          {
+            echo "## Allure report"
+            echo
+            echo "[Open report](${url})"
+            echo
+            echo "_Available after the first successful publish; may take a minute for GitHub Pages to propagate._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail job if tests failed
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.run-tests.outcome }}" != "success" ]; then
+            echo "E2E tests reported outcome '${{ steps.run-tests.outcome }}'."
+            exit 1
+          fi
+
+      - uses: ./.github/actions/status-set
+        if: always()
+        with:
+          context: tests-e2e-${{ inputs.infra }}-allure
+          status: ${{ job.status }}
+          description: ${{ env.STATUS_DESC }}
+          target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

@@ -173,6 +173,17 @@ tasks:
     cmds:
       - poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}integration
 
+  tests-e2e:
+    desc: Run end-to-end tests (`e.g. task tests-e2e INFRA=aws TEST=test_deploy_idempotency.py::test_deploy_is_idempotent ALLURE_DIR=allure-results`)
+    deps: [tests-setup]
+    dir: '{{.TESTS_DIR}}'
+    vars:
+      INFRA: '{{default "aws" .INFRA}}'
+      TEST: '{{default "" .TEST}}'
+      ALLURE_DIR: '{{default "" .ALLURE_DIR}}'
+    cmds:
+      - poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}}{{if .ALLURE_DIR}} --alluredir={{.ALLURE_DIR}} --clean-alluredir{{end}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}e2e{{if .TEST}}{{.SEP}}{{.TEST}}{{end}}
+
   tests-deployment:
     desc: Run deployment tests (`e.g. task tests-deployment INFRA=aws TEST=test_standard_deployment.py::test_license_session_limit`)
     deps: [tests-setup]

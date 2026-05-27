@@ -11,6 +11,7 @@ dependencies = [
   "pydantic (>=2.12.0,<3.0.0)",
   "semver (>=3.0.4,<4.0.0)",
   "requests (>=2.31.0,<3.0.0)",
+  "allure-pytest (>=2.13.5,<3.0.0)",
 ]
 
 [tool.poetry]
@@ -31,6 +32,8 @@ markers = [
   "launcher_tests: Tests that validate launcher CLI and behavioral contracts without real cloud deployment.",
   "installation_e2e: End-to-end tests focused on installation-level behavior.",
   "infrastructure_e2e: End-to-end tests focused on cloud infrastructure behavior.",
+  "e2e: End-to-end tests that exercise the launcher through full user workflows against a real cloud deployment.",
+  "stress: Resource-intensive tests (large data, long runtimes). Skipped unless EXASOL_TEST_STRESS=1.",
   "provider_aws: Tests that assert AWS-specific behavior.",
   "provider_azure: Tests that assert Azure-specific behavior.",
 ]

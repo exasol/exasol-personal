@@ -24,6 +24,10 @@ tfstate*
 __pycache__
 coverage.out
 
+# Allure test report artifacts
+tests/allure-results/
+tests/allure-report/
+
 # Credentials and secrets
 *.pem
 *.key

@@ -59,7 +59,18 @@ The project uses multiple layers of testing to ensure quality at different level
   - Validate idempotency and state management
   - Check file creation and configuration handling
   
-### 3. Python Deployment Tests
+### 3. Python End-to-End Tests
+
+- **Location:** `tests/e2e/`
+- **Purpose:** Exercise the launcher through complete user workflows against a real cloud deployment
+- **Run with:** `task tests-e2e` (from project root; default: AWS)
+- **Speed:** Slow (10-30+ minutes)
+- **Resources:** **Creates real cloud resources (incurs costs!)**
+- **When to use:**
+  - Validate multi-step user workflows end-to-end
+  - Cover behaviors that require a deployed cluster but are workflow-focused rather than infrastructure-focused
+
+### 4. Python Deployment Tests
 
 - **Location:** `tests/deployment/`
 - **Purpose:** Full end-to-end tests with real AWS infrastructure
@@ -97,6 +108,9 @@ task tests-unit
 # Run Python integration tests
 task tests-integration
 
+# Run Python end-to-end tests (default: AWS)
+task tests-e2e INFRA=aws
+
 # Run Python deployment tests (default: AWS)
 task tests-deployment
 
@@ -119,6 +133,12 @@ cd tests
 
 # Run all integration tests
 poetry run pytest --exasol-path=../bin/exasol tests/integration
+
+# Run all end-to-end tests (default: AWS)
+poetry run pytest --exasol-path=../bin/exasol tests/e2e
+
+# Run end-to-end tests against Azure
+poetry run pytest --exasol-path=../bin/exasol --infra=azure tests/e2e
 
 # Run specific test file
 poetry run pytest --exasol-path=../bin/exasol tests/integration/test_cli.py
