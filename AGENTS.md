@@ -8,6 +8,14 @@ Always read everything that is linked here at least once.
 
 **Testing** - Follow testing principles and patterns documented in [tests/README.md](tests/README.md). Apply those principles by inspecting existing test organization before adding new tests.
 
+## Repository Workflow
+
+Before creating a branch, committing, or opening a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md) and follow the contribution process documented there.
+
+When preparing a branch or pull request, ask the user for a related Jira or GitHub issue ID if they have not already provided one; when provided, include it in the branch name and pull request description.
+
+For non-trivial changes, propose using OpenSpec even if the user has not asked for it; for OpenSpec-backed work, propose archiving the completed change before committing and opening a pull request.
+
 ## Documentation Guidelines
 
 Guidelines for AI agents working with documentation in this repository.
@@ -47,7 +55,5 @@ Guidelines for AI agents working with documentation in this repository.
 **[doc/ci.md](doc/ci.md)** - CI/CD workflows, when they run, how to trigger them
 
 **[doc/release.md](doc/release.md)** - Release process, versioning, automation details
-
-
 
 
