@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
 )
@@ -23,6 +24,8 @@ const (
 )
 
 type ConnectionDetails struct {
+	DeploymentOverview
+
 	Hostname        string
 	DisplayHost     string
 	DBPort          string
@@ -31,14 +34,18 @@ type ConnectionDetails struct {
 	CertFingerprint string
 	InsecureSkipTLS bool
 	SecretsFilePath string
-	DeploymentName  string
 	PublicIp        string
 	SSHCommand      string
 	SSHPort         string
-	ClusterState    string
-	ClusterSize     int
 	ShellSupported  bool
 	AdminUISecured  bool
+}
+
+type DeploymentOverview struct {
+	DeploymentName  string
+	DeploymentState string
+	ClusterState    string
+	ClusterSize     int
 }
 
 type DocumentationLink struct {
@@ -54,7 +61,7 @@ type Details struct {
 	Documentation   []DocumentationLink `json:"documentation"`
 }
 
-func getConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails, error) {
+func readConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails, error) {
 	deploymentInfo, err := config.ReadDeploymentInfo(deployment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read deployment info: %w", err)
@@ -69,9 +76,11 @@ func getConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails, 
 	}
 
 	return &ConnectionDetails{
-		DeploymentName:  connectionInfo.DeploymentName,
-		ClusterSize:     connectionInfo.ClusterSize,
-		ClusterState:    connectionInfo.ClusterState,
+		DeploymentOverview: DeploymentOverview{
+			DeploymentName: connectionInfo.DeploymentName,
+			ClusterSize:    connectionInfo.ClusterSize,
+			ClusterState:   connectionInfo.ClusterState,
+		},
 		Hostname:        connectionInfo.Host,
 		DisplayHost:     connectionInfo.DisplayHost,
 		PublicIp:        connectionInfo.PublicIP,
@@ -160,13 +169,13 @@ Or visit %s for general information about Exasol products.
 `, SQLClientsDocURL, ProductDocURL)
 }
 
-func GetHeader(connectionDetails *ConnectionDetails, wfState string) string {
+func renderDeploymentOverview(overview DeploymentOverview) string {
 	return `
 Exasol Personal Deployment Overview
-Deployment Name: ` + connectionDetails.DeploymentName + `
-Deployment State: ` + wfState + `
-Cluster Size: ` + strconv.Itoa(connectionDetails.ClusterSize) + `
-Cluster State: ` + connectionDetails.ClusterState + `
+Deployment Name: ` + overview.DeploymentName + `
+Deployment State: ` + overview.DeploymentState + `
+Cluster Size: ` + strconv.Itoa(overview.ClusterSize) + `
+Cluster State: ` + overview.ClusterState + `
 `
 }
 
@@ -201,29 +210,52 @@ func getConnectionInstructionsTextUnsafe(
 
 	switch wfState {
 	case StatusRunning:
-		connectionDetails, err := getConnectionDetails(deployment)
+		connectionDetails, err := readConnectionDetails(deployment)
 		if err != nil {
 			return "", err
 		}
-		content := GetHeader(
-			connectionDetails,
-			wfState,
+		overview := connectionDetails.DeploymentOverview
+		overview.DeploymentState = wfState
+		content := renderDeploymentOverview(
+			overview,
 		) + GetSQLInstructions(
 			connectionDetails,
 		) + GetDocumentationLink()
 
 		return content, nil
 	case StatusStopped:
-		connectionDetails, err := getConnectionDetails(deployment)
+		overview, err := readDeploymentOverview(deployment, wfState)
 		if err != nil {
 			return "", err
 		}
-		content := GetHeader(connectionDetails, wfState) + GetDocumentationLink()
+		content := renderDeploymentOverview(overview) + GetDocumentationLink()
 
 		return content, nil
 	default:
 		return deploymentStatus.Message, nil
 	}
+}
+
+func readDeploymentOverview(
+	deployment config.DeploymentDir,
+	wfState string,
+) (DeploymentOverview, error) {
+	deploymentInfo, err := config.ReadDeploymentInfo(deployment)
+	if err != nil {
+		return DeploymentOverview{}, fmt.Errorf("failed to read deployment info: %w", err)
+	}
+
+	clusterState := strings.TrimSpace(deploymentInfo.ClusterState)
+	if clusterState == "" {
+		clusterState = wfState
+	}
+
+	return DeploymentOverview{
+		DeploymentName:  deploymentInfo.DeploymentId,
+		DeploymentState: wfState,
+		ClusterSize:     deploymentInfo.ClusterSize,
+		ClusterState:    clusterState,
+	}, nil
 }
 
 func writeConnectionInstructionsFile(deployment config.DeploymentDir, content string) error {
