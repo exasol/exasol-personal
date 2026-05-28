@@ -60,10 +60,10 @@ func registerDeploymentDirFlag(cmd *cobra.Command, state *CommonFlags) {
 	AbsDirVar(
 		cmd.Flags(),
 		&state.DeploymentDir,
-		"deployment-dir",
+		deploymentDirFlagName,
 		"",
-		".",
-		"The directory to store deployment files",
+		"",
+		"Override the deployment directory selected automatically",
 	)
 }
 

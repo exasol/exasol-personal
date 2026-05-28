@@ -149,6 +149,8 @@ func TestConnectUsageShowsJSONFormatUnderFlags(t *testing.T) {
 	jsonFlag := connectCmd.LocalNonPersistentFlags().Lookup("json")
 	if jsonFlag == nil {
 		t.Fatal("expected --json to be a local non-persistent flag")
+
+		return
 	}
 	if jsonFlag.NoOptDefVal != connect.JSONFormatPretty.String() {
 		t.Fatalf(

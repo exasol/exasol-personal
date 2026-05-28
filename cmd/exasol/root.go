@@ -22,13 +22,14 @@ const (
 	rootCmdLongDesc = rootCmdShortDesc + `
 
 Getting Started:
-  Begin by creating a deployment directory, e.g., with "mkdir deployment", and then change
-  into that directory, e.g., with "cd deployment".
-
   To create and run an Exasol deployment, run "exasol install <infra preset name-or-path>".
 	This single command initializes your deployment directory, prepares the selected infrastructure,
 	and installs the database. It uses either a built-in infrastructure preset or a custom preset 
 	at a path you provide. Built-in presets are: aws, azure, and exoscale.
+
+	If you do not pass --deployment-dir and are not already inside a deployment directory,
+	Exasol Personal uses ~/.exasol/personal/deployments/default. Pass --deployment-dir
+	to override the active deployment directory.
 
 	Note: Cloud presets require provider credentials in your environment.
   Use "exasol init --help", "exasol install --help", or "exasol presets list" to see the preset
@@ -57,13 +58,16 @@ var rootCmd = &cobra.Command{
 	Example:       rootCmdExample,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-		deployment := commonFlags.Deployment()
 		// Root-level pre-run is the single place where we enforce cross-cutting concerns.
 		// Design decision: keep this centralized so individual commands don't have to
 		// remember to repeat it (and so user-visible behavior stays consistent).
 		if err := setupLogging(); err != nil {
 			return err
 		}
+		if err := resolveDeploymentDirForCommand(cmd, commonFlags); err != nil {
+			return err
+		}
+		deployment := commonFlags.Deployment()
 
 		// Deployment-directory compatibility is enforced centrally and only for commands
 		// that declare it via annotations.

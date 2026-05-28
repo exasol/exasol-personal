@@ -45,11 +45,7 @@ A cloud account on one of the supported platforms with permission to provision c
 curl https://downloads.exasol.com/exasol-personal/installer.sh | sh
 ```
 
-2. Create a deployment directory
-```bash
-mkdir deployment && cd deployment
-``` 
-3. Install on your cloud of choice
+2. Install on your cloud of choice
 
 ```bash
 exasol install aws        # Amazon Web Services
@@ -79,15 +75,9 @@ Read on for Windows instructions and full details.
 
    On Windows: download the Exasol Launcher from the [Exasol Download Portal](https://downloads.exasol.com/exasol-personal) and copy the `exasol` binary to a directory in your `PATH`.
 
-2. Create a new directory “deployment” and change into the directory:
-   ```bash
-   mkdir deployment
-   cd deployment
-   ```
+2. Configure authentication for your cloud provider. See the relevant account setup guide in [Prerequisites](#-prerequisites) for the environment variables and credentials required.
 
-3. Configure authentication for your cloud provider. See the relevant account setup guide in [Prerequisites](#-prerequisites) for the environment variables and credentials required.
-
-4. To install Exasol Personal, run the following command with the preset for your cloud provider:
+3. To install Exasol Personal, run the following command with the preset for your cloud provider:
    ```bash
    exasol install aws        # Amazon Web Services
    exasol install azure      # Microsoft Azure
@@ -103,13 +93,15 @@ Read on for Windows instructions and full details.
 
    When the deployment process has finished, you will see instructions on how to connect to your Exasol database using a client of your choice. You can also find this information at any time by using `exasol info` in the terminal.
 
-Most `exasol` commands must be run from the context of the deployment directory. Change into the deployment directory before you run any `exasol` commands.
+By default, Exasol Personal stores deployment state in `~/.exasol/personal/deployments/default`. If you run a command from an existing deployment directory, Exasol Personal uses that directory instead. Pass `--deployment-dir <path>` to choose a different deployment directory explicitly.
+
+Keep the deployment directory until cloud resources have been destroyed. Deleting the directory does not remove cloud resources and can make cleanup harder.
 
 ## 📊 Load Sample Data
 
 To get started quickly, Exasol provides two sample datasets hosted on S3 that you can import directly using SQL.
 
-You can load it directly by executing this command in the deployment directory:
+You can load it directly by executing this command:
 
 ```bash
 exasol connect < sample.sql
@@ -170,7 +162,7 @@ If the deployment process is interrupted, cloud resources that were already crea
 
 ## ⏯️ Start and stop Exasol Personal
 
-To save costs, you can temporarily stop Exasol Personal by using the following command (in the deployment directory):
+To save costs, you can temporarily stop Exasol Personal by using the following command:
 ```bash
 exasol stop
 ```
@@ -190,7 +182,7 @@ To completely remove an Exasol Personal deployment, use `exasol destroy`. This c
 
 To learn more about this command, use `exasol destroy --help`.
 
-Deleting the deployment directory and the Exasol Launcher will not remove the resources that were created in your cloud environment. To completely remove a deployment, you must use the `exasol destroy` command.
+Deleting the deployment directory and the Exasol Launcher will not remove the resources that were created in your cloud environment. To completely remove a deployment, you must use the `exasol destroy` command before deleting the deployment directory.
 
 If you have already deleted the deployment directory and the Exasol Launcher, you must remove the resources manually in your cloud provider’s console.
 

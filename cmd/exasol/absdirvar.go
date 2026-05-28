@@ -18,7 +18,13 @@ type AbsDirValue struct {
 }
 
 func NewAbsDirValue(target *string, defaultValue string) *AbsDirValue {
+	if defaultValue == "" {
+		*target = ""
+		return &AbsDirValue{target: target}
+	}
+
 	*target, _ = filepath.Abs(defaultValue)
+
 	return &AbsDirValue{target: target}
 }
 
