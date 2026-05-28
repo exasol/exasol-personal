@@ -17,17 +17,8 @@ var installCmdShortDesc = `Initialize and deploy Exasol in one step`
 
 var installCmdLongDesc = installCmdShortDesc + `
 
-	Extracts the specified infrastructure and installation presets into the deployment directory.
-
-	Preset arguments:
-	  - The first argument selects the infrastructure preset (required).
-	  - The optional second argument selects the installation preset.
-
-	Each argument can be either an embedded preset name (e.g. "aws") or a preset directory path.
-	To force path selection, pass a path-like value such as "./my-preset" or "/abs/path/to/preset".
-
-	Tip: use "exasol presets" to discover and export presets.
-	`
+	Initializes the deployment directory, prepares infrastructure, and installs Exasol.` +
+	deploymentDirectoryResolutionHelp + presetSelectionHelp
 
 var installCmd = &cobra.Command{
 	Use:   "install <infra preset name-or-path> [install preset name-or-path]",

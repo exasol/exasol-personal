@@ -18,10 +18,12 @@ const (
 
 var initCmdShortDesc = `Initialize a new deployment directory`
 
-var initCmdLongDesc = initCmdShortDesc + `
-
-	Extracts the specified infrastructure and installation presets into the deployment directory.
-
+const (
+	deploymentDirectoryResolutionHelp = `
+	If --deployment-dir is not provided and the current directory is not a deployment directory,
+	uses ~/.exasol/personal/deployments/default.
+`
+	presetSelectionHelp = `
 	Preset arguments:
 	  - The first argument selects the infrastructure preset (required).
 	  - The optional second argument selects the installation preset.
@@ -31,6 +33,12 @@ var initCmdLongDesc = initCmdShortDesc + `
 
 	Tip: use "exasol presets" to discover and export presets.
 	`
+)
+
+var initCmdLongDesc = initCmdShortDesc + `
+
+	Extracts the specified infrastructure and installation presets into the deployment directory.` +
+	deploymentDirectoryResolutionHelp + presetSelectionHelp
 
 var initCmd = &cobra.Command{
 	Use:   "init <infra preset name-or-path> [install preset name-or-path]",

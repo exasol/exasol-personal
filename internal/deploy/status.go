@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/exasol/exasol-personal/internal/config"
 )
@@ -26,9 +27,10 @@ const (
 )
 
 type StatusOutput struct {
-	Status  string `json:"status"`
-	Message string `json:"message,omitempty"`
-	Error   string `json:"error,omitempty"`
+	DeploymentDir string `json:"deploymentDir"`
+	Status        string `json:"status"`
+	Message       string `json:"message,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
 
 func StatusJSONFormatter(status StatusOutput) (string, error) {
@@ -42,6 +44,7 @@ func StatusJSONFormatter(status StatusOutput) (string, error) {
 
 func StatusTextFormatter(status StatusOutput) (string, error) {
 	output := ""
+	output += fmt.Sprintf("Deployment directory: %s\n", status.DeploymentDir)
 	output += fmt.Sprintf("Status: %s\n", status.Status)
 
 	if status.Message != "" {
@@ -86,6 +89,7 @@ func statusWithFormatter(
 	if err != nil || status == nil {
 		return "", err
 	}
+	status.DeploymentDir = deployment.Root()
 
 	return format(*status)
 }
@@ -112,25 +116,35 @@ func GetStatusWithLock(
 		return getErr
 	})
 	if err != nil {
-		if errors.Is(err, ErrDeploymentDirectoryLocked) {
-			lockMessage := deploymentLockMessage(err)
-			if lockMessage == "" {
-				lockMessage = lockUnavailableMessage
-			}
-
-			return &StatusOutput{
-				Status:  StatusOperationInProgress,
-				Message: lockMessage,
-			}, nil
-		}
-		if errors.Is(err, context.Canceled) {
-			return nil, err
-		}
-
-		return nil, err
+		return statusFromLockError(err)
 	}
 
 	return status, nil
+}
+
+func statusFromLockError(err error) (*StatusOutput, error) {
+	if errors.Is(err, os.ErrNotExist) {
+		return notInitializedStatus(), nil
+	}
+	if errors.Is(err, ErrDeploymentDirectoryLocked) {
+		return operationInProgressStatus(deploymentLockMessage(err)), nil
+	}
+	if errors.Is(err, context.Canceled) {
+		return nil, err
+	}
+
+	return nil, err
+}
+
+func operationInProgressStatus(lockMessage string) *StatusOutput {
+	if lockMessage == "" {
+		lockMessage = lockUnavailableMessage
+	}
+
+	return &StatusOutput{
+		Status:  StatusOperationInProgress,
+		Message: lockMessage,
+	}
 }
 
 // nolint: revive
@@ -141,16 +155,16 @@ func GetStatus(
 ) (*StatusOutput, error) {
 	exasolState, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {
+		if errors.Is(err, config.ErrMissingConfigFile) {
+			return notInitializedStatus(), nil
+		}
+
 		return nil, err
 	}
 
 	workflowState, err := exasolState.GetWorkflowState()
 	if errors.Is(err, config.ErrMissingConfigFile) {
-		return &StatusOutput{
-			Status: StatusNotInitialized,
-			Message: "No workflow state file was found. " +
-				"Run `init` or `install` to start a new deployment in this directory.",
-		}, nil
+		return notInitializedStatus(), nil
 	} else if err != nil {
 		return nil, err
 	}
@@ -237,6 +251,14 @@ func GetStatus(
 
 	default:
 		panic("unknown workflow state")
+	}
+}
+
+func notInitializedStatus() *StatusOutput {
+	return &StatusOutput{
+		Status: StatusNotInitialized,
+		Message: "No workflow state file was found. " +
+			"Run `init` or `install` to start a new deployment in this directory.",
 	}
 }
 

@@ -74,7 +74,6 @@ func registerStatusFlags() {
 // nolint: gochecknoinits
 func init() {
 	requireMinorVersionCompatibility(statusCmd, CurrentLauncherVersion)
-	requireInitializedDeploymentDir(statusCmd)
 	registerStatusFlags()
 	registerDeploymentDirFlag(statusCmd, commonFlags)
 	registerOutputFlags(statusCmd, commonFlags)
