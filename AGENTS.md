@@ -55,5 +55,3 @@ Guidelines for AI agents working with documentation in this repository.
 **[doc/ci.md](doc/ci.md)** - CI/CD workflows, when they run, how to trigger them
 
 **[doc/release.md](doc/release.md)** - Release process, versioning, automation details
-
-
