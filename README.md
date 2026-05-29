@@ -24,7 +24,7 @@
 - ♾️ **Unlimited Data** — Store and analyze unlimited amounts of data with no artificial limits
 - 📈 **Scalable Architecture** — Scale up to any number of nodes using Exasol's MPP (Massively Parallel Processing) architecture
 - 🤖 **Built-in AI Functions** — Leverage native AI/ML capabilities with GPU acceleration
-- ⚙️ **Simple Deployment** — Spin up a distributed cluster on AWS, Azure, or Exoscale with just a few commands
+- ⚙️ **Simple Deployment** — Spin up a distributed cluster on AWS, Azure, Exoscale, or STACKIT with just a few commands
 - 🖥️ **Cross-Platform CLI** — Install and manage your cluster using the Exasol Launcher on Linux, macOS, or Windows
 
 
@@ -35,6 +35,7 @@ A cloud account on one of the supported platforms with permission to provision c
 - **AWS** — [Set up an AWS account for Exasol Personal](./HOWTO_SETUP_AWS_ACCOUNT.md)
 - **Azure** — [Set up an Azure account for Exasol Personal](./HOWTO_SETUP_AZURE_ACCOUNT.md)
 - **Exoscale** — [Set up an Exoscale account for Exasol Personal](./HOWTO_SETUP_EXOSCALE_ACCOUNT.md)
+- **STACKIT** — [Set up a STACKIT account for Exasol Personal](./HOWTO_SETUP_STACKIT_ACCOUNT.md)
 
 
 ## 🏎️ Quick Start (macOS / Linux)
@@ -57,6 +58,10 @@ exasol install azure      # Microsoft Azure
 
 ```bash
 exasol install exoscale   # Exoscale
+```
+
+```bash
+exasol install stackit    # STACKIT
 ```
 
 Read on for Windows instructions and full details.
@@ -82,6 +87,7 @@ Read on for Windows instructions and full details.
    exasol install aws        # Amazon Web Services
    exasol install azure      # Microsoft Azure
    exasol install exoscale   # Exoscale
+   exasol install stackit    # STACKIT
    ```
    The `exasol install` command does the following:
    - Generates OpenTofu files in the deployment directory
@@ -154,7 +160,7 @@ Both tables are distributed by `PRODUCT_ID`, enabling efficient joins between th
 
 ## ⚙️ Choosing cluster size and compute instance types
 
-By default the launcher deploys a single-node cluster on a memory-optimized instance (e.g. `r6i.xlarge` on AWS, `Standard_E4s_v3` on Azure, `standard.extra-large` on Exoscale). To change the number of nodes or the instance type, use the `--cluster-size` and `--instance-type` options:
+By default the launcher deploys a single-node cluster on a memory-optimized instance (e.g. `r6i.xlarge` on AWS, `Standard_E4s_v3` on Azure, `standard.extra-large` on Exoscale, `m2i.4` on STACKIT). To change the number of nodes or the instance type, use the `--cluster-size` and `--instance-type` options:
 ```bash
 exasol install <preset> --cluster-size <number> --instance-type <string>
 ```
@@ -225,7 +231,7 @@ exasol shell container
 
 Exasol Personal uses **presets** — self-contained directories of templates and config files — to provision infrastructure and install Exasol. Each deployment combines two presets:
 
-- **Infrastructure preset** — provisions cloud resources (compute, network, storage). Built-in: `aws`, `azure`, `exoscale`.
+- **Infrastructure preset** — provisions cloud resources (compute, network, storage). Built-in: `aws`, `azure`, `exoscale`, `stackit`.
 - **Installation preset** — installs and configures Exasol on the provisioned nodes. Built-in: `ubuntu` (used by default).
 
 ```bash
