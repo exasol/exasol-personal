@@ -16,13 +16,18 @@ import (
 const shortDescription = "Exasol Personal cleanup tool"
 
 const description = shortDescription + `
-Specific providers can be targeted using the --aws, --exoscale, and --stackit flags. If no provider flags are set, all providers will be used.
+Specific providers can be targeted using --provider=<name>[,<name>...]. If no providers are specified, all known providers will be used.
 `
 
 var rootCmd = &cobra.Command{
 	Use:   "exasol-cleanup",
 	Short: shortDescription,
 	Long:  description,
+}
+
+// nolint: gochecknoinits
+func init() {
+	rootCmd.SetHelpFunc(cleanupHelpFunc)
 }
 
 func configureLogger() {

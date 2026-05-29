@@ -4,28 +4,19 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/stackit"
 	"github.com/spf13/cobra"
 )
 
 var cleanupDiscoverOpts = struct {
-	JSON           bool
-	OwnerFilter    string
-	Order          string
-	Legacy         bool
-	ownerIsDefault bool
+	Order  string
+	Legacy bool
 }{}
 
 const cleanupDiscoverShort = "List deployments discovered via Deployment tag"
@@ -38,51 +29,51 @@ var cleanupDiscoverCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 
-		var collectors []shared.ProviderCollector
-
-		// AWS Collector - default owner to caller identity
-		if shouldUseProvider(aws.ProviderName) {
-			awsRegion := cleanupOpts.AWSRegion
-			if awsRegion == "" {
-				awsRegion = "us-east-1" // Default region
+		plan := buildCleanupPlan(cmd.Context(), cleanupDiscoverOpts.Legacy)
+		res := make([]shared.DeploymentSummary, 0)
+		successCount := 0
+		for _, scopedCollector := range plan.Collectors {
+			summaries, err := scopedCollector.Collector.CollectDeploymentSummaries(cmd.Context())
+			if err != nil {
+				scopedCollector.Scope.Status = providerStatusError
+				scopedCollector.Scope.Reason = err.Error()
+				continue
 			}
 
-			awsOwnerFilter := cleanupDiscoverOpts.OwnerFilter
+			successCount++
+			scopedCollector.Scope.Status = providerStatusSearched
+			scopedCollector.Scope.Reason = ""
+			res = append(res, summaries...)
+		}
 
-			// AWS-specific default: use caller identity if no filter provided
-			if awsOwnerFilter == "" {
-				cfg, err := config.LoadDefaultConfig(cmd.Context())
-				if err == nil {
-					stsClient := sts.NewFromConfig(cfg)
-					idOut, err := stsClient.GetCallerIdentity(cmd.Context(), &sts.GetCallerIdentityInput{})
-					if err == nil && idOut.Arn != nil && *idOut.Arn != "" {
-						awsOwnerFilter = *idOut.Arn
-						cleanupDiscoverOpts.ownerIsDefault = true
-					}
+		if !cleanupOpts.JSON {
+			renderCleanupScope(cmd.OutOrStdout(), plan.Scope)
+		}
+
+		switch {
+		case len(plan.Collectors) == 0:
+			err := fmt.Errorf("no searchable providers available")
+			if cleanupOpts.JSON {
+				if encodeErr := encodeJSONOutput(cmd.OutOrStdout(), cleanupDiscoverJSONOutput{
+					Scope: plan.Scope,
+					Error: commandError("no_searchable_providers", err),
+				}); encodeErr != nil {
+					return encodeErr
 				}
 			}
 
-			collectors = append(collectors,
-				aws.NewCollector(awsRegion, awsOwnerFilter, cleanupDiscoverOpts.Legacy))
-		}
+			return err
+		case successCount == 0:
+			err := fmt.Errorf("all selected provider discovery attempts failed")
+			if cleanupOpts.JSON {
+				if encodeErr := encodeJSONOutput(cmd.OutOrStdout(), cleanupDiscoverJSONOutput{
+					Scope: plan.Scope,
+					Error: commandError("provider_discovery_failed", err),
+				}); encodeErr != nil {
+					return encodeErr
+				}
+			}
 
-		// Exoscale Collector - use provided owner filter or empty for all
-		if shouldUseProvider(exoscale.ProviderName) {
-			exoOwnerFilter := cleanupDiscoverOpts.OwnerFilter
-			// Exoscale default: empty means all deployments (no caller identity equivalent)
-
-			collectors = append(collectors,
-				exoscale.NewCollector(cleanupOpts.ExoscaleZone, exoOwnerFilter, cleanupDiscoverOpts.Legacy))
-		}
-
-		if shouldUseProvider(stackit.ProviderName) {
-			collectors = append(collectors,
-				stackit.NewCollector(cleanupOpts.STACKITProjectId, cleanupOpts.STACKITRegion))
-		}
-
-		// Collect from all providers
-		res, err := shared.CollectAllProviders(cmd.Context(), collectors)
-		if err != nil {
 			return err
 		}
 		// Support comma-separated ordering hierarchy, default to state
@@ -193,11 +184,14 @@ var cleanupDiscoverCmd = &cobra.Command{
 			// final tie-breaker: deployment id
 			return res[item1].ID < res[item2].ID
 		})
-		if cleanupDiscoverOpts.JSON {
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-
-			return enc.Encode(res)
+		if cleanupOpts.JSON {
+			return encodeJSONOutput(cmd.OutOrStdout(), cleanupDiscoverJSONOutput{
+				Scope: plan.Scope,
+				Data:  res,
+				Summary: &cleanupDiscoverySummary{
+					Count: len(res),
+				},
+			})
 		}
 
 		// Prepare table rows
@@ -234,24 +228,7 @@ var cleanupDiscoverCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "\n")
 		}
 
-		// Build a concise summary of search parameters
-		mode := "project=exasol-personal"
-		if cleanupDiscoverOpts.Legacy {
-			mode = "legacy"
-		}
-		regionDisplay := cleanupOpts.AWSRegion
-		if regionDisplay == "" {
-			regionDisplay = "(default)"
-		}
-		if _, err := fmt.Fprintf(
-			cmd.OutOrStdout(),
-			"Total: %d deployments (owner=%s, region=%s, mode=%s, order=%s)\n",
-			len(res),
-			ownerFilterDisplay(cleanupDiscoverOpts.OwnerFilter),
-			regionDisplay,
-			mode,
-			order,
-		); err != nil {
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Total: %d deployments\n", len(res)); err != nil {
 			// non-fatal: log to stderr-like output
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "write output failed:", err)
 		}
@@ -262,10 +239,6 @@ var cleanupDiscoverCmd = &cobra.Command{
 }
 
 func registerCleanupDiscoverFlags(cmd *cobra.Command) {
-	cmd.Flags().BoolVar(&cleanupDiscoverOpts.JSON, "json", false, "Output JSON")
-	cmd.Flags().
-		StringVar(&cleanupDiscoverOpts.OwnerFilter, "owner", "",
-			"Owner ARN/wildcard to filter (defaults to caller; use * for any)")
 	cmd.Flags().StringVar(&cleanupDiscoverOpts.Order, "order", "state,created,resources",
 		"Order by columns (comma-separated). Prefix +/- for asc/desc per field."+
 			" Fields: deployment,provider,owner,region,created,state,resources."+
@@ -274,20 +247,9 @@ func registerCleanupDiscoverFlags(cmd *cobra.Command) {
 		"Discover legacy deployments (ignore mandatory Project=exasol-personal)")
 }
 
-func ownerFilterDisplay(f string) string {
-	if cleanupDiscoverOpts.ownerIsDefault {
-		return "(caller)"
-	}
-
-	if f == "" {
-		return "(caller)"
-	}
-
-	return f
-}
-
 // nolint: gochecknoinits
 func init() {
 	rootCmd.AddCommand(cleanupDiscoverCmd)
+	registerCommonFlags(cleanupDiscoverCmd, cleanupFlagOptions{includeOwner: true, includeJSON: true})
 	registerCleanupDiscoverFlags(cleanupDiscoverCmd)
 }

@@ -59,6 +59,10 @@ func createStackitClient(ctx context.Context) (*iaas.APIClient, *objectstorage.A
 }
 
 func GetAccountInfo(ctx context.Context, projectId string) (string, error) {
+	if projectId == "" {
+		return "", fmt.Errorf("STACKIT project id is required")
+	}
+
 	_, _, resourceManagerClient, err := createStackitClient(ctx)
 	if err != nil {
 		return "", err
@@ -66,10 +70,15 @@ func GetAccountInfo(ctx context.Context, projectId string) (string, error) {
 
 	projectResp, err := resourceManagerClient.DefaultAPI.GetProject(ctx, projectId).Execute()
 	if err != nil {
-		return projectResp.GetName(), nil
+		return "", fmt.Errorf("failed to get STACKIT project %s: %w", projectId, err)
 	}
 
-	return "[restricted]", nil
+	projectName := projectResp.GetName()
+	if projectName == "" {
+		return projectId, nil
+	}
+
+	return projectName, nil
 
 }
 
@@ -256,7 +265,8 @@ func CollectDeploymentDetails(
 func CollectDeploymentSummaries(
 	ctx context.Context,
 	projectId,
-	region string,
+	region,
+	ownerFilter string,
 ) ([]DeploymentSummary, error) {
 	resources, err := CollectResources(ctx, projectId, region, nil)
 	if err != nil {
@@ -274,7 +284,11 @@ func CollectDeploymentSummaries(
 	// Convert map to slice
 	result := make([]DeploymentSummary, 0, len(resourcesByDeployment))
 	for deploymentID, deploymentResources := range resourcesByDeployment {
-		result = append(result, summarizeDeploymentResources(deploymentID, region, deploymentResources))
+		summary := summarizeDeploymentResources(deploymentID, region, deploymentResources)
+		if !ownerMatchesFilter(summary.Owner, ownerFilter) {
+			continue
+		}
+		result = append(result, summary)
 	}
 
 	return result, nil
@@ -712,6 +726,20 @@ func firstStringAdditionalProperty(properties map[string]interface{}, keys ...st
 	}
 
 	return "", false
+}
+
+func ownerMatchesFilter(owner, filter string) bool {
+	if filter == "" || filter == "*" {
+		return true
+	}
+	pattern := "^" + regexp.QuoteMeta(filter) + "$"
+	pattern = strings.ReplaceAll(pattern, "\\*", ".*")
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return false
+	}
+
+	return re.MatchString(owner)
 }
 
 func serverStateToSimple(state string) string {
