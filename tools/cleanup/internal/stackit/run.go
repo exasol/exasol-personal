@@ -23,6 +23,8 @@ func BuildPlan() CleanupPlan {
 	return CleanupPlan{Phases: []Phase{
 		{Name: "servers", Types: []ResourceType{ResourceServer}},
 		{Name: "volumes", Types: []ResourceType{ResourceVolume}},
+		{Name: "public-ips", Types: []ResourceType{ResourcePublicIP}},
+		{Name: "network-interfaces", Types: []ResourceType{ResourceNetworkInterface}},
 		{Name: "networks", Types: []ResourceType{ResourceNetwork}},
 		{Name: "security-groups", Types: []ResourceType{ResourceSecurityGroup}},
 		{Name: "objectstorage-buckets", Types: []ResourceType{ResourceObjectStorageBucket}},

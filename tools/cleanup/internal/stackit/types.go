@@ -26,6 +26,7 @@ type ResourceType = shared.ResourceType
 const (
 	ResourceServer                        ResourceType = "stackit-server"
 	ResourceVolume                        ResourceType = "stackit-volume"
+	ResourcePublicIP                      ResourceType = "stackit-public-ip"
 	ResourceNetworkInterface              ResourceType = "stackit-network-interface"
 	ResourceNetwork                       ResourceType = "stackit-network"
 	ResourceSecurityGroup                 ResourceType = "stackit-security-group"
