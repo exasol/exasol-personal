@@ -127,6 +127,25 @@ func CollectResources(ctx context.Context, projectId, region string, deploymentI
 				resources = append(resources, *meta)
 			}
 		}
+
+		for _, net := range networksResp.GetItems() {
+			nicsResp, err := iaasClient.DefaultAPI.ListNics(ctx, projectId, region, net.GetId()).Execute()
+			if err != nil {
+				slog.Debug("list network interfaces failed", "network_id", net.GetId(), "error", err)
+				continue
+			}
+
+			for _, nic := range nicsResp.GetItems() {
+				meta, err := ResourceMetaFromNIC(nic, projectId, region)
+				if err != nil {
+					return nil, err
+				}
+
+				if isDeployment(meta, deploymentId) {
+					resources = append(resources, *meta)
+				}
+			}
+		}
 	}
 
 	securityGroupsResp, err := iaasClient.DefaultAPI.ListSecurityGroups(ctx, projectId, region).Execute()
@@ -135,6 +154,22 @@ func CollectResources(ctx context.Context, projectId, region string, deploymentI
 	} else {
 		for _, sg := range securityGroupsResp.GetItems() {
 			meta, err := ResourceMetaFromSecurityGroup(sg, projectId, region)
+			if err != nil {
+				return nil, err
+			}
+
+			if isDeployment(meta, deploymentId) {
+				resources = append(resources, *meta)
+			}
+		}
+	}
+
+	publicIPsResp, err := iaasClient.DefaultAPI.ListPublicIPs(ctx, projectId, region).Execute()
+	if err != nil {
+		slog.Debug("list public IPs failed", "error", err)
+	} else {
+		for _, publicIP := range publicIPsResp.GetItems() {
+			meta, err := ResourceMetaFromPublicIP(publicIP, projectId, region)
 			if err != nil {
 				return nil, err
 			}
@@ -210,61 +245,8 @@ func CollectDeploymentDetails(
 	}
 
 	details := &DeploymentDetails{
-		Summary: DeploymentSummary{
-			ID:        deploymentId,
-			Provider:  "stackit",
-			Region:    region,
-			Owner:     "",
-			CreatedAt: time.Time{},
-			State:     StateUnknown,
-		},
+		Summary:   summarizeDeploymentResources(deploymentId, region, resources),
 		Resources: resources,
-	}
-
-	var earliest *time.Time
-	hasInstances := false
-	hasActive := false
-	hasStopped := false
-
-	for _, meta := range resources {
-		if meta.Ref.Type == ResourceServer {
-			state := meta.Attr["status"].(string)
-			switch state {
-			case StateActive:
-				hasActive = true
-			case StateStopped:
-				hasStopped = true
-			}
-		}
-
-		createdAt, ok := meta.Attr["createdAt"].(time.Time)
-		if ok && !createdAt.IsZero() && createdAt.Before(*earliest) {
-			earliest = &createdAt
-		}
-	}
-
-	// Update summary
-	details.Summary.Resources = len(details.Resources)
-	if earliest != nil {
-		details.Summary.CreatedAt = *earliest
-	}
-
-	// Determine state
-	if hasInstances {
-		switch {
-		case hasActive:
-			details.Summary.State = StateActive
-		case hasStopped:
-			details.Summary.State = StateStopped
-		case details.Summary.Resources > 0:
-			details.Summary.State = StateTerminated
-		}
-	} else if details.Summary.Resources > 0 {
-		details.Summary.State = "orphaned"
-	}
-
-	if details.Summary.Owner == "" {
-		details.Summary.Owner = "-"
 	}
 
 	return details, nil
@@ -281,60 +263,121 @@ func CollectDeploymentSummaries(
 		return nil, err
 	}
 
-	summaries := make(map[string]*DeploymentSummary)
+	resourcesByDeployment := make(map[string][]ResourceMeta)
 	for _, meta := range resources {
 		depId, ok := getDeploymentId(&meta)
 		if ok {
-			sum, ok := summaries[depId]
-			if !ok {
-				sum = &DeploymentSummary{
-					ID:        depId,
-					Provider:  "stackit",
-					Region:    region,
-					Owner:     "",
-					CreatedAt: time.Time{},
-					State:     StateUnknown,
-				}
-
-				summaries[depId] = sum
-			}
-
-			sum.Resources++
-
-			if meta.Ref.Type == ResourceServer {
-				state := meta.Attr["state"].(string)
-				switch state {
-				case StateActive:
-					if sum.State != StateActive {
-						sum.State = StateActive
-					}
-				case StateStopped:
-					if sum.State != StateActive {
-						sum.State = StateStopped
-					}
-				}
-			}
-
-			createdAt, ok := meta.Attr["createdAt"].(time.Time)
-			if ok && !createdAt.IsZero() && createdAt.Before(sum.CreatedAt) {
-				sum.CreatedAt = createdAt
-			}
+			resourcesByDeployment[depId] = append(resourcesByDeployment[depId], meta)
 		}
 	}
 
 	// Convert map to slice
-	result := make([]DeploymentSummary, 0, len(summaries))
-	for _, s := range summaries {
-		if s.Owner == "" {
-			s.Owner = "-"
-		}
-		result = append(result, *s)
+	result := make([]DeploymentSummary, 0, len(resourcesByDeployment))
+	for deploymentID, deploymentResources := range resourcesByDeployment {
+		result = append(result, summarizeDeploymentResources(deploymentID, region, deploymentResources))
 	}
 
 	return result, nil
 }
 
 // Helper functions
+
+func summarizeDeploymentResources(
+	deploymentID string,
+	region string,
+	resources []ResourceMeta,
+) DeploymentSummary {
+	summary := DeploymentSummary{
+		ID:        deploymentID,
+		Provider:  "stackit",
+		Region:    region,
+		Owner:     "",
+		CreatedAt: time.Time{},
+		State:     StateUnknown,
+		Resources: len(resources),
+	}
+
+	var earliest *time.Time
+	hasInstances := false
+	hasActive := false
+	hasProvisioning := false
+	hasStopped := false
+
+	for _, meta := range resources {
+		if summary.Owner == "" {
+			if owner := firstNonEmpty(meta.Tags["Owner"], meta.Tags["owner"]); owner != "" {
+				summary.Owner = owner
+			}
+		}
+
+		if meta.Ref.Type == ResourceServer {
+			hasInstances = true
+			if state, ok := meta.Attr["state"].(string); ok {
+				switch state {
+				case StateActive:
+					hasActive = true
+				case StateProvisioning:
+					hasProvisioning = true
+				case StateStopped:
+					hasStopped = true
+				}
+			}
+		}
+
+		if createdAt, ok := meta.Attr["createdAt"].(time.Time); ok && !createdAt.IsZero() {
+			earliest = preferEarlierTime(earliest, createdAt)
+		}
+	}
+
+	if earliest != nil {
+		summary.CreatedAt = *earliest
+	}
+
+	if hasInstances {
+		switch {
+		case hasActive:
+			summary.State = StateActive
+		case hasProvisioning:
+			summary.State = StateProvisioning
+		case hasStopped:
+			summary.State = StateStopped
+		case summary.Resources > 0:
+			summary.State = StateTerminated
+		}
+	} else if summary.Resources > 0 {
+		summary.State = "orphaned"
+	}
+
+	if summary.Owner == "" {
+		summary.Owner = "-"
+	}
+
+	return summary
+}
+
+func preferEarlierTime(existing *time.Time, candidate time.Time) *time.Time {
+	if candidate.IsZero() {
+		return existing
+	}
+
+	if existing == nil || candidate.Before(*existing) {
+		candidateCopy := candidate
+
+		return &candidateCopy
+	}
+
+	return existing
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+
+	return ""
+}
 
 func ResourceMetaFromServer(server iaas.Server, projectId, region string) (*ResourceMeta, error) {
 	labels, err := toStringMap(server.GetLabels())
@@ -425,6 +468,68 @@ func ResourceMetaFromNetwork(net iaas.Network, projectId, region string) (*Resou
 	return &meta, nil
 }
 
+func ResourceMetaFromNIC(nic iaas.NIC, projectId, region string) (*ResourceMeta, error) {
+	labels, err := toStringMap(nic.GetLabels())
+	if err != nil {
+		return nil, err
+	}
+
+	id := nic.GetId()
+	name := nic.GetName()
+	networkID := nic.GetNetworkId()
+	device := nic.GetDevice()
+	ipv4 := nic.GetIpv4()
+	status := strings.ToLower(nic.GetStatus())
+
+	meta := ResourceMeta{
+		Ref: ResourceRef{
+			ARN:      nicARN(region, projectId, networkID, id),
+			Type:     ResourceNetworkInterface,
+			Region:   region,
+			ParentID: networkID,
+			ID:       id,
+		},
+		Tags: labels,
+		Attr: map[string]any{
+			"name":      name,
+			"networkId": networkID,
+			"device":    device,
+			"ipv4":      ipv4,
+			"state":     status,
+		},
+	}
+
+	return &meta, nil
+}
+
+func ResourceMetaFromPublicIP(publicIP iaas.PublicIp, projectId, region string) (*ResourceMeta, error) {
+	labels, err := toStringMap(publicIP.GetLabels())
+	if err != nil {
+		return nil, err
+	}
+
+	id := publicIP.GetId()
+	ip := publicIP.GetIp()
+	networkInterfaceID := publicIP.GetNetworkInterface()
+
+	meta := ResourceMeta{
+		Ref: ResourceRef{
+			ARN:    publicIPARN(region, projectId, id),
+			Type:   ResourcePublicIP,
+			Region: region,
+			ID:     id,
+		},
+		Tags: labels,
+		Attr: map[string]any{
+			"name":             ip,
+			"ip":               ip,
+			"networkInterface": networkInterfaceID,
+		},
+	}
+
+	return &meta, nil
+}
+
 func ResourceMetaFromSecurityGroup(sg iaas.SecurityGroup, projectId, region string) (*ResourceMeta, error) {
 	labels, err := toStringMap(sg.GetLabels())
 	if err != nil {
@@ -476,27 +581,42 @@ func ResourceMetaFromAccessKey(key objectstorage.AccessKey, projectId, region st
 
 	id := key.GetKeyId()
 	name := key.GetDisplayName()
+	expires := key.GetExpires()
+	credentialsGroupID, _ := firstStringAdditionalProperty(key.AdditionalProperties, "credentialsGroupId", "credentialsGroupID", "groupId")
 
 	meta := ResourceMeta{
 		Ref: ResourceRef{
-			ARN:    credentialARN(region, projectId, id),
-			Type:   ResourceObjectStorageCredential,
-			Region: region,
-			ID:     id,
+			ARN:      credentialARN(region, projectId, id),
+			Type:     ResourceObjectStorageCredential,
+			Region:   region,
+			ParentID: credentialsGroupID,
+			ID:       id,
 		},
 		Tags: map[string]string{},
 		Attr: map[string]any{
-			"name": name,
+			"name":    name,
+			"expires": expires,
 		},
+	}
+
+	for _, keyName := range []string{"credentialsGroupId", "credentialsGroupID", "credentialsGroupName", "groupId", "groupName", "userUrn", "userURN", "urn"} {
+		if value, ok := stringAdditionalProperty(key.AdditionalProperties, keyName); ok {
+			meta.Attr[keyName] = value
+		}
 	}
 
 	return &meta, nil
 }
 
-func ResourceMetaFromCredentialsGroup(cg objectstorage.CredentialsGroup, projectId, region string) (*ResourceMeta, error) {
+func ResourceMetaFromCredentialsGroup(
+	cg objectstorage.CredentialsGroup,
+	projectId,
+	region string,
+) (*ResourceMeta, error) {
 
 	id := cg.GetCredentialsGroupId()
 	name := cg.GetDisplayName()
+	urn := cg.GetUrn()
 
 	meta := ResourceMeta{
 		Ref: ResourceRef{
@@ -508,6 +628,7 @@ func ResourceMetaFromCredentialsGroup(cg objectstorage.CredentialsGroup, project
 		Tags: map[string]string{},
 		Attr: map[string]any{
 			"name": name,
+			"urn":  urn,
 		},
 	}
 
@@ -523,7 +644,7 @@ func isDeployment(meta *ResourceMeta, deploymentId *string) bool {
 		return true
 	}
 
-	if name, ok := meta.Attr["name"]; ok && (strings.HasPrefix(name.(string), *deploymentId+"-") || name == *deploymentId) {
+	if name, ok := meta.Attr["name"].(string); ok && (strings.HasPrefix(name, *deploymentId+"-") || name == *deploymentId) {
 		return true
 	}
 
@@ -565,6 +686,34 @@ func toStringMap(m map[string]interface{}) (map[string]string, error) {
 	return result, nil
 }
 
+func stringAdditionalProperty(properties map[string]interface{}, key string) (string, bool) {
+	if properties == nil {
+		return "", false
+	}
+
+	value, ok := properties[key]
+	if !ok {
+		return "", false
+	}
+
+	stringValue, ok := value.(string)
+	if !ok || stringValue == "" {
+		return "", false
+	}
+
+	return stringValue, true
+}
+
+func firstStringAdditionalProperty(properties map[string]interface{}, keys ...string) (string, bool) {
+	for _, key := range keys {
+		if value, ok := stringAdditionalProperty(properties, key); ok {
+			return value, true
+		}
+	}
+
+	return "", false
+}
+
 func serverStateToSimple(state string) string {
 	switch state {
 	case "ACTIVE", "BACKING-UP", "SNAPSHOTTING", "STARTING":
@@ -600,6 +749,14 @@ func serverARN(region, projectId, id string) string {
 
 func volumeARN(region, projectId, id string) string {
 	return fmt.Sprintf("stackit:%s:project:%s:volume:%s", region, projectId, id)
+}
+
+func publicIPARN(region, projectId, id string) string {
+	return fmt.Sprintf("stackit:%s:project:%s:public-ip:%s", region, projectId, id)
+}
+
+func nicARN(region, projectId, networkID, id string) string {
+	return fmt.Sprintf("stackit:%s:project:%s:network:%s:nic:%s", region, projectId, networkID, id)
 }
 
 func networkARN(region, projectId, id string) string {

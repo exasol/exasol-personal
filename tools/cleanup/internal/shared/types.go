@@ -21,10 +21,11 @@ type DeploymentSummary struct {
 
 // ResourceRef identifies a resource found via tagging or relationship.
 type ResourceRef struct {
-	ARN    string       `json:"arn"`
-	Type   ResourceType `json:"type"`
-	Region string       `json:"region"`
-	ID     string       `json:"id"` // native ID (e.g., i-123, vol-abc)
+	ARN      string       `json:"arn"`
+	Type     ResourceType `json:"type"`
+	Region   string       `json:"region"`
+	ParentID string       `json:"parentId,omitempty"`
+	ID       string       `json:"id"` // native ID (e.g., i-123, vol-abc)
 }
 
 // ResourceMeta adds descriptive metadata used for planning & output.
