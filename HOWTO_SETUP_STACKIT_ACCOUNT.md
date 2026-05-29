@@ -18,11 +18,15 @@ In the STACKIT portal, make sure you have an active organization with billing co
 
 ### 🔐 In the STACKIT Portal, do the following:
 
-1. Go to the resource manager.
+1. Go to the "Resource manager".
 2. Create a new project and enter it.
-3. Create a service account and select it.
-4. Create and download a service account key.
-5. Copy the project's UUID.
+3. Go to the "Service Accounts" menu in the "IAM" section.
+4. Create a service account and select it.
+5. Copy the service account's email.
+6. Create a service account key and download the JSON file.
+7. Go to the "Access" menu in the "IAM" section.
+8. Grant access to the service account using its email as the subject and give it the "Editor" role in the "Basic" section.
+9. Copy the project's UUID from the URL or the "Resource manager".
 
 ### 💻 On your local machine, do the following:
 
