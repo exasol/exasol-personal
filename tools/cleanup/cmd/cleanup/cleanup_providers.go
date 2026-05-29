@@ -4,17 +4,21 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"log/slog"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/stackit"
 	"github.com/spf13/cobra"
 )
 
 const cleanupProvidersShort = "List available providers and connection status"
+
+type providerStatus struct {
+	Provider  string `json:"provider"`
+	Location  string `json:"location"`
+	Connected bool   `json:"connected"`
+	Account   string `json:"account,omitempty"`
+}
 
 var cleanupProvidersCmd = &cobra.Command{
 	Use:    "providers",
@@ -24,61 +28,54 @@ var cleanupProvidersCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 
-		var collectors []shared.ProviderCollector
-
-		// AWS provider
-		if shouldUseProvider(aws.ProviderName) {
-			awsRegion := cleanupOpts.AWSRegion
-			if awsRegion == "" {
-				awsRegion = "us-east-1" // Default region for availability check
-			}
-			collectors = append(collectors, aws.NewCollector(awsRegion, "", false))
-		}
-
-		// Exoscale provider
-		if shouldUseProvider(exoscale.ProviderName) {
-			exoscaleZone := cleanupOpts.ExoscaleZone
-			if exoscaleZone == "" {
-				exoscaleZone = "ch-gva-2" // Already has default, but be explicit
-			}
-			collectors = append(collectors, exoscale.NewCollector(exoscaleZone, "", false))
-		}
-
-		if shouldUseProvider(stackit.ProviderName) {
-			collectors = append(collectors, stackit.NewCollector(cleanupOpts.STACKITProjectId, cleanupOpts.STACKITRegion))
-		}
-
-		for _, collector := range collectors {
-			providerName := collector.Name()
-			// Capitalize and pad provider name for alignment
-			displayName := providerName
-			if displayName == "aws" {
-				displayName = "AWS"
-			} else if displayName == "exoscale" {
-				displayName = "Exoscale"
-			} else if displayName == "stackit" {
-				displayName = "STACKIT"
-			}
-
-			// Pad to 11 characters for alignment
-			padded := fmt.Sprintf("%-11s", displayName)
-
-			if !collector.IsAvailable(cmd.Context()) {
-				fmt.Printf("%s Disconnected\n", padded)
-				slog.Debug("provider not available", "provider", providerName)
+		statuses := make([]providerStatus, 0)
+		for _, spec := range cleanupProviderSpecs() {
+			if !shouldUseProvider(spec.Name) {
 				continue
 			}
+			for _, location := range spec.Locations() {
+				collector := spec.BuildCollector(location, "", false)
+				status := providerStatus{Provider: spec.Name, Location: location, Connected: false}
+				accountInfo, err := collector.GetAccountInfo(cmd.Context())
+				if err != nil {
+					statuses = append(statuses, status)
+					slog.Debug("failed to get account info",
+						"provider", spec.Name,
+						"location", location,
+						"error", err)
+					continue
+				}
 
-			accountInfo, err := collector.GetAccountInfo(cmd.Context())
-			if err != nil {
-				fmt.Printf("%s Disconnected\n", padded)
-				slog.Debug("failed to get account info",
-					"provider", providerName,
-					"error", err)
-				continue
+				status.Connected = true
+				status.Account = accountInfo
+				statuses = append(statuses, status)
 			}
+		}
 
-			fmt.Printf("%s Connected    %s\n", padded, accountInfo)
+		if cleanupOpts.JSON {
+			enc := json.NewEncoder(cmd.OutOrStdout())
+			enc.SetIndent("", "  ")
+
+			return enc.Encode(statuses)
+		}
+
+		rows := make([][]string, 0, len(statuses))
+		for _, status := range statuses {
+			connected := "disconnected"
+			account := "-"
+			if status.Connected {
+				connected = "connected"
+				account = status.Account
+			}
+			rows = append(rows, []string{status.Provider, status.Location, connected, account})
+		}
+		if len(rows) > 0 {
+			shared.RenderTable(
+				cmd.OutOrStdout(),
+				[]string{"provider", "location", "status", "account"},
+				[]int{12, 14, 12, 24},
+				rows,
+			)
 		}
 
 		return nil
@@ -88,4 +85,5 @@ var cleanupProvidersCmd = &cobra.Command{
 // nolint: gochecknoinits
 func init() {
 	rootCmd.AddCommand(cleanupProvidersCmd)
+	registerCommonFlags(cleanupProvidersCmd, cleanupFlagOptions{})
 }

@@ -15,14 +15,16 @@ const ProviderName = "stackit"
 
 // Collector implements shared.ProviderCollector for STACKIT.
 type Collector struct {
-	projectId string
-	region    string
+	projectId   string
+	region      string
+	ownerFilter string
 }
 
-func NewCollector(projectId, region string) *Collector {
+func NewCollector(projectId, region, ownerFilter string) *Collector {
 	return &Collector{
-		projectId: projectId,
-		region:    region,
+		projectId:   projectId,
+		region:      region,
+		ownerFilter: ownerFilter,
 	}
 }
 
@@ -41,7 +43,7 @@ func (c *Collector) GetAccountInfo(ctx context.Context) (string, error) {
 }
 
 func (c *Collector) CollectDeploymentSummaries(ctx context.Context) ([]shared.DeploymentSummary, error) {
-	return CollectDeploymentSummaries(ctx, c.projectId, c.region)
+	return CollectDeploymentSummaries(ctx, c.projectId, c.region, c.ownerFilter)
 }
 
 func (c *Collector) CollectDeploymentDetails(ctx context.Context, deploymentId string) (*shared.DeploymentDetails, error) {
