@@ -1,6 +1,8 @@
+.github/CODEOWNERS @exasol/r-d-platform-blue
 .github/workflows/** @exasol/r-d-platform-blue
 .github/actions/** @exasol/r-d-platform-blue
 .github/scripts/** @exasol/r-d-platform-blue
+.ciignore @exasol/r-d-platform-blue
 .goreleaser.yaml @exasol/r-d-platform-blue
 Taskfile.yml @exasol/r-d-platform-blue
 doc/repository_security_spec.md @exasol/r-d-platform-blue

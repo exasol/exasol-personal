@@ -15,8 +15,22 @@ Runs automatically on every push to `main` and on pull requests targeting `main`
 - **Unit Tests** - Runs Go unit tests with coverage
 - **Integration Tests** - Runs Python integration tests
 
+The workflow first classifies changed files. Pull request changes matching only patterns in [`.ciignore`](../.ciignore) run the documentation quality stage and skip the expensive build, lint, and test jobs. Full CI runs for pushes to `main` and whenever a pull request changes at least one file outside `.ciignore`.
+
+Use the final `ci-required` job as the protected required status check. Individual CI jobs can be intentionally skipped by the classifier, so requiring them directly can block documentation-only pull requests.
+
 This is the only workflow that runs in pull request context. It is intentionally non-privileged and does not use deployment/release credentials.
 All CI jobs declare explicit minimal permissions.
+
+Required repository settings:
+- Protect the default branch with `ci-required` as the required CI status check for pull requests.
+- Do not require the individual CI jobs directly because they can be skipped intentionally by change classification.
+- Require Code Owner review so changes to CI policy files, including [`.ciignore`](../.ciignore), are reviewed by the owning team.
+
+Maintainer notes:
+- Add documentation-only patterns to [`.ciignore`](../.ciignore) when a path can safely skip full CI in pull requests.
+- Keep `.ciignore` conservative because any non-matching file automatically triggers full CI.
+- To inspect or rerun validation, use the normal workflow run in GitHub Actions; jobs skipped by classification will remain skipped unless the changed file set changes.
 
 ### Release Pipeline (`release.yml`)
 

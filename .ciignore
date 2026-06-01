@@ -1,0 +1,9 @@
+# Pull request changes matching only these patterns can skip full CI.
+doc/**
+docs/**
+*.md
+*.mdx
+*.rst
+*.txt
+.github/ISSUE_TEMPLATE/**
+.github/pull_request_template.md
