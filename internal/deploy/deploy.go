@@ -59,12 +59,12 @@ func Deploy(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	verbose bool,
-	tofuLockfileMode TofuLockfileMode,
+	options DeployOptions,
 ) error {
 	slog.Debug("Running deploy")
 
 	// Execute according to infrastructure/installation manifests instead of exasolConfig.yaml
-	return deployFromManifests(ctx, deployment, verbose, tofuLockfileMode)
+	return deployFromManifests(ctx, deployment, verbose, options)
 }
 
 func WorkflowStatePermitsDeploy(
@@ -111,7 +111,7 @@ func deployFromManifests(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	verbose bool,
-	tofuLockfileMode TofuLockfileMode,
+	options DeployOptions,
 ) error {
 	return withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
@@ -154,7 +154,7 @@ func deployFromManifests(
 			if err != nil {
 				return err
 			}
-			backend, err := resolveBackendForManifest(infrastructureManifest)
+			backend, err := newDeploymentBackend(deployment, infrastructureManifest)
 			if err != nil {
 				return err
 			}
@@ -171,11 +171,9 @@ func deployFromManifests(
 
 			if err := backend.Deploy(
 				ctx,
-				deployment,
-				infrastructureManifest,
 				externalCommandOutput,
 				externalCommandOutput,
-				tofuLockfileMode,
+				options,
 			); err != nil {
 				unregister()
 

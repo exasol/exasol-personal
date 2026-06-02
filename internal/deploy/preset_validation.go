@@ -29,11 +29,7 @@ func ValidatePresetSelection(
 			err,
 		)
 	}
-	backend, err := resolveBackendForManifest(infrastructureManifest)
-	if err != nil {
-		return err
-	}
-	if err := backend.ValidateEnvironment(); err != nil {
+	if _, err := resolveBackendKind(infrastructureManifest); err != nil {
 		return err
 	}
 

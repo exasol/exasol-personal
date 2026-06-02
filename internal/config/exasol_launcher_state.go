@@ -72,6 +72,13 @@ type ExasolPersonalState struct {
 	InfrastructurePresetIdentity string `json:"infrastructurePresetIdentity,omitempty"`
 	// InstallationPresetIdentity is the stable selector used to initialize this deployment.
 	InstallationPresetIdentity string `json:"installationPresetIdentity,omitempty"`
+	// CreatedAt is the launcher-owned timestamp marking when this deployment
+	// directory was initialized. It is persisted here so that backends can be
+	// re-configured without needing to consult their own state storage to learn
+	// the original deployment creation time (which is a launcher concept, not a
+	// backend one). Backends may still receive CreatedAt via DeploymentMetadata
+	// and persist it for their own purposes (e.g. resource tagging).
+	CreatedAt time.Time `json:"createdAt,omitempty"`
 }
 
 // DirectoryExasolPersonalStatefile.

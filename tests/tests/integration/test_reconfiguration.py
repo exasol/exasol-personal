@@ -16,6 +16,40 @@ from .helpers import (
 
 PRESET_FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "presets"
 
+CONFIGURABLE_INFRASTRUCTURE_DISPLAY_NAME = "Configurable Test Infrastructure"
+CONFIGURABLE_INFRASTRUCTURE_DESCRIPTION = "configurable test infrastructure"
+CONFIGURABLE_INSTALLATION_DISPLAY_NAME = "Empty Test Installation"
+CONFIGURABLE_INSTALLATION_DESCRIPTION = "empty test installation"
+
+
+def _configurable_active_configuration(
+    infra_dir: Path,
+    install_dir: Path,
+    infrastructure_options: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "infrastructure": {
+            "identity": {
+                "selector": f"path:{infra_dir}",
+                "kind": "path",
+                "path": str(infra_dir),
+                "displayName": CONFIGURABLE_INFRASTRUCTURE_DISPLAY_NAME,
+                "description": CONFIGURABLE_INFRASTRUCTURE_DESCRIPTION,
+            },
+            "options": infrastructure_options,
+        },
+        "installation": {
+            "identity": {
+                "selector": f"path:{install_dir}",
+                "kind": "path",
+                "path": str(install_dir),
+                "displayName": CONFIGURABLE_INSTALLATION_DISPLAY_NAME,
+                "description": CONFIGURABLE_INSTALLATION_DESCRIPTION,
+            },
+            "options": {},
+        },
+    }
+
 
 def _infrastructure_presets_or_skip(exasol_path: str, count: int) -> list[str]:
     result = run_command([exasol_path, "presets", "list", "--json"])
@@ -154,7 +188,14 @@ def test_config_set_updates_same_preset_variables(
         deployment_dir,
         "cluster-size",
         "instance-type",
-    ) == {"cluster-size": 3, "instance-type": "custom-instance"}
+    ) == _configurable_active_configuration(
+        infra_dir,
+        install_dir,
+        {
+            "cluster-size": 3,
+            "instance-type": "custom-instance",
+        },
+    )
 
 
 def test_init_updates_same_preset_variables(exasol_path: str, tmp_path: Path) -> None:
@@ -200,7 +241,14 @@ def test_init_updates_same_preset_variables(exasol_path: str, tmp_path: Path) ->
         deployment_dir,
         "cluster-size",
         "instance-type",
-    ) == {"cluster-size": 3, "instance-type": "custom-instance"}
+    ) == _configurable_active_configuration(
+        infra_dir,
+        install_dir,
+        {
+            "cluster-size": 3,
+            "instance-type": "custom-instance",
+        },
+    )
 
 
 def test_config_get_outputs_active_configuration(
@@ -240,7 +288,11 @@ def test_config_get_outputs_active_configuration(
 
     # Then only the requested active value is printed
     assert result.returncode == 0
-    assert json.loads(result.stdout) == {"cluster-size": 5}
+    assert json.loads(result.stdout) == _configurable_active_configuration(
+        infra_dir,
+        install_dir,
+        {"cluster-size": 5},
+    )
 
 
 def test_config_reset_restores_selected_defaults(
@@ -284,7 +336,14 @@ def test_config_reset_restores_selected_defaults(
         deployment_dir,
         "cluster-size",
         "instance-type",
-    ) == {"cluster-size": 2, "instance-type": "custom-instance"}
+    ) == _configurable_active_configuration(
+        infra_dir,
+        install_dir,
+        {
+            "cluster-size": 2,
+            "instance-type": "custom-instance",
+        },
+    )
 
 
 def test_config_reset_all_restores_all_defaults(
@@ -328,7 +387,14 @@ def test_config_reset_all_restores_all_defaults(
         deployment_dir,
         "cluster-size",
         "instance-type",
-    ) == {"cluster-size": 2, "instance-type": "default-instance"}
+    ) == _configurable_active_configuration(
+        infra_dir,
+        install_dir,
+        {
+            "cluster-size": 2,
+            "instance-type": "default-instance",
+        },
+    )
 
 
 def test_config_set_refuses_running_deployment(
@@ -481,7 +547,14 @@ def test_install_updates_same_preset_configuration_before_retry(
         deployment_dir,
         "cluster-size",
         "instance-type",
-    ) == {"cluster-size": 4, "instance-type": "custom-instance"}
+    ) == _configurable_active_configuration(
+        infra_dir,
+        install_dir,
+        {
+            "cluster-size": 4,
+            "instance-type": "custom-instance",
+        },
+    )
 
 
 def test_install_refuses_same_preset_configuration_change_for_running_deployment(
@@ -525,9 +598,15 @@ def test_install_refuses_same_preset_configuration_change_for_running_deployment
     stderr = exc.value.stderr.lower()
     assert "deployment may already have cloud resources" in stderr
     assert "exasol destroy" in stderr
-    assert _get_active_configuration(exasol_path, deployment_dir, "cluster-size") == {
-        "cluster-size": 2
-    }
+    assert _get_active_configuration(
+        exasol_path,
+        deployment_dir,
+        "cluster-size",
+    ) == _configurable_active_configuration(
+        infra_dir,
+        install_dir,
+        {"cluster-size": 2},
+    )
     updated_state = json.loads(
         (deployment_dir / ".exasolLauncherState.json").read_text()
     )

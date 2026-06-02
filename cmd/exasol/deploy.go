@@ -25,16 +25,14 @@ var deployCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 		deployment := commonFlags.Deployment()
-		lockfileMode := deploy.TofuLockfileReadonly
-		if commonFlags.DeployTofuUpdateLockfile {
-			lockfileMode = deploy.TofuLockfileUpdate
-		}
 
 		if err := deploy.Deploy(
 			cmd.Context(),
 			deployment,
 			commonFlags.DeployVerbose,
-			lockfileMode,
+			deploy.DeployOptions{
+				UpdateDependencyLockfile: commonFlags.DeployTofuUpdateLockfile,
+			},
 		); err != nil {
 			return err
 		}

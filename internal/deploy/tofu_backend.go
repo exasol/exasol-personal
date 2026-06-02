@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -19,70 +20,107 @@ import (
 	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/exasol/exasol-personal/internal/util"
 	"github.com/zclconf/go-cty/cty"
+	ctyjson "github.com/zclconf/go-cty/cty/json"
 )
 
-type tofuBackend struct{}
-
-func (tofuBackend) ValidateEnvironment() error {
-	return nil
+// tofuReservedVariableNames lists the infrastructure variable names that the
+// launcher injects automatically when configuring the tofu backend. They are
+// not user-configurable and must never appear in the configuration surface
+// exposed by ReadConfiguration / ReadDeploymentConfigVariables.
+//
+// This list is a tofu-backend implementation detail: a future backend may
+// reserve a completely different set of names (or none at all).
+var tofuReservedVariableNames = map[string]struct{}{
+	"deployment_id":               {},
+	"cluster_identity":            {},
+	"deployment_created_at":       {},
+	"infrastructure_artifact_dir": {},
+	"installation_preset_dir":     {},
 }
 
-func (tofuBackend) SetupWorkspace(
-	_ context.Context,
+// tofuBackend is a deploymentBackend implementation bound to a specific
+// deployment directory and the tofu portion of its infrastructure manifest.
+//
+// It caches the parsed defaults of the preset's variables file so that a
+// single high-level operation (e.g. `config set`) does not parse the same file
+// repeatedly across calls to ReadConfiguration, ReadDeploymentConfigVariables
+// and Configure. A backend instance is intended for use within a single
+// operation and is not safe for concurrent use.
+type tofuBackend struct {
+	deployment config.DeploymentDir
+	cfg        *tofu.Config
+
+	defaultsCached bool
+	defaults       map[string]*tofu.Variable
+	defaultsErr    error
+}
+
+func newTofuBackend(
 	deployment config.DeploymentDir,
 	manifest *presets.InfrastructureManifest,
-) error {
-	if manifest.Tofu == nil {
+) *tofuBackend {
+	b := &tofuBackend{deployment: deployment}
+	if manifest != nil && manifest.Tofu != nil {
+		b.cfg = tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
+	}
+
+	return b
+}
+
+func (b *tofuBackend) SetupWorkspace(_ context.Context) error {
+	if !b.hasTofu() {
 		slog.Info("tofu: no configuration defined; skipping workspace setup")
 		return nil
 	}
 
-	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
-
-	return tofu.SetupWorkspace(tofuCfg)
+	return tofu.SetupWorkspace(b.cfg)
 }
 
-func (tofuBackend) Configure(
+func (b *tofuBackend) Configure(
 	_ context.Context,
-	deployment config.DeploymentDir,
-	manifest *presets.InfrastructureManifest,
-	values []DeploymentConfigValue,
+	overrides map[string]string,
+	metadata DeploymentMetadata,
+	layout DeploymentLayout,
 ) error {
-	if manifest.Tofu == nil {
+	if !b.hasTofu() {
 		slog.Info("tofu: no configuration defined; skipping configuration")
 		return nil
 	}
 
-	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
+	infraVars := make(map[string]string, len(overrides)+len(tofuReservedVariableNames))
+	for name, value := range overrides {
+		if _, reserved := tofuReservedVariableNames[name]; reserved {
+			// Reserved names are launcher-governed; silently drop any caller
+			// attempt to override them.
+			continue
+		}
+		infraVars[name] = value
+	}
+	infraVars["deployment_id"] = string(metadata.ID)
+	infraVars["cluster_identity"] = string(metadata.ClusterIdentity)
+	infraVars["deployment_created_at"] = metadata.CreatedAt.UTC().Format(time.RFC3339)
+	infraVars["infrastructure_artifact_dir"] = string(layout.InfrastructureArtifactDir)
+	infraVars["installation_preset_dir"] = string(layout.InstallationPresetDir)
 
-	return tofu.Configure(tofuCfg, configValuesRawMap(values))
+	return tofu.Configure(b.cfg, infraVars)
 }
 
-func (tofuBackend) ReadConfiguration(
-	deployment config.DeploymentDir,
-	manifest *presets.InfrastructureManifest,
-) ([]DeploymentConfigValue, error) {
-	if manifest.Tofu == nil {
+func (b *tofuBackend) ReadConfiguration() ([]DeploymentConfigValue, error) {
+	if !b.hasTofu() {
 		return []DeploymentConfigValue{}, nil
 	}
-
-	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
-	variableData, err := os.ReadFile(tofuCfg.VariablesFile())
-	if err != nil {
-		return nil, err
-	}
-	defaults, err := tofu.ParseVarFile(variableData, tofuCfg.VariablesFile())
+	defaults, err := b.loadDefaults()
 	if err != nil {
 		return nil, err
 	}
 
 	currentValues := map[string]cty.Value{}
-	tfvarsData, err := os.ReadFile(tofuCfg.VarsOutputFile())
+	tfvarsData, err := os.ReadFile(b.cfg.VarsOutputFile())
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	if err == nil {
-		currentValues, err = tofu.ParseVarsValuesFile(tfvarsData, tofuCfg.VarsOutputFile())
+		currentValues, err = tofu.ParseVarsValuesFile(tfvarsData, b.cfg.VarsOutputFile())
 		if err != nil {
 			return nil, err
 		}
@@ -90,7 +128,10 @@ func (tofuBackend) ReadConfiguration(
 
 	values := make([]DeploymentConfigValue, 0, len(defaults))
 	for name, variable := range defaults {
-		if variable == nil || isReservedInfrastructureVariableName(name) {
+		if variable == nil {
+			continue
+		}
+		if _, reserved := tofuReservedVariableNames[name]; reserved {
 			continue
 		}
 		value := variable.Value
@@ -130,31 +171,125 @@ func (tofuBackend) ReadConfiguration(
 			)
 		}
 		values = append(values, DeploymentConfigValue{
-			Name:         configOptionDisplayName(name),
-			Scope:        ConfigScopeInfrastructure,
-			Type:         variable.Type,
-			Value:        scalar,
-			Default:      defaultScalar,
-			VariableName: name,
-			RawValue:     rawValue,
-			RawDefault:   rawDefault,
+			Name:       name,
+			Type:       tofuVariableType(variable.Type),
+			Value:      scalar,
+			Default:    defaultScalar,
+			RawValue:   rawValue,
+			RawDefault: rawDefault,
 		})
 	}
 
 	return values, nil
 }
 
-func (tofuBackend) OpenHostShell(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	selectedNode string,
-) error {
-	sshRemote, err := sshRemoteForNodeUnsafe(deployment, selectedNode)
+func (b *tofuBackend) ReadDeploymentConfigVariables() (
+	map[string]ConfigVariableDefinition,
+	error,
+) {
+	defaults, err := b.loadDefaults()
+	if err != nil {
+		return nil, err
+	}
+
+	return tofuVariableDefinitions(defaults), nil
+}
+
+// readTofuPresetConfigVariables loads the configurable infrastructure
+// variables declared by a preset without consulting any deployment directory.
+func readTofuPresetConfigVariables(
+	preset PresetRef,
+	tofuManifest presets.InfrastructureTofu,
+) (map[string]ConfigVariableDefinition, error) {
+	var (
+		variableData []byte
+		filename     string
+		err          error
+	)
+	if preset.IsPath() {
+		tofuCfg := tofu.NewTofuConfigFromPreset(preset.Path, tofuManifest)
+		filename = tofuCfg.VariablesFile()
+		variableData, err = os.ReadFile(filename)
+	} else {
+		filename = tofuManifest.VariablesFile
+		variableData, err = presets.ReadInfrastructureFile(preset.Name, filename)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	tofuVars, err := tofu.ParseVarFile(variableData, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	return tofuVariableDefinitions(tofuVars), nil
+}
+
+func tofuVariableDefinitions(
+	tofuVars map[string]*tofu.Variable,
+) map[string]ConfigVariableDefinition {
+	variables := make(map[string]ConfigVariableDefinition, len(tofuVars))
+	for name, variable := range tofuVars {
+		if variable == nil {
+			continue
+		}
+		if _, reserved := tofuReservedVariableNames[name]; reserved {
+			continue
+		}
+		variables[name] = ConfigVariableDefinition{
+			Name:           name,
+			Description:    variable.Description,
+			Type:           tofuVariableType(variable.Type),
+			DefaultDisplay: ctyDefaultDisplay(variable.Value),
+			Required:       variable.Required,
+		}
+	}
+
+	return variables
+}
+
+func tofuVariableType(raw string) ConfigVariableType {
+	switch strings.TrimSpace(raw) {
+	case string(ConfigVariableTypeBool):
+		return ConfigVariableTypeBool
+	case string(ConfigVariableTypeNumber):
+		return ConfigVariableTypeNumber
+	default:
+		return ConfigVariableTypeString
+	}
+}
+
+func ctyDefaultDisplay(value cty.Value) string {
+	if value.IsNull() || !value.IsWhollyKnown() {
+		return ""
+	}
+	repr, err := ctyjson.Marshal(value, value.Type())
+	if err != nil {
+		return "<error>"
+	}
+
+	return string(repr)
+}
+
+func (b *tofuBackend) OpenHostShell(ctx context.Context, selectedNode string) error {
+	sshRemote, err := sshRemoteForNodeUnsafe(b.deployment, selectedNode)
 	if err != nil {
 		return err
 	}
 
 	return sshRemote.Shell(ctx, os.Stdout, os.Stderr)
+}
+
+func (b *tofuBackend) OpenCOSShell(ctx context.Context) error {
+	sshRemote, err := sshRemoteForNodeUnsafe(b.deployment, "n11")
+	if err != nil {
+		return err
+	}
+
+	cosCommand := "/usr/bin/env bash /opt/exasol_launcher/scripts/connectCos.sh"
+
+	return sshRemote.RunInteractiveCommand(ctx, cosCommand, os.Stdout, os.Stderr)
 }
 
 func ctyScalarToRawString(value cty.Value) (string, error) {
@@ -197,52 +332,44 @@ func ctyScalarToGoValue(value cty.Value) (any, error) {
 	}
 }
 
-func (tofuBackend) OpenCOSShell(ctx context.Context, deployment config.DeploymentDir) error {
-	sshRemote, err := sshRemoteForNodeUnsafe(deployment, "n11")
-	if err != nil {
-		return err
-	}
-
-	cosCommand := "/usr/bin/env bash /opt/exasol_launcher/scripts/connectCos.sh"
-
-	return sshRemote.RunInteractiveCommand(ctx, cosCommand, os.Stdout, os.Stderr)
-}
-
-func (tofuBackend) Deploy(
+func (b *tofuBackend) Deploy(
 	ctx context.Context,
-	deployment config.DeploymentDir,
-	manifest *presets.InfrastructureManifest,
 	out, outErr io.Writer,
-	tofuLockfileMode TofuLockfileMode,
+	options DeployOptions,
 ) error {
-	if manifest.Tofu == nil {
+	if !b.hasTofu() {
 		slog.Info("tofu: no configuration defined; skipping")
 		return nil
 	}
 
 	slog.Info("beginning deployment with tofu")
 
-	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
 	logBuffer := task_runner.NewLogBuffer()
 	stdOutWriter := util.CombineWriters(logBuffer, out)
 	stdErrWriter := util.CombineWriters(logBuffer, outErr)
 
-	if err := tofu.Initialize(ctx, tofuCfg,
-		stdOutWriter, stdErrWriter, tofuLockfileMode); err != nil {
+	lockfileMode := tofu.LockfileReadonly
+	if options.UpdateDependencyLockfile {
+		lockfileMode = tofu.LockfileUpdate
+	}
+
+	if err := tofu.Initialize(
+		ctx, b.cfg, stdOutWriter, stdErrWriter, lockfileMode,
+	); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("tofu: failed to init", "error", err)
 
 		return err
 	}
 
-	if err := tofu.Plan(ctx, tofuCfg, stdOutWriter, stdErrWriter); err != nil {
+	if err := tofu.Plan(ctx, b.cfg, stdOutWriter, stdErrWriter); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("tofu: failed to plan")
 
 		return err
 	}
 
-	if err := tofu.ApplyPlan(ctx, tofuCfg, stdOutWriter, stdErrWriter); err != nil {
+	if err := tofu.ApplyPlan(ctx, b.cfg, stdOutWriter, stdErrWriter); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("tofu: failed to apply")
 
@@ -252,10 +379,8 @@ func (tofuBackend) Deploy(
 	return nil
 }
 
-func (tofuBackend) Start(
+func (b *tofuBackend) Start(
 	ctx context.Context,
-	deployment config.DeploymentDir,
-	manifest *presets.InfrastructureManifest,
 	out, outErr io.Writer,
 	waitTimeoutSeconds int,
 ) error {
@@ -263,14 +388,7 @@ func (tofuBackend) Start(
 	output := util.CombineWriters(logBuffer, out)
 	errOutput := util.CombineWriters(logBuffer, outErr)
 
-	if err := tofuApplyAction(
-		ctx,
-		deployment,
-		manifest,
-		"power_state=running",
-		output,
-		errOutput,
-	); err != nil {
+	if err := b.applyAction(ctx, "power_state=running", output, errOutput); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("failed to start deployment")
 
@@ -278,7 +396,7 @@ func (tofuBackend) Start(
 	}
 
 	instPollCond := func(ctx context.Context) (bool, error) {
-		n11Details, err := Getn11Details(deployment)
+		n11Details, err := Getn11Details(b.deployment)
 		if err != nil {
 			return false, err
 		}
@@ -286,14 +404,7 @@ func (tofuBackend) Start(
 			return true, nil
 		}
 
-		if err := tofuApplyAction(
-			ctx,
-			deployment,
-			manifest,
-			"",
-			output,
-			errOutput,
-		); err != nil {
+		if err := b.applyAction(ctx, "", output, errOutput); err != nil {
 			logBuffer.ReplayLogMessages(ctx)
 			slog.Error("ApplyAction failed while refreshing", "error", err)
 
@@ -325,7 +436,7 @@ func (tofuBackend) Start(
 	waitCtx, cancel = context.WithTimeout(ctx, time.Duration(waitTimeoutSeconds)*time.Second)
 	defer cancel()
 
-	if err := WaitForDatabaseStarted(waitCtx, deployment); err != nil {
+	if err := WaitForDatabaseStarted(waitCtx, b.deployment); err != nil {
 		slog.Error("database did not become operational with timeout", "error", err.Error())
 		return err
 	}
@@ -333,18 +444,14 @@ func (tofuBackend) Start(
 	return nil
 }
 
-func (tofuBackend) Stop(
+func (b *tofuBackend) Stop(
 	ctx context.Context,
-	deployment config.DeploymentDir,
-	manifest *presets.InfrastructureManifest,
 	out, outErr io.Writer,
 ) error {
 	logBuffer := task_runner.NewLogBuffer()
 
-	if err := tofuApplyAction(
+	if err := b.applyAction(
 		ctx,
-		deployment,
-		manifest,
 		"power_state=stopped",
 		util.CombineWriters(logBuffer, out),
 		util.CombineWriters(logBuffer, outErr),
@@ -358,34 +465,28 @@ func (tofuBackend) Stop(
 	return nil
 }
 
-func (tofuBackend) Destroy(
+func (b *tofuBackend) Destroy(
 	ctx context.Context,
-	deployment config.DeploymentDir,
-	manifest *presets.InfrastructureManifest,
 	out, outErr io.Writer,
 ) error {
-	if manifest.Tofu == nil {
+	if !b.hasTofu() {
 		slog.Info("no tofu configuration defined; skipping destroy")
 		return nil
 	}
 
-	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
 	logBuffer := task_runner.NewLogBuffer()
 	output := util.CombineWriters(logBuffer, out)
 	errOutput := util.CombineWriters(logBuffer, outErr)
-	if err := tofu.Initialize(ctx, tofuCfg, output, errOutput, tofu.LockfileReadonly); err != nil {
+	if err := tofu.Initialize(
+		ctx, b.cfg, output, errOutput, tofu.LockfileReadonly,
+	); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("tofu: failed to init before destroy", "error", err)
 
 		return err
 	}
 
-	if err := tofu.Destroy(
-		ctx,
-		tofuCfg,
-		util.CombineWriters(logBuffer, out),
-		util.CombineWriters(logBuffer, outErr),
-	); err != nil {
+	if err := tofu.Destroy(ctx, b.cfg, output, errOutput); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("failed to destroy cloud resources")
 
@@ -395,26 +496,43 @@ func (tofuBackend) Destroy(
 	return nil
 }
 
-func tofuApplyAction(
+func (b *tofuBackend) hasTofu() bool {
+	return b.cfg != nil
+}
+
+func (b *tofuBackend) loadDefaults() (map[string]*tofu.Variable, error) {
+	if !b.hasTofu() {
+		return map[string]*tofu.Variable{}, nil
+	}
+	if b.defaultsCached {
+		return b.defaults, b.defaultsErr
+	}
+
+	variableData, err := os.ReadFile(b.cfg.VariablesFile())
+	if err != nil {
+		b.defaultsCached = true
+		b.defaultsErr = err
+
+		return nil, err
+	}
+	defaults, err := tofu.ParseVarFile(variableData, b.cfg.VariablesFile())
+	b.defaultsCached = true
+	b.defaults = defaults
+	b.defaultsErr = err
+
+	return defaults, err
+}
+
+func (b *tofuBackend) applyAction(
 	ctx context.Context,
-	deployment config.DeploymentDir,
-	manifest *presets.InfrastructureManifest,
 	startStopArg string,
 	out, outErr io.Writer,
 ) error {
-	if manifest.Tofu == nil {
+	if !b.hasTofu() {
 		slog.Info("no tofu configuration defined; skipping apply action")
 		return nil
 	}
-
-	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
-	if err := tofu.ApplyAction(
-		ctx,
-		tofuCfg,
-		startStopArg,
-		out,
-		outErr,
-	); err != nil {
+	if err := tofu.ApplyAction(ctx, b.cfg, startStopArg, out, outErr); err != nil {
 		slog.Error("Tofu Apply Failed:", "error", err.Error())
 		return err
 	}

@@ -7,17 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
-	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/spf13/cobra"
 )
 
-var infraFlagToVarName = map[string]string{} // flag-name (hyphen) -> tofu var-name (underscore)
+var infraFlagToVarName = map[string]string{} // flag-name (hyphen) -> infra var-name (underscore)
 
 // infraPresetLabelAnnotationKey is a Cobra command annotation that stores the selected
 // infrastructure preset label (either the embedded preset name or the preset path).
@@ -30,7 +27,7 @@ const numberType = "number"
 // numberFlag is a pflag.Value implementation that validates numbers without
 // converting through float64 (to avoid precision loss).
 //
-// The raw string is kept as-is (trimmed) and later parsed by tofu.ParseOverrideStrings.
+// The raw string is kept as-is (trimmed) and later parsed by the infrastructure backend.
 type numberFlag struct {
 	raw string
 }
@@ -64,50 +61,10 @@ func (*numberFlag) Type() string {
 func resolveInfrastructureVariables(
 	infraPresetName string,
 	infraPresetPath string,
-) (map[string]*tofu.Variable, string, error) {
-	var (
-		info  *deploy.InfrastructureInfo
-		err   error
-		label string
-	)
-
+) (deploy.ConfigVariableResolution, error) {
 	preset := deploy.PresetRef{Name: infraPresetName, Path: infraPresetPath}
-	info, err = deploy.GetInfrastructureInfoFromPreset(preset)
-	if preset.IsPath() {
-		label = infraPresetPath
-	} else {
-		label = infraPresetName
-	}
-	if err != nil {
-		return nil, label, err
-	}
 
-	// If tofu is involved, read variables file from there
-	if info.Tofu != nil {
-		var variablesData []byte
-		var variableFilepath string
-		if preset.IsPath() {
-			tofuCfg := tofu.NewTofuConfigFromPreset(infraPresetPath, *info.Tofu)
-			variableFilepath = tofuCfg.VariablesFile()
-			variablesData, err = os.ReadFile(variableFilepath)
-		} else {
-			variableFilepath = info.Tofu.VariablesFile
-			variablesData, err = presets.ReadInfrastructureFile(infraPresetName, variableFilepath)
-		}
-
-		if err != nil {
-			return nil, label, err
-		}
-
-		vars, err := tofu.ParseVarFile(variablesData, variableFilepath)
-		if err != nil {
-			return nil, label, err
-		}
-
-		return vars, label, nil
-	}
-
-	return map[string]*tofu.Variable{}, label, nil
+	return deploy.ResolveInfrastructureConfigVariables(preset)
 }
 
 // prepareInfrastructureVariableFlags registers infrastructure variable flags
@@ -129,12 +86,12 @@ func prepareInfrastructureVariableFlags(args []string) error {
 		return prepareConfigSetInfrastructureVariableFlags(args)
 	}
 	if preset != nil {
-		vars, label, err := resolveInfrastructureVariables(preset.Name, preset.Path)
+		resolution, err := resolveInfrastructureVariables(preset.Name, preset.Path)
 		if err == nil {
 			if err := registerInfrastructureVariableFlags(
 				[]*cobra.Command{initCmd, installCmd},
-				vars,
-				label,
+				resolution.Variables,
+				resolution.PresetLabel,
 			); err != nil {
 				return err
 			}
@@ -150,12 +107,12 @@ func prepareConfigSetInfrastructureVariableFlags(args []string) error {
 	}
 
 	if deployment, err := deploymentDirFromRawArgs(args); err == nil {
-		vars, label, resolveErr := resolveInfrastructureVariablesFromDeployment(deployment)
+		resolution, resolveErr := resolveInfrastructureVariablesFromDeployment(deployment)
 		if resolveErr == nil {
 			return registerInfrastructureVariableFlags(
 				[]*cobra.Command{configSetCmd},
-				vars,
-				label,
+				resolution.Variables,
+				resolution.PresetLabel,
 			)
 		}
 	}
@@ -165,7 +122,7 @@ func prepareConfigSetInfrastructureVariableFlags(args []string) error {
 
 func registerInfrastructureVariableFlags(
 	cmds []*cobra.Command,
-	vars map[string]*tofu.Variable,
+	vars map[string]deploy.ConfigVariableDefinition,
 	label string,
 ) error {
 	if len(vars) == 0 {
@@ -182,8 +139,8 @@ func registerInfrastructureVariableFlags(
 		cmd.Annotations[infraPresetLabelAnnotationKey] = label
 
 		for name, variable := range vars {
-			if variable == nil {
-				continue
+			if strings.TrimSpace(variable.Name) != "" {
+				name = variable.Name
 			}
 
 			flagName := strings.ReplaceAll(name, "_", "-")
@@ -196,22 +153,24 @@ func registerInfrastructureVariableFlags(
 				)
 			}
 
-			usage := variable.Description
+			usage := strings.TrimSpace(variable.Description)
 			if strings.TrimSpace(usage) == "" {
 				usage = "Infrastructure variable"
 			}
-			if !variable.Value.IsNull() && variable.Value.IsWhollyKnown() {
-				usage += fmt.Sprintf(" (default: %s)", ctyToJSONString(variable.Value))
+			if strings.TrimSpace(variable.DefaultDisplay) != "" {
+				usage += fmt.Sprintf(" (default: %s)", variable.DefaultDisplay)
 			}
 			if variable.Required {
 				usage += " (required)"
 			}
 
-			switch strings.TrimSpace(variable.Type) {
-			case "bool":
+			switch variable.Type {
+			case deploy.ConfigVariableTypeBool:
 				cmd.Flags().Bool(flagName, false, usage)
-			case "number":
+			case deploy.ConfigVariableTypeNumber:
 				cmd.Flags().Var(&numberFlag{}, flagName, usage)
+			case deploy.ConfigVariableTypeString:
+				cmd.Flags().String(flagName, "", usage)
 			default:
 				cmd.Flags().String(flagName, "", usage)
 			}
@@ -227,27 +186,8 @@ func registerInfrastructureVariableFlags(
 
 func resolveInfrastructureVariablesFromDeployment(
 	deployment config.DeploymentDir,
-) (map[string]*tofu.Variable, string, error) {
-	manifest, err := config.ReadInfrastructureManifest(deployment)
-	if err != nil {
-		return nil, "", err
-	}
-	label := manifest.Name
-	if manifest.Tofu == nil {
-		return map[string]*tofu.Variable{}, label, nil
-	}
-
-	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
-	variablesData, err := os.ReadFile(tofuCfg.VariablesFile())
-	if err != nil {
-		return nil, label, err
-	}
-	vars, err := tofu.ParseVarFile(variablesData, tofuCfg.VariablesFile())
-	if err != nil {
-		return nil, label, err
-	}
-
-	return vars, label, nil
+) (deploy.ConfigVariableResolution, error) {
+	return deploy.ResolveInfrastructureConfigVariablesFromDeployment(deployment)
 }
 
 func collectInfrastructureVariableOverrides(cmd *cobra.Command) map[string]string {

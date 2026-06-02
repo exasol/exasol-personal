@@ -25,7 +25,22 @@ const configureNotAllowedHint = "the deployment may already have cloud resources
 	"run `exasol destroy` (or `exasol remove` if you have confirmed the cloud resources are " +
 	"gone) before changing configuration, then run `exasol config set` and `exasol deploy`"
 
-const reservedInfrastructureConfigValueCount = 5
+type DeploymentID string
+
+type ClusterIdentity string
+
+type RelativeDeploymentPath string
+
+type DeploymentMetadata struct {
+	ID              DeploymentID
+	ClusterIdentity ClusterIdentity
+	CreatedAt       time.Time
+}
+
+type DeploymentLayout struct {
+	InfrastructureArtifactDir RelativeDeploymentPath
+	InstallationPresetDir     RelativeDeploymentPath
+}
 
 // WorkflowStatePermitsConfigure rejects configuration changes whenever the
 // deployment may already have cloud resources. Only freshly-initialized
@@ -50,51 +65,32 @@ func writeDeploymentConfiguration(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	exasolState *config.ExasolPersonalState,
-	infraVars map[string]string,
-	installVars map[string]string,
+	configuration DeploymentConfiguration,
 ) error {
-	infrastructureValues := make(
-		map[string]string,
-		len(infraVars)+reservedInfrastructureConfigValueCount,
-	)
-	for key, value := range infraVars {
-		infrastructureValues[key] = value
-	}
-	installationValues := make(map[string]string, len(installVars))
-	for key, value := range installVars {
-		installationValues[key] = value
-	}
-
 	infraManifest, installManifest, err := readExtractedManifests(deployment)
 	if err != nil {
 		return err
 	}
-
-	deploymentId := exasolState.DeploymentId
-	if deploymentId == "" {
-		return errors.New("deployment state is missing deployment id")
-	}
-	clusterIdentity := exasolState.ClusterIdentity
-	if clusterIdentity == "" {
-		return errors.New("deployment state is missing cluster identity")
-	}
-
-	artifactDir := deployment.RelativeInfrastructureArtifactDir()
-	infrastructureValues["infrastructure_artifact_dir"] = artifactDir
-	infrastructureValues["installation_preset_dir"] = deployment.RelativeInstallationPresetDir()
-	infrastructureValues["deployment_id"] = deploymentId
-	infrastructureValues["cluster_identity"] = clusterIdentity
-	infrastructureValues["deployment_created_at"] = time.Now().UTC().Format(time.RFC3339)
-
-	backend, err := resolveBackendForManifest(infraManifest)
+	backend, err := newDeploymentBackend(deployment, infraManifest)
 	if err != nil {
 		return err
 	}
+
+	metadata, err := resolveDeploymentMetadata(exasolState)
+	if err != nil {
+		return err
+	}
+	layout := DeploymentLayout{
+		InfrastructureArtifactDir: RelativeDeploymentPath(
+			deployment.RelativeInfrastructureArtifactDir(),
+		),
+		InstallationPresetDir: RelativeDeploymentPath(deployment.RelativeInstallationPresetDir()),
+	}
 	if err := backend.Configure(
 		ctx,
-		deployment,
-		infraManifest,
-		rawInfrastructureConfigValues(infrastructureValues),
+		configValuesRawMap(configuration.Infrastructure.Options),
+		metadata,
+		layout,
 	); err != nil {
 		return err
 	}
@@ -102,11 +98,36 @@ func writeDeploymentConfiguration(
 	return writeInstallationVariablesFile(
 		deployment.InstallationDir(),
 		installManifest.Variables,
-		clusterIdentity,
-		deploymentId,
+		string(metadata.ClusterIdentity),
+		string(metadata.ID),
 		GetVersionCheckURL(),
-		installationValues,
+		configValuesRawMap(configuration.Installation.Options),
 	)
+}
+
+func resolveDeploymentMetadata(
+	exasolState *config.ExasolPersonalState,
+) (DeploymentMetadata, error) {
+	deploymentId := exasolState.DeploymentId
+	if deploymentId == "" {
+		return DeploymentMetadata{}, errors.New("deployment state is missing deployment id")
+	}
+	clusterIdentity := exasolState.ClusterIdentity
+	if clusterIdentity == "" {
+		return DeploymentMetadata{}, errors.New("deployment state is missing cluster identity")
+	}
+	createdAt := exasolState.CreatedAt
+	if createdAt.IsZero() {
+		// Older deployment-state files predate the launcher-owned
+		// createdAt field; fall back to "now" to keep behaviour stable.
+		createdAt = time.Now().UTC()
+	}
+
+	return DeploymentMetadata{
+		ID:              DeploymentID(deploymentId),
+		ClusterIdentity: ClusterIdentity(clusterIdentity),
+		CreatedAt:       createdAt.UTC(),
+	}, nil
 }
 
 func readExtractedManifests(

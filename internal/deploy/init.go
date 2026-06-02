@@ -135,6 +135,7 @@ func InitDeployment(
 				currentVersion,
 				deploymentId,
 				clusterIdentity,
+				time.Now().UTC(),
 				infrastructurePreset,
 				installationPreset,
 			)
@@ -142,19 +143,18 @@ func InitDeployment(
 			if err != nil {
 				return err
 			}
-			backend, err := resolveBackendForManifest(infraManifest)
+			backend, err := newDeploymentBackend(deployment, infraManifest)
 			if err != nil {
 				return err
 			}
-			if err := backend.SetupWorkspace(ctx, deployment, infraManifest); err != nil {
+			if err := backend.SetupWorkspace(ctx); err != nil {
 				return err
 			}
 			if err := writeDeploymentConfiguration(
 				ctx,
 				deployment,
 				exasolState,
-				infraVars,
-				installVars,
+				newDeploymentConfigurationFromRaw(infraVars, installVars),
 			); err != nil {
 				return err
 			}
@@ -268,59 +268,22 @@ func newInitializedState(
 	deploymentVersion string,
 	deploymentId string,
 	clusterIdentity string,
+	createdAt time.Time,
 	infrastructurePreset PresetRef,
 	installationPreset PresetRef,
 ) *config.ExasolPersonalState {
+	lastVersionCheck := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	if versionCheckEnabled {
-		return newInitializedStateWithVersionChecks(
-			deploymentVersion,
-			deploymentId,
-			clusterIdentity,
-			infrastructurePreset,
-			installationPreset,
-		)
+		lastVersionCheck = time.Now()
 	}
 
-	return newInitializedStateWithoutVersionChecks(
-		deploymentVersion,
-		deploymentId,
-		clusterIdentity,
-		infrastructurePreset,
-		installationPreset,
-	)
-}
-
-func newInitializedStateWithVersionChecks(
-	deploymentVersion string,
-	deploymentId string,
-	clusterIdentity string,
-	infrastructurePreset PresetRef,
-	installationPreset PresetRef,
-) *config.ExasolPersonalState {
 	return &config.ExasolPersonalState{
 		DeploymentId:                 deploymentId,
 		ClusterIdentity:              clusterIdentity,
+		CreatedAt:                    createdAt.UTC(),
 		DeploymentVersion:            deploymentVersion,
-		VersionCheckEnabled:          true,
-		LastVersionCheck:             time.Now(),
-		InfrastructurePresetIdentity: presetIdentityOf(infrastructurePreset),
-		InstallationPresetIdentity:   presetIdentityOf(installationPreset),
-	}
-}
-
-func newInitializedStateWithoutVersionChecks(
-	deploymentVersion string,
-	deploymentId string,
-	clusterIdentity string,
-	infrastructurePreset PresetRef,
-	installationPreset PresetRef,
-) *config.ExasolPersonalState {
-	return &config.ExasolPersonalState{
-		DeploymentId:                 deploymentId,
-		ClusterIdentity:              clusterIdentity,
-		DeploymentVersion:            deploymentVersion,
-		VersionCheckEnabled:          false,
-		LastVersionCheck:             time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC),
+		VersionCheckEnabled:          versionCheckEnabled,
+		LastVersionCheck:             lastVersionCheck,
 		InfrastructurePresetIdentity: presetIdentityOf(infrastructurePreset),
 		InstallationPresetIdentity:   presetIdentityOf(installationPreset),
 	}
