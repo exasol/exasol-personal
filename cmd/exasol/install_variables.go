@@ -6,13 +6,12 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 // flag-name (hyphen) -> install var-name (underscore).
@@ -62,24 +61,52 @@ func prepareInstallationVariableFlags(args []string) error {
 	// Be tolerant and avoid hard failures before Cobra runs.
 	preset, err := scanInstallationPresetSelection(args)
 	if err != nil {
-		// nolint: nilerr
-		return nil
+		return prepareConfigSetInstallationVariableFlags(args)
 	}
-	if preset == nil {
+	if preset != nil {
+		vars, label, err := resolveInstallationVariables(preset.Name, preset.Path)
+		if err == nil {
+			if err := registerInstallationVariableFlags(
+				[]*cobra.Command{initCmd, installCmd},
+				vars,
+				label,
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	return prepareConfigSetInstallationVariableFlags(args)
+}
+
+func prepareConfigSetInstallationVariableFlags(args []string) error {
+	if !preregisteredCommandIs(args, configSetCmd) {
 		return nil
 	}
 
-	vars, label, err := resolveInstallationVariables(preset.Name, preset.Path)
-	if err != nil {
-		_ = label
-		// nolint: nilerr
-		return nil
+	if deployment, err := deploymentDirFromRawArgs(args); err == nil {
+		vars, label, resolveErr := resolveInstallationVariablesFromDeployment(deployment)
+		if resolveErr == nil {
+			return registerInstallationVariableFlags(
+				[]*cobra.Command{configSetCmd},
+				vars,
+				label,
+			)
+		}
 	}
+
+	return nil
+}
+
+func registerInstallationVariableFlags(
+	cmds []*cobra.Command,
+	vars map[string]*presets.VariableDef,
+	label string,
+) error {
 	if len(vars) == 0 {
 		return nil
 	}
 
-	cmds := []*cobra.Command{initCmd, installCmd}
 	for _, cmd := range cmds {
 		if cmd == nil {
 			continue
@@ -134,6 +161,20 @@ func prepareInstallationVariableFlags(args []string) error {
 	return nil
 }
 
+func resolveInstallationVariablesFromDeployment(
+	deployment config.DeploymentDir,
+) (map[string]*presets.VariableDef, string, error) {
+	manifest, err := config.ReadInstallManifest(deployment)
+	if err != nil {
+		return nil, "", err
+	}
+	if manifest == nil || manifest.Variables == nil || len(manifest.Variables.Vars) == 0 {
+		return map[string]*presets.VariableDef{}, manifest.Name, nil
+	}
+
+	return manifest.Variables.Vars, manifest.Name, nil
+}
+
 func collectInstallationVariableOverrides(cmd *cobra.Command) map[string]string {
 	overrides := map[string]string{}
 	for flagName, varName := range installFlagToVarName {
@@ -151,33 +192,22 @@ func collectInstallationVariableOverrides(cmd *cobra.Command) map[string]string 
 }
 
 func scanInstallationPresetSelection(args []string) (*deploy.PresetRef, error) {
-	flagset := pflag.NewFlagSet("install-preset-scan", pflag.ContinueOnError)
-	flagset.SetOutput(io.Discard)
-	flagset.SetInterspersed(true)
-	flagset.ParseErrorsAllowlist.UnknownFlags = true
-	flagset.BoolP("help", "h", false, "")
-
-	if err := flagset.Parse(args); err != nil && !errors.Is(err, pflag.ErrHelp) {
-		return nil, fmt.Errorf("cannot parse pre-init flags: %w", err)
+	cmd, remainingArgs := preregisteredCommand(args)
+	if cmd != initCmd && cmd != installCmd {
+		return nil, errors.New("no command with installation preset argument found")
 	}
 
-	positionals := flagset.Args()
-	cmdIndex := -1
-	for i, tok := range positionals {
-		if tok == "init" || tok == "install" {
-			cmdIndex = i
-			break
-		}
+	positionals, err := preregisteredPositionals(remainingArgs)
+	if err != nil {
+		return nil, err
 	}
-	if cmdIndex < 0 {
-		return nil, errors.New("no commands with preset arguments found")
-	}
-	if cmdIndex+1 >= len(positionals) {
+
+	if len(positionals) == 0 {
 		return nil, errors.New("infra preset not provided")
 	}
 
-	if cmdIndex+2 < len(positionals) {
-		ref := presetRefFromArg(positionals[cmdIndex+2])
+	if len(positionals) > 1 {
+		ref := presetRefFromArg(positionals[1])
 		if strings.TrimSpace(ref.Name) == "" && strings.TrimSpace(ref.Path) == "" {
 			return nil, errors.New("no valid preset value")
 		}
@@ -185,7 +215,7 @@ func scanInstallationPresetSelection(args []string) (*deploy.PresetRef, error) {
 		return &ref, nil
 	}
 
-	infraRef := presetRefFromArg(positionals[cmdIndex+1])
+	infraRef := presetRefFromArg(positionals[0])
 	ref, err := deploy.ResolveDefaultInstallationPreset(infraRef)
 	if err != nil {
 		return nil, err

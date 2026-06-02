@@ -17,6 +17,21 @@ const backendTypeTofu = "tofu"
 
 type deploymentBackend interface {
 	ValidateEnvironment() error
+	SetupWorkspace(
+		ctx context.Context,
+		deployment config.DeploymentDir,
+		manifest *presets.InfrastructureManifest,
+	) error
+	Configure(
+		ctx context.Context,
+		deployment config.DeploymentDir,
+		manifest *presets.InfrastructureManifest,
+		values []DeploymentConfigValue,
+	) error
+	ReadConfiguration(
+		deployment config.DeploymentDir,
+		manifest *presets.InfrastructureManifest,
+	) ([]DeploymentConfigValue, error)
 	OpenHostShell(ctx context.Context, deployment config.DeploymentDir, selectedNode string) error
 	OpenCOSShell(ctx context.Context, deployment config.DeploymentDir) error
 	Deploy(

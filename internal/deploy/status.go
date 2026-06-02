@@ -100,7 +100,7 @@ func LogDeploymentStatus(deployment config.DeploymentDir) {
 	if err != nil {
 		slog.Error("failed to get status", "error", err.Error())
 	}
-	slog.Info(status.Message)
+	slog.Info("deployment status", "status", status.Status)
 }
 
 func GetStatusWithLock(
@@ -195,21 +195,18 @@ func GetStatus(
 		currentOperation := state.Operation
 
 		return &StatusOutput{
-			Status: StatusOperationInProgress,
-			Message: fmt.Sprintf(
-				"Operation '%s' is currently in progress. Please wait. "+
-					"Do not use `unlock` unless you are certain that no other exasol "+
-					"launcher instance is running.", currentOperation,
-			),
+			Status:  StatusOperationInProgress,
+			Message: staleOperationInProgressMessage(currentOperation),
 		}, nil
 
 	case *config.WorkflowStateDeploymentFailed:
 		slog.Debug("Workflow State Deployment Failed")
 
 		return &StatusOutput{
-			Status:  StatusDeploymentFailed,
-			Message: "Deployment failed. Run `destroy` before attempting to run `deploy` again.",
-			Error:   state.Error,
+			Status: StatusDeploymentFailed,
+			Message: "Deployment failed. Fix the problem and run `deploy` or the same " +
+				"`install` command again, or run `destroy` to clean up resources.",
+			Error: state.Error,
 		}, nil
 
 	case *config.WorkflowStateStopped:
@@ -251,6 +248,26 @@ func GetStatus(
 
 	default:
 		panic("unknown workflow state")
+	}
+}
+
+func staleOperationInProgressMessage(operation string) string {
+	switch operation {
+	case config.DestroyOperation:
+		return "A previous destroy operation did not finish cleanly. " +
+			"If cloud resources may still exist, run `destroy` again. " +
+			"If resources were already deleted or cannot be destroyed through the launcher, " +
+			"run `remove` to delete only the local deployment directory."
+	case config.DeployOperation:
+		return "A previous deploy operation did not finish cleanly. " +
+			"Fix the problem and run `deploy` or the same `install` command again, " +
+			"or run `destroy` to clean up resources."
+	default:
+		return fmt.Sprintf(
+			"A previous %s operation did not finish cleanly. Retry the operation, "+
+				"or run `status` again to inspect the deployment.",
+			operation,
+		)
 	}
 }
 

@@ -1,0 +1,394 @@
+// Copyright 2026 Exasol AG
+// SPDX-License-Identifier: MIT
+
+package deploy
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/presets"
+	"github.com/exasol/exasol-personal/internal/tofu"
+)
+
+func TestEnsureDeploymentPresetIdentityMatches_RejectsDifferentPreset(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := InitDeployment(
+		context.Background(),
+		PresetRef{Name: presets.DefaultInfrastructure},
+		PresetRef{Name: presets.DefaultInstallation},
+		map[string]string{},
+		map[string]string{},
+		deployment,
+		false,
+		"0.0.0",
+	); err != nil {
+		t.Fatalf("initial init failed: %v", err)
+	}
+
+	// When
+	err := EnsureDeploymentPresetIdentityMatches(
+		deployment,
+		PresetRef{Name: "stackit"},
+		PresetRef{Name: presets.DefaultInstallation},
+	)
+
+	// Then
+	if !errors.Is(err, ErrDeploymentPresetMismatch) {
+		t.Fatalf("expected preset mismatch, got %v", err)
+	}
+}
+
+func TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := InitDeployment(
+		context.Background(),
+		PresetRef{Name: presets.DefaultInfrastructure},
+		PresetRef{Name: presets.DefaultInstallation},
+		map[string]string{"cluster_size": "2"},
+		map[string]string{},
+		deployment,
+		false,
+		"0.0.0",
+	); err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+	statePath := filepath.Join(deployment.InfrastructureDir(), tofu.DefaultStateFile)
+	if err := os.WriteFile(statePath, []byte("state"), 0o600); err != nil {
+		t.Fatalf("write state file failed: %v", err)
+	}
+
+	// When
+	if _, err := SetDeploymentConfiguration(
+		context.Background(),
+		map[string]string{"cluster_size": "3"},
+		map[string]string{},
+		deployment,
+	); err != nil {
+		t.Fatalf("config set failed: %v", err)
+	}
+
+	// Then
+	if _, err := os.Stat(statePath); err != nil {
+		t.Fatalf("expected state file to be preserved, got %v", err)
+	}
+	tfvarsPath := filepath.Join(deployment.InfrastructureDir(), tofu.DefaultVarsOutput)
+	content, err := os.ReadFile(tfvarsPath)
+	if err != nil {
+		t.Fatalf("read tfvars failed: %v", err)
+	}
+	if !strings.Contains(string(content), `cluster_size`) ||
+		!strings.Contains(string(content), `= 3`) {
+		t.Fatalf("expected updated cluster size, got: %s", string(content))
+	}
+}
+
+func TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name  string
+		state any
+	}{
+		{name: "running", state: &config.WorkflowStateRunning{}},
+		{name: "stopped", state: &config.WorkflowStateStopped{}},
+		{name: "deployment_failed", state: &config.WorkflowStateDeploymentFailed{Error: "boom"}},
+		{
+			name: "interrupted_during_deploy",
+			state: &config.WorkflowStateInterrupted{
+				InterruptedDuringOperation: config.DeployOperation,
+			},
+		},
+		{
+			name: "interrupted_during_destroy",
+			state: &config.WorkflowStateInterrupted{
+				InterruptedDuringOperation: config.DestroyOperation,
+			},
+		},
+		{
+			name: "operation_in_progress",
+			state: &config.WorkflowStateOperationInProgress{
+				Operation: config.DeployOperation,
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			exasolState := &config.ExasolPersonalState{}
+			if err := exasolState.SetWorkflowState(test.state); err != nil {
+				t.Fatalf("set workflow state failed: %v", err)
+			}
+
+			err := WorkflowStatePermitsConfigure(exasolState)
+
+			if !errors.Is(err, ErrConfigureNotAllowed) {
+				t.Fatalf("expected ErrConfigureNotAllowed, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "run `exasol destroy`") {
+				t.Fatalf("expected destroy guidance, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "exasol remove") {
+				t.Fatalf("expected remove guidance, got %v", err)
+			}
+		})
+	}
+}
+
+func TestDestroyThenRemoveLocalDeploymentDirectoryRemovesLocalFiles(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	writeMinimalInitializedDeployment(t, deployment)
+
+	// When
+	if err := Destroy(context.Background(), deployment, false); err != nil {
+		t.Fatalf("destroy failed: %v", err)
+	}
+	if err := RemoveLocalDeploymentDirectory(context.Background(), deployment); err != nil {
+		t.Fatalf("remove local deployment directory failed: %v", err)
+	}
+
+	// Then
+	if _, err := os.Stat(deployment.Root()); !os.IsNotExist(err) {
+		t.Fatalf("expected deployment directory to be removed, got %v", err)
+	}
+}
+
+func TestDestroyPreservesLocalFilesWhenDestroyFails(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o700); err != nil {
+		t.Fatalf("create infrastructure dir failed: %v", err)
+	}
+	writeTestFile(t, deployment.InfrastructureManifestPath(), `
+name: Test Infrastructure
+description: test infrastructure
+backend: unknown
+`)
+	state := newInitializedStateWithoutVersionChecks(
+		"0.0.0",
+		"test-deployment",
+		"test-cluster",
+		PresetRef{Name: "test-infra"},
+		PresetRef{Name: "test-install"},
+	)
+	if err := state.SetWorkflowStateAndWrite(
+		&config.WorkflowStateInitialized{},
+		deployment,
+	); err != nil {
+		t.Fatalf("write state failed: %v", err)
+	}
+	localPath := deployment.Resolve("local.txt")
+	if err := os.WriteFile(localPath, []byte("local"), 0o600); err != nil {
+		t.Fatalf("write local file failed: %v", err)
+	}
+
+	// When
+	err := Destroy(context.Background(), deployment, false)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected destroy to fail, got nil")
+	}
+	if _, statErr := os.Stat(localPath); statErr != nil {
+		t.Fatalf("expected local file to be preserved, got %v", statErr)
+	}
+	updatedState, readErr := config.ReadExasolPersonalState(deployment)
+	if readErr != nil {
+		t.Fatalf("read state failed: %v", readErr)
+	}
+	workflowState, stateErr := updatedState.GetWorkflowState()
+	if stateErr != nil {
+		t.Fatalf("read workflow state failed: %v", stateErr)
+	}
+	interrupted, ok := workflowState.(*config.WorkflowStateInterrupted)
+	if !ok {
+		t.Fatalf("expected interrupted workflow state, got %T", workflowState)
+	}
+	if interrupted.InterruptedDuringOperation != config.DestroyOperation {
+		t.Fatalf("expected destroy interruption, got %q", interrupted.InterruptedDuringOperation)
+	}
+}
+
+func TestRemoveLocalDeploymentDirectory_RemovesDeploymentDirectory(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	writeMinimalInitializedDeployment(t, deployment)
+	localPath := deployment.Resolve("local.txt")
+	if err := os.WriteFile(localPath, []byte("local"), 0o600); err != nil {
+		t.Fatalf("write local file failed: %v", err)
+	}
+
+	// When
+	if err := RemoveLocalDeploymentDirectory(context.Background(), deployment); err != nil {
+		t.Fatalf("remove local deployment directory failed: %v", err)
+	}
+
+	// Then
+	if _, err := os.Stat(deployment.Root()); !os.IsNotExist(err) {
+		t.Fatalf("expected deployment directory to be removed, got %v", err)
+	}
+}
+
+func TestRemoveLocalDeploymentDirectory_RejectsNonDeploymentDirectory(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	localPath := deployment.Resolve("local.txt")
+	if err := os.WriteFile(localPath, []byte("local"), 0o600); err != nil {
+		t.Fatalf("write local file failed: %v", err)
+	}
+
+	// When
+	err := RemoveLocalDeploymentDirectory(context.Background(), deployment)
+
+	// Then
+	if !errors.Is(err, ErrNotExasolPersonalDeploymentDirectory) {
+		t.Fatalf("expected ErrNotExasolPersonalDeploymentDirectory, got %v", err)
+	}
+	if _, statErr := os.Stat(localPath); statErr != nil {
+		t.Fatalf("expected local file to be preserved, got %v", statErr)
+	}
+}
+
+//nolint:paralleltest // This test intentionally changes process cwd.
+func TestRemoveLocalDeploymentDirectory_RejectsCurrentDirectoryInsideDeployment(
+	t *testing.T,
+) {
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	writeMinimalInitializedDeployment(t, deployment)
+	cwd := deployment.Resolve("subdir")
+	if err := os.MkdirAll(cwd, 0o700); err != nil {
+		t.Fatalf("create cwd failed: %v", err)
+	}
+	t.Chdir(cwd)
+
+	// When
+	err := RemoveLocalDeploymentDirectory(context.Background(), deployment)
+
+	// Then
+	if !errors.Is(err, ErrDeploymentDirectoryRemovalUnsafe) {
+		t.Fatalf("expected ErrDeploymentDirectoryRemovalUnsafe, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "change to another directory") {
+		t.Fatalf("expected cwd guidance, got %v", err)
+	}
+	if _, statErr := os.Stat(deployment.Root()); statErr != nil {
+		t.Fatalf("expected deployment directory to be preserved, got %v", statErr)
+	}
+}
+
+func TestValidateDeploymentDirectoryRemovalContext_RejectsLauncherBinaryInsideDeployment(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	cwd := t.TempDir()
+	executable := deployment.Resolve("bin/exasol")
+
+	// When
+	err := validateDeploymentDirectoryRemovalContext(deployment, cwd, executable)
+
+	// Then
+	if !errors.Is(err, ErrDeploymentDirectoryRemovalUnsafe) {
+		t.Fatalf("expected ErrDeploymentDirectoryRemovalUnsafe, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "move the launcher binary") {
+		t.Fatalf("expected launcher binary guidance, got %v", err)
+	}
+}
+
+func TestValidateDeploymentDirectoryRemovalContext_AllowsOutsidePaths(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	cwd := t.TempDir()
+	executable := filepath.Join(t.TempDir(), "exasol")
+
+	// When
+	err := validateDeploymentDirectoryRemovalContext(deployment, cwd, executable)
+	// Then
+	if err != nil {
+		t.Fatalf("expected outside paths to be allowed, got %v", err)
+	}
+}
+
+func TestRemoveLocalDeploymentDirectory_AllowsExtractedPresetManifestsWithoutState(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o700); err != nil {
+		t.Fatalf("create infrastructure dir failed: %v", err)
+	}
+	if err := os.MkdirAll(deployment.InstallationDir(), 0o700); err != nil {
+		t.Fatalf("create installation dir failed: %v", err)
+	}
+	writeTestFile(t, deployment.InfrastructureManifestPath(), `
+name: Test Infrastructure
+description: test infrastructure
+backend: tofu
+`)
+	writeTestFile(t, deployment.InstallManifestPath(), `
+name: Test Installation
+description: test installation
+install: []
+`)
+
+	// When
+	if err := RemoveLocalDeploymentDirectory(context.Background(), deployment); err != nil {
+		t.Fatalf("remove local deployment directory failed: %v", err)
+	}
+
+	// Then
+	if _, err := os.Stat(deployment.Root()); !os.IsNotExist(err) {
+		t.Fatalf("expected deployment directory to be removed, got %v", err)
+	}
+}
+
+func writeMinimalInitializedDeployment(t *testing.T, deployment config.DeploymentDir) {
+	t.Helper()
+
+	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o700); err != nil {
+		t.Fatalf("create infrastructure dir failed: %v", err)
+	}
+	writeTestFile(t, deployment.InfrastructureManifestPath(), `
+name: Test Infrastructure
+description: test infrastructure
+backend: tofu
+`)
+	state := newInitializedStateWithoutVersionChecks(
+		"0.0.0",
+		"test-deployment",
+		"test-cluster",
+		PresetRef{Name: "test-infra"},
+		PresetRef{Name: "test-install"},
+	)
+	if err := state.SetWorkflowStateAndWrite(
+		&config.WorkflowStateInitialized{},
+		deployment,
+	); err != nil {
+		t.Fatalf("write state failed: %v", err)
+	}
+}

@@ -115,3 +115,38 @@ func TestStatus_ReportsOperationInProgressWhenLockedBeforeStateFileExists(t *tes
 		t.Fatal("expected operation-in-progress message, got empty message")
 	}
 }
+
+func TestStatus_ReportsStaleDestroyOperationWithRecoveryGuidance(t *testing.T) {
+	t.Parallel()
+
+	// Given: a deployment directory whose previous destroy failed after setting
+	// operation-in-progress, but no process currently holds the deployment lock.
+	deployment := config.NewDeploymentDir(t.TempDir())
+	exasolState := &config.ExasolPersonalState{}
+	if err := exasolState.SetWorkflowStateAndWrite(
+		&config.WorkflowStateOperationInProgress{Operation: config.DestroyOperation},
+		deployment,
+	); err != nil {
+		t.Fatalf("write workflow state failed: %v", err)
+	}
+
+	// When: status is requested.
+	output, err := Status(context.Background(), deployment, StatusJSONFormatter)
+	// Then: the message points to retry destroy or local-only removal.
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	var status StatusOutput
+	if err := json.Unmarshal([]byte(output), &status); err != nil {
+		t.Fatalf("expected valid JSON, got %q: %v", output, err)
+	}
+	if status.Status != StatusOperationInProgress {
+		t.Fatalf("expected status %q, got %q", StatusOperationInProgress, status.Status)
+	}
+	if !strings.Contains(status.Message, "run `destroy` again") {
+		t.Fatalf("expected destroy retry guidance, got %q", status.Message)
+	}
+	if !strings.Contains(status.Message, "run `remove`") {
+		t.Fatalf("expected remove guidance, got %q", status.Message)
+	}
+}

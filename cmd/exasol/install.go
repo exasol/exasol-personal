@@ -5,19 +5,23 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/spf13/cobra"
 )
 
-var installCmdShortDesc = `Initialize and deploy Exasol in one step`
+var installCmdShortDesc = `Initialize, apply configuration, and deploy Exasol in one step`
 
 var installCmdLongDesc = installCmdShortDesc + `
 
-	Initializes the deployment directory, prepares infrastructure, and installs Exasol.` +
+	Initializes the deployment directory or applies supplied configuration, prepares infrastructure,
+	and installs Exasol.
+	Rerunning install with the same presets is safe for retrying failed deployments.
+	To switch presets, run exasol destroy --remove first, or exasol remove if the
+	cloud resources are already gone.` +
 	deploymentDirectoryResolutionHelp + presetSelectionHelp
 
 var installCmd = &cobra.Command{
@@ -47,7 +51,13 @@ func init() {
 
 	// Run initialization
 	installCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
+
 		deployment := commonFlags.Deployment()
+		wasInitialized, err := config.HasExasolPersonalStateFile(deployment)
+		if err != nil {
+			return err
+		}
 		infraVars := collectInfrastructureVariableOverrides(cmd)
 		installVars := collectInstallationVariableOverrides(cmd)
 		infraPreset := presetRefFromArg(args[0])
@@ -56,23 +66,38 @@ func init() {
 			return err
 		}
 
-		safePrint(deploy.EulaNoticeText)
-
-		// Run initialization
-		if err := deploy.InitDeployment(
-			cmd.Context(),
-			infraPreset,
-			installPreset,
-			infraVars,
-			installVars,
-			deployment,
-			!commonFlags.NoLauncherVersionCheck,
-			CurrentLauncherVersion,
-		); err != nil {
-			return fmt.Errorf("initialization failed: %w", err)
+		if wasInitialized {
+			if err := prepareInitializedInstall(
+				cmd,
+				deployment,
+				infraPreset,
+				installPreset,
+				infraVars,
+				installVars,
+			); err != nil {
+				return fmt.Errorf("initialization failed: %w", err)
+			}
+		} else {
+			if err := deploy.InitDeployment(
+				cmd.Context(),
+				infraPreset,
+				installPreset,
+				infraVars,
+				installVars,
+				deployment,
+				!commonFlags.NoLauncherVersionCheck,
+				CurrentLauncherVersion,
+			); err != nil {
+				return fmt.Errorf("initialization failed: %w", err)
+			}
 		}
 
-		return setupDeploymentLogSession(cmd, deployment)
+		if err := setupDeploymentLogSession(cmd, deployment); err != nil {
+			return err
+		}
+		addTerminalNotice(deploy.EulaNoticeText)
+
+		return nil
 	}
 
 	// Perform deployment after initialization completes.
@@ -91,7 +116,7 @@ func init() {
 			return fmt.Errorf("deployment failed: %w", err)
 		}
 
-		err := printConnectionInstructionsFromFile(deployment, os.Stdout)
+		err := addConnectionInstructionsTerminalOutput(deployment)
 		if err != nil {
 			return fmt.Errorf("failed to print deployment info: %w", err)
 		}
@@ -104,8 +129,29 @@ func init() {
 	installCmd.RunE = func(_ *cobra.Command, _ []string) error { return nil }
 
 	requireMinorVersionCompatibility(installCmd, CurrentLauncherVersion)
+	registerInitFlags(installCmd, commonFlags)
 	registerDeploymentDirFlag(installCmd, commonFlags)
 	registerVerboseFlag(installCmd, commonFlags)
 	registerDeployFlags(installCmd, commonFlags)
 	rootCmd.AddCommand(installCmd)
+}
+
+func prepareInitializedInstall(
+	cmd *cobra.Command,
+	deployment config.DeploymentDir,
+	infraPreset deploy.PresetRef,
+	installPreset deploy.PresetRef,
+	infraVars map[string]string,
+	installVars map[string]string,
+) error {
+	if err := ensureRequestedPresetsMatchInitializedDeployment(
+		deployment,
+		infraPreset,
+		installPreset,
+	); err != nil {
+		return err
+	}
+	_, _, err := applyConfigurationPatchIfProvided(cmd, infraVars, installVars)
+
+	return err
 }

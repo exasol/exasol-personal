@@ -53,15 +53,15 @@ func fetchDeploymentInfoText(
 	return err
 }
 
-func printConnectionInstructionsFromFile(deployment config.DeploymentDir, writer io.Writer) error {
+func addConnectionInstructionsTerminalOutput(deployment config.DeploymentDir) error {
 	content, err := os.ReadFile(deployment.ConnectionInstructionsPath())
 	if err != nil {
 		return err
 	}
 
-	_, err = fmt.Fprintln(writer, string(content))
+	addTerminalOutput(string(content))
 
-	return err
+	return nil
 }
 
 var deploymentInfoCmd = &cobra.Command{

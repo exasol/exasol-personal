@@ -6,16 +6,15 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"os"
 	"strings"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 var infraFlagToVarName = map[string]string{} // flag-name (hyphen) -> tofu var-name (underscore)
@@ -127,30 +126,56 @@ func prepareInfrastructureVariableFlags(args []string) error {
 	// flags (deployment-dir, log-level, etc.) and then scan the remaining positionals.
 	preset, err := scanInfrastructurePresetSelection(args)
 	if err != nil {
-		// nolint: nilerr
-		return nil
+		return prepareConfigSetInfrastructureVariableFlags(args)
 	}
-	if preset == nil {
+	if preset != nil {
+		vars, label, err := resolveInfrastructureVariables(preset.Name, preset.Path)
+		if err == nil {
+			if err := registerInfrastructureVariableFlags(
+				[]*cobra.Command{initCmd, installCmd},
+				vars,
+				label,
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	return prepareConfigSetInfrastructureVariableFlags(args)
+}
+
+func prepareConfigSetInfrastructureVariableFlags(args []string) error {
+	if !preregisteredCommandIs(args, configSetCmd) {
 		return nil
 	}
 
-	vars, label, err := resolveInfrastructureVariables(preset.Name, preset.Path)
-	if err != nil {
-		_ = label
-		// nolint: nilerr
-		return nil
+	if deployment, err := deploymentDirFromRawArgs(args); err == nil {
+		vars, label, resolveErr := resolveInfrastructureVariablesFromDeployment(deployment)
+		if resolveErr == nil {
+			return registerInfrastructureVariableFlags(
+				[]*cobra.Command{configSetCmd},
+				vars,
+				label,
+			)
+		}
 	}
+
+	return nil
+}
+
+func registerInfrastructureVariableFlags(
+	cmds []*cobra.Command,
+	vars map[string]*tofu.Variable,
+	label string,
+) error {
 	if len(vars) == 0 {
 		return nil
 	}
 
-	// Register the same set of infra vars on each command that needs them.
-	cmds := []*cobra.Command{initCmd, installCmd}
 	for _, cmd := range cmds {
 		if cmd == nil {
 			continue
 		}
-		// Attach the preset label to the command so the usage template can show it.
 		if cmd.Annotations == nil {
 			cmd.Annotations = map[string]string{}
 		}
@@ -162,7 +187,6 @@ func prepareInfrastructureVariableFlags(args []string) error {
 			}
 
 			flagName := strings.ReplaceAll(name, "_", "-")
-			// Fail fast on collisions with existing (built-in) flags.
 			if cmd.Flags().Lookup(flagName) != nil || cmd.InheritedFlags().Lookup(flagName) != nil {
 				return fmt.Errorf(
 					"infrastructure variable flag name conflict: "+
@@ -183,7 +207,6 @@ func prepareInfrastructureVariableFlags(args []string) error {
 				usage += " (required)"
 			}
 
-			// Preserve primitive types in CLI flags where supported.
 			switch strings.TrimSpace(variable.Type) {
 			case "bool":
 				cmd.Flags().Bool(flagName, false, usage)
@@ -192,8 +215,6 @@ func prepareInfrastructureVariableFlags(args []string) error {
 			default:
 				cmd.Flags().String(flagName, "", usage)
 			}
-			// We render defaults as part of the usage text above (when available), so
-			// suppress pflag's default rendering to avoid duplication/misleading output.
 			if f := cmd.Flags().Lookup(flagName); f != nil {
 				f.DefValue = ""
 			}
@@ -202,6 +223,31 @@ func prepareInfrastructureVariableFlags(args []string) error {
 	}
 
 	return nil
+}
+
+func resolveInfrastructureVariablesFromDeployment(
+	deployment config.DeploymentDir,
+) (map[string]*tofu.Variable, string, error) {
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return nil, "", err
+	}
+	label := manifest.Name
+	if manifest.Tofu == nil {
+		return map[string]*tofu.Variable{}, label, nil
+	}
+
+	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
+	variablesData, err := os.ReadFile(tofuCfg.VariablesFile())
+	if err != nil {
+		return nil, label, err
+	}
+	vars, err := tofu.ParseVarFile(variablesData, tofuCfg.VariablesFile())
+	if err != nil {
+		return nil, label, err
+	}
+
+	return vars, label, nil
 }
 
 func collectInfrastructureVariableOverrides(cmd *cobra.Command) map[string]string {
@@ -224,38 +270,21 @@ func collectInfrastructureVariableOverrides(cmd *cobra.Command) map[string]strin
 }
 
 func scanInfrastructurePresetSelection(args []string) (*deploy.PresetRef, error) {
-	// This runs before Cobra parses any arguments, and before infrastructure variable
-	// flags are registered. Therefore we must be tolerant and avoid hard failures.
-	flagset := pflag.NewFlagSet("infra-preset-scan", pflag.ContinueOnError)
-	flagset.SetOutput(io.Discard)
-	flagset.SetInterspersed(true)
-	flagset.ParseErrorsAllowlist.UnknownFlags = true
-	// Parse --help early so that `exasol init --help` doesn't get its `--help` mistaken
-	// as a preset argument.
-	flagset.BoolP("help", "h", false, "")
-
-	if err := flagset.Parse(args); err != nil && !errors.Is(err, pflag.ErrHelp) {
-		// Do not fail before Cobra runs; Cobra will surface a polished error message
-		// (and usage) for malformed flags like a missing value.
-		return nil, fmt.Errorf("cannot parse pre-init flags: %w", err)
+	cmd, remainingArgs := preregisteredCommand(args)
+	if cmd != initCmd && cmd != installCmd {
+		return nil, errors.New("no command with infrastructure preset argument found")
 	}
 
-	positionals := flagset.Args()
-	cmdIndex := -1
-	for i, tok := range positionals {
-		if tok == "init" || tok == "install" {
-			cmdIndex = i
-			break
-		}
-	}
-	if cmdIndex < 0 {
-		return nil, errors.New("no commands with preset arguments found")
-	}
-	if cmdIndex+1 >= len(positionals) {
-		return nil, errors.New("too many commands with preset arguments found")
+	positionals, err := preregisteredPositionals(remainingArgs)
+	if err != nil {
+		return nil, err
 	}
 
-	ref := presetRefFromArg(positionals[cmdIndex+1])
+	if len(positionals) == 0 {
+		return nil, errors.New("infra preset not provided")
+	}
+
+	ref := presetRefFromArg(positionals[0])
 	if strings.TrimSpace(ref.Name) == "" && strings.TrimSpace(ref.Path) == "" {
 		return nil, errors.New("no valid preset value")
 	}

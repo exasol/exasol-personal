@@ -23,6 +23,18 @@ func Prepare(
 	infraVars map[string]string,
 ) error {
 	slog.Info("tofu: prepare workspace")
+	if err := Configure(cfg, infraVars); err != nil {
+		return err
+	}
+
+	return SetupWorkspace(cfg)
+}
+
+func Configure(
+	cfg *Config,
+	infraVars map[string]string,
+) error {
+	slog.Info("tofu: configure workspace")
 
 	slog.Debug("tofu: reading variables file", "path", cfg.VariablesFile())
 	variableData, err := os.ReadFile(cfg.VariablesFile())
@@ -55,6 +67,10 @@ func Prepare(
 		defaults,
 		overrides,
 	)
+}
+
+func SetupWorkspace(_ *Config) error {
+	return nil
 }
 
 // Initialize tofu for a deployment.

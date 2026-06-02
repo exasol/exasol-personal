@@ -16,7 +16,7 @@ import (
 
 //nolint:revive
 func Destroy(ctx context.Context, deployment config.DeploymentDir, verbose bool) error {
-	return withDeploymentExclusiveLock(ctx, deployment,
+	if err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
 			slog.Info("Destroying deployment and releasing all resources")
 
@@ -47,11 +47,11 @@ func Destroy(ctx context.Context, deployment config.DeploymentDir, verbose bool)
 
 			manifest, err := config.ReadInfrastructureManifest(deployment)
 			if err != nil {
-				return err
+				return markDestroyInterrupted(exasolState, deployment, err)
 			}
 			backend, err := resolveBackendForManifest(manifest)
 			if err != nil {
-				return err
+				return markDestroyInterrupted(exasolState, deployment, err)
 			}
 
 			var externalCommandStandardOut io.Writer
@@ -66,7 +66,9 @@ func Destroy(ctx context.Context, deployment config.DeploymentDir, verbose bool)
 				externalCommandStandardOut,
 				externalCommandStandardOut,
 			); err != nil {
-				return err
+				unregister()
+
+				return markDestroyInterrupted(exasolState, deployment, err)
 			}
 
 			// Stop handling interrupts before committing final initialized state
@@ -89,5 +91,25 @@ func Destroy(ctx context.Context, deployment config.DeploymentDir, verbose bool)
 			slog.Info("Successfully destroyed deployment and released all resources")
 
 			return nil
-		})
+		}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func markDestroyInterrupted(
+	exasolState *config.ExasolPersonalState,
+	deployment config.DeploymentDir,
+	destroyErr error,
+) error {
+	stateErr := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
+		Error:                      destroyErr.Error(),
+		InterruptedDuringOperation: config.DestroyOperation,
+	}, deployment)
+	if stateErr != nil {
+		slog.Warn("failed to persist destroy failure state", "error", stateErr)
+	}
+
+	return destroyErr
 }

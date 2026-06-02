@@ -63,6 +63,12 @@ type DirectoryMutex struct {
 	path string
 }
 
+// IsMarkerName reports whether name is one of this package's lock marker file
+// names.
+func IsMarkerName(name string) bool {
+	return name == exclusiveMarkerName || strings.HasPrefix(name, sharedMarkerPrefix)
+}
+
 // New validates path and prepares a directory mutex handle.
 func New(path string) (*DirectoryMutex, error) {
 	info, err := os.Stat(path)

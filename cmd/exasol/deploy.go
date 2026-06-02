@@ -4,8 +4,6 @@
 package main
 
 import (
-	"os"
-
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
@@ -41,7 +39,7 @@ var deployCmd = &cobra.Command{
 			return err
 		}
 
-		return printConnectionInstructionsFromFile(deployment, os.Stdout)
+		return addConnectionInstructionsTerminalOutput(deployment)
 	},
 }
 

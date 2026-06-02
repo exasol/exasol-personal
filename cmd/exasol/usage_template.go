@@ -256,6 +256,7 @@ const customUsageTemplate = `Usage:
 {{- range $cmds }}
 	{{rpad .Name $np }} {{.Short}}
 {{- end }}
+{{ "\n" }}
 
 {{- end }}
 {{- end }}
@@ -266,6 +267,7 @@ Additional Commands:
 {{- range $other }}
 	{{rpad .Name $np }} {{.Short}}
 {{- end }}
+{{ "\n" }}
 
 {{- end }}
 {{- end }}

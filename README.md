@@ -103,6 +103,8 @@ By default, Exasol Personal stores deployment state in `~/.exasol/personal/deplo
 
 Keep the deployment directory until cloud resources have been destroyed. Deleting the directory does not remove cloud resources and can make cleanup harder.
 
+An initialized deployment directory is tied to the selected infrastructure and installation presets. Rerun `exasol install <preset>` with the same presets to retry a failed deployment safely, or use `exasol config get`, `exasol config set`, and `exasol config reset` to inspect or change parameters for the existing presets without deleting local state. To switch presets in the same deployment directory, run `exasol destroy --remove` before initializing again, or run `exasol remove` if the cloud resources are already gone.
+
 ## 📊 Load Sample Data
 
 To get started quickly, Exasol provides two sample datasets hosted on S3 that you can import directly using SQL.
@@ -187,6 +189,17 @@ The IP addresses of the nodes will change when you restart Exasol Personal. Chec
 To completely remove an Exasol Personal deployment, use `exasol destroy`. This command will terminate and delete the compute instances and all associated resources on your cloud platform.
 
 To learn more about this command, use `exasol destroy --help`.
+
+By default, `exasol destroy` keeps the local deployment files so you can inspect the deployment or recreate the same preset. To also remove the local deployment directory after cloud resources have been destroyed, run:
+```bash
+exasol destroy --remove
+```
+
+If cloud resources were already deleted manually or you no longer have access to destroy them through the launcher, use the local recovery command:
+```bash
+exasol remove
+```
+This removes the local deployment directory. It does not destroy cloud resources.
 
 Deleting the deployment directory and the Exasol Launcher will not remove the resources that were created in your cloud environment. To completely remove a deployment, you must use the `exasol destroy` command before deleting the deployment directory.
 
