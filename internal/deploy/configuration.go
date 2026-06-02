@@ -18,21 +18,46 @@ import (
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
+// DeploymentConfigValue describes a single configurable variable as seen by
+// the launcher. The Name is the canonical variable name (underscore form, as
+// it appears in backend manifests). Use DisplayName() to obtain the
+// hyphenated form used in user-facing output and CLI flag names.
 type DeploymentConfigValue struct {
-	Name    string `json:"name"`
-	Scope   string `json:"scope"`
-	Type    string `json:"type"`
-	Value   any    `json:"value"`
-	Default any    `json:"default"`
-
-	VariableName string `json:"-"`
-	RawValue     string `json:"-"`
-	RawDefault   string `json:"-"`
+	Name       string
+	Type       ConfigVariableType
+	Value      any
+	Default    any
+	RawValue   string
+	RawDefault string
 }
 
-type deploymentConfigRawValues struct {
-	infraVars   map[string]string
-	installVars map[string]string
+// DisplayName returns the user-facing form of the variable name, where any
+// underscores in the canonical name are rendered as hyphens.
+func (v DeploymentConfigValue) DisplayName() string {
+	return strings.ReplaceAll(v.Name, "_", "-")
+}
+
+// PresetIdentityInfo describes the preset identity that owns a configuration
+// section. Selector is the stable persisted identity used for comparisons
+// (for example "name:aws" or "path:/abs/preset"); DisplayName and
+// Description come from the extracted manifest and are informational only.
+type PresetIdentityInfo struct {
+	Selector    string
+	Kind        string
+	Name        string
+	Path        string
+	DisplayName string
+	Description string
+}
+
+type DeploymentConfigurationSection struct {
+	Identity PresetIdentityInfo
+	Options  []DeploymentConfigValue
+}
+
+type DeploymentConfiguration struct {
+	Infrastructure DeploymentConfigurationSection
+	Installation   DeploymentConfigurationSection
 }
 
 const (
@@ -44,23 +69,23 @@ func GetDeploymentConfiguration(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	optionNames []string,
-) ([]DeploymentConfigValue, error) {
-	var values []DeploymentConfigValue
+) (DeploymentConfiguration, error) {
+	var configuration DeploymentConfiguration
 	err := withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
 		var err error
-		values, err = readDeploymentConfigurationValues(deployment)
+		configuration, err = readDeploymentConfiguration(deployment)
 		if err != nil {
 			return err
 		}
-		values, err = filterDeploymentConfigurationValues(values, optionNames)
+		configuration, err = filterDeploymentConfiguration(configuration, optionNames)
 
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return DeploymentConfiguration{}, err
 	}
 
-	return values, nil
+	return configuration, nil
 }
 
 func SetDeploymentConfiguration(
@@ -68,9 +93,9 @@ func SetDeploymentConfiguration(
 	infraVars map[string]string,
 	installVars map[string]string,
 	deployment config.DeploymentDir,
-) ([]DeploymentConfigValue, error) {
+) (DeploymentConfiguration, error) {
 	if len(infraVars) == 0 && len(installVars) == 0 {
-		return nil, errors.New("no configuration options were provided")
+		return DeploymentConfiguration{}, errors.New("no configuration options were provided")
 	}
 
 	err := withDeploymentExclusiveLock(ctx, deployment,
@@ -92,7 +117,7 @@ func SetDeploymentConfiguration(
 			)
 		})
 	if err != nil {
-		return nil, err
+		return DeploymentConfiguration{}, err
 	}
 
 	return GetDeploymentConfiguration(ctx, deployment, nil)
@@ -104,12 +129,12 @@ func ResetDeploymentConfiguration(
 	deployment config.DeploymentDir,
 	optionNames []string,
 	resetAll bool,
-) ([]DeploymentConfigValue, error) {
+) (DeploymentConfiguration, error) {
 	if !resetAll && len(optionNames) == 0 {
-		return nil, errors.New("provide option names to reset, or pass --all")
+		return DeploymentConfiguration{}, errors.New("provide option names to reset, or pass --all")
 	}
 	if resetAll && len(optionNames) > 0 {
-		return nil, errors.New("pass either --all or option names, not both")
+		return DeploymentConfiguration{}, errors.New("pass either --all or option names, not both")
 	}
 
 	err := withDeploymentExclusiveLock(ctx, deployment,
@@ -122,101 +147,240 @@ func ResetDeploymentConfiguration(
 				return err
 			}
 
-			values, err := readDeploymentConfigurationValues(deployment)
+			configuration, err := readDeploymentConfiguration(deployment)
 			if err != nil {
 				return err
 			}
 			if !resetAll {
-				values, err = resetSelectedConfigurationValues(values, optionNames)
+				configuration, err = resetSelectedDeploymentConfiguration(
+					configuration,
+					optionNames,
+				)
 				if err != nil {
 					return err
 				}
 			} else {
-				for idx := range values {
-					values[idx].RawValue = values[idx].RawDefault
-					values[idx].Value = values[idx].Default
-				}
+				resetAllConfigurationValues(configuration.Infrastructure.Options)
+				resetAllConfigurationValues(configuration.Installation.Options)
 			}
-
-			rawValues := splitConfigurationRawValues(values)
 
 			return writeDeploymentConfiguration(
 				ctx,
 				deployment,
 				exasolState,
-				rawValues.infraVars,
-				rawValues.installVars,
+				configuration,
 			)
 		})
 	if err != nil {
-		return nil, err
+		return DeploymentConfiguration{}, err
 	}
 
 	return GetDeploymentConfiguration(ctx, deployment, nil)
 }
 
-func readDeploymentConfigurationValues(
+func readDeploymentConfiguration(
 	deployment config.DeploymentDir,
-) ([]DeploymentConfigValue, error) {
+) (DeploymentConfiguration, error) {
 	infraManifest, installManifest, err := readExtractedManifests(deployment)
 	if err != nil {
-		return nil, err
+		return DeploymentConfiguration{}, err
 	}
-	backend, err := resolveBackendForManifest(infraManifest)
+	backend, err := newDeploymentBackend(deployment, infraManifest)
 	if err != nil {
-		return nil, err
+		return DeploymentConfiguration{}, err
 	}
-	infraValues, err := backend.ReadConfiguration(deployment, infraManifest)
+	infraValues, err := backend.ReadConfiguration()
 	if err != nil {
-		return nil, err
+		return DeploymentConfiguration{}, err
 	}
 	installValues, err := readInstallationConfigurationValues(deployment, installManifest)
 	if err != nil {
-		return nil, err
+		return DeploymentConfiguration{}, err
 	}
+	exasolState, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return DeploymentConfiguration{}, err
+	}
+	presetIdentities, err := loadOrBackfillPresetIdentity(exasolState, deployment)
+	if err != nil {
+		return DeploymentConfiguration{}, err
+	}
+	sortConfigurationValues(infraValues)
+	sortConfigurationValues(installValues)
 
-	values := append([]DeploymentConfigValue{}, infraValues...)
-	values = append(values, installValues...)
-	sortConfigurationValues(values)
-
-	return values, nil
+	return DeploymentConfiguration{
+		Infrastructure: DeploymentConfigurationSection{
+			Identity: presetIdentityInfo(
+				presetIdentities.infrastructure,
+				infrastructureManifestName(infraManifest),
+				infrastructureManifestDescription(infraManifest),
+			),
+			Options: infraValues,
+		},
+		Installation: DeploymentConfigurationSection{
+			Identity: presetIdentityInfo(
+				presetIdentities.installation,
+				installationManifestName(installManifest),
+				installationManifestDescription(installManifest),
+			),
+			Options: installValues,
+		},
+	}, nil
 }
 
-func filterDeploymentConfigurationValues(
-	values []DeploymentConfigValue,
+func infrastructureManifestName(manifest *presets.InfrastructureManifest) string {
+	if manifest == nil {
+		return ""
+	}
+
+	return strings.TrimSpace(manifest.Name)
+}
+
+func infrastructureManifestDescription(manifest *presets.InfrastructureManifest) string {
+	if manifest == nil {
+		return ""
+	}
+
+	return strings.TrimSpace(manifest.Description)
+}
+
+func installationManifestName(manifest *presets.InstallManifest) string {
+	if manifest == nil {
+		return ""
+	}
+
+	return strings.TrimSpace(manifest.Name)
+}
+
+func installationManifestDescription(manifest *presets.InstallManifest) string {
+	if manifest == nil {
+		return ""
+	}
+
+	return strings.TrimSpace(manifest.Description)
+}
+
+func presetIdentityInfo(
+	selector string, displayName string, description string,
+) PresetIdentityInfo {
+	info := PresetIdentityInfo{
+		Selector:    strings.TrimSpace(selector),
+		DisplayName: strings.TrimSpace(displayName),
+		Description: strings.TrimSpace(description),
+	}
+	kind, value, ok := strings.Cut(info.Selector, ":")
+	if !ok {
+		return info
+	}
+	info.Kind = strings.TrimSpace(kind)
+	switch info.Kind {
+	case "name":
+		info.Name = strings.TrimSpace(value)
+	case "path":
+		info.Path = strings.TrimSpace(value)
+	default:
+		// Keep Selector/Kind for forward-compatible identity kinds.
+	}
+
+	return info
+}
+
+func filterDeploymentConfiguration(
+	configuration DeploymentConfiguration,
 	optionNames []string,
-) ([]DeploymentConfigValue, error) {
+) (DeploymentConfiguration, error) {
 	if len(optionNames) == 0 {
-		return values, nil
+		return configuration, nil
 	}
 
-	byName := map[string]DeploymentConfigValue{}
-	for _, value := range values {
-		byName[normalizeConfigOptionName(value.Name)] = value
-	}
-
-	filtered := make([]DeploymentConfigValue, 0, len(optionNames))
-	for _, optionName := range optionNames {
-		normalized := normalizeConfigOptionName(optionName)
-		value, ok := byName[normalized]
-		if !ok {
-			return nil, fmt.Errorf("unknown configuration option %q", optionName)
-		}
-		filtered = append(filtered, value)
-	}
-
-	return filtered, nil
-}
-
-func resetSelectedConfigurationValues(
-	values []DeploymentConfigValue,
-	optionNames []string,
-) ([]DeploymentConfigValue, error) {
 	selected := map[string]struct{}{}
 	for _, optionName := range optionNames {
 		selected[normalizeConfigOptionName(optionName)] = struct{}{}
 	}
 
+	filtered := DeploymentConfiguration{
+		Infrastructure: DeploymentConfigurationSection{
+			Identity: configuration.Infrastructure.Identity,
+			Options:  filterConfigurationValues(configuration.Infrastructure.Options, selected),
+		},
+		Installation: DeploymentConfigurationSection{
+			Identity: configuration.Installation.Identity,
+			Options:  filterConfigurationValues(configuration.Installation.Options, selected),
+		},
+	}
+	for _, optionName := range optionNames {
+		if !configurationContainsOption(filtered, optionName) {
+			return DeploymentConfiguration{}, fmt.Errorf(
+				"unknown configuration option %q", optionName,
+			)
+		}
+	}
+
+	return filtered, nil
+}
+
+func filterConfigurationValues(
+	values []DeploymentConfigValue,
+	selected map[string]struct{},
+) []DeploymentConfigValue {
+	filtered := make([]DeploymentConfigValue, 0, len(values))
+	for _, value := range values {
+		if _, ok := selected[normalizeConfigOptionName(value.Name)]; ok {
+			filtered = append(filtered, value)
+		}
+	}
+
+	return filtered
+}
+
+func configurationContainsOption(configuration DeploymentConfiguration, optionName string) bool {
+	normalized := normalizeConfigOptionName(optionName)
+	return configurationValuesContainOption(configuration.Infrastructure.Options, normalized) ||
+		configurationValuesContainOption(configuration.Installation.Options, normalized)
+}
+
+func configurationValuesContainOption(values []DeploymentConfigValue, normalized string) bool {
+	for _, value := range values {
+		if normalizeConfigOptionName(value.Name) == normalized {
+			return true
+		}
+	}
+
+	return false
+}
+
+func resetSelectedDeploymentConfiguration(
+	configuration DeploymentConfiguration,
+	optionNames []string,
+) (DeploymentConfiguration, error) {
+	selected := map[string]struct{}{}
+	for _, optionName := range optionNames {
+		selected[normalizeConfigOptionName(optionName)] = struct{}{}
+	}
+	found := map[string]struct{}{}
+	resetSelectedConfigurationValues(configuration.Infrastructure.Options, selected, found)
+	resetSelectedConfigurationValues(configuration.Installation.Options, selected, found)
+
+	missing := make([]string, 0, len(selected))
+	for optionName := range selected {
+		if _, ok := found[optionName]; !ok {
+			missing = append(missing, optionName)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+
+		return DeploymentConfiguration{}, fmt.Errorf("unknown configuration option %q", missing[0])
+	}
+
+	return configuration, nil
+}
+
+func resetSelectedConfigurationValues(
+	values []DeploymentConfigValue,
+	selected map[string]struct{},
+	found map[string]struct{},
+) {
 	for idx := range values {
 		normalized := normalizeConfigOptionName(values[idx].Name)
 		if _, ok := selected[normalized]; !ok {
@@ -224,52 +388,35 @@ func resetSelectedConfigurationValues(
 		}
 		values[idx].RawValue = values[idx].RawDefault
 		values[idx].Value = values[idx].Default
-		delete(selected, normalized)
+		found[normalized] = struct{}{}
 	}
-
-	if len(selected) > 0 {
-		missing := make([]string, 0, len(selected))
-		for optionName := range selected {
-			missing = append(missing, optionName)
-		}
-		sort.Strings(missing)
-
-		return nil, fmt.Errorf("unknown configuration option %q", missing[0])
-	}
-
-	return values, nil
 }
 
-func splitConfigurationRawValues(values []DeploymentConfigValue) deploymentConfigRawValues {
-	rawValues := deploymentConfigRawValues{
-		infraVars:   map[string]string{},
-		installVars: map[string]string{},
+func resetAllConfigurationValues(values []DeploymentConfigValue) {
+	for idx := range values {
+		values[idx].RawValue = values[idx].RawDefault
+		values[idx].Value = values[idx].Default
 	}
-	for _, value := range values {
-		switch value.Scope {
-		case ConfigScopeInfrastructure:
-			rawValues.infraVars[value.VariableName] = value.RawValue
-		case ConfigScopeInstallation:
-			rawValues.installVars[value.VariableName] = value.RawValue
-		default:
-			continue
-		}
-	}
-
-	return rawValues
 }
 
-func rawInfrastructureConfigValues(values map[string]string) []DeploymentConfigValue {
+func newDeploymentConfigurationFromRaw(
+	infraVars map[string]string,
+	installVars map[string]string,
+) DeploymentConfiguration {
+	return DeploymentConfiguration{
+		Infrastructure: DeploymentConfigurationSection{Options: rawConfigValues(infraVars)},
+		Installation:   DeploymentConfigurationSection{Options: rawConfigValues(installVars)},
+	}
+}
+
+func rawConfigValues(values map[string]string) []DeploymentConfigValue {
 	result := make([]DeploymentConfigValue, 0, len(values))
 	for name, rawValue := range values {
 		result = append(result, DeploymentConfigValue{
-			Name:         configOptionDisplayName(name),
-			Scope:        ConfigScopeInfrastructure,
-			VariableName: name,
-			RawValue:     rawValue,
+			Name:     name,
+			RawValue: rawValue,
 		})
 	}
-	sortConfigurationValues(result)
 
 	return result
 }
@@ -277,10 +424,7 @@ func rawInfrastructureConfigValues(values map[string]string) []DeploymentConfigV
 func configValuesRawMap(values []DeploymentConfigValue) map[string]string {
 	result := make(map[string]string, len(values))
 	for _, value := range values {
-		name := value.VariableName
-		if name == "" {
-			name = strings.TrimSpace(value.Name)
-		}
+		name := strings.TrimSpace(value.Name)
 		if name == "" {
 			continue
 		}
@@ -297,25 +441,51 @@ func writeDeploymentConfigurationPatch(
 	infraVars map[string]string,
 	installVars map[string]string,
 ) error {
-	values, err := readDeploymentConfigurationValues(deployment)
+	configuration, err := readDeploymentConfiguration(deployment)
 	if err != nil {
 		return err
 	}
-	rawValues := splitConfigurationRawValues(values)
-	for key, value := range infraVars {
-		rawValues.infraVars[key] = value
-	}
-	for key, value := range installVars {
-		rawValues.installVars[key] = value
-	}
+	configuration.Infrastructure.Options = patchConfigurationValues(
+		configuration.Infrastructure.Options,
+		infraVars,
+	)
+	configuration.Installation.Options = patchConfigurationValues(
+		configuration.Installation.Options,
+		installVars,
+	)
 
 	return writeDeploymentConfiguration(
 		ctx,
 		deployment,
 		exasolState,
-		rawValues.infraVars,
-		rawValues.installVars,
+		configuration,
 	)
+}
+
+func patchConfigurationValues(
+	values []DeploymentConfigValue,
+	overrides map[string]string,
+) []DeploymentConfigValue {
+	for name, rawValue := range overrides {
+		matched := false
+		for idx := range values {
+			if values[idx].Name != name {
+				continue
+			}
+			values[idx].RawValue = rawValue
+			matched = true
+
+			break
+		}
+		if !matched {
+			values = append(values, DeploymentConfigValue{
+				Name:     name,
+				RawValue: rawValue,
+			})
+		}
+	}
+
+	return values
 }
 
 func readInstallationConfigurationValues(
@@ -366,14 +536,12 @@ func readInstallationConfigurationValues(
 			)
 		}
 		values = append(values, DeploymentConfigValue{
-			Name:         configOptionDisplayName(name),
-			Scope:        ConfigScopeInstallation,
-			Type:         effectiveType,
-			Value:        value,
-			Default:      defaultValue,
-			VariableName: name,
-			RawValue:     rawValue,
-			RawDefault:   rawDefault,
+			Name:       name,
+			Type:       installationVariableType(effectiveType),
+			Value:      value,
+			Default:    defaultValue,
+			RawValue:   rawValue,
+			RawDefault: rawDefault,
 		})
 	}
 
@@ -426,33 +594,26 @@ func scalarToRawString(value any) (string, error) {
 	}
 }
 
-func isReservedInfrastructureVariableName(name string) bool {
-	switch strings.TrimSpace(name) {
-	case "deployment_id",
-		"cluster_identity",
-		"deployment_created_at",
-		"infrastructure_artifact_dir",
-		"installation_preset_dir":
-		return true
-	default:
-		return false
-	}
-}
-
+// normalizeConfigOptionName converts a user-supplied option name (either
+// hyphen or underscore form) into the canonical underscore form used
+// internally as DeploymentConfigValue.Name.
 func normalizeConfigOptionName(name string) string {
-	return strings.ReplaceAll(strings.TrimSpace(name), "_", "-")
+	return strings.ReplaceAll(strings.TrimSpace(name), "-", "_")
 }
 
-func configOptionDisplayName(name string) string {
-	return strings.ReplaceAll(strings.TrimSpace(name), "_", "-")
+func installationVariableType(raw string) ConfigVariableType {
+	switch strings.TrimSpace(raw) {
+	case string(ConfigVariableTypeBool):
+		return ConfigVariableTypeBool
+	case string(ConfigVariableTypeNumber):
+		return ConfigVariableTypeNumber
+	default:
+		return ConfigVariableTypeString
+	}
 }
 
 func sortConfigurationValues(values []DeploymentConfigValue) {
 	sort.Slice(values, func(left, right int) bool {
-		if values[left].Scope != values[right].Scope {
-			return values[left].Scope < values[right].Scope
-		}
-
 		return values[left].Name < values[right].Name
 	})
 }

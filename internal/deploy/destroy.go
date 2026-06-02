@@ -49,7 +49,7 @@ func Destroy(ctx context.Context, deployment config.DeploymentDir, verbose bool)
 			if err != nil {
 				return markDestroyInterrupted(exasolState, deployment, err)
 			}
-			backend, err := resolveBackendForManifest(manifest)
+			backend, err := newDeploymentBackend(deployment, manifest)
 			if err != nil {
 				return markDestroyInterrupted(exasolState, deployment, err)
 			}
@@ -61,8 +61,6 @@ func Destroy(ctx context.Context, deployment config.DeploymentDir, verbose bool)
 
 			if err := backend.Destroy(
 				ctx,
-				deployment,
-				manifest,
 				externalCommandStandardOut,
 				externalCommandStandardOut,
 			); err != nil {

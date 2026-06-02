@@ -8,8 +8,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
@@ -68,6 +70,13 @@ func TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles(t *te
 	if err := os.WriteFile(statePath, []byte("state"), 0o600); err != nil {
 		t.Fatalf("write state file failed: %v", err)
 	}
+	tofuBinaryPath, err := tofu.ResolveBinaryPath(context.Background(), deployment.Root())
+	if err != nil {
+		t.Fatalf("resolve tofu binary path failed: %v", err)
+	}
+	if err := os.Remove(tofuBinaryPath); err != nil {
+		t.Fatalf("remove tofu binary before config set failed: %v", err)
+	}
 
 	// When
 	if _, err := SetDeploymentConfiguration(
@@ -83,6 +92,9 @@ func TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles(t *te
 	if _, err := os.Stat(statePath); err != nil {
 		t.Fatalf("expected state file to be preserved, got %v", err)
 	}
+	if _, err := os.Stat(tofuBinaryPath); !os.IsNotExist(err) {
+		t.Fatalf("expected config set not to recreate tofu binary, got %v", err)
+	}
 	tfvarsPath := filepath.Join(deployment.InfrastructureDir(), tofu.DefaultVarsOutput)
 	content, err := os.ReadFile(tfvarsPath)
 	if err != nil {
@@ -91,6 +103,58 @@ func TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles(t *te
 	if !strings.Contains(string(content), `cluster_size`) ||
 		!strings.Contains(string(content), `= 3`) {
 		t.Fatalf("expected updated cluster size, got: %s", string(content))
+	}
+}
+
+func TestSetDeploymentConfiguration_PreservesDeploymentCreatedAt(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := InitDeployment(
+		context.Background(),
+		PresetRef{Name: presets.DefaultInfrastructure},
+		PresetRef{Name: presets.DefaultInstallation},
+		map[string]string{"cluster_size": "2"},
+		map[string]string{},
+		deployment,
+		false,
+		"0.0.0",
+	); err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+	tfvarsPath := filepath.Join(deployment.InfrastructureDir(), tofu.DefaultVarsOutput)
+	createdAt := "2001-02-03T04:05:06Z"
+	parsedCreatedAt, err := time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		t.Fatalf("parse createdAt failed: %v", err)
+	}
+	state, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		t.Fatalf("read state failed: %v", err)
+	}
+	state.CreatedAt = parsedCreatedAt
+	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
+		t.Fatalf("write state failed: %v", err)
+	}
+
+	// When
+	if _, err := SetDeploymentConfiguration(
+		context.Background(),
+		map[string]string{"cluster_size": "3"},
+		map[string]string{},
+		deployment,
+	); err != nil {
+		t.Fatalf("config set failed: %v", err)
+	}
+
+	// Then
+	content, err := os.ReadFile(tfvarsPath)
+	if err != nil {
+		t.Fatalf("read tfvars failed: %v", err)
+	}
+	if !deploymentCreatedAtPattern(createdAt).Match(content) {
+		t.Fatalf("expected deployment_created_at to be preserved, got:\n%s", string(content))
 	}
 }
 
@@ -179,10 +243,12 @@ name: Test Infrastructure
 description: test infrastructure
 backend: unknown
 `)
-	state := newInitializedStateWithoutVersionChecks(
+	state := newInitializedState(
+		false,
 		"0.0.0",
 		"test-deployment",
 		"test-cluster",
+		time.Now().UTC(),
 		PresetRef{Name: "test-infra"},
 		PresetRef{Name: "test-install"},
 	)
@@ -378,10 +444,12 @@ name: Test Infrastructure
 description: test infrastructure
 backend: tofu
 `)
-	state := newInitializedStateWithoutVersionChecks(
+	state := newInitializedState(
+		false,
 		"0.0.0",
 		"test-deployment",
 		"test-cluster",
+		time.Now().UTC(),
 		PresetRef{Name: "test-infra"},
 		PresetRef{Name: "test-install"},
 	)
@@ -391,4 +459,8 @@ backend: tofu
 	); err != nil {
 		t.Fatalf("write state failed: %v", err)
 	}
+}
+
+func deploymentCreatedAtPattern(createdAt string) *regexp.Regexp {
+	return regexp.MustCompile(`deployment_created_at\s*=\s*"` + regexp.QuoteMeta(createdAt) + `"`)
 }

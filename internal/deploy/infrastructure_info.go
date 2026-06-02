@@ -13,7 +13,6 @@ type InfrastructureInfo struct {
 	Name             string
 	ShortDescription string
 	LongDescription  string
-	Tofu             *presets.InfrastructureTofu
 }
 
 func GetInfrastructureInfo(infrastructureName string) (*InfrastructureInfo, error) {
@@ -31,7 +30,6 @@ func GetInfrastructureInfo(infrastructureName string) (*InfrastructureInfo, erro
 	info.Name = manifest.Name
 	info.ShortDescription = manifest.Name
 	info.LongDescription = manifest.Description
-	info.Tofu = manifest.Tofu
 
 	return &info, nil
 }
@@ -51,7 +49,6 @@ func GetInfrastructureInfoFromDir(dir string) (*InfrastructureInfo, error) {
 	info.Name = manifest.Name
 	info.ShortDescription = manifest.Name
 	info.LongDescription = manifest.Description
-	info.Tofu = manifest.Tofu
 
 	return &info, nil
 }

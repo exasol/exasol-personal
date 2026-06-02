@@ -11,8 +11,6 @@ import (
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
-	"github.com/zclconf/go-cty/cty"
-	ctyjson "github.com/zclconf/go-cty/cty/json"
 )
 
 // UserConfirmationValidator is a function that takes an user input as a String,
@@ -55,16 +53,6 @@ func askForUserConfirmation(prompt string, validators ...UserConfirmationValidat
 	response = strings.ToLower(strings.TrimSpace(response))
 
 	return validate(response)
-}
-
-// ctyToJSONString renders a cty.Value to JSON string, for nice defaults in help.
-func ctyToJSONString(value cty.Value) string {
-	repr, err := ctyjson.Marshal(value, value.Type())
-	if err != nil {
-		return "<error>"
-	}
-
-	return string(repr)
 }
 
 // Note: orderedInfrastructureVariables and the custom help wrapper were removed when

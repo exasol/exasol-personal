@@ -124,12 +124,8 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 }
 
-func printConfigurationJSON(values []deploy.DeploymentConfigValue) error {
-	result := map[string]any{}
-	for _, value := range values {
-		result[value.Name] = value.Value
-	}
-	data, err := json.MarshalIndent(result, "", "  ")
+func printConfigurationJSON(configuration deploy.DeploymentConfiguration) error {
+	data, err := json.MarshalIndent(configurationJSON(configuration), "", "  ")
 	if err != nil {
 		return err
 	}
@@ -138,27 +134,122 @@ func printConfigurationJSON(values []deploy.DeploymentConfigValue) error {
 	return nil
 }
 
-func formatConfigurationChangedNotice(values []deploy.DeploymentConfigValue) string {
-	return strings.TrimRight(formatConfigurationValues(values), "\n") +
+func configurationJSON(configuration deploy.DeploymentConfiguration) map[string]any {
+	return map[string]any{
+		deploy.ConfigScopeInfrastructure: configurationSectionJSON(configuration.Infrastructure),
+		deploy.ConfigScopeInstallation:   configurationSectionJSON(configuration.Installation),
+	}
+}
+
+func configurationSectionJSON(section deploy.DeploymentConfigurationSection) map[string]any {
+	return map[string]any{
+		"identity": presetIdentityJSON(section.Identity),
+		"options":  configurationOptionsJSON(section.Options),
+	}
+}
+
+func presetIdentityJSON(identity deploy.PresetIdentityInfo) map[string]string {
+	result := map[string]string{}
+	if strings.TrimSpace(identity.Selector) != "" {
+		result["selector"] = identity.Selector
+	}
+	if strings.TrimSpace(identity.Kind) != "" {
+		result["kind"] = identity.Kind
+	}
+	if strings.TrimSpace(identity.Name) != "" {
+		result["name"] = identity.Name
+	}
+	if strings.TrimSpace(identity.Path) != "" {
+		result["path"] = identity.Path
+	}
+	if strings.TrimSpace(identity.DisplayName) != "" {
+		result["displayName"] = identity.DisplayName
+	}
+	if strings.TrimSpace(identity.Description) != "" {
+		result["description"] = identity.Description
+	}
+
+	return result
+}
+
+func configurationOptionsJSON(values []deploy.DeploymentConfigValue) map[string]any {
+	result := map[string]any{}
+	for _, value := range values {
+		result[value.DisplayName()] = value.Value
+	}
+
+	return result
+}
+
+func formatConfigurationChangedNotice(configuration deploy.DeploymentConfiguration) string {
+	return strings.TrimRight(formatConfigurationValues(configuration), "\n") +
 		"\nconfiguration updated locally; run `exasol deploy` to apply these changes"
 }
 
-func formatConfigurationValues(values []deploy.DeploymentConfigValue) string {
-	if len(values) == 0 {
+func formatConfigurationValues(configuration deploy.DeploymentConfiguration) string {
+	if len(configuration.Infrastructure.Options) == 0 &&
+		len(configuration.Installation.Options) == 0 &&
+		strings.TrimSpace(configuration.Infrastructure.Identity.Selector) == "" &&
+		strings.TrimSpace(configuration.Installation.Identity.Selector) == "" {
 		return "Active configuration:\n  (no configurable options)\n"
 	}
 
 	var builder strings.Builder
 	_, _ = builder.WriteString("Active configuration:\n")
-	for _, value := range values {
-		_, _ = builder.WriteString("  ")
-		_, _ = builder.WriteString(value.Name)
+	writeConfigurationSection(
+		&builder,
+		"Infrastructure",
+		configuration.Infrastructure,
+	)
+	writeConfigurationSection(
+		&builder,
+		"Installation",
+		configuration.Installation,
+	)
+
+	return builder.String()
+}
+
+func writeConfigurationSection(
+	builder *strings.Builder,
+	title string,
+	section deploy.DeploymentConfigurationSection,
+) {
+	_, _ = builder.WriteString("  ")
+	_, _ = builder.WriteString(title)
+	if strings.TrimSpace(section.Identity.DisplayName) != "" {
+		_, _ = builder.WriteString(" (")
+		_, _ = builder.WriteString(section.Identity.DisplayName)
+		_, _ = builder.WriteString(")")
+	}
+	_, _ = builder.WriteString(":\n")
+	writeIdentityLine(builder, "Identity", section.Identity.Selector)
+	writeIdentityLine(builder, "Description", section.Identity.Description)
+	_, _ = builder.WriteString("    Options:\n")
+	if len(section.Options) == 0 {
+		_, _ = builder.WriteString("      (no configurable options)\n")
+
+		return
+	}
+	for _, value := range section.Options {
+		_, _ = builder.WriteString("      ")
+		_, _ = builder.WriteString(value.DisplayName())
 		_, _ = builder.WriteString(" = ")
 		_, _ = builder.WriteString(formatConfigurationScalar(value.Value))
 		_, _ = builder.WriteString("\n")
 	}
+}
 
-	return builder.String()
+func writeIdentityLine(builder *strings.Builder, label string, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	_, _ = builder.WriteString("    ")
+	_, _ = builder.WriteString(label)
+	_, _ = builder.WriteString(": ")
+	_, _ = builder.WriteString(value)
+	_, _ = builder.WriteString("\n")
 }
 
 func formatConfigurationScalar(value any) string {
@@ -195,20 +286,20 @@ func applyConfigurationPatchIfProvided(
 	cmd *cobra.Command,
 	infraVars map[string]string,
 	installVars map[string]string,
-) ([]deploy.DeploymentConfigValue, bool, error) {
+) (deploy.DeploymentConfiguration, bool, error) {
 	if !hasConfigurationVariableOverrides(infraVars, installVars) {
-		return nil, false, nil
+		return deploy.DeploymentConfiguration{}, false, nil
 	}
 
-	values, err := deploy.SetDeploymentConfiguration(
+	configuration, err := deploy.SetDeploymentConfiguration(
 		cmd.Context(),
 		infraVars,
 		installVars,
 		commonFlags.Deployment(),
 	)
 	if err != nil {
-		return nil, false, fmt.Errorf("configuration failed: %w", err)
+		return deploy.DeploymentConfiguration{}, false, fmt.Errorf("configuration failed: %w", err)
 	}
 
-	return values, true, nil
+	return configuration, true, nil
 }

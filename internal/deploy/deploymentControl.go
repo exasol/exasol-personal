@@ -96,7 +96,7 @@ func Start(
 			if err != nil {
 				return err
 			}
-			backend, err := resolveBackendForManifest(manifest)
+			backend, err := newDeploymentBackend(deployment, manifest)
 			if err != nil {
 				return err
 			}
@@ -108,8 +108,6 @@ func Start(
 
 			if err := backend.Start(
 				ctx,
-				deployment,
-				manifest,
 				externalCommandOutput,
 				externalCommandOutput,
 				waitTimeoutSeconds,
@@ -221,7 +219,7 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 			if err != nil {
 				return err
 			}
-			backend, err := resolveBackendForManifest(manifest)
+			backend, err := newDeploymentBackend(deployment, manifest)
 			if err != nil {
 				return err
 			}
@@ -233,8 +231,6 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 
 			if err := backend.Stop(
 				ctx,
-				deployment,
-				manifest,
 				externalCommandOutput,
 				externalCommandOutput,
 			); err != nil {

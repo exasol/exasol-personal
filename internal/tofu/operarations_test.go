@@ -5,6 +5,7 @@ package tofu
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -64,6 +65,29 @@ func TestPrepare_WritesVars(t *testing.T) {
 	mustContain(t, out, "3")
 	mustContain(t, out, "extra")
 	mustContain(t, out, "hello")
+}
+
+func TestConfigure_WritesVarsWithoutBinary(t *testing.T) {
+	t.Parallel()
+
+	deploymentDir := t.TempDir()
+	cfg := NewTofuConfigFromDeployment(deploymentDir, presets.InfrastructureTofu{})
+	binaryPath := filepath.Join(deploymentDir, "tofu")
+	cfg.tofuBinaryPath = binaryPath
+
+	expectNoErr(t, os.MkdirAll(cfg.WorkDir(), 0o700))
+	writeMinimalVariablesFile(t, cfg)
+
+	err := Configure(cfg, map[string]string{"region": "eu-west-1"})
+	expectNoErr(t, err)
+
+	data, err := os.ReadFile(cfg.VarsOutputFile())
+	expectNoErr(t, err)
+	mustContain(t, string(data), "eu-west-1")
+
+	if _, err := os.Stat(binaryPath); !os.IsNotExist(err) {
+		t.Fatalf("expected configure not to write tofu binary, got: %v", err)
+	}
 }
 
 func TestPrepare_ErrorsWhenVariablesMissing(t *testing.T) {
