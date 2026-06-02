@@ -22,7 +22,7 @@ func TestValidatePresetSelection_AcceptsDefaultEmbeddedPair(t *testing.T) {
 	installationPreset := PresetRef{Name: presets.DefaultInstallation}
 
 	// When
-	err := validatePresetSelection(infrastructurePreset, installationPreset)
+	err := ValidatePresetSelection(infrastructurePreset, installationPreset)
 	// Then
 	if err != nil {
 		t.Fatalf("expected default preset pair to be valid, got %v", err)

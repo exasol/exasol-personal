@@ -18,7 +18,7 @@ def _env_with_home(home: Path) -> dict[str, str]:
     return env
 
 
-def _default_dir_logged(stderr: str, default_dir: Path) -> bool:
+def _deployment_dir_logged(stderr: str, deployment_dir: Path, source: str) -> bool:
     for line in stderr.splitlines():
         try:
             decoded: object = json.loads(line)
@@ -26,19 +26,23 @@ def _default_dir_logged(stderr: str, default_dir: Path) -> bool:
             continue
         if not isinstance(decoded, dict):
             continue
-        if decoded.get("msg") != "using default deployment directory":
+        if decoded.get("msg") != "using deployment directory":
+            continue
+        if decoded.get("source") != source:
             continue
 
         logged_path = decoded.get("path")
-        if isinstance(logged_path, str) and Path(logged_path) == default_dir:
+        if isinstance(logged_path, str) and Path(logged_path) == deployment_dir:
             return True
 
     return False
 
 
-def _assert_default_dir_logged(stderr: str, default_dir: Path) -> None:
-    assert _default_dir_logged(stderr, default_dir), (
-        f"expected default deployment directory {str(default_dir)!r} "
+def _assert_deployment_dir_logged(
+    stderr: str, deployment_dir: Path, source: str
+) -> None:
+    assert _deployment_dir_logged(stderr, deployment_dir, source), (
+        f"expected {source} deployment directory {str(deployment_dir)!r} "
         f"in stderr logs:\n{stderr}"
     )
 
@@ -68,7 +72,7 @@ def test_status_uses_default_deployment_dir_without_corrupting_json(
     data = json.loads(result.stdout)
     assert data["status"] == "not_initialized"
     assert data["deploymentDir"] == str(default_dir)
-    _assert_default_dir_logged(result.stderr, default_dir)
+    _assert_deployment_dir_logged(result.stderr, default_dir, "default")
 
 
 def test_status_reports_uninitialized_explicit_deployment_dir(
@@ -91,6 +95,41 @@ def test_status_reports_uninitialized_explicit_deployment_dir(
     data = json.loads(result.stdout)
     assert data["status"] == "not_initialized"
     assert data["deploymentDir"] == str(deployment_dir)
+    _assert_deployment_dir_logged(result.stderr, deployment_dir, "explicit")
+
+
+def test_status_logs_current_deployment_dir(exasol_path: str, tmp_path: Path) -> None:
+    # Given the current working directory is a recognized deployment directory
+    deployment_dir = tmp_path / "deployment"
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+    launcher = str(Path(exasol_path).resolve())
+    subprocess.run(
+        [
+            launcher,
+            "init",
+            infra_id,
+            "--deployment-dir",
+            str(deployment_dir),
+            "--no-launcher-version-check",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # When status is invoked without an explicit deployment directory
+    result = subprocess.run(
+        [launcher, "status", "--json"],
+        cwd=deployment_dir,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Then the current deployment directory is logged and reported
+    data = json.loads(result.stdout)
+    assert data["deploymentDir"] == str(deployment_dir)
+    _assert_deployment_dir_logged(result.stderr, deployment_dir, "current")
 
 
 def test_init_creates_default_deployment_dir(exasol_path: str, tmp_path: Path) -> None:
@@ -115,7 +154,7 @@ def test_init_creates_default_deployment_dir(exasol_path: str, tmp_path: Path) -
 
     # Then init creates and initializes the default deployment directory
     assert (default_dir / ".exasolLauncherState.json").exists()
-    _assert_default_dir_logged(result.stderr, default_dir)
+    _assert_deployment_dir_logged(result.stderr, default_dir, "default")
 
 
 def test_initialized_state_error_mentions_resolved_default_dir(
@@ -142,4 +181,4 @@ def test_initialized_state_error_mentions_resolved_default_dir(
     # Then the error explains the resolved deployment directory
     assert result.returncode != 0
     assert "deployment directory is not initialized" in result.stderr.lower()
-    _assert_default_dir_logged(result.stderr, default_dir)
+    _assert_deployment_dir_logged(result.stderr, default_dir, "default")

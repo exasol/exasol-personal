@@ -38,11 +38,28 @@ func resolveDeploymentDirForCommand(cmd *cobra.Command, state *CommonFlags) erro
 	}
 
 	state.DeploymentDir = deployment.Root()
-	if source == deploymentDirSourceDefault {
-		slog.Info("using default deployment directory", "path", deployment.Root())
-	}
+	slog.Info(
+		"using deployment directory",
+		"path", deployment.Root(),
+		"source", source.String(),
+	)
 
 	return nil
+}
+
+func (source deploymentDirSource) String() string {
+	switch source {
+	case deploymentDirSourceExplicit:
+		return "explicit"
+	case deploymentDirSourceCurrent:
+		return "current"
+	case deploymentDirSourceDefault:
+		return "default"
+	case deploymentDirSourceNone:
+		fallthrough
+	default:
+		return "none"
+	}
 }
 
 func resolveDeploymentDir(

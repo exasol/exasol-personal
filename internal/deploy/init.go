@@ -14,7 +14,6 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
@@ -61,6 +60,9 @@ func ResolveInfrastructureInfo(infrastructureName string) (*InfrastructureInfo, 
 var (
 	ErrUnknownVariable             = errors.New("unknown variable")
 	ErrDeploymentDirectoryNotEmpty = errors.New("deployment directory is not empty")
+	ErrDeploymentPresetMismatch    = errors.New(
+		"deployment directory is initialized with different presets",
+	)
 )
 
 // InitDeployment initializes a new deployment directory by extracting presets and
@@ -84,19 +86,19 @@ func InitDeployment(
 
 	// Proactively validate the preset selection to produce friendly errors.
 	slog.Info("validating presets")
-	if err := validatePresetSelection(infrastructurePreset, installationPreset); err != nil {
+	if err := ValidatePresetSelection(infrastructurePreset, installationPreset); err != nil {
 		return err
 	}
 
-	// If the directory is already an initialized deployment directory,
-	// we skip everything and regard this as a success
+	// Init only creates fresh deployment state. Existing deployment orchestration
+	// belongs to the command layer.
 	initialized, err := config.HasExasolPersonalStateFile(deployment)
 	if err != nil {
 		slog.Error("failed to check deployment directory initialization")
 		return err
-	} else if initialized {
-		slog.Info("deployment directory is already initialized")
-		return nil
+	}
+	if initialized {
+		return ErrDeploymentDirectoryNotEmpty
 	}
 
 	// Make sure the directory exists and is empty
@@ -127,69 +129,45 @@ func InitDeployment(
 				return err
 			}
 
-			// Load manifests from the extracted presets (the deployment directory is the source of truth).
-			slog.Debug("loading preset manifests")
-			infraDir := deployment.InfrastructureDir()
-			infraManifest, err := presets.ReadInfrastructureManifestFromDir(infraDir)
-			if err != nil {
-				return fmt.Errorf("failed to read extracted infrastructure manifest: %w", err)
-			}
-			installDir := deployment.InstallationDir()
-			installManifest, err := presets.ReadInstallManifestFromDir(installDir)
-			if err != nil {
-				return fmt.Errorf("failed to read extracted installation manifest: %w", err)
-			}
-
-			// These values should always be part of the infra vars per contract.
-			// They are expressed relative to the extracted infrastructure preset
-			// directory, which keeps the deployment directory movable while
-			// preserving a single launcher-owned layout SSOT.
-			infraVars["infrastructure_artifact_dir"] = deployment.RelativeInfrastructureArtifactDir()
-			infraVars["installation_preset_dir"] = deployment.RelativeInstallationPresetDir()
-			// Launcher-governed identity values.
-			infraVars["deployment_id"] = deploymentId
-			infraVars["cluster_identity"] = clusterIdentity
-			infraVars["deployment_created_at"] = time.Now().UTC().Format(time.RFC3339)
-
-			// If tofu is configured for the infrastructure, perform tofu-specific initialization.
-			if infraManifest.Tofu != nil {
-				tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *infraManifest.Tofu)
-				slog.Info("preparing tofu workspace", "workdir", tofuCfg.WorkDir())
-				if err := tofu.Prepare(tofuCfg, infraVars); err != nil {
-					return err
-				}
-			}
-
-			if err := writeInstallationVariablesFile(
-				installDir,
-				installManifest.Variables,
-				clusterIdentity,
+			slog.Debug("Initializing deployment state")
+			exasolState := newInitializedState(
+				versionCheckEnabled,
+				currentVersion,
 				deploymentId,
-				GetVersionCheckURL(),
+				clusterIdentity,
+				infrastructurePreset,
+				installationPreset,
+			)
+			infraManifest, _, err := readExtractedManifests(deployment)
+			if err != nil {
+				return err
+			}
+			backend, err := resolveBackendForManifest(infraManifest)
+			if err != nil {
+				return err
+			}
+			if err := backend.SetupWorkspace(ctx, deployment, infraManifest); err != nil {
+				return err
+			}
+			if err := writeDeploymentConfiguration(
+				ctx,
+				deployment,
+				exasolState,
+				infraVars,
 				installVars,
 			); err != nil {
 				return err
 			}
 
-			slog.Debug("Initializing deployment state")
-			if versionCheckEnabled {
-				if err := writeInitializedStateWithVersionChecks(
-					deployment,
-					currentVersion,
-					deploymentId,
-					clusterIdentity,
-				); err != nil {
-					return err
-				}
-			} else {
-				if err := writeInitializedStateWithoutVersionChecks(
-					deployment,
-					currentVersion,
-					deploymentId,
-					clusterIdentity,
-				); err != nil {
-					return err
-				}
+			err = exasolState.SetWorkflowStateAndWrite(
+				&config.WorkflowStateInitialized{},
+				deployment,
+			)
+			if err != nil {
+				return err
+			}
+			if err := config.WriteDeploymentVersionMarker(deployment, currentVersion); err != nil {
+				return err
 			}
 
 			slog.Info(
@@ -284,55 +262,49 @@ func ensureDirectoryIsEmpty(deployment config.DeploymentDir) error {
 	return nil
 }
 
-func writeInitializedStateWithVersionChecks(
-	deployment config.DeploymentDir,
+//nolint:revive // versionCheckEnabled chooses persisted state shape for user configuration.
+func newInitializedState(
+	versionCheckEnabled bool,
 	deploymentVersion string,
 	deploymentId string,
 	clusterIdentity string,
-) error {
-	exasolState := newInitializedStateWithVersionChecks(
+	infrastructurePreset PresetRef,
+	installationPreset PresetRef,
+) *config.ExasolPersonalState {
+	if versionCheckEnabled {
+		return newInitializedStateWithVersionChecks(
+			deploymentVersion,
+			deploymentId,
+			clusterIdentity,
+			infrastructurePreset,
+			installationPreset,
+		)
+	}
+
+	return newInitializedStateWithoutVersionChecks(
 		deploymentVersion,
 		deploymentId,
 		clusterIdentity,
+		infrastructurePreset,
+		installationPreset,
 	)
-	err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deployment)
-	if err != nil {
-		return err
-	}
-
-	return config.WriteDeploymentVersionMarker(deployment, deploymentVersion)
-}
-
-func writeInitializedStateWithoutVersionChecks(
-	deployment config.DeploymentDir,
-	deploymentVersion string,
-	deploymentId string,
-	clusterIdentity string,
-) error {
-	exasolState := newInitializedStateWithoutVersionChecks(
-		deploymentVersion,
-		deploymentId,
-		clusterIdentity,
-	)
-	err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deployment)
-	if err != nil {
-		return err
-	}
-
-	return config.WriteDeploymentVersionMarker(deployment, deploymentVersion)
 }
 
 func newInitializedStateWithVersionChecks(
 	deploymentVersion string,
 	deploymentId string,
 	clusterIdentity string,
+	infrastructurePreset PresetRef,
+	installationPreset PresetRef,
 ) *config.ExasolPersonalState {
 	return &config.ExasolPersonalState{
-		DeploymentId:        deploymentId,
-		ClusterIdentity:     clusterIdentity,
-		DeploymentVersion:   deploymentVersion,
-		VersionCheckEnabled: true,
-		LastVersionCheck:    time.Now(),
+		DeploymentId:                 deploymentId,
+		ClusterIdentity:              clusterIdentity,
+		DeploymentVersion:            deploymentVersion,
+		VersionCheckEnabled:          true,
+		LastVersionCheck:             time.Now(),
+		InfrastructurePresetIdentity: presetIdentityOf(infrastructurePreset),
+		InstallationPresetIdentity:   presetIdentityOf(installationPreset),
 	}
 }
 
@@ -340,13 +312,17 @@ func newInitializedStateWithoutVersionChecks(
 	deploymentVersion string,
 	deploymentId string,
 	clusterIdentity string,
+	infrastructurePreset PresetRef,
+	installationPreset PresetRef,
 ) *config.ExasolPersonalState {
 	return &config.ExasolPersonalState{
-		DeploymentId:        deploymentId,
-		ClusterIdentity:     clusterIdentity,
-		DeploymentVersion:   deploymentVersion,
-		VersionCheckEnabled: false,
-		LastVersionCheck:    time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC),
+		DeploymentId:                 deploymentId,
+		ClusterIdentity:              clusterIdentity,
+		DeploymentVersion:            deploymentVersion,
+		VersionCheckEnabled:          false,
+		LastVersionCheck:             time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC),
+		InfrastructurePresetIdentity: presetIdentityOf(infrastructurePreset),
+		InstallationPresetIdentity:   presetIdentityOf(installationPreset),
 	}
 }
 

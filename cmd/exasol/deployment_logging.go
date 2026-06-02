@@ -107,6 +107,9 @@ func setupDeploymentLogSession(cmd *cobra.Command, deployment config.DeploymentD
 	if !deploymentFileLoggingIsRequired(cmd) {
 		return nil
 	}
+	if cmd.Name() == "destroy" && destroyOpts.Remove {
+		return nil
+	}
 
 	cleanup, err := startDeploymentLogSession(cmd.Context(), cmd.Name(), deployment)
 	setDeploymentLogCleanup(cleanup)

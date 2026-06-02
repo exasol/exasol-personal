@@ -79,10 +79,18 @@ def test_init_succeeds(exasol_path: str, tmp_path: Path) -> None:
     # Then and the EULA is there too
     assert (deployment_dir / "eula.txt").exists()
 
-    # Then the EULA message is displayed (in stdout, not stderr)
-    combined_output = result.stdout + result.stderr
-    assert "End User License Agreement" in combined_output or "EULA" in combined_output
-    assert "exasol.com" in combined_output.lower()
+    # Then the EULA notice is displayed as the final terminal notice, not as log output
+    assert "End User License Agreement" in result.stderr or "EULA" in result.stderr
+    assert "exasol.com" in result.stderr.lower()
+    assert "End User License Agreement" not in result.stdout
+    assert result.stderr.rfind("deployment log file") < result.stderr.rfind(
+        "End User License Agreement"
+    )
+    assert result.stderr.strip().splitlines()[-1] == (
+        "A copy of the EULA is also included as 'eula.txt' in this directory."
+    )
+    deployment_log = (deployment_dir / "deployment.log").read_text()
+    assert "End User License Agreement" not in deployment_log
 
 
 def test_init_creates_deployment_dir(exasol_path: str, tmp_path: Path) -> None:
@@ -280,7 +288,8 @@ def test_init_accepts_install_preset_path_as_second_arg(
         [
             exasol_path,
             "init",
-            "aws",
+            infra_id,
+            str(install_dir),
             "--deployment-dir",
             str(deployment_dir),
         ]

@@ -153,6 +153,32 @@ func ParseVarFile(varFile []byte, filenameForLogs string) (map[string]*Variable,
 	return result, nil
 }
 
+// ParseVarsValuesFile parses a tfvars file and returns top-level assigned values.
+func ParseVarsValuesFile(varFile []byte, filenameForLogs string) (map[string]cty.Value, error) {
+	result := make(map[string]cty.Value)
+
+	parser := hclparse.NewParser()
+	file, diags := parser.ParseHCL(varFile, filenameForLogs)
+	if diags.HasErrors() {
+		return result, fmt.Errorf("%w: %s", ErrFailedHclParsing, diags.Error())
+	}
+
+	attrs, diags := file.Body.JustAttributes()
+	if diags.HasErrors() {
+		return result, fmt.Errorf("%w: %s", ErrFailedHclDecode, diags.Error())
+	}
+
+	for name, attr := range attrs {
+		val, valueDiags := attr.Expr.Value(nil)
+		if valueDiags.HasErrors() {
+			return result, fmt.Errorf("%w: %s", ErrFailedHclDecode, valueDiags.Error())
+		}
+		result[name] = val
+	}
+
+	return result, nil
+}
+
 // WriteVarsFile writes a tfvars file based on the provided variables map.
 func WriteVarsFile(vars map[string]*Variable, writer io.Writer) error {
 	file := hclwrite.NewEmptyFile()

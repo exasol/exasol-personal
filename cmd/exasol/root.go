@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/lmittmann/tint"
 	"github.com/spf13/cobra"
@@ -82,13 +83,10 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		// Best-effort version update hint (non-blocking; logs only when an update is available).
+		// Best-effort version update hint (non-blocking; terminal-only when available).
 		// Design decision: never block commands on this.
 		if cmd.Name() != "version" && !cmd.Hidden {
-			deploy.MaybeLogVersionUpdateHint(
-				cmd.Context(), deployment,
-				CurrentLauncherVersion,
-			)
+			maybeAddVersionUpdateHint(cmd, deployment)
 		}
 
 		return nil
@@ -103,7 +101,7 @@ func setupLogging() error {
 		return fmt.Errorf("%w: \"%s\"", ErrInvalidLogLevel, commonFlags.LogLevel)
 	}
 
-	if term.IsTerminal(int(os.Stdout.Fd())) {
+	if term.IsTerminal(int(os.Stderr.Fd())) {
 		levelVar := slog.LevelVar{}
 		levelVar.Set(selectedLevel)
 		// Design decision: when attached to a terminal, prefer human-friendly logs.
@@ -137,8 +135,7 @@ func addHelpFlag(cmd *cobra.Command) {
 }
 
 func Execute() error {
-	defer runDeploymentLogCleanup()
-
+	resetTerminalMessages()
 	registerLogLevelFlag(rootCmd, commonFlags)
 
 	// Register infrastructure variable flags only for commands that need them.
@@ -170,5 +167,32 @@ func Execute() error {
 	// want to have the "Usage" text be capitalized.
 	addHelpFlag(rootCmd)
 
-	return rootCmd.Execute()
+	err := rootCmd.Execute()
+	runDeploymentLogCleanup()
+	if err == nil {
+		printTerminalMessages()
+	}
+
+	return err
+}
+
+func maybeAddVersionUpdateHint(cmd *cobra.Command, deployment config.DeploymentDir) {
+	result, err := deploy.PerformSilentVersionCheck(
+		cmd.Context(),
+		deployment,
+		CurrentLauncherVersion,
+	)
+	if err != nil {
+		slog.Debug("launcher version update check failed", "error", err)
+		return
+	}
+	if !result.Checked || !result.UpdateAvailable {
+		return
+	}
+
+	addTerminalNotice(fmt.Sprintf(
+		"A new version of Exasol Personal is available: %s. "+
+			"Run `exasol version --latest` for more details.",
+		result.LatestVersion,
+	))
 }

@@ -114,16 +114,36 @@ func mapLockAcquireError(ctx context.Context, deployment config.DeploymentDir, e
 		return &deploymentDirectoryLockedError{message: lockUnavailableMessage}
 	}
 
-	statusCtx := context.WithoutCancel(ctx)
-	status, statusErr := GetStatus(statusCtx, deployment, false)
-	if statusErr != nil {
-		return &deploymentDirectoryLockedError{message: lockUnavailableMessage}
-	}
-	if status != nil && status.Status == StatusOperationInProgress && status.Message != "" {
-		return &deploymentDirectoryLockedError{message: status.Message}
+	if operation := lockedOperationName(deployment); operation != "" {
+		return &deploymentDirectoryLockedError{
+			message: activeOperationInProgressMessage(operation),
+		}
 	}
 
 	return &deploymentDirectoryLockedError{message: lockUnavailableMessage}
+}
+
+func lockedOperationName(deployment config.DeploymentDir) string {
+	exasolState, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return ""
+	}
+	workflowState, err := exasolState.GetWorkflowState()
+	if err != nil {
+		return ""
+	}
+	state, ok := workflowState.(*config.WorkflowStateOperationInProgress)
+	if !ok {
+		return ""
+	}
+
+	return state.Operation
+}
+
+func activeOperationInProgressMessage(operation string) string {
+	return "Operation '" + operation + "' is currently in progress. Please wait. " +
+		"Do not use `unlock` unless you are certain that no other exasol " +
+		"launcher instance is running."
 }
 
 func callWithPanicSafetyError(

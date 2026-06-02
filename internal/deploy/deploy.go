@@ -22,7 +22,8 @@ import (
 const (
 	deployFailureResourceHint = "Deployment may have created cloud resources " +
 		"that can incur costs. " +
-		"Fix the problem and run `deploy` again, or run `destroy` to clean up."
+		"Fix the problem and run `deploy` or the same `install` command again, " +
+		"or run `destroy` to clean up."
 )
 
 func appendDeployFailureHint(

@@ -10,7 +10,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
-func validatePresetSelection(
+func ValidatePresetSelection(
 	infrastructurePreset PresetRef,
 	installationPreset PresetRef,
 ) error {
@@ -28,9 +28,6 @@ func validatePresetSelection(
 			presetLabel(infrastructurePreset),
 			err,
 		)
-	}
-	if _, err := resolveBackendForManifest(infrastructureManifest); err != nil {
-		return err
 	}
 	backend, err := resolveBackendForManifest(infrastructureManifest)
 	if err != nil {

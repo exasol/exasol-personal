@@ -68,6 +68,10 @@ type ExasolPersonalState struct {
 	DeploymentVersion   string    `json:"deploymentVersion"`
 	LastVersionCheck    time.Time `json:"lastVersionCheck"`
 	VersionCheckEnabled bool      `json:"versionCheckEnabled"`
+	// InfrastructurePresetIdentity is the stable selector used to initialize this deployment.
+	InfrastructurePresetIdentity string `json:"infrastructurePresetIdentity,omitempty"`
+	// InstallationPresetIdentity is the stable selector used to initialize this deployment.
+	InstallationPresetIdentity string `json:"installationPresetIdentity,omitempty"`
 }
 
 // DirectoryExasolPersonalStatefile.

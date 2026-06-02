@@ -57,6 +57,18 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	if strings.TrimSpace(state.ClusterIdentity) == "" {
 		t.Fatal("expected clusterIdentity to be persisted, got empty")
 	}
+	if state.InfrastructurePresetIdentity != "name:"+presets.DefaultInfrastructure {
+		t.Fatalf(
+			"expected infrastructure preset identity to be persisted, got %q",
+			state.InfrastructurePresetIdentity,
+		)
+	}
+	if state.InstallationPresetIdentity != "name:"+presets.DefaultInstallation {
+		t.Fatalf(
+			"expected installation preset identity to be persisted, got %q",
+			state.InstallationPresetIdentity,
+		)
+	}
 	if ver, ok, err := config.ReadDeploymentVersionMarker(deployment); err != nil {
 		t.Fatalf("expected deployment version marker to be readable, got error: %v", err)
 	} else if !ok {

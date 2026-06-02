@@ -4,7 +4,6 @@
 package main
 
 import (
-	"os"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -53,7 +52,7 @@ var startCmd = &cobra.Command{
 			return err
 		}
 
-		return printConnectionInstructionsFromFile(deployment, os.Stdout)
+		return addConnectionInstructionsTerminalOutput(deployment)
 	},
 }
 

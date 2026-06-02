@@ -40,28 +40,7 @@ func TestPrepare_WritesVars(t *testing.T) {
 
 	expectNoErr(t, os.MkdirAll(cfg.WorkDir(), 0o700))
 
-	// A minimal variables file with primitive types and defaults.
-	variablesTF := `variable "region" {
-  type = string
-  default = "us-east-1"
-}
-
-variable "enabled" {
-  type = bool
-  default = true
-}
-
-variable "instance_count" {
-  type = number
-  default = 2
-}
-`
-
-	//nolint:gosec // test data file
-	expectNoErr(
-		t,
-		os.WriteFile(cfg.VariablesFile(), []byte(variablesTF), 0o644),
-	)
+	writeMinimalVariablesFile(t, cfg)
 
 	overrides := map[string]string{
 		"region":         "eu-central-1",
@@ -97,4 +76,30 @@ func TestPrepare_ErrorsWhenVariablesMissing(t *testing.T) {
 
 	err := Prepare(cfg, nil)
 	expectErr(t, err)
+}
+
+func writeMinimalVariablesFile(t *testing.T, cfg *Config) {
+	t.Helper()
+
+	variablesTF := `variable "region" {
+  type = string
+  default = "us-east-1"
+}
+
+variable "enabled" {
+  type = bool
+  default = true
+}
+
+variable "instance_count" {
+  type = number
+  default = 2
+}
+`
+
+	//nolint:gosec // test data file
+	expectNoErr(
+		t,
+		os.WriteFile(cfg.VariablesFile(), []byte(variablesTF), 0o644),
+	)
 }

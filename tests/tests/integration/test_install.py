@@ -32,7 +32,7 @@ def test_install_help(exasol_path: str) -> None:
     output: str = result.stdout.strip()
 
     # Then the output explains the command
-    assert "Initialize and deploy Exasol in one step" in output
+    assert "Initialize, apply configuration, and deploy Exasol in one step" in output
 
     # Then I see which preset names I can pass
     infra_id = first_infrastructure_preset_id_or_skip(exasol_path)

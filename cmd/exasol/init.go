@@ -6,6 +6,7 @@ package main
 import (
 	"strings"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/spf13/cobra"
@@ -37,7 +38,11 @@ const (
 
 var initCmdLongDesc = initCmdShortDesc + `
 
-	Extracts the specified infrastructure and installation presets into the deployment directory.` +
+	Extracts the specified infrastructure and installation presets into the deployment directory.
+	For an already initialized deployment with the same presets, supplied configuration
+	flags update only the selected parameters. Omitted parameters keep their values.
+	To switch presets, run exasol destroy --remove first, or exasol remove if the
+	cloud resources are already gone.` +
 	deploymentDirectoryResolutionHelp + presetSelectionHelp
 
 var initCmd = &cobra.Command{
@@ -72,7 +77,13 @@ func init() {
 	}
 
 	initCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
+
 		deployment := commonFlags.Deployment()
+		wasInitialized, err := config.HasExasolPersonalStateFile(deployment)
+		if err != nil {
+			return err
+		}
 		infraVars := collectInfrastructureVariableOverrides(cmd)
 		installVars := collectInstallationVariableOverrides(cmd)
 		infraPreset := presetRefFromArg(args[0])
@@ -81,26 +92,109 @@ func init() {
 			return err
 		}
 
-		safePrint(deploy.EulaNoticeText)
+		if wasInitialized {
+			return runInitForInitializedDeployment(
+				cmd,
+				deployment,
+				infraPreset,
+				installPreset,
+				infraVars,
+				installVars,
+			)
+		}
 
-		err = deploy.InitDeployment(
-			cmd.Context(),
+		return runInitForFreshDeployment(
+			cmd,
+			deployment,
 			infraPreset,
 			installPreset,
 			infraVars,
 			installVars,
-			deployment,
-			!commonFlags.NoLauncherVersionCheck,
-			CurrentLauncherVersion,
 		)
-		if err != nil {
-			return err
-		}
-
-		return setupDeploymentLogSession(cmd, deployment)
 	}
 
 	registerInitFlags(initCmd, commonFlags)
 	registerDeploymentDirFlag(initCmd, commonFlags)
 	rootCmd.AddCommand(initCmd)
+}
+
+func runInitForInitializedDeployment(
+	cmd *cobra.Command,
+	deployment config.DeploymentDir,
+	infraPreset deploy.PresetRef,
+	installPreset deploy.PresetRef,
+	infraVars map[string]string,
+	installVars map[string]string,
+) error {
+	if err := ensureRequestedPresetsMatchInitializedDeployment(
+		deployment,
+		infraPreset,
+		installPreset,
+	); err != nil {
+		return err
+	}
+	if err := setupDeploymentLogSession(cmd, deployment); err != nil {
+		return err
+	}
+	values, changed, err := applyConfigurationPatchIfProvided(cmd, infraVars, installVars)
+	if err != nil {
+		return err
+	}
+	if changed {
+		addTerminalNotice(formatConfigurationChangedNotice(values))
+
+		return nil
+	}
+	addTerminalNotice(
+		"deployment directory is already initialized with the requested presets; " +
+			"configuration was not changed. Run `exasol config set` to " +
+			"update configuration.",
+	)
+
+	return nil
+}
+
+func runInitForFreshDeployment(
+	cmd *cobra.Command,
+	deployment config.DeploymentDir,
+	infraPreset deploy.PresetRef,
+	installPreset deploy.PresetRef,
+	infraVars map[string]string,
+	installVars map[string]string,
+) error {
+	err := deploy.InitDeployment(
+		cmd.Context(),
+		infraPreset,
+		installPreset,
+		infraVars,
+		installVars,
+		deployment,
+		!commonFlags.NoLauncherVersionCheck,
+		CurrentLauncherVersion,
+	)
+	if err != nil {
+		return err
+	}
+	if err := setupDeploymentLogSession(cmd, deployment); err != nil {
+		return err
+	}
+	addTerminalNotice(deploy.EulaNoticeText)
+
+	return nil
+}
+
+func ensureRequestedPresetsMatchInitializedDeployment(
+	deployment config.DeploymentDir,
+	infraPreset deploy.PresetRef,
+	installPreset deploy.PresetRef,
+) error {
+	if err := deploy.ValidatePresetSelection(infraPreset, installPreset); err != nil {
+		return err
+	}
+
+	return deploy.EnsureDeploymentPresetIdentityMatches(
+		deployment,
+		infraPreset,
+		installPreset,
+	)
 }

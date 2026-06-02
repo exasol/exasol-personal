@@ -32,6 +32,28 @@ func TestNewRejectsNonDirectory(t *testing.T) {
 	}
 }
 
+func TestIsMarkerNameRecognizesDirectoryMutexMarkers(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name  string
+		input string
+		match bool
+	}{
+		{name: "exclusive", input: exclusiveMarkerName, match: true},
+		{name: "shared", input: sharedMarkerName(3), match: true},
+		{name: "non-marker", input: "notes.txt", match: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := IsMarkerName(test.input); got != test.match {
+				t.Fatalf("expected %q match=%t, got %t", test.input, test.match, got)
+			}
+		})
+	}
+}
+
 func TestExclusiveLockBlocksSharedUntilTimeout(t *testing.T) {
 	t.Parallel()
 
