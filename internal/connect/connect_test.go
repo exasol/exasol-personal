@@ -6,6 +6,8 @@ package connect
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -136,6 +138,89 @@ func TestPrintResultJSON(t *testing.T) {
 			require.Equal(t, test.result.rows, decoded.Rows)
 		})
 	}
+}
+
+func TestResolveNonInteractiveSQL(t *testing.T) {
+	t.Parallel()
+
+	t.Run("command supplies SQL", func(t *testing.T) {
+		t.Parallel()
+
+		sql, nonInteractive, err := resolveNonInteractiveSQL(&Opts{Command: "SELECT 1"})
+
+		require.NoError(t, err)
+		require.True(t, nonInteractive)
+		require.Equal(t, "SELECT 1", sql)
+	})
+
+	t.Run("file supplies SQL", func(t *testing.T) {
+		t.Parallel()
+
+		path := filepath.Join(t.TempDir(), "script.sql")
+		require.NoError(t, os.WriteFile(path, []byte("SELECT 1; SELECT 2;"), 0o600))
+
+		sql, nonInteractive, err := resolveNonInteractiveSQL(&Opts{File: path})
+
+		require.NoError(t, err)
+		require.True(t, nonInteractive)
+		require.Equal(t, "SELECT 1; SELECT 2;", sql)
+	})
+
+	t.Run("missing file fails without running statements", func(t *testing.T) {
+		t.Parallel()
+
+		path := filepath.Join(t.TempDir(), "does-not-exist.sql")
+
+		sql, nonInteractive, err := resolveNonInteractiveSQL(&Opts{File: path})
+
+		require.Error(t, err)
+		require.ErrorContains(t, err, "reading SQL file")
+		require.False(t, nonInteractive)
+		require.Empty(t, sql)
+	})
+
+	t.Run("no flag falls back to interactive", func(t *testing.T) {
+		t.Parallel()
+
+		sql, nonInteractive, err := resolveNonInteractiveSQL(&Opts{})
+
+		require.NoError(t, err)
+		require.False(t, nonInteractive)
+		require.Empty(t, sql)
+	})
+}
+
+func TestRunStatementsRendersEachResult(t *testing.T) {
+	t.Parallel()
+
+	// The non-interactive runner uses the same printer the interactive shell
+	// does, so each statement's result is rendered identically.
+	var buf bytes.Buffer
+
+	result := stubQueryResult{columnNames: []string{"N"}, rows: [][]string{{"1"}}}
+	printer := newJSONResultPrinter(JSONFormatCompact)
+
+	process := func(input string) error {
+		if input == "" {
+			return nil
+		}
+
+		return printer(&buf, result)
+	}
+
+	err := runStatements("SELECT 1; SELECT 1;", process)
+
+	require.NoError(t, err)
+	require.Equal(t, compactJSONResult2x(result), buf.String())
+}
+
+func compactJSONResult2x(result stubQueryResult) string {
+	var buf bytes.Buffer
+	printer := newJSONResultPrinter(JSONFormatCompact)
+	_ = printer(&buf, result)
+	single := buf.String()
+
+	return single + single
 }
 
 func TestEffectiveMaxRows(t *testing.T) {
