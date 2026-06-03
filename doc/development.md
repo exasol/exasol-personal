@@ -47,7 +47,7 @@ These tools are invoked via Task commands and don't need manual installation.
 git clone https://github.com/exasol/exasol-personal.git
 cd exasol-personal
 
-# Generate code and download embedded assets
+# Generate code
 task generate
 
 # Build the binary
@@ -62,7 +62,7 @@ task build
 ### Standard Build
 
 ```bash
-# Generate code and download platform-specific OpenTofu binaries
+# Generate code
 task generate
 
 # Build the binary
@@ -83,7 +83,7 @@ GOOS=windows GOARCH=amd64 task build
 GOOS=darwin GOARCH=arm64 task build
 ```
 
-**Note:** The `task generate` step downloads platform-specific [OpenTofu](https://opentofu.org/) binaries that get embedded in the application. When cross-compiling, ensure you've generated assets for the target platform.
+**Note:** The launcher now resolves OpenTofu at runtime through the embedded resource manager, so `task build` no longer needs platform-specific OpenTofu downloads. Cross-compilation only needs the usual Go environment variables.
 
 ### Building Without Task
 
@@ -93,15 +93,10 @@ If you prefer to use Go commands directly (or Task is unavailable):
 # Generate code
 go generate ./...
 
-# Download OpenTofu binary for your platform
-go build -o bin/downloadtofu ./tools/downloadtofu/main.go
-go run ./tools/downloadtofu/main.go -dir="./assets/tofubin/generated"
-
 # Build the binary
 go build -o bin/exasol ./cmd/exasol
 
 # For cross-compilation, specify target OS and architecture
-go run ./tools/downloadtofu/main.go -goos="windows" -goarch="amd64" -dir="./assets/tofubin/generated"
 GOOS=windows GOARCH=amd64 go build -o bin/exasol.exe ./cmd/exasol
 ```
 
@@ -118,14 +113,11 @@ task --list
 
 1. **Make code changes**
 
-2. **Generate code and assets** (if needed):
+2. **Generate code** (if needed):
    ```bash
    task generate
    ```
-   Run this after:
-   - Modifying interface definitions
-   - Changing embedded assets
-   - Pulling latest changes
+   Run this after modifying generated code or interfaces.
 
 3. **Format code**:
    ```bash
@@ -216,10 +208,10 @@ See [Best Practices](best_practices.md) for project-specific coding guidelines a
 ## Common Issues
 
 **OpenTofu binary not found:**
-- Run `task generate` to download embedded binaries
+- OpenTofu is resolved at runtime through the embedded resource manager.
+- For direct tofu invocations in development workflows, use `task fmt-terraform` or `go run ./tools/tofu/main.go ...`.
 
 **Windows fails with `tofu init -lockfile=readonly` due to missing hashes in `.terraform.lock.hcl`:**
-- Ensure embedded OpenTofu binaries are present: run `task generate`.
 - Regenerate the lockfiles with hashes for all supported platforms: run `task tofu-lock-update`.
 - This updates the committed lockfile(s) under `assets/infrastructure/` without leaving temporary `.terraform/` directories behind.
 - Presets that don't use OpenTofu (no `tofu:` section in `infrastructure.yaml` or no `.tf` files) are skipped.

@@ -15,8 +15,7 @@ import (
 // Prepare a deployment directory for tofu usage.
 //
 // Writes the tfvars file (merging defaults from the infrastructure preset and
-// user overrides) and writes the embedded tofu binary into the deployment
-// directory.
+// user overrides).
 //
 // If tofu is not configured (cfg is nil or empty), this function is a no-op.
 func Prepare(
@@ -50,29 +49,27 @@ func Prepare(
 	}
 
 	slog.Info("tofu: writing TF vars", "path", cfg.VarsOutputFile())
-	if err := writeVarsFileWithOverrides(
+
+	return writeVarsFileWithOverrides(
 		cfg.VarsOutputFile(),
 		defaults,
 		overrides,
-	); err != nil {
-		return err
-	}
-
-	slog.Info("tofu: saving tofu executable", "path", cfg.TofuBinaryPath())
-
-	return WriteBinary(cfg.TofuBinaryPath())
+	)
 }
 
 // Initialize tofu for a deployment.
 func Initialize(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	out, outErr io.Writer,
 	lockfileMode LockfileMode,
 ) error {
 	slog.Info("tofu: initialize workspace")
 
-	tofuRunner := NewTofuRunner(cfg, out, outErr)
+	tofuRunner, err := NewTofuRunner(ctx, cfg, out, outErr)
+	if err != nil {
+		return err
+	}
 
 	return tofuRunner.Init(ctx, lockfileMode)
 }
@@ -80,12 +77,15 @@ func Initialize(
 // Plan for a tofu deployment.
 func Plan(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	out, outErr io.Writer,
 ) error {
 	slog.Info("tofu: plan infrastructure")
 
-	tofuRunner := NewTofuRunner(cfg, out, outErr)
+	tofuRunner, err := NewTofuRunner(ctx, cfg, out, outErr)
+	if err != nil {
+		return err
+	}
 
 	return tofuRunner.Plan(ctx, cfg.PlanFile(), cfg.VarsOutputFile(), cfg.StateFile())
 }
@@ -93,12 +93,15 @@ func Plan(
 // Apply a tofu action with variable overrides (used for start/stop).
 func ApplyPlan(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	out, outErr io.Writer,
 ) error {
 	slog.Info("tofu: deploy infrastructure")
 
-	tofuRunner := NewTofuRunner(cfg, out, outErr)
+	tofuRunner, err := NewTofuRunner(ctx, cfg, out, outErr)
+	if err != nil {
+		return err
+	}
 
 	applyOpts := ApplyOptions{
 		// Must use plan file
@@ -113,13 +116,16 @@ func ApplyPlan(
 // Apply a tofu action with variable overrides (used for start/stop).
 func ApplyAction(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	action string,
 	out, outErr io.Writer,
 ) error {
 	slog.Info("tofu: change infrastructure")
 
-	tofuRunner := NewTofuRunner(cfg, out, outErr)
+	tofuRunner, err := NewTofuRunner(ctx, cfg, out, outErr)
+	if err != nil {
+		return err
+	}
 
 	applyOpts := ApplyOptions{
 		// Cannot use plan file
@@ -135,12 +141,15 @@ func ApplyAction(
 // Destroy releases tofu-managed resources for a deployment.
 func Destroy(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	out, outErr io.Writer,
 ) error {
 	slog.Info("tofu: destroy infrastructure")
 
-	tofuRunner := NewTofuRunner(cfg, out, outErr)
+	tofuRunner, err := NewTofuRunner(ctx, cfg, out, outErr)
+	if err != nil {
+		return err
+	}
 
 	return tofuRunner.Destroy(ctx, cfg.VarsOutputFile(), cfg.StateFile())
 }

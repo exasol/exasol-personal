@@ -32,7 +32,7 @@ func mustContain(t *testing.T, s, substr string) {
 	}
 }
 
-func TestPrepare_WritesVarsAndBinary(t *testing.T) {
+func TestPrepare_WritesVars(t *testing.T) {
 	t.Parallel()
 
 	deploymentDir := t.TempDir()
@@ -85,14 +85,6 @@ variable "instance_count" {
 	mustContain(t, out, "3")
 	mustContain(t, out, "extra")
 	mustContain(t, out, "hello")
-
-	// Embedded binary should exist.
-	binPath := cfg.TofuBinaryPath()
-	info, err := os.Stat(binPath)
-	expectNoErr(t, err)
-	if info.Size() == 0 {
-		t.Fatalf("expected tofu binary at %q to be non-empty", binPath)
-	}
 }
 
 func TestPrepare_ErrorsWhenVariablesMissing(t *testing.T) {

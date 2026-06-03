@@ -4,10 +4,11 @@
 package tofu
 
 import (
+	"context"
+	"errors"
 	"path"
 	"strings"
 
-	"github.com/exasol/exasol-personal/assets/tofubin"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
 )
@@ -23,6 +24,7 @@ const (
 // Config captures optional tofu settings from an infrastructure preset.
 type Config struct {
 	// All absolute!
+	deploymentRoot string
 	workDir        string
 	tofuBinaryPath string
 	variablesFile  string
@@ -38,25 +40,38 @@ func NewTofuConfigFromDeployment(
 ) *Config {
 	infraDir := path.Join(deploymentDir, config.InfrastructureFilesDirectory)
 
-	return NewTofuConfigFromPreset(infraDir, presetTofuConfig)
+	return newTofuConfig(
+		deploymentDir,
+		infraDir,
+		presetTofuConfig.VariablesFile,
+		presetTofuConfig.VarsOutputFile,
+	)
 }
 
 // Construct a tofu config from a infra directory and a preset manifest.
-func NewTofuConfigFromPreset(infraDir string, presetTofuConfig presets.InfrastructureTofu) *Config {
-	return newTofuConfig(infraDir, presetTofuConfig.VariablesFile, presetTofuConfig.VarsOutputFile)
+func NewTofuConfigFromPreset(
+	infraDir string,
+	presetTofuConfig presets.InfrastructureTofu,
+) *Config {
+	return newTofuConfig(
+		"",
+		infraDir,
+		presetTofuConfig.VariablesFile,
+		presetTofuConfig.VarsOutputFile,
+	)
 }
 
 // Construct a full tofu config.
 // SSOT for all relative paths etc. Don't construct them anywhere else
 // Pathes are either relative to work dir or absolute!
 func newTofuConfig(
+	deploymentRoot string,
 	workDir string,
 	variablesRelFilepath string,
 	varsOutputRelFilepath string,
 ) *Config {
 	planFile := path.Join(workDir, DefaultPlanFile)
 	stateFile := path.Join(workDir, DefaultStateFile)
-	tofuBinaryPath := path.Join(workDir, tofubin.TofuBinaryName)
 
 	var variablesFile string
 	if variablesRelFilepath == "" {
@@ -67,14 +82,21 @@ func newTofuConfig(
 	variablesFile = path.Join(workDir, variablesFile)
 
 	var varsOutputFile string
-	if varsOutputFile == "" {
+	if strings.TrimSpace(varsOutputRelFilepath) == "" {
 		varsOutputFile = DefaultVarsOutput
 	} else {
 		varsOutputFile = strings.TrimSpace(varsOutputRelFilepath)
 	}
 	varsOutputFile = path.Join(workDir, varsOutputFile)
 
-	return &Config{workDir, tofuBinaryPath, variablesFile, varsOutputFile, planFile, stateFile}
+	return &Config{
+		deploymentRoot: deploymentRoot,
+		workDir:        workDir,
+		variablesFile:  variablesFile,
+		varsOutputFile: varsOutputFile,
+		planeFile:      planFile,
+		stateFile:      stateFile,
+	}
 }
 
 // The directory that all file paths are relative to if they aren't absolute.
@@ -83,9 +105,24 @@ func (c *Config) WorkDir() string {
 	return c.workDir
 }
 
-// Relative to the work dir or absolute.
-func (c *Config) TofuBinaryPath() string {
-	return c.tofuBinaryPath
+// Relative to the deployment root or absolute.
+func (c *Config) TofuBinaryPath(ctx context.Context) (string, error) {
+	if c.tofuBinaryPath != "" {
+		return c.tofuBinaryPath, nil
+	}
+
+	if c.deploymentRoot == "" {
+		return "", errors.New("tofu deployment root is not configured")
+	}
+
+	binaryPath, err := ResolveBinaryPath(ctx, c.deploymentRoot)
+	if err != nil {
+		return "", err
+	}
+
+	c.tofuBinaryPath = binaryPath
+
+	return c.tofuBinaryPath, nil
 }
 
 // Relative to the work dir or absolute.

@@ -23,48 +23,10 @@ tasks:
     cmds:
       - "task --list"
 
-  tofu-placeholders:
-    desc: Create placeholder files for tofu binaries required by go:embed
-    vars:
-      PLACEHOLDER_TEXT: "placeholder for go:embed"
-      TARGETS: >-
-        darwin/amd64/tofu
-        darwin/arm64/tofu
-        linux/amd64/tofu
-        linux/arm64/tofu
-        windows/amd64/tofu.exe
-    cmds:
-      - for:
-          var: TARGETS
-        cmd: >-
-          {{- if eq OS "windows" }}
-          if not exist "assets\tofubin\generated\{{.ITEM | replace "/" "\\"}}" (
-            mkdir "assets\tofubin\generated\{{.ITEM | replace "/" "\\" | dir | replace "/" "\\"}}" 2>nul
-            echo {{.PLACEHOLDER_TEXT}} > "assets\tofubin\generated\{{.ITEM | replace "/" "\\"}}"
-          )
-          {{- else }}
-          test -f "assets/tofubin/generated/{{.ITEM}}" || (mkdir -p "assets/tofubin/generated/$(dirname {{.ITEM}})" && echo "{{.PLACEHOLDER_TEXT}}" > "assets/tofubin/generated/{{.ITEM}}")
-          {{- end }}
-
   generate:
     desc: run generation for all packages
     cmds:
       - go generate ./...
-      - go run ./tools/downloadtofu/main.go -goos="$GOOS" -goarch="$GOARCH" -dir "./assets/tofubin/generated/"
-
-  tofu-download-windows:
-    desc: Download OpenTofu binaries for Windows (required for go:embed)
-    vars:
-      TARGET_ARCHS: >-
-        amd64
-    cmds:
-      - for:
-          var: TARGET_ARCHS
-        cmd: >-
-          go run ./tools/downloadtofu/main.go
-          -goos="windows"
-          -goarch="{{.ITEM}}"
-          -dir "./assets/tofubin/generated/"
 
   tofu-lock-update:
     desc: Regenerate multi-platform .terraform.lock.hcl files (no temp files in assets)
@@ -92,8 +54,6 @@ tasks:
 
   build-windows:
     desc: Cross-compile the Windows binary (defaults to GOARCH=amd64)
-    deps:
-      - tofu-download-windows
     vars:
       TARGET_GOARCH: '{{default "amd64" .GOARCH}}'
       OUTPUT_NAME: '{{.COMMAND_NAME}}.exe'
@@ -144,8 +104,6 @@ tasks:
 
   tests-unit:
     desc: Run unit tests (`task tests-unit TEST=Ready` or `task tests-unit TEST=*Ready*`)
-    deps:
-      - tofu-placeholders
     vars:
       TEST: '{{default "" .TEST}}'
     cmds:
@@ -260,8 +218,6 @@ tasks:
 
   lint-golang:
     desc: Run golangci-lint linters
-    deps:
-      - tofu-placeholders
     cmds:
       - go tool golangci-lint run ./...
 
@@ -316,11 +272,8 @@ tasks:
 
   fmt-terraform:
     desc: Format Terraform code with OpenTofu
-    deps: [generate]
-    vars:
-      TOFU_COMMAND: 'assets/tofubin/generated/{{OS}}/{{ARCH}}/tofu{{.BINARY_SUFFIX}}'
     cmds:
-      - echo {{.TOFU_COMMAND}} fmt -recursive assets/infrastructure
+      - go run ./tools/tofu/main.go fmt -recursive assets/infrastructure
 
   fmt:
     desc: Format code
