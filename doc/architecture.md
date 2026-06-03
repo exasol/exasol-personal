@@ -26,7 +26,7 @@ The Exasol Personal tool (`exasol`) is a command-line application that automates
 
 - **Language:** Go 1.25+ (statically compiled, single binary)
 - **Build System:** [Task](https://taskfile.dev/) for development automation
-- **IaC Engine:** [OpenTofu](https://opentofu.org/) embedded in the binary
+- **IaC Engine:** [OpenTofu](https://opentofu.org/) resolved at runtime through an embedded resource specification
 - **Target Platforms:** Linux, macOS (Intel & ARM), Windows (Intel & ARM)
 
 ## Design Philosophy
@@ -46,7 +46,7 @@ The Exasol Personal tool (`exasol`) is a command-line application that automates
 **Self-Contained**
 - Single binary with no external dependencies
 - Infrastructure-as-Code templates embedded in the binary
-- Platform-specific OpenTofu binaries bundled
+- Runtime resources stored in the deployment directory
 
 **Safety**
 - Explicit commands for destructive operations
@@ -95,7 +95,7 @@ The `init` command prepares a deployment directory:
 1. Create deployment directory structure
 2. Extract the selected infrastructure and installation presets
 3. Write infrastructure variables (for example, a `.tfvars` file) and workflow state
-4. Extract a platform-specific OpenTofu binary
+4. Resolve runtime resources needed by the selected infrastructure preset
 
 **Output:** A self-contained deployment directory ready for provisioning.
 
@@ -330,4 +330,3 @@ Users and developers can customize:
 - Restrict `allowed_cidr` in production deployments
 - Destroy deployments when not in use
 - Secure the machine running the tool
-

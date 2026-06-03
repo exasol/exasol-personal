@@ -49,13 +49,18 @@ type ApplyOptions struct {
 // NewTofuRunner creates a runner that executes tofu commands.
 // workDir is the directory containing the .tf files (e.g. the infrastructure dir).
 // All state/plan paths passed to individual commands should be absolute.
-func NewTofuRunner(cfg Config, out, outErr io.Writer) TofuRunner {
+func NewTofuRunner(ctx context.Context, cfg *Config, out, outErr io.Writer) (TofuRunner, error) {
+	binPath, err := cfg.TofuBinaryPath(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return &tofuRunnerImpl{
-		binPath: cfg.TofuBinaryPath(),
+		binPath: binPath,
 		workDir: cfg.WorkDir(),
 		out:     out,
 		outErr:  outErr,
-	}
+	}, nil
 }
 
 func (s *tofuRunnerImpl) SetOutput(out io.Writer) {

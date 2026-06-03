@@ -66,7 +66,7 @@ func (tofuBackend) Deploy(
 	stdOutWriter := util.CombineWriters(logBuffer, out)
 	stdErrWriter := util.CombineWriters(logBuffer, outErr)
 
-	if err := tofu.Initialize(ctx, *tofuCfg,
+	if err := tofu.Initialize(ctx, tofuCfg,
 		stdOutWriter, stdErrWriter, tofuLockfileMode); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("tofu: failed to init", "error", err)
@@ -74,14 +74,14 @@ func (tofuBackend) Deploy(
 		return err
 	}
 
-	if err := tofu.Plan(ctx, *tofuCfg, stdOutWriter, stdErrWriter); err != nil {
+	if err := tofu.Plan(ctx, tofuCfg, stdOutWriter, stdErrWriter); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("tofu: failed to plan")
 
 		return err
 	}
 
-	if err := tofu.ApplyPlan(ctx, *tofuCfg, stdOutWriter, stdErrWriter); err != nil {
+	if err := tofu.ApplyPlan(ctx, tofuCfg, stdOutWriter, stdErrWriter); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("tofu: failed to apply")
 
@@ -212,7 +212,7 @@ func (tofuBackend) Destroy(
 	logBuffer := task_runner.NewLogBuffer()
 	if err := tofu.Destroy(
 		ctx,
-		*tofuCfg,
+		tofuCfg,
 		util.CombineWriters(logBuffer, out),
 		util.CombineWriters(logBuffer, outErr),
 	); err != nil {
@@ -240,7 +240,7 @@ func tofuApplyAction(
 	tofuCfg := tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu)
 	if err := tofu.ApplyAction(
 		ctx,
-		*tofuCfg,
+		tofuCfg,
 		startStopArg,
 		out,
 		outErr,

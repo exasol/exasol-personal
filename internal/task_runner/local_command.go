@@ -11,7 +11,6 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
@@ -24,14 +23,11 @@ func (*TaskRunnerImpl) runLocalCommandForNode(
 ) error {
 	command := make([]string, len(templatedCommand))
 
-	tofuConfig := tofu.NewTofuConfigFromDeployment(deployment.Root(), presets.InfrastructureTofu{})
-
 	for idx, part := range templatedCommand {
 		slog.Debug("parsing command part", "part", part)
 
 		newPart, err := commandSubstitutions(part, map[string]string{
 			"Node": nodeName,
-			"Tofu": tofuConfig.TofuBinaryPath(),
 		})
 		if err != nil {
 			return err
