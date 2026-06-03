@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/connect"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
@@ -115,6 +116,65 @@ func TestConnectCmdExamplesMentionJSONOptions(t *testing.T) {
 		if !strings.Contains(connectCmdExample, expected) {
 			t.Fatalf("expected examples to contain %q", expected)
 		}
+	}
+}
+
+func TestConnectCmdExamplesMentionCommandAndFile(t *testing.T) {
+	t.Parallel()
+
+	for _, expected := range []string{
+		`exasol connect -c "SELECT 1; SELECT 2"`,
+		"exasol connect -f script.sql",
+	} {
+		if !strings.Contains(connectCmdExample, expected) {
+			t.Fatalf("expected examples to contain %q", expected)
+		}
+	}
+}
+
+func TestConnectRegistersCommandAndFileFlags(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name      string
+		shorthand string
+	}{
+		{name: "command", shorthand: "c"},
+		{name: "file", shorthand: "f"},
+	} {
+		flag := connectCmd.Flags().ShorthandLookup(test.shorthand)
+		if flag == nil || flag.Name != test.name {
+			t.Fatalf("expected -%s to be registered as --%s", test.shorthand, test.name)
+		}
+	}
+}
+
+// nolint: paralleltest // Builds and executes an isolated command instance.
+func TestConnectCommandAndFileAreMutuallyExclusive(t *testing.T) {
+	// Mirror the registration in registerConnectFlags so we exercise the
+	// mutual-exclusivity wiring without the full command's prerequisites.
+	var command, file string
+
+	cmd := &cobra.Command{
+		Use:           "connect",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(*cobra.Command, []string) error {
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&command, "command", "c", "", "")
+	cmd.Flags().StringVarP(&file, "file", "f", "", "")
+	cmd.MarkFlagsMutuallyExclusive("command", "file")
+
+	cmd.SetArgs([]string{"-c", "SELECT 1", "-f", "script.sql"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected an error when both --command and --file are supplied")
+	}
+	if !strings.Contains(err.Error(), "command") || !strings.Contains(err.Error(), "file") {
+		t.Fatalf("expected mutual-exclusivity error mentioning both flags, got: %v", err)
 	}
 }
 

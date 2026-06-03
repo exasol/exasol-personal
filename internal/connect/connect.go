@@ -56,6 +56,13 @@ type Opts struct {
 	ExecuteOnSemicolon         bool
 	OutputJSON                 bool
 	JSONFormat                 JSONFormat
+	// Command holds inline SQL passed via --command. When set, the statements
+	// are executed non-interactively and the shell is not started.
+	Command string
+	// File holds the path to a SQL script passed via --file. When set, the
+	// file's statements are executed non-interactively and the shell is not
+	// started.
+	File string
 	// MaxRows caps the number of rows displayed per query. A negative value
 	// means "unset" (use the per-mode default); 0 means unlimited.
 	MaxRows int
@@ -140,6 +147,13 @@ func Connect(
 ) error {
 	slog.Debug("running connect")
 
+	// Resolve any non-interactive SQL source up front so that an unreadable
+	// --file fails fast without opening a database connection.
+	nonInteractiveSQL, nonInteractive, err := resolveNonInteractiveSQL(opts)
+	if err != nil {
+		return err
+	}
+
 	database, err := NewExasolConnection(
 		deployment,
 		connectionInfo,
@@ -163,21 +177,19 @@ func Connect(
 		printer = newJSONResultPrinter(opts.JSONFormat)
 	}
 
-	interactive := util.IsInteractiveStdin()
+	// The interactive preview cap applies only when an interactive shell is
+	// actually started. --command/--file and piped input return everything by
+	// default, so they behave as non-interactive (unlimited) unless --max-rows
+	// is set explicitly.
+	interactiveShell := !nonInteractive && util.IsInteractiveStdin()
 
 	modeDefault := 0
-	if interactive {
+	if interactiveShell {
 		modeDefault = interactivePreviewMaxRows
 	}
 	maxRows := effectiveMaxRows(opts.MaxRows, modeDefault)
 
-	if interactive {
-		if err := printExitHint(os.Stderr); err != nil {
-			return err
-		}
-	}
-
-	return RunShellWithOpts(func(input string) error {
+	processInput := func(input string) error {
 		// The input string is expected to be trimmed of whitespace
 		if input == "" {
 			return nil
@@ -197,7 +209,40 @@ func Connect(
 		}
 
 		return nil
-	}, ShellOpts{ExecuteOnSemicolon: opts.ExecuteOnSemicolon})
+	}
+
+	if nonInteractive {
+		return runStatements(nonInteractiveSQL, processInput)
+	}
+
+	if interactiveShell {
+		if err := printExitHint(os.Stderr); err != nil {
+			return err
+		}
+	}
+
+	return RunShellWithOpts(processInput, ShellOpts{ExecuteOnSemicolon: opts.ExecuteOnSemicolon})
+}
+
+// resolveNonInteractiveSQL returns the SQL to run non-interactively, derived
+// from --file or --command. The boolean reports whether a non-interactive
+// source was supplied; when false, the caller falls back to the interactive
+// shell. A --file that cannot be read yields an error before any database
+// connection is attempted.
+func resolveNonInteractiveSQL(opts *Opts) (string, bool, error) {
+	switch {
+	case opts.File != "":
+		contents, err := os.ReadFile(opts.File)
+		if err != nil {
+			return "", false, fmt.Errorf("reading SQL file %q: %w", opts.File, err)
+		}
+
+		return string(contents), true, nil
+	case opts.Command != "":
+		return opts.Command, true, nil
+	default:
+		return "", false, nil
+	}
 }
 
 // printTruncationFooter notifies the user, via stderr, that the displayed

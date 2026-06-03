@@ -211,6 +211,54 @@ func TestRunShell(t *testing.T) {
 	}
 }
 
+func TestRunStatements(t *testing.T) {
+	t.Parallel()
+
+	t.Run("executes a single statement without a terminator", func(t *testing.T) {
+		t.Parallel()
+
+		processor := &mockInputsProcessor{}
+		err := runStatements("SELECT 1", processor.processInput)
+
+		require.NoError(t, err)
+		require.Equal(t, []string{"SELECT 1"}, processor.inputs)
+	})
+
+	t.Run("executes semicolon-separated statements in order", func(t *testing.T) {
+		t.Parallel()
+
+		processor := &mockInputsProcessor{}
+		err := runStatements("SELECT 1; SELECT 2; SELECT 3", processor.processInput)
+
+		require.NoError(t, err)
+		require.Equal(t, []string{"SELECT 1", "SELECT 2", "SELECT 3"}, processor.inputs)
+	})
+
+	t.Run("skips empty and trailing segments", func(t *testing.T) {
+		t.Parallel()
+
+		processor := &mockInputsProcessor{}
+		err := runStatements("SELECT 1;; SELECT 2;\n  \n", processor.processInput)
+
+		require.NoError(t, err)
+		require.Equal(t, []string{"SELECT 1", "SELECT 2"}, processor.inputs)
+	})
+
+	t.Run("stops at and returns the first error", func(t *testing.T) {
+		t.Parallel()
+
+		processor := &mockInputsProcessor{}
+		processor.failOnInput("INVALID SQL", errInputsProcessor)
+
+		err := runStatements("SELECT 1; INVALID SQL; SELECT 2", processor.processInput)
+
+		require.ErrorIs(t, err, errInputsProcessor)
+		// SELECT 1 ran, INVALID SQL failed and aborted, SELECT 2 never ran.
+		require.Equal(t, 2, processor.callCount)
+		require.Equal(t, []string{"SELECT 1"}, processor.inputs)
+	})
+}
+
 func TestSplitSemicolonTerminatedStatements(t *testing.T) {
 	t.Parallel()
 

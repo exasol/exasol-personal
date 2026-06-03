@@ -213,6 +213,26 @@ func runShellImpl(
 	return shell.run()
 }
 
+// runStatements executes the ;-separated statements in sql non-interactively,
+// in order, stopping at and returning the first error. It uses the same
+// quote- and comment-aware splitting as the interactive shell. Any non-empty
+// trailing remainder after the final terminator is executed as a final
+// statement, mirroring the shell's end-of-input handling.
+func runStatements(sql string, processInput ProcessInputFunc) error {
+	statements, remainder := splitSemicolonTerminatedStatements(sql)
+	if trailing := strings.TrimSpace(remainder); trailing != "" {
+		statements = append(statements, trailing)
+	}
+
+	for _, statement := range statements {
+		if err := processInput(strings.TrimSpace(statement)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // RunShell runs the shell, processing incoming input
 // with the passed callback. Blocks until the shell exits.
 func RunShell(processInput ProcessInputFunc) error {
