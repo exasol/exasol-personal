@@ -11,13 +11,18 @@ import "context"
 type QueryResulter interface {
 	ColumnNames() []string
 	Rows() [][]string
+	// Truncated reports whether more rows were available than are returned by
+	// Rows, because retrieval was capped by a row limit.
+	Truncated() bool
 }
 
 // Databaser describes an interface for interacting with a running database instance.
 // It provides methods for establishing SQL connections and executing queries.
 type Databaser interface {
 	Connect(ctx context.Context) error
-	Exec(ctx context.Context, query string) (QueryResulter, error)
+	// Exec runs query and returns its result. maxRows caps the number of rows
+	// retrieved and returned; a value of 0 means unlimited.
+	Exec(ctx context.Context, query string, maxRows int) (QueryResulter, error)
 	Close() error
 }
 

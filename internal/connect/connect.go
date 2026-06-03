@@ -56,6 +56,26 @@ type Opts struct {
 	ExecuteOnSemicolon         bool
 	OutputJSON                 bool
 	JSONFormat                 JSONFormat
+	// MaxRows caps the number of rows displayed per query. A negative value
+	// means "unset" (use the per-mode default); 0 means unlimited.
+	MaxRows int
+}
+
+// MaxRowsUnset is the sentinel for a MaxRows that was not set on the command
+// line, leaving the limit to be derived from the session mode.
+const MaxRowsUnset = -1
+
+// interactivePreviewMaxRows is the default row cap for interactive sessions.
+const interactivePreviewMaxRows = 100
+
+// effectiveMaxRows returns the explicit row limit when one was set, otherwise
+// the mode default. A negative requested value means "unset".
+func effectiveMaxRows(requested, modeDefault int) int {
+	if requested >= 0 {
+		return requested
+	}
+
+	return modeDefault
 }
 
 type jsonQueryResult struct {
@@ -143,7 +163,15 @@ func Connect(
 		printer = newJSONResultPrinter(opts.JSONFormat)
 	}
 
-	if util.IsInteractiveStdin() {
+	interactive := util.IsInteractiveStdin()
+
+	modeDefault := 0
+	if interactive {
+		modeDefault = interactivePreviewMaxRows
+	}
+	maxRows := effectiveMaxRows(opts.MaxRows, modeDefault)
+
+	if interactive {
 		if err := printExitHint(os.Stderr); err != nil {
 			return err
 		}
@@ -155,13 +183,34 @@ func Connect(
 			return nil
 		}
 
-		queryResult, err := database.Exec(ctx, input)
+		queryResult, err := database.Exec(ctx, input, maxRows)
 		if err != nil {
 			return err
 		}
 
-		return printer(output, queryResult)
+		if err := printer(output, queryResult); err != nil {
+			return err
+		}
+
+		if queryResult.Truncated() {
+			return printTruncationFooter(os.Stderr, len(queryResult.Rows()))
+		}
+
+		return nil
 	}, ShellOpts{ExecuteOnSemicolon: opts.ExecuteOnSemicolon})
+}
+
+// printTruncationFooter notifies the user, via stderr, that the displayed
+// result was capped. It is written to stderr so it never corrupts stdout
+// output such as JSON.
+func printTruncationFooter(output io.Writer, shown int) error {
+	_, err := fmt.Fprintf(
+		output,
+		"-- showing first %d rows (output truncated; use --max-rows 0 to see all)\n",
+		shown,
+	)
+
+	return err
 }
 
 func printExitHint(output io.Writer) error {
