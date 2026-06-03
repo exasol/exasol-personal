@@ -200,6 +200,13 @@ You can also use the built-in SQL client in Exasol Launcher to connect directly 
 ```bash
 exasol connect
 ```
+
+In an interactive session, query output is capped at 100 rows by default so a large `SELECT` doesn't flood the terminal; a note is printed when output is truncated. Piped (non-interactive) input returns the full result set. Use `--max-rows N` to set the cap explicitly, or `--max-rows 0` for unlimited:
+```bash
+exasol connect --max-rows 0        # return all rows, even interactively
+echo "SELECT * FROM PRODUCTS;" | exasol connect --max-rows 1000
+```
+
 See also...
 - To learn more about how you can connect to your Exasol database and start loading data using the many supported tools and integrations, see [Connect to Exasol](https://docs.exasol.com/db/latest/connect_exasol.htm) and [Load Data](https://docs.exasol.com/db/latest/loading_data.htm).
 - To learn how to use the SQL statements, data types, functions, and other SQL language elements that are supported in Exasol, see [SQL reference](https://docs.exasol.com/db/latest/sql_reference.htm).

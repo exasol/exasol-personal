@@ -5,7 +5,7 @@ package exasol
 
 import (
 	"context"
-	"encoding/json"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +14,6 @@ import (
 	"regexp"
 
 	"github.com/exasol/exasol-driver-go"
-	exasoltypes "github.com/exasol/exasol-driver-go/pkg/types"
 	"github.com/exasol/exasol-personal/internal/connect/exasol/types"
 	generaltypes "github.com/exasol/exasol-personal/internal/connect/types"
 	"github.com/exasol/exasol-personal/internal/util"
@@ -136,43 +135,62 @@ func (db *Database) Close() error {
 	return db.conn.Close()
 }
 
-func (db *Database) Exec(ctx context.Context, query string) (generaltypes.QueryResulter, error) {
-	slog.Debug("executing query", "query", query)
+func (db *Database) Exec(
+	ctx context.Context,
+	query string,
+	maxRows int,
+) (generaltypes.QueryResulter, error) {
+	slog.Debug("executing query", "query", query, "max_rows", maxRows)
 
-	// A bit hacky but we can't use the standard Query/Exec because we
-	// don't know what query is being executed. And the standard Query
-	// method doesn't work with non-query SQL queries (e.g., "OPEN SCHEMA").
+	// File import queries are executed through the driver's Exec because the
+	// driver streams the local file; they never produce a result set.
 	if isImportQuery(query) {
 		_, err := db.conn.Exec(query, nil)
-		return &QueryResult{[]string{}, [][]string{}}, err
+		return &QueryResult{columnNames: []string{}, rows: [][]string{}}, err
 	}
 
-	// Using SimpleExec because it's the only one that works for
-	// all types of queries (except file import queries).
-	results, err := db.conn.SimpleExec(ctx, query)
+	// QueryContext returns driver.Rows, which transparently fetches result-set
+	// chunks (large results) and closes the server-side handle on Close.
+	rows, err := db.conn.QueryContext(ctx, query, nil)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	if len(results.Results) == 0 {
-		return &QueryResult{[]string{}, [][]string{}}, nil
+	return collectRows(rows, maxRows)
+}
+
+// collectRows materializes up to maxRows rows from rows (maxRows == 0 means
+// unlimited). When maxRows is reached and at least one further row exists, the
+// result is flagged truncated and no additional rows are fetched.
+func collectRows(rows driver.Rows, maxRows int) (*QueryResult, error) {
+	columns := rows.Columns()
+	result := &QueryResult{columnNames: columns, rows: [][]string{}}
+
+	dest := make([]driver.Value, len(columns))
+
+	for {
+		if err := rows.Next(dest); err != nil {
+			if errors.Is(err, io.EOF) {
+				return result, nil
+			}
+
+			return nil, err
+		}
+
+		// One row beyond the cap proves there is more to show; stop fetching.
+		if maxRows > 0 && len(result.rows) >= maxRows {
+			result.truncated = true
+			return result, nil
+		}
+
+		row := make([]string, len(columns))
+		for i, value := range dest {
+			row[i] = fmt.Sprint(value)
+		}
+
+		result.rows = append(result.rows, row)
 	}
-
-	// The Exasol driver library also only parses the first result.
-	result := results.Results[0]
-
-	resultSet, err := parseQueryResult(result)
-	if err != nil {
-		return nil, err
-	}
-
-	queryResult := &QueryResult{}
-
-	if err := queryResult.FromResultSet(resultSet); err != nil {
-		return nil, err
-	}
-
-	return queryResult, nil
 }
 
 // version returns the database version.
@@ -181,6 +199,7 @@ func (db *Database) version(ctx context.Context) (string, error) {
 
 	queryResult, err := db.Exec(ctx,
 		"SELECT param_value FROM exa_metadata WHERE param_name = 'databaseProductVersion'",
+		0,
 	)
 	if err != nil {
 		return "", err
@@ -193,16 +212,6 @@ func (db *Database) version(ctx context.Context) (string, error) {
 	}
 
 	return rows[0][0], nil
-}
-
-func parseQueryResult(result json.RawMessage) (*exasoltypes.SqlQueryResponseResultSet, error) {
-	var resultSet exasoltypes.SqlQueryResponseResultSet
-
-	if err := json.Unmarshal(result, &resultSet); err != nil {
-		return nil, err
-	}
-
-	return &resultSet, nil
 }
 
 func printVersion(output io.Writer, version string) error {

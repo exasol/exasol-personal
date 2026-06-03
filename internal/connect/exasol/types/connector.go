@@ -6,8 +6,6 @@ package types
 import (
 	"context"
 	"database/sql/driver"
-
-	"github.com/exasol/exasol-driver-go/pkg/types"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -17,6 +15,6 @@ type ConnectFunc func(input string) (ExasolConnector, error)
 //counterfeiter:generate . ExasolConnector
 type ExasolConnector interface {
 	Exec(query string, args []driver.Value) (driver.Result, error)
-	SimpleExec(ctx context.Context, query string) (*types.SqlQueriesResponse, error)
+	QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error)
 	Close() error
 }

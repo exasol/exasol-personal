@@ -23,6 +23,7 @@ const connectCmdExample = `  exasol connect
 var connectOpts = connect.Opts{
 	ExecuteOnSemicolon: true,
 	JSONFormat:         connect.JSONFormatPretty,
+	MaxRows:            connect.MaxRowsUnset,
 }
 
 var connectCmd = &cobra.Command{
@@ -72,6 +73,13 @@ func registerConnectFlags() {
 		"j",
 		connect.JSONFormatPretty,
 		"Output in JSON format: pretty, compact",
+	)
+
+	connectCmd.Flags().IntVar(
+		&connectOpts.MaxRows,
+		"max-rows", connect.MaxRowsUnset,
+		"Maximum rows to display per query (0 = unlimited; "+
+			"default: 100 interactively, unlimited otherwise)",
 	)
 }
 

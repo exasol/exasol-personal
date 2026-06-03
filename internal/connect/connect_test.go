@@ -49,6 +49,7 @@ var (
 type stubQueryResult struct {
 	columnNames []string
 	rows        [][]string
+	truncated   bool
 }
 
 func (s stubQueryResult) ColumnNames() []string {
@@ -57,6 +58,10 @@ func (s stubQueryResult) ColumnNames() []string {
 
 func (s stubQueryResult) Rows() [][]string {
 	return s.rows
+}
+
+func (s stubQueryResult) Truncated() bool {
+	return s.truncated
 }
 
 func TestPrintResultJSON(t *testing.T) {
@@ -131,6 +136,41 @@ func TestPrintResultJSON(t *testing.T) {
 			require.Equal(t, test.result.rows, decoded.Rows)
 		})
 	}
+}
+
+func TestEffectiveMaxRows(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name        string
+		requested   int
+		modeDefault int
+		expected    int
+	}{
+		{name: "unset, interactive", requested: MaxRowsUnset, modeDefault: 100, expected: 100},
+		{name: "unset, unlimited", requested: MaxRowsUnset, modeDefault: 0, expected: 0},
+		{name: "explicit over interactive", requested: 5, modeDefault: 100, expected: 5},
+		{name: "explicit over unlimited", requested: 5, modeDefault: 0, expected: 5},
+		{name: "explicit zero is unlimited", requested: 0, modeDefault: 100, expected: 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, test.expected, effectiveMaxRows(test.requested, test.modeDefault))
+		})
+	}
+}
+
+func TestPrintTruncationFooter(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	require.NoError(t, printTruncationFooter(&buf, 100))
+
+	require.Equal(t,
+		"-- showing first 100 rows (output truncated; use --max-rows 0 to see all)\n",
+		buf.String(),
+	)
 }
 
 func TestParseJSONFormat(t *testing.T) {

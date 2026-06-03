@@ -6,7 +6,6 @@ import (
 	"database/sql/driver"
 	"sync"
 
-	typesa "github.com/exasol/exasol-driver-go/pkg/types"
 	"github.com/exasol/exasol-personal/internal/connect/exasol/types"
 )
 
@@ -35,18 +34,19 @@ type FakeExasolConnector struct {
 		result1 driver.Result
 		result2 error
 	}
-	SimpleExecStub        func(context.Context, string) (*typesa.SqlQueriesResponse, error)
-	simpleExecMutex       sync.RWMutex
-	simpleExecArgsForCall []struct {
+	QueryContextStub        func(context.Context, string, []driver.NamedValue) (driver.Rows, error)
+	queryContextMutex       sync.RWMutex
+	queryContextArgsForCall []struct {
 		arg1 context.Context
 		arg2 string
+		arg3 []driver.NamedValue
 	}
-	simpleExecReturns struct {
-		result1 *typesa.SqlQueriesResponse
+	queryContextReturns struct {
+		result1 driver.Rows
 		result2 error
 	}
-	simpleExecReturnsOnCall map[int]struct {
-		result1 *typesa.SqlQueriesResponse
+	queryContextReturnsOnCall map[int]struct {
+		result1 driver.Rows
 		result2 error
 	}
 	invocations      map[string][][]interface{}
@@ -176,19 +176,25 @@ func (fake *FakeExasolConnector) ExecReturnsOnCall(i int, result1 driver.Result,
 	}{result1, result2}
 }
 
-func (fake *FakeExasolConnector) SimpleExec(arg1 context.Context, arg2 string) (*typesa.SqlQueriesResponse, error) {
-	fake.simpleExecMutex.Lock()
-	ret, specificReturn := fake.simpleExecReturnsOnCall[len(fake.simpleExecArgsForCall)]
-	fake.simpleExecArgsForCall = append(fake.simpleExecArgsForCall, struct {
+func (fake *FakeExasolConnector) QueryContext(arg1 context.Context, arg2 string, arg3 []driver.NamedValue) (driver.Rows, error) {
+	var arg3Copy []driver.NamedValue
+	if arg3 != nil {
+		arg3Copy = make([]driver.NamedValue, len(arg3))
+		copy(arg3Copy, arg3)
+	}
+	fake.queryContextMutex.Lock()
+	ret, specificReturn := fake.queryContextReturnsOnCall[len(fake.queryContextArgsForCall)]
+	fake.queryContextArgsForCall = append(fake.queryContextArgsForCall, struct {
 		arg1 context.Context
 		arg2 string
-	}{arg1, arg2})
-	stub := fake.SimpleExecStub
-	fakeReturns := fake.simpleExecReturns
-	fake.recordInvocation("SimpleExec", []interface{}{arg1, arg2})
-	fake.simpleExecMutex.Unlock()
+		arg3 []driver.NamedValue
+	}{arg1, arg2, arg3Copy})
+	stub := fake.QueryContextStub
+	fakeReturns := fake.queryContextReturns
+	fake.recordInvocation("QueryContext", []interface{}{arg1, arg2, arg3Copy})
+	fake.queryContextMutex.Unlock()
 	if stub != nil {
-		return stub(arg1, arg2)
+		return stub(arg1, arg2, arg3)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
@@ -196,47 +202,47 @@ func (fake *FakeExasolConnector) SimpleExec(arg1 context.Context, arg2 string) (
 	return fakeReturns.result1, fakeReturns.result2
 }
 
-func (fake *FakeExasolConnector) SimpleExecCallCount() int {
-	fake.simpleExecMutex.RLock()
-	defer fake.simpleExecMutex.RUnlock()
-	return len(fake.simpleExecArgsForCall)
+func (fake *FakeExasolConnector) QueryContextCallCount() int {
+	fake.queryContextMutex.RLock()
+	defer fake.queryContextMutex.RUnlock()
+	return len(fake.queryContextArgsForCall)
 }
 
-func (fake *FakeExasolConnector) SimpleExecCalls(stub func(context.Context, string) (*typesa.SqlQueriesResponse, error)) {
-	fake.simpleExecMutex.Lock()
-	defer fake.simpleExecMutex.Unlock()
-	fake.SimpleExecStub = stub
+func (fake *FakeExasolConnector) QueryContextCalls(stub func(context.Context, string, []driver.NamedValue) (driver.Rows, error)) {
+	fake.queryContextMutex.Lock()
+	defer fake.queryContextMutex.Unlock()
+	fake.QueryContextStub = stub
 }
 
-func (fake *FakeExasolConnector) SimpleExecArgsForCall(i int) (context.Context, string) {
-	fake.simpleExecMutex.RLock()
-	defer fake.simpleExecMutex.RUnlock()
-	argsForCall := fake.simpleExecArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+func (fake *FakeExasolConnector) QueryContextArgsForCall(i int) (context.Context, string, []driver.NamedValue) {
+	fake.queryContextMutex.RLock()
+	defer fake.queryContextMutex.RUnlock()
+	argsForCall := fake.queryContextArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
 }
 
-func (fake *FakeExasolConnector) SimpleExecReturns(result1 *typesa.SqlQueriesResponse, result2 error) {
-	fake.simpleExecMutex.Lock()
-	defer fake.simpleExecMutex.Unlock()
-	fake.SimpleExecStub = nil
-	fake.simpleExecReturns = struct {
-		result1 *typesa.SqlQueriesResponse
+func (fake *FakeExasolConnector) QueryContextReturns(result1 driver.Rows, result2 error) {
+	fake.queryContextMutex.Lock()
+	defer fake.queryContextMutex.Unlock()
+	fake.QueryContextStub = nil
+	fake.queryContextReturns = struct {
+		result1 driver.Rows
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *FakeExasolConnector) SimpleExecReturnsOnCall(i int, result1 *typesa.SqlQueriesResponse, result2 error) {
-	fake.simpleExecMutex.Lock()
-	defer fake.simpleExecMutex.Unlock()
-	fake.SimpleExecStub = nil
-	if fake.simpleExecReturnsOnCall == nil {
-		fake.simpleExecReturnsOnCall = make(map[int]struct {
-			result1 *typesa.SqlQueriesResponse
+func (fake *FakeExasolConnector) QueryContextReturnsOnCall(i int, result1 driver.Rows, result2 error) {
+	fake.queryContextMutex.Lock()
+	defer fake.queryContextMutex.Unlock()
+	fake.QueryContextStub = nil
+	if fake.queryContextReturnsOnCall == nil {
+		fake.queryContextReturnsOnCall = make(map[int]struct {
+			result1 driver.Rows
 			result2 error
 		})
 	}
-	fake.simpleExecReturnsOnCall[i] = struct {
-		result1 *typesa.SqlQueriesResponse
+	fake.queryContextReturnsOnCall[i] = struct {
+		result1 driver.Rows
 		result2 error
 	}{result1, result2}
 }
