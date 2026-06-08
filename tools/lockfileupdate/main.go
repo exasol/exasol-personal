@@ -145,7 +145,7 @@ func updateLockfileForPreset(ctx context.Context, presetDir string, platforms []
 		return fmt.Errorf("copy preset dir to temp: %w", err)
 	}
 
-	tofuPath, err := tofu.ResolveBinaryPath(context.Background(), tmpRoot)
+	tofuPath, err := tofu.ResolveBinaryPath(ctx)
 	if err != nil {
 		return fmt.Errorf("resolve tofu binary path: %w", err)
 	}

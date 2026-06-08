@@ -4,9 +4,18 @@
 package config
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/presets"
+)
+
+const (
+	launcherRootDirName      = ".exasol"
+	launcherPersonalDirName  = "personal"
+	deploymentsDirName       = "deployments"
+	defaultDeploymentDirName = "default"
 )
 
 // DeploymentDir represents the root of a deployment directory.
@@ -28,6 +37,29 @@ func NewDeploymentDir(path string) DeploymentDir {
 	}
 
 	return DeploymentDir{root: root}
+}
+
+func DefaultDeploymentDirPath() (string, error) {
+	rootDir, err := LauncherRootDirPath()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(rootDir, deploymentsDirName, defaultDeploymentDirName), nil
+}
+
+func LauncherRootDirPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory for launcher root directory: %w", err)
+	}
+
+	return LauncherDirPath(home), nil
+}
+
+// LauncherDirPath returns the launcher-owned directory below baseDir.
+func LauncherDirPath(baseDir string) string {
+	return filepath.Join(baseDir, launcherRootDirName, launcherPersonalDirName)
 }
 
 func (d DeploymentDir) Root() string {

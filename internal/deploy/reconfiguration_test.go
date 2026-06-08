@@ -70,7 +70,7 @@ func TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles(t *te
 	if err := os.WriteFile(statePath, []byte("state"), 0o600); err != nil {
 		t.Fatalf("write state file failed: %v", err)
 	}
-	tofuBinaryPath, err := tofu.ResolveBinaryPath(context.Background(), deployment.Root())
+	tofuBinaryPath, err := tofu.ResolveBinaryPath(context.Background())
 	if err != nil {
 		t.Fatalf("resolve tofu binary path failed: %v", err)
 	}

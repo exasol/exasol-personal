@@ -177,7 +177,7 @@ func downloadFile(ctx context.Context, url, destPath string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download %s: %s", url, resp.Status)
+		return fmt.Errorf("failed to fetch %s (%s)", url, resp.Status)
 	}
 
 	out, err := os.Create(destPath)
