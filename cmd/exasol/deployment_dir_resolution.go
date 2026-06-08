@@ -104,12 +104,7 @@ func deploymentDirFlag(cmd *cobra.Command) *pflag.Flag {
 }
 
 func defaultDeploymentDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory for default deployment directory: %w", err)
-	}
-
-	return filepath.Join(home, ".exasol", "personal", "deployments", "default"), nil
+	return config.DefaultDeploymentDirPath()
 }
 
 func isRecognizedDeploymentDir(path string) (bool, error) {
