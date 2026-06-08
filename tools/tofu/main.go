@@ -9,16 +9,14 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/tofu"
 )
 
 func main() {
-	cacheDir := flag.String("cache-dir", filepath.Join(os.TempDir(), "exasol-personal-runtime"), "Directory used to cache runtime resources")
 	flag.Parse()
 
-	binaryPath, err := tofu.ResolveBinaryPath(context.Background(), *cacheDir)
+	binaryPath, err := tofu.ResolveBinaryPath(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}

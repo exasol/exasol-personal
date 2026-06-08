@@ -115,7 +115,7 @@ func (c *Config) TofuBinaryPath(ctx context.Context) (string, error) {
 		return "", errors.New("tofu deployment root is not configured")
 	}
 
-	binaryPath, err := ResolveBinaryPath(ctx, c.deploymentRoot)
+	binaryPath, err := ResolveBinaryPath(ctx)
 	if err != nil {
 		return "", err
 	}

@@ -10,14 +10,17 @@ import (
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
-// ResolveBinaryPath resolves the runtime tofu binary path for the given deployment directory.
-func ResolveBinaryPath(ctx context.Context, deploymentRoot string) (string, error) {
+// ResolveBinaryPath resolves the runtime tofu binary path.
+func ResolveBinaryPath(ctx context.Context) (string, error) {
 	spec, err := runtimeartifacts.ParseSpec(resources.ResourcesYAML)
 	if err != nil {
 		return "", err
 	}
 
-	manager := runtimeartifacts.NewResourceManager(spec, deploymentRoot)
+	manager, err := runtimeartifacts.NewResourceManager(spec)
+	if err != nil {
+		return "", err
+	}
 
 	return manager.Request(ctx, "tofu")
 }
