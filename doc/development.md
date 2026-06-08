@@ -83,8 +83,6 @@ GOOS=windows GOARCH=amd64 task build
 GOOS=darwin GOARCH=arm64 task build
 ```
 
-**Note:** The launcher now resolves OpenTofu at runtime through the embedded resource manager, so `task build` no longer needs platform-specific OpenTofu downloads. Cross-compilation only needs the usual Go environment variables.
-
 ### Building Without Task
 
 If you prefer to use Go commands directly (or Task is unavailable):
@@ -208,7 +206,8 @@ See [Best Practices](best_practices.md) for project-specific coding guidelines a
 ## Common Issues
 
 **OpenTofu binary not found:**
-- OpenTofu is resolved at runtime through the embedded resource manager.
+- OpenTofu is resolved at runtime through the per-user runtime artifact cache.
+- Use `exasol diag cache` to inspect cache state, `exasol cache clean --invalid` to remove artifacts that fail integrity checks, and `exasol cache clean --partial-downloads` to remove interrupted downloads.
 - For direct tofu invocations in development workflows, use `task fmt-terraform` or `go run ./tools/tofu/main.go ...`.
 
 **Windows fails with `tofu init -lockfile=readonly` due to missing hashes in `.terraform.lock.hcl`:**

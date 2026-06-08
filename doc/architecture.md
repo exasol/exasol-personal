@@ -46,7 +46,7 @@ The Exasol Personal tool (`exasol`) is a command-line application that automates
 **Self-Contained**
 - Single binary with no external dependencies
 - Infrastructure-as-Code templates embedded in the binary
-- Runtime resources stored in the deployment directory
+- Runtime artifacts resolved on demand and cached per user
 
 **Safety**
 - Explicit commands for destructive operations
@@ -95,7 +95,6 @@ The `init` command prepares a deployment directory:
 1. Create deployment directory structure
 2. Extract the selected infrastructure and installation presets
 3. Write infrastructure variables (for example, a `.tfvars` file) and workflow state
-4. Resolve runtime resources needed by the selected infrastructure preset
 
 **Output:** A self-contained deployment directory ready for provisioning.
 
@@ -227,6 +226,12 @@ The deployment directory is the central artifact containing everything needed to
 - `deployment.json` - Deployment information (IPs, connection details)
 - `secrets.json` - Credentials required by the launcher (sensitive)
 - SSH private key referenced by `deployment.json:nodes[*].ssh.keyFile` (current presets use `node_access.pem`)
+
+### Runtime Artifact Cache
+
+Launcher-managed runtime artifacts are resolved on demand and stored in a per-user cache so they can be reused across deployments. Cache metadata records source information, validation data, size, and last-use timestamps; cleanup uses the launcher cache retention configuration, with a built-in default when no user configuration exists.
+
+Users can inspect and maintain the cache with `exasol cache list`, `exasol cache clean`, `exasol cache clean --invalid`, `exasol cache clean --partial-downloads`, `exasol cache clean --all`, `exasol cache unlock`, and `exasol diag cache`. Diagnostics are read-only and include cache, lock, metadata, and checksum state.
 
 **Key characteristics:**
 - Self-contained (portable to another machine if needed)
