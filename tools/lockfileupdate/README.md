@@ -21,7 +21,7 @@ For each infrastructure preset directory under `assets/infrastructure/*`:
    - it must contain at least one `.tf` file.
    Presets that don’t use OpenTofu are skipped.
 2. Copy the preset directory into a temporary working directory.
-3. Resolve the OpenTofu binary through the runtime resource manager.
+3. Resolve the OpenTofu binary through the runtime artifact cache.
 4. Run `tofu providers lock` for multiple `-platform=...` values.
 5. Copy the generated `.terraform.lock.hcl` back into the original preset directory in `assets/`.
 6. Remove the temporary directory.
@@ -58,6 +58,6 @@ Example (update only one preset):
 
 ## Notes / assumptions
 
-- The tool resolves OpenTofu through the same runtime resource mechanism used by the launcher.
+- The tool resolves OpenTofu through the same runtime artifact cache used by the launcher.
 - The tool intentionally avoids writing state files; it only regenerates lockfiles.
 - Platform list defaults are conservative; adjust them if the project’s supported platforms change.
