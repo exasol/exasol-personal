@@ -374,6 +374,138 @@ func TestCacheCleanAllWipesCacheContentsAndResetsMetadata(t *testing.T) {
 	}
 }
 
+func TestCacheDiagnoseReportsChecksumMismatchAndUnexpectedPaths(t *testing.T) {
+	t.Parallel()
+
+	now := testNow()
+	cache := newTestCache(t, now)
+	writeTestCacheConfig(t, cache, 5)
+	index := emptyCacheIndex()
+	seedCacheEntry(t, cache, &index, "valid", "valid", checksumString("valid"), now)
+	seedCacheEntry(
+		t,
+		cache,
+		&index,
+		"invalid",
+		"invalid",
+		checksumString("expected"),
+		now.AddDate(0, 0, -10),
+	)
+	writeTestIndex(t, cache, index)
+	unexpected := filepath.Join(
+		cache.artifactsRoot(),
+		"unexpected",
+		"linux_amd64",
+		"orphan",
+		"file",
+	)
+	if err := os.MkdirAll(filepath.Dir(unexpected), dirPerm); err != nil {
+		t.Fatalf("failed to create unexpected entry: %v", err)
+	}
+	if err := os.WriteFile(unexpected, []byte("orphan"), filePerm); err != nil {
+		t.Fatalf("failed to write unexpected entry: %v", err)
+	}
+
+	report := cache.Diagnose()
+
+	if report.ConfigError != "" || report.IndexError != "" {
+		t.Fatalf(
+			"expected clean diagnostic read, got config=%q index=%q",
+			report.ConfigError,
+			report.IndexError,
+		)
+	}
+	if report.ArtifactCount != 2 || report.InvalidArtifacts != 1 || report.StaleCandidates != 1 {
+		t.Fatalf("unexpected diagnostic counts: %+v", report)
+	}
+	statuses := map[string]string{}
+	for _, entry := range report.Entries {
+		statuses[entry.ID] = entry.IntegrityStatus
+	}
+	if statuses["valid"] != integrityStatusOK {
+		t.Fatalf("expected valid entry to be ok, got %q", statuses["valid"])
+	}
+	if statuses["invalid"] != integrityStatusMismatch {
+		t.Fatalf("expected invalid entry mismatch, got %q", statuses["invalid"])
+	}
+	expectedUnexpected := filepath.ToSlash(filepath.Join(
+		artifactsDirName,
+		"unexpected",
+		"linux_amd64",
+		"orphan",
+	))
+	if len(report.UnexpectedPaths) != 1 || report.UnexpectedPaths[0] != expectedUnexpected {
+		t.Fatalf("expected unexpected entry root, got %+v", report.UnexpectedPaths)
+	}
+}
+
+func TestCacheDiagnoseContinuesWhenOneEntryHasInvalidPath(t *testing.T) {
+	t.Parallel()
+
+	now := testNow()
+	cache := newTestCache(t, now)
+	index := emptyCacheIndex()
+	seedCacheEntry(t, cache, &index, "valid", "valid", checksumString("valid"), now)
+	index.Entries["bad"] = cacheIndexEntry{
+		ResourceID:   "bad-resource",
+		Platform:     "linux/amd64",
+		Sha256:       checksumString("bad"),
+		EntryPath:    "../bad",
+		ArtifactPath: "artifacts/bad/file",
+		ResolvedPath: "artifacts/bad/file",
+		LastUsedAt:   now,
+	}
+	writeTestIndex(t, cache, index)
+
+	report := cache.Diagnose()
+
+	if report.IndexError != "" {
+		t.Fatalf("expected diagnostics to continue past bad entry, got %q", report.IndexError)
+	}
+	if report.ArtifactCount != 1 || report.InvalidArtifacts != 1 {
+		t.Fatalf("unexpected diagnostic counts: %+v", report)
+	}
+	statuses := map[string]string{}
+	for _, entry := range report.Entries {
+		statuses[entry.ID] = entry.IntegrityStatus
+	}
+	if statuses["valid"] != integrityStatusOK {
+		t.Fatalf("expected valid entry to be ok, got %q", statuses["valid"])
+	}
+	if statuses["bad"] != integrityStatusReadError {
+		t.Fatalf("expected bad entry read error, got %q", statuses["bad"])
+	}
+}
+
+func TestCacheLockStatusAndUnlockUseDirectoryMutex(t *testing.T) {
+	t.Parallel()
+
+	cache := newTestCache(t, testNow())
+	if err := os.MkdirAll(cache.Root(), dirPerm); err != nil {
+		t.Fatalf("failed to create cache root: %v", err)
+	}
+	mutex, err := directorymutex.New(cache.Root())
+	if err != nil {
+		t.Fatalf("failed to create mutex: %v", err)
+	}
+	if err := mutex.AcquireExclusive(context.Background()); err != nil {
+		t.Fatalf("failed to acquire mutex: %v", err)
+	}
+
+	status := cache.lockStatus()
+	if !status.Locked || status.Mode != "exclusive" {
+		t.Fatalf("expected exclusive lock status, got %+v", status)
+	}
+
+	if err := cache.Unlock(); err != nil {
+		t.Fatalf("expected unlock to clear marker, got %v", err)
+	}
+	status = cache.lockStatus()
+	if status.Locked || status.Error != "" {
+		t.Fatalf("expected unlocked cache, got %+v", status)
+	}
+}
+
 func TestCacheLockContentionReturnsUserFacingError(t *testing.T) {
 	t.Parallel()
 

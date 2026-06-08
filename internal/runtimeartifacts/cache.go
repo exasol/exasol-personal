@@ -95,6 +95,15 @@ type CleanSummary struct {
 	Entries        []CacheEntryInfo `json:"entries"`
 }
 
+type CacheLockStatus struct {
+	CacheExists bool   `json:"cacheExists"`
+	Locked      bool   `json:"locked"`
+	Mode        string `json:"mode,omitempty"`
+	SharedCount int    `json:"sharedCount,omitempty"`
+	MarkerPath  string `json:"markerPath,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
 type cleanupPlan struct {
 	mode           CleanupMode
 	dryRun         bool
