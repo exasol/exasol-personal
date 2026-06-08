@@ -76,7 +76,7 @@ func TestResolveDeploymentDir_DefaultWinsWhenFlagOmittedOutsideDeploymentDir(t *
 	if source != deploymentDirSourceDefault {
 		t.Fatalf("expected default source, got %v", source)
 	}
-	expected := filepath.Join(home, ".exasol", "personal", "deployments", "default")
+	expected := filepath.Join(config.LauncherDirPath(home), "deployments", "default")
 	if deployment.Root() != expected {
 		t.Fatalf("expected %q, got %q", expected, deployment.Root())
 	}
