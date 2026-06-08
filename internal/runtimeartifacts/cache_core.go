@@ -17,10 +17,11 @@ import (
 )
 
 // Primitive groups and semantics:
-// - lock primitives (`withExclusiveLock`, `clearLock`) create the cache root
-//   before constructing directorymutex, serialize cache reads and mutations
-//   with exclusive locks, map contention to cache-specific errors, and release
-//   locks with a cancellation-independent context.
+// - lock primitives (`withExclusiveLock`, `lockStatus`, `clearLock`) create the
+//   cache root before constructing directorymutex, serialize cache reads and
+//   mutations with exclusive locks, map contention to cache-specific errors,
+//   report lock state without acquiring the lock, and release locks with a
+//   cancellation-independent context.
 // - index primitives (`readIndex`, `readIndexRaw`, `writeIndex`) treat a
 //   missing index as an empty cache, reject unsupported schema versions,
 //   validate relative cache paths for normal operations, and write metadata
@@ -92,6 +93,42 @@ func (c *Cache) clearLock() error {
 	}
 
 	return mutex.ClearLock()
+}
+
+func (c *Cache) lockStatus() CacheLockStatus {
+	status := CacheLockStatus{}
+	info, err := os.Stat(c.root)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return status
+		}
+		status.Error = err.Error()
+
+		return status
+	}
+	status.CacheExists = true
+	if !info.IsDir() {
+		status.Error = c.root + " is not a directory"
+		return status
+	}
+
+	mutex, err := directorymutex.New(c.root)
+	if err != nil {
+		status.Error = err.Error()
+		return status
+	}
+	lockStatus, err := mutex.Status()
+	if err != nil {
+		status.Error = err.Error()
+		return status
+	}
+
+	status.Locked = lockStatus.Locked
+	status.Mode = lockStatus.Mode
+	status.SharedCount = lockStatus.SharedCount
+	status.MarkerPath = lockStatus.MarkerPath
+
+	return status
 }
 
 //nolint:contextcheck // Lock release must outlive caller cancellation.

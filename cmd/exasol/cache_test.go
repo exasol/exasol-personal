@@ -26,6 +26,7 @@ func TestCacheCommandsDoNotUseDeploymentDirectoryConcerns(t *testing.T) {
 		"cache list":   cacheListCmd,
 		"cache clean":  cacheCleanCmd,
 		"cache unlock": cacheUnlockCmd,
+		"diag cache":   diagCacheCmd,
 	}
 	for name, cmd := range commands {
 		t.Run(name, func(t *testing.T) {
@@ -139,6 +140,16 @@ func TestCacheUnlockHelpWarnsAboutActiveLauncherProcesses(t *testing.T) {
 	}
 }
 
+func TestDiagCacheHelpDescribesReadOnlyBehavior(t *testing.T) {
+	t.Parallel()
+
+	if !strings.Contains(diagCacheCmd.Long, "without removing artifacts") ||
+		!strings.Contains(diagCacheCmd.Long, "rewriting metadata") ||
+		!strings.Contains(diagCacheCmd.Long, "clearing cache locks") {
+		t.Fatalf("expected read-only diagnostic help, got %q", diagCacheCmd.Long)
+	}
+}
+
 func TestRenderCacheListJSON(t *testing.T) {
 	t.Parallel()
 
@@ -206,6 +217,57 @@ func TestRenderCacheCleanTextUsesDryRunAndInvalidWording(t *testing.T) {
 	for _, expected := range []string{
 		"Would remove 2 runtime artifact(s), 2 MB (mode: invalid).",
 		"Invalid artifacts: 2",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("expected %q in output, got %q", expected, output)
+		}
+	}
+}
+
+func TestRenderCacheDiagnosticsTextIncludesCacheState(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	report := runtimeartifacts.DiagnosticReport{
+		CacheRoot:        "/cache",
+		ConfigPath:       "/config/runtime-artifacts.yaml",
+		ConfigExists:     true,
+		RetentionDays:    30,
+		IndexPath:        "/cache/index.json",
+		IndexExists:      true,
+		Lock:             runtimeartifacts.CacheLockStatus{Locked: true, Mode: "exclusive"},
+		ArtifactCount:    1,
+		TotalBytes:       3 * 1024 * 1024 * 1024,
+		StaleCandidates:  1,
+		InvalidArtifacts: 1,
+		MissingFiles:     []string{"/cache/missing"},
+		UnexpectedPaths:  []string{"/cache/unexpected"},
+		Entries: []runtimeartifacts.DiagnosticEntry{
+			{
+				CacheEntryInfo:  cacheEntryInfoFixture(),
+				Stale:           true,
+				IntegrityStatus: "mismatch",
+			},
+		},
+	}
+
+	if err := renderCacheDiagnosticsText(&buf, report); err != nil {
+		t.Fatalf("expected diagnostics render to succeed, got %v", err)
+	}
+
+	output := buf.String()
+	for _, expected := range []string{
+		"Cache root: /cache",
+		"Config file: /config/runtime-artifacts.yaml",
+		"Index file: index.json",
+		"Config status: ok (retention_days=30)",
+		"Index status: ok",
+		"Lock status: locked (exclusive)",
+		"Total size: 3 GB",
+		"Invalid artifacts: 1",
+		"tofu linux/amd64 integrity=mismatch stale=true path=artifacts/tofu",
+		"Missing: missing",
+		"Unexpected: unexpected",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("expected %q in output, got %q", expected, output)
