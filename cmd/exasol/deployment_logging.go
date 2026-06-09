@@ -73,10 +73,10 @@ var startDeploymentLogSession = func(
 	globalDeploymentFileSink.Set(file, slog.LevelDebug)
 	writeDeploymentLogBootstrap(file, commandName, deployment)
 
-	slog.Info("deployment log file", "status", "started", "path", logFilePath)
+	slog.Debug("deployment log file", "status", "started", "path", logFilePath)
 
 	return func() {
-		slog.Info("deployment log file", "status", "finished", "path", logFilePath)
+		slog.Debug("deployment log file", "status", "finished", "path", logFilePath)
 		globalDeploymentFileSink.Clear()
 
 		if err := file.Close(); err != nil {

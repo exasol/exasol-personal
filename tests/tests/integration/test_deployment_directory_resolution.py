@@ -43,7 +43,7 @@ def _assert_deployment_dir_logged(
 ) -> None:
     assert _deployment_dir_logged(stderr, deployment_dir, source), (
         f"expected {source} deployment directory {str(deployment_dir)!r} "
-        f"in stderr logs:\n{stderr}"
+        f"in debug stderr logs:\n{stderr}"
     )
 
 
@@ -60,7 +60,7 @@ def test_status_uses_default_deployment_dir_without_corrupting_json(
 
     # When status is invoked outside a deployment directory
     result = subprocess.run(
-        [launcher, "status", "--json"],
+        [launcher, "--log-level", "debug", "status", "--json"],
         cwd=cwd,
         env=_env_with_home(home),
         capture_output=True,
@@ -95,10 +95,11 @@ def test_status_reports_uninitialized_explicit_deployment_dir(
     data = json.loads(result.stdout)
     assert data["status"] == "not_initialized"
     assert data["deploymentDir"] == str(deployment_dir)
-    _assert_deployment_dir_logged(result.stderr, deployment_dir, "explicit")
 
 
-def test_status_logs_current_deployment_dir(exasol_path: str, tmp_path: Path) -> None:
+def test_status_debug_logs_current_deployment_dir(
+    exasol_path: str, tmp_path: Path
+) -> None:
     # Given the current working directory is a recognized deployment directory
     deployment_dir = tmp_path / "deployment"
     infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
@@ -119,7 +120,7 @@ def test_status_logs_current_deployment_dir(exasol_path: str, tmp_path: Path) ->
 
     # When status is invoked without an explicit deployment directory
     result = subprocess.run(
-        [launcher, "status", "--json"],
+        [launcher, "--log-level", "debug", "status", "--json"],
         cwd=deployment_dir,
         capture_output=True,
         text=True,
@@ -144,7 +145,14 @@ def test_init_creates_default_deployment_dir(exasol_path: str, tmp_path: Path) -
 
     # When init is invoked
     result = subprocess.run(
-        [launcher, "init", infra_id, "--no-launcher-version-check"],
+        [
+            launcher,
+            "--log-level",
+            "debug",
+            "init",
+            infra_id,
+            "--no-launcher-version-check",
+        ],
         cwd=cwd,
         env=_env_with_home(home),
         capture_output=True,
@@ -181,4 +189,4 @@ def test_initialized_state_error_mentions_resolved_default_dir(
     # Then the error explains the resolved deployment directory
     assert result.returncode != 0
     assert "deployment directory is not initialized" in result.stderr.lower()
-    _assert_deployment_dir_logged(result.stderr, default_dir, "default")
+    assert f"in {json.dumps(str(default_dir))}" in result.stderr

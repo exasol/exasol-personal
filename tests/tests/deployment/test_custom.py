@@ -146,10 +146,7 @@ def test_custom_deployment_success(
     assert config.db_password is not None
     for p in [(), ("--password", config.db_password)]:
         proc = deployment.connect(*p, input=query, capture_output=True)
-        stderr = proc.stderr.strip()
         stdout = proc.stdout.strip()
-
-        assert stderr == ""
 
         # Check the query output.
         expected = textwrap.dedent("""

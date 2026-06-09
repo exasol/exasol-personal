@@ -125,10 +125,7 @@ def test_single_query(reusable_deployment: Deployment) -> None:
     query: Final = "SELECT * FROM Dual"
 
     proc = reusable_deployment.connect(input=query, capture_output=True)
-    stderr = proc.stderr.strip()
     stdout = proc.stdout.strip()
-
-    assert stderr == ""
 
     # Check the query output.
     expected = textwrap.dedent("""

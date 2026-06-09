@@ -38,7 +38,7 @@ func resolveDeploymentDirForCommand(cmd *cobra.Command, state *CommonFlags) erro
 	}
 
 	state.DeploymentDir = deployment.Root()
-	slog.Info(
+	slog.Debug(
 		"using deployment directory",
 		"path", deployment.Root(),
 		"source", source.String(),
