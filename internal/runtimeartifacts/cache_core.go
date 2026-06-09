@@ -35,6 +35,10 @@ import (
 // - filesystem primitives (`directorySize`) provide size inspection without
 //   mutating the cache.
 
+// This timeout should be long enough for another launcher to download and
+// extract whatever resource it is going to use.
+const acquireTimeout = 5 * time.Minute
+
 type cacheIndex struct {
 	Version     int                        `json:"version"`
 	LastCleanup time.Time                  `json:"lastCleanupAt,omitempty"`
@@ -132,7 +136,7 @@ func (c *Cache) lockStatus() CacheLockStatus {
 }
 
 //nolint:contextcheck // Lock release must outlive caller cancellation.
-func (c *Cache) withExclusiveLock(ctx context.Context, function func() error) (callbackErr error) {
+func (c *Cache) withExclusiveLock(ctx context.Context, function func() error) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -144,33 +148,15 @@ func (c *Cache) withExclusiveLock(ctx context.Context, function func() error) (c
 		return err
 	}
 
-	lockCtx, cancel := cacheLockContext(ctx)
+	waitCtx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
-	if err := mutex.AcquireExclusive(lockCtx); err != nil {
+
+	err = mutex.WithExclusive(waitCtx, nil, func(any) error { return function() })
+	if err != nil {
 		return mapCacheLockError(err)
 	}
 
-	releaseCtx := context.WithoutCancel(ctx)
-	defer func() {
-		releaseErr := mutex.ReleaseExclusive(releaseCtx)
-		if callbackErr == nil {
-			callbackErr = releaseErr
-		} else if releaseErr != nil {
-			callbackErr = errors.Join(callbackErr, releaseErr)
-		}
-	}()
-
-	callbackErr = function()
-
-	return callbackErr
-}
-
-func cacheLockContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	if _, ok := ctx.Deadline(); ok {
-		return ctx, func() {}
-	}
-
-	return context.WithTimeout(ctx, defaultCacheAcquireTimeout)
+	return nil
 }
 
 func mapCacheLockError(err error) error {
