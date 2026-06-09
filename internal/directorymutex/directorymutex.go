@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/exasol/exasol-personal/internal/util"
 )
 
 var (
@@ -102,6 +104,38 @@ func (m *DirectoryMutex) ReleaseExclusive(ctx context.Context) error {
 	return m.release(ctx, modeExclusive)
 }
 
+func (m *DirectoryMutex) WithShared(ctx context.Context, arg any, function func(any) error) error {
+	return m.withLock(ctx, arg, function, modeShared)
+}
+
+func (m *DirectoryMutex) WithExclusive(
+	ctx context.Context,
+	arg any,
+	function func(any) error,
+) error {
+	return m.withLock(ctx, arg, function, modeExclusive)
+}
+
+// ClearLock force-removes the current marker file if one exists.
+func (m *DirectoryMutex) ClearLock() error {
+	marker, err := m.findMarker()
+	if err != nil {
+		return err
+	}
+	if marker == nil {
+		return nil
+	}
+	if err := os.Remove(marker.path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
+}
+
 // Status reports the current observed lock state.
 func (m *DirectoryMutex) Status() (Status, error) {
 	marker, err := m.findMarker()
@@ -129,26 +163,6 @@ func (m *DirectoryMutex) Status() (Status, error) {
 	}
 
 	return status, nil
-}
-
-// ClearLock force-removes the current marker file if one exists.
-func (m *DirectoryMutex) ClearLock() error {
-	marker, err := m.findMarker()
-	if err != nil {
-		return err
-	}
-	if marker == nil {
-		return nil
-	}
-	if err := os.Remove(marker.path); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-
-		return err
-	}
-
-	return nil
 }
 
 type markerInfo struct {
@@ -401,6 +415,82 @@ func withTimeoutIfMissing(
 	}
 
 	return context.WithTimeout(ctx, timeout)
+}
+
+func (m *DirectoryMutex) withLock(
+	ctx context.Context,
+	arg any,
+	function func(any) error,
+	mode lockMode,
+) error {
+	var err error
+
+	switch mode {
+	case modeExclusive:
+		err = m.AcquireExclusive(ctx)
+	case modeShared:
+		err = m.AcquireShared(ctx)
+	default:
+	}
+
+	if err != nil {
+		return err
+	}
+
+	releaseCtx := context.WithoutCancel(ctx)
+	release := func() error {
+		switch mode {
+		case modeExclusive:
+			return m.ReleaseExclusive(releaseCtx)
+		case modeShared:
+			return m.ReleaseShared(releaseCtx)
+		default:
+			return nil
+		}
+	}
+	releaseOnce := releaseOnInterruptOnce(release)
+
+	var callbackErr error
+	defer func() {
+		releaseErr := releaseOnce()
+		if releaseErr == nil {
+			return
+		}
+		if callbackErr == nil {
+			callbackErr = releaseErr
+			return
+		}
+		callbackErr = errors.Join(callbackErr, releaseErr)
+	}()
+
+	callbackErr = callWithPanicSafetyError(function, arg)
+
+	return callbackErr
+}
+
+func callWithPanicSafetyError(function func(any) error, arg any) error {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			panic(recovered)
+		}
+	}()
+
+	return function(arg)
+}
+
+func releaseOnInterruptOnce(release func() error) func() error {
+	// Run the release function no matter what
+	unregister, _ := util.RegisterOnceSignalHandler(func() {
+		_ = release()
+	})
+
+	return func() error {
+		if unregister() {
+			return release()
+		}
+
+		return nil
+	}
 }
 
 func sleepWithContext(ctx context.Context, duration time.Duration) error {

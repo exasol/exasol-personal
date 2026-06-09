@@ -18,19 +18,18 @@ import (
 )
 
 const (
-	runtimeArtifactsDirName    = "runtime-artifacts"
-	artifactsDirName           = "artifacts"
-	downloadsDirName           = "downloads"
-	cacheIndexFileName         = "index.json"
-	cacheConfigFileName        = "runtime-artifacts.yaml"
-	cacheIndexVersion          = 1
-	defaultRetentionDays       = 30
-	automaticCleanupInterval   = 24 * time.Hour
-	defaultCacheAcquireTimeout = 5 * time.Minute
-	integrityStatusOK          = "ok"
-	integrityStatusMissing     = "missing"
-	integrityStatusMismatch    = "mismatch"
-	integrityStatusReadError   = "read_error"
+	runtimeArtifactsDirName  = "runtime-artifacts"
+	artifactsDirName         = "artifacts"
+	downloadsDirName         = "downloads"
+	cacheIndexFileName       = "index.json"
+	cacheConfigFileName      = "runtime-artifacts.yaml"
+	cacheIndexVersion        = 1
+	defaultRetentionDays     = 30
+	automaticCleanupInterval = 24 * time.Hour
+	integrityStatusOK        = "ok"
+	integrityStatusMissing   = "missing"
+	integrityStatusMismatch  = "mismatch"
+	integrityStatusReadError = "read_error"
 )
 
 var (

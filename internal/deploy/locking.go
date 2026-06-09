@@ -9,7 +9,6 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/directorymutex"
-	"github.com/exasol/exasol-personal/internal/util"
 )
 
 const lockUnavailableMessage = "Deployment directory is locked by another operation. " +
@@ -65,53 +64,29 @@ func withDeploymentLock(
 		return err
 	}
 
+	wrapped := func(any) error {
+		return function(deployment)
+	}
+
 	if exclusive {
-		err = mutex.AcquireExclusive(ctx)
+		err = mutex.WithExclusive(ctx, nil, wrapped)
 	} else {
-		err = mutex.AcquireShared(ctx)
+		err = mutex.WithShared(ctx, nil, wrapped)
 	}
 
 	if err != nil {
-		return mapLockAcquireError(ctx, deployment, err)
+		return mapDeploymentLockError(deployment, err)
 	}
 
-	releaseCtx := context.WithoutCancel(ctx)
-	release := func() error {
-		if exclusive {
-			return mutex.ReleaseExclusive(releaseCtx)
-		}
-
-		return mutex.ReleaseShared(releaseCtx)
-	}
-	releaseOnce := releaseOnInterruptOnce(release)
-
-	var callbackErr error
-	defer func() {
-		releaseErr := releaseOnce()
-		if releaseErr == nil {
-			return
-		}
-		if callbackErr == nil {
-			callbackErr = releaseErr
-			return
-		}
-		callbackErr = errors.Join(callbackErr, releaseErr)
-	}()
-
-	callbackErr = callWithPanicSafetyError(function, deployment)
-
-	return callbackErr
+	return nil
 }
 
-func mapLockAcquireError(ctx context.Context, deployment config.DeploymentDir, err error) error {
+func mapDeploymentLockError(deployment config.DeploymentDir, err error) error {
 	if errors.Is(err, context.Canceled) {
 		return err
 	}
 	if !errors.Is(err, directorymutex.ErrAcquireTimeout) {
 		return err
-	}
-	if ctx == nil {
-		return &deploymentDirectoryLockedError{message: lockUnavailableMessage}
 	}
 
 	if operation := lockedOperationName(deployment); operation != "" {
@@ -144,34 +119,6 @@ func activeOperationInProgressMessage(operation string) string {
 	return "Operation '" + operation + "' is currently in progress. Please wait. " +
 		"Do not use `unlock` unless you are certain that no other exasol " +
 		"launcher instance is running."
-}
-
-func callWithPanicSafetyError(
-	function func(deployment config.DeploymentDir) error,
-	deployment config.DeploymentDir,
-) error {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			panic(recovered)
-		}
-	}()
-
-	return function(deployment)
-}
-
-func releaseOnInterruptOnce(release func() error) func() error {
-	// Run the release function no matter what
-	unregister, _ := util.RegisterOnceSignalHandler(func() {
-		_ = release()
-	})
-
-	return func() error {
-		if unregister() {
-			return release()
-		}
-
-		return nil
-	}
 }
 
 func deploymentLockMessage(err error) string {
