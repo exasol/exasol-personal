@@ -10,7 +10,7 @@ dependencies = [
   "websocket-client (>=1.8.0,<2.0.0)",
   "pydantic (>=2.12.0,<3.0.0)",
   "semver (>=3.0.4,<4.0.0)",
-  "requests (>=2.31.0,<3.0.0)",
+  "requests (>=2.34.2,<3.0.0)",
 ]
 
 [tool.poetry]
@@ -19,7 +19,7 @@ packages = [{ include = "tests" }]
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^2.1.0"
-ruff = "^0.15.8"
+ruff = "^0.15.16"
 pydantic = { extras = ["mypy"], version = "^2.11.7" }
 types-requests = "^2.33.0"
 
