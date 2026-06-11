@@ -255,7 +255,7 @@ func staleOperationInProgressMessage(operation string) string {
 	switch operation {
 	case config.DestroyOperation:
 		return "A previous destroy operation did not finish cleanly. " +
-			"If cloud resources may still exist, run `destroy` again. " +
+			"If deployment resources may still exist, run `destroy` again. " +
 			"If resources were already deleted or cannot be destroyed through the launcher, " +
 			"run `remove` to delete only the local deployment directory."
 	case config.DeployOperation:

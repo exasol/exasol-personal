@@ -42,7 +42,7 @@ var initCmdLongDesc = initCmdShortDesc + `
 	For an already initialized deployment with the same presets, supplied configuration
 	flags update only the selected parameters. Omitted parameters keep their values.
 	To switch presets, run exasol destroy --remove first, or exasol remove if the
-	cloud resources are already gone.` +
+	deployment resources are already gone.` +
 	deploymentDirectoryResolutionHelp + presetSelectionHelp
 
 var initCmd = &cobra.Command{

@@ -433,7 +433,7 @@ def test_config_set_refuses_running_deployment(
 
     # Then it tells the user to destroy before changing configuration
     stderr = exc.value.stderr.lower()
-    assert "deployment may already have cloud resources" in stderr
+    assert "deployment may already have resources" in stderr
     assert "exasol destroy" in stderr
 
 
@@ -454,13 +454,13 @@ def test_config_set_refuses_running_deployment(
         ),
     ],
 )
-def test_config_set_refuses_state_with_possible_cloud_resources(
+def test_config_set_refuses_state_with_possible_resources(
     exasol_path: str,
     tmp_path: Path,
     workflow_state: dict[str, object],
 ) -> None:
     # Given an initialized deployment whose previous operation failed or was
-    # interrupted, so cloud resources may already exist
+    # interrupted, so deployment resources may already exist
     deployment_dir = tmp_path / "deployment"
     infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
     run_command(
@@ -493,7 +493,7 @@ def test_config_set_refuses_state_with_possible_cloud_resources(
 
     # Then it refuses the configuration change with destroy guidance
     stderr = exc.value.stderr.lower()
-    assert "deployment may already have cloud resources" in stderr
+    assert "deployment may already have resources" in stderr
     assert "exasol destroy" in stderr
 
 
@@ -596,7 +596,7 @@ def test_install_refuses_same_preset_configuration_change_for_running_deployment
 
     # Then it refuses the configuration change without destroying or mutating state
     stderr = exc.value.stderr.lower()
-    assert "deployment may already have cloud resources" in stderr
+    assert "deployment may already have resources" in stderr
     assert "exasol destroy" in stderr
     assert _get_active_configuration(
         exasol_path,
@@ -774,7 +774,8 @@ def test_remove_removes_local_deployment_directory_without_destroy(
         ]
     )
 
-    # Then the local deployment directory is removed without destroying cloud resources
+    # Then the local deployment directory is removed
+    # without destroying deployment resources
     assert result.returncode == 0
     assert not deployment_dir.exists()
 
