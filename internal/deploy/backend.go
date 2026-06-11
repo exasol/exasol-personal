@@ -34,7 +34,9 @@ type DeployOptions struct {
 //
 // All methods operate against the deployment and manifest that were supplied
 // when the backend was constructed (see newDeploymentBackend).
+// nolint: interfacebloat
 type deploymentBackend interface {
+	ValidateEnvironment() error
 	SetupWorkspace(ctx context.Context) error
 	Configure(
 		ctx context.Context,

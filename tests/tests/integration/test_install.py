@@ -3,6 +3,7 @@
 
 import json
 import os
+import platform
 import sys
 from pathlib import Path
 from subprocess import CalledProcessError
@@ -73,6 +74,36 @@ def test_install_executes_init_step(exasol_path: str, tmp_path: Path) -> None:
     stderr = (excinfo.value.stderr or "").lower()
     assert "initialization failed" in stderr
     assert "deployment directory is not empty" in stderr
+
+
+@pytest.mark.skipif(
+    sys.platform == "darwin" and platform.machine().lower() in {"arm64", "aarch64"},
+    reason="local deployments are supported on macOS Apple Silicon",
+)
+def test_init_local_rejects_unsupported_platform_before_writing_files(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given an empty deployment directory on an unsupported local platform
+    deployment_dir = tmp_path / "deployment"
+    deployment_dir.mkdir()
+
+    # When init is invoked for the local preset
+    with pytest.raises(CalledProcessError) as exc:
+        run_command(
+            [
+                exasol_path,
+                "init",
+                "local",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--no-launcher-version-check",
+            ]
+        )
+
+    # Then it fails before writing deployment state
+    stderr = exc.value.stderr.lower()
+    assert "local deployments are only supported on macos apple silicon" in stderr
+    assert list(deployment_dir.iterdir()) == []
 
 
 @pytest.mark.skipif(

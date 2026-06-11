@@ -89,6 +89,21 @@ func InitDeployment(
 	if err := ValidatePresetSelection(infrastructurePreset, installationPreset); err != nil {
 		return err
 	}
+	infrastructureManifest, err := readInfrastructureManifestFromPreset(infrastructurePreset)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to load infrastructure preset %q: %w",
+			presetLabel(infrastructurePreset),
+			err,
+		)
+	}
+	backend, err := newDeploymentBackend(deployment, infrastructureManifest)
+	if err != nil {
+		return err
+	}
+	if err := backend.ValidateEnvironment(); err != nil {
+		return err
+	}
 
 	// Init only creates fresh deployment state. Existing deployment orchestration
 	// belongs to the command layer.

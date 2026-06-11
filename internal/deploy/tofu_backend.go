@@ -67,6 +67,10 @@ func newTofuBackend(
 	return b
 }
 
+func (*tofuBackend) ValidateEnvironment() error {
+	return nil
+}
+
 func (b *tofuBackend) SetupWorkspace(_ context.Context) error {
 	if !b.hasTofu() {
 		slog.Info("tofu: no configuration defined; skipping workspace setup")
