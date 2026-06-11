@@ -37,9 +37,13 @@ tasks:
       LOCAL_RUNNER_REPO: '{{default "exasol/exasol-local-vm" .LOCAL_RUNNER_REPO}}'
       LOCAL_RUNNER_VERSION: '{{default "v1.0.0-rc1" .LOCAL_RUNNER_VERSION}}'
       LOCAL_RUNNER_ASSET: '{{default "mac-runner-aarch64.zip" .LOCAL_RUNNER_ASSET}}'
+      TARGET_GOOS: '{{default "" .TARGET_GOOS}}'
+      TARGET_GOARCH: '{{default "" .TARGET_GOARCH}}'
     cmds:
       - >-
         go run ./tools/localrunner stage
+        {{if .TARGET_GOOS}}-goos {{.TARGET_GOOS}}{{end}}
+        {{if .TARGET_GOARCH}}-goarch {{.TARGET_GOARCH}}{{end}}
         -repo {{.LOCAL_RUNNER_REPO}}
         -version {{.LOCAL_RUNNER_VERSION}}
         -asset {{.LOCAL_RUNNER_ASSET}}
