@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -72,6 +73,47 @@ install: []
 	}
 	if !strings.Contains(err.Error(), "missing capabilities [remote-exec]") {
 		t.Fatalf("expected compatibility error, got %v", err)
+	}
+
+	entries, readErr := os.ReadDir(deploymentDir)
+	if readErr != nil {
+		t.Fatalf("expected to read deployment dir, got %v", readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf(
+			"expected deployment directory to remain untouched, found %d entries",
+			len(entries),
+		)
+	}
+}
+
+func TestInitDeployment_RejectsUnsupportedLocalPlatformBeforeMutation(t *testing.T) {
+	if runtime.GOOS == localSupportedOS && runtime.GOARCH == localSupportedArch {
+		t.Skip("current platform supports local deployments")
+	}
+	t.Setenv(localAllowUnsupportedEnv, "")
+
+	// Given
+	deploymentDir := t.TempDir()
+
+	// When
+	err := InitDeployment(
+		context.Background(),
+		PresetRef{Name: "local"},
+		PresetRef{Name: "local"},
+		map[string]string{},
+		map[string]string{},
+		config.NewDeploymentDir(deploymentDir),
+		false,
+		"0.0.0",
+	)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), errUnsupportedLocalPlatform.Error()) {
+		t.Fatalf("expected unsupported local platform error, got %v", err)
 	}
 
 	entries, readErr := os.ReadDir(deploymentDir)
