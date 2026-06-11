@@ -17,12 +17,12 @@ import (
 var ErrConfigureNotAllowed = errors.New("deployment cannot be configured in its current state")
 
 // configureNotAllowedHint guides the user out of any non-initialized state in
-// which the deployment may already have cloud resources. It is used both when
+// which the deployment may already have resources. It is used both when
 // the deployment is live (running, stopped) and when a previous deploy or
-// destroy was interrupted or failed: in those cases the cloud may still hold
+// destroy was interrupted or failed: in those cases the target infrastructure may still hold
 // resources whose configuration the user must not silently change.
-const configureNotAllowedHint = "the deployment may already have cloud resources;\n" +
-	"run `exasol destroy` (or `exasol remove` if you have confirmed the cloud resources are " +
+const configureNotAllowedHint = "the deployment may already have resources;\n" +
+	"run `exasol destroy` (or `exasol remove` if you have confirmed the resources are " +
 	"gone) before changing configuration, then run `exasol config set` and `exasol deploy`"
 
 type DeploymentID string
@@ -43,7 +43,7 @@ type DeploymentLayout struct {
 }
 
 // WorkflowStatePermitsConfigure rejects configuration changes whenever the
-// deployment may already have cloud resources. Only freshly-initialized
+// deployment may already have resources. Only freshly-initialized
 // deployments may be configured; any later state (running, stopped, deployment
 // failed, interrupted during deploy or destroy, or an operation in progress)
 // requires the user to run `exasol destroy` (or `exasol remove`) first so that

@@ -8,15 +8,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const removeCmdShortDesc = `Remove a local deployment directory without destroying cloud resources`
+const removeCmdShortDesc = `Remove a local deployment directory without destroying resources`
 
 const removeCmdLongDesc = removeCmdShortDesc + `
 
-This is a recovery command for cases where cloud resources were already deleted manually,
+This is a recovery command for cases where deployment resources were already deleted manually,
 or where you no longer have access to destroy them through the launcher.
 
 WARNING: This command removes the local deployment directory. It does not destroy
-cloud resources and can make launcher-based cleanup impossible if resources still exist.
+deployment resources and can make launcher-based cleanup impossible if resources still exist.
 `
 
 var removeOpts = struct {
@@ -56,7 +56,7 @@ var removeCmd = &cobra.Command{
 
 func removeConfirmationPrompt(deploymentDir string) string {
 	return "WARNING: This removes the local deployment directory. " +
-		"It does not destroy cloud resources. Continue only if the " +
+		"It does not destroy deployment resources. Continue only if the " +
 		"resources were already deleted manually or you accept that " +
 		"launcher-based cleanup may no longer be possible.\n\n" +
 		"Local deployment directory to remove:\n" +

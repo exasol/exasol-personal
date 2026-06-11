@@ -74,7 +74,7 @@ func EnsureDeploymentPresetIdentityMatches(
 		"%w: existing infrastructure %q, installation %q; "+
 			"requested infrastructure %q, installation %q.\n"+
 			"Run `exasol destroy --remove` before initializing different presets, "+
-			"or run `exasol remove` if the cloud resources are already gone",
+			"or run `exasol remove` if the deployment resources are already gone",
 		ErrDeploymentPresetMismatch,
 		presetIdentityDisplay(existing.infrastructure),
 		presetIdentityDisplay(existing.installation),

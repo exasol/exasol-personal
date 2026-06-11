@@ -21,7 +21,7 @@ var installCmdLongDesc = installCmdShortDesc + `
 	and installs Exasol.
 	Rerunning install with the same presets is safe for retrying failed deployments.
 	To switch presets, run exasol destroy --remove first, or exasol remove if the
-	cloud resources are already gone.` +
+	deployment resources are already gone.` +
 	deploymentDirectoryResolutionHelp + presetSelectionHelp
 
 var installCmd = &cobra.Command{

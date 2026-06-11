@@ -10,12 +10,13 @@ import (
 
 const destroyCmdShortDesc = `Destroy a deployment`
 
+// nolint: revive
 const destroyCmdLongDesc = destroyCmdShortDesc + `
 
 Destroying a deployment deletes all resources - including all data.
 If you want to retain any data, make sure you've created and moved backups to another safe location.
 By default, local deployment files are kept so the same deployment can be inspected or recreated.
-Pass --remove to remove the local deployment directory after cloud resources have been destroyed.
+Pass --remove to remove the local deployment directory after deployment resources have been destroyed.
 `
 
 var destroyOpts = struct {
@@ -29,10 +30,11 @@ func registerDestroyFlags(cmd *cobra.Command) {
 		"auto-approve",
 		false,
 		"Force destroy without confirmation prompt")
+	// nolint: revive
 	cmd.Flags().BoolVar(&destroyOpts.Remove,
 		"remove",
 		false,
-		"Remove the local deployment directory after cloud resources are successfully destroyed")
+		"Remove the local deployment directory after deployment resources are successfully destroyed")
 }
 
 var destroyCmd = &cobra.Command{
@@ -76,7 +78,7 @@ var destroyCmd = &cobra.Command{
 func destroyConfirmationPrompt(localRemovalTarget string) string {
 	prompt := "WARNING: Destroying a deployment " +
 		"is an irreversible operation, " +
-		"and removes all cloud resources " +
+		"and removes all deployment resources " +
 		"- including all data."
 	if localRemovalTarget != "" {
 		prompt += "\n\nLocal deployment directory to remove after destroy:\n" + localRemovalTarget
