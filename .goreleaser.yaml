@@ -32,7 +32,10 @@ builds:
     binary: exasol
     hooks:
       pre:
-        - cmd: GOOS="{{ .Os }}" GOARCH="{{ .Arch }}" task local-runner-stage
+        - cmd: task local-runner-stage
+          env:
+            - GOOS={{ .Os }}
+            - GOARCH={{ .Arch }}
           output: true
       post:
         - cmd: ./.github/scripts/sign-windows-binary.sh "{{ .Path }}"
