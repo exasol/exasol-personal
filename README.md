@@ -9,7 +9,7 @@
 
 **The High-Performance Analytics Engine — Free for Personal Use**
 
-*Deploy a full-scale Exasol cluster on your own cloud infrastructure in minutes*
+*Deploy a full-scale Exasol database on your own infrastructure in minutes*
 
 [![Documentation](https://img.shields.io/badge/docs-exasol.com-blue)](https://docs.exasol.com/db/latest/home.htm)
 [![Community](https://img.shields.io/badge/community-exasol-green)](https://community.exasol.com)
@@ -24,19 +24,19 @@
 - ♾️ **Unlimited Data** — Store and analyze unlimited amounts of data with no artificial limits
 - 📈 **Scalable Architecture** — Scale up to any number of nodes using Exasol's MPP (Massively Parallel Processing) architecture
 - 🤖 **Built-in AI Functions** — Leverage native AI/ML capabilities with GPU acceleration
-- ⚙️ **Simple Deployment** — Spin up a distributed cluster on AWS, Azure, Exoscale, or STACKIT with just a few commands
+- ⚙️ **Simple Deployment** — Spin up Exasol on AWS, Azure, Exoscale, STACKIT, or your local system with just a few commands
 - 🖥️ **Cross-Platform CLI** — Install and manage your cluster using the Exasol Launcher on Linux, macOS, or Windows
 
 
 ## ✅ Prerequisites
 
-A cloud account on one of the supported platforms with permission to provision compute instances, or an Apple Silicon Mac for local deployment:
+A cloud account on one of the supported platforms with permission to provision compute instances, or a macOS Apple Silicon system for local deployment:
 
 - **AWS** — [Set up an AWS account for Exasol Personal](./HOWTO_SETUP_AWS_ACCOUNT.md)
 - **Azure** — [Set up an Azure account for Exasol Personal](./HOWTO_SETUP_AZURE_ACCOUNT.md)
 - **Exoscale** — [Set up an Exoscale account for Exasol Personal](./HOWTO_SETUP_EXOSCALE_ACCOUNT.md)
 - **STACKIT** — [Set up a STACKIT account for Exasol Personal](./HOWTO_SETUP_STACKIT_ACCOUNT.md)
-- **Local** — macOS on Apple Silicon for an Exasol Local deployment
+- **Local** — local deployment on macOS Apple Silicon only
 
 
 ## 🏎️ Quick Start (macOS / Linux)
@@ -47,7 +47,7 @@ A cloud account on one of the supported platforms with permission to provision c
 curl https://downloads.exasol.com/exasol-personal/installer.sh | sh
 ```
 
-2. Install on your cloud of choice
+2. Install on a cloud provider or your local system
 
 ```bash
 exasol install aws        # Amazon Web Services
@@ -66,7 +66,7 @@ exasol install stackit    # STACKIT
 ````
 
 ```bash
-exasol install local      # Exasol Local on Apple Silicon macOS
+exasol install local      # local system, macOS Apple Silicon only
 ```
 
 Read on for Windows instructions and full details.
@@ -85,20 +85,20 @@ Read on for Windows instructions and full details.
 
    On Windows: download the Exasol Launcher from the [Exasol Download Portal](https://downloads.exasol.com/exasol-personal) and copy the `exasol` binary to a directory in your `PATH`.
 
-2. Configure authentication for your cloud provider. See the relevant account setup guide in [Prerequisites](#-prerequisites) for the environment variables and credentials required.
+2. For cloud presets, configure authentication for your provider. See the relevant account setup guide in [Prerequisites](#-prerequisites) for the environment variables and credentials required.
 
-3. To install Exasol Personal, run the following command with the preset for your cloud provider:
+3. To install Exasol Personal, run the following command with the preset for your cloud provider or local system:
    ```bash
    exasol install aws        # Amazon Web Services
    exasol install azure      # Microsoft Azure
    exasol install exoscale   # Exoscale
    exasol install stackit    # STACKIT
-   exasol install local      # Exasol Local on Apple Silicon macOS
+   exasol install local      # local system, macOS Apple Silicon only
    ```
    The `exasol install` command does the following:
-   - Generates OpenTofu files in the deployment directory
-   - Provisions the necessary cloud infrastructure
-   - Starts up the infrastructure
+   - Generates backend files in the deployment directory
+   - Provisions the necessary deployment resources
+   - Starts the deployment
    - Downloads and installs Exasol Personal on that infrastructure
 
    The whole process normally takes about 10 to 20 minutes to complete.
@@ -107,9 +107,9 @@ Read on for Windows instructions and full details.
 
 By default, Exasol Personal stores deployment state in `~/.exasol/personal/deployments/default`. If you run a command from an existing deployment directory, Exasol Personal uses that directory instead. Pass `--deployment-dir <path>` to choose a different deployment directory explicitly.
 
-Keep the deployment directory until cloud resources have been destroyed. Deleting the directory does not remove cloud resources and can make cleanup harder.
+Keep the deployment directory until deployment resources have been destroyed. Deleting the directory does not remove those resources and can make cleanup harder.
 
-An initialized deployment directory is tied to the selected infrastructure and installation presets. Rerun `exasol install <preset>` with the same presets to retry a failed deployment safely, or use `exasol config get`, `exasol config set`, and `exasol config reset` to inspect or change parameters for the existing presets without deleting local state. To switch presets in the same deployment directory, run `exasol destroy --remove` before initializing again, or run `exasol remove` if the cloud resources are already gone.
+An initialized deployment directory is tied to the selected infrastructure and installation presets. Rerun `exasol install <preset>` with the same presets to retry a failed deployment safely, or use `exasol config get`, `exasol config set`, and `exasol config reset` to inspect or change parameters for the existing presets without deleting local state. To switch presets in the same deployment directory, run `exasol destroy --remove` before initializing again, or run `exasol remove` if the deployment resources are already gone.
 
 Runtime tools such as OpenTofu are downloaded on demand and reused from a per-user runtime artifact cache. Use `exasol cache list` to inspect cached artifacts, `exasol cache clean` to remove stale artifacts, `exasol cache clean --invalid` to remove artifacts that fail integrity checks, `exasol cache clean --partial-downloads` to remove staged partial downloads, `exasol cache clean --all` to wipe cached artifacts, and `exasol diag cache` to inspect cache health without changing it. Add `--dry-run` to a cleanup command to preview what would be removed.
 
@@ -174,7 +174,7 @@ By default the launcher deploys a single-node cluster on a memory-optimized inst
 ```bash
 exasol install <preset> --cluster-size <number> --instance-type <string>
 ```
-If the deployment process is interrupted, cloud resources that were already created will not be removed automatically and may continue to accrue cost. In that case, use `exasol destroy` to clean up the deployment, or remove the resources manually in your cloud provider's console.
+If the deployment process is interrupted, resources that were already created will not be removed automatically and cloud resources may continue to accrue cost. In that case, use `exasol destroy` to clean up the deployment, or remove the resources manually in the target environment.
 
 ## ⏯️ Start and stop Exasol Personal
 
@@ -192,28 +192,28 @@ exasol start
 ```
 The IP addresses of the nodes will change when you restart Exasol Personal. Check the output of the `start` command to know how to connect to the deployment after a restart.
 
-For local deployments, the launcher manages the Exasol Local VM runtime and an internal deployment share inside the deployment directory. The initial local database credentials are `sys` / `exasol`. `exasol shell host` opens the local VM shell, and `exasol shell container` opens a shell inside the Exasol Local database container.
+For local deployments, which currently require macOS Apple Silicon, the launcher manages a local VM runtime and an internal deployment share inside the deployment directory. The initial local database credentials are `sys` / `exasol`. `exasol shell host` opens the local VM shell, and `exasol shell container` opens a shell inside the local database container.
 
 ## 🗑️ Remove Exasol Personal
 
-To completely remove an Exasol Personal deployment, use `exasol destroy`. This command will terminate and delete the compute instances and all associated resources on your cloud platform.
+To completely remove an Exasol Personal deployment, use `exasol destroy`. This command deletes the deployment resources and all associated data.
 
 To learn more about this command, use `exasol destroy --help`.
 
-By default, `exasol destroy` keeps the local deployment files so you can inspect the deployment or recreate the same preset. To also remove the local deployment directory after cloud resources have been destroyed, run:
+By default, `exasol destroy` keeps the local deployment files so you can inspect the deployment or recreate the same preset. To also remove the local deployment directory after deployment resources have been destroyed, run:
 ```bash
 exasol destroy --remove
 ```
 
-If cloud resources were already deleted manually or you no longer have access to destroy them through the launcher, use the local recovery command:
+If deployment resources were already deleted manually or you no longer have access to destroy them through the launcher, use the local recovery command:
 ```bash
 exasol remove
 ```
-This removes the local deployment directory. It does not destroy cloud resources.
+This removes the local deployment directory. It does not destroy deployment resources.
 
-Deleting the deployment directory and the Exasol Launcher will not remove the resources that were created in your cloud environment. To completely remove a deployment, you must use the `exasol destroy` command before deleting the deployment directory.
+Deleting the deployment directory and the Exasol Launcher will not remove the resources that were created in the target environment. To completely remove a deployment, you must use the `exasol destroy` command before deleting the deployment directory.
 
-If you have already deleted the deployment directory and the Exasol Launcher, you must remove the resources manually in your cloud provider’s console.
+If you have already deleted the deployment directory and the Exasol Launcher, you must remove the resources manually in the target environment.
 
 For local deployments, `exasol destroy` deletes the local VM disk/data and launcher-managed share for that deployment.
 
@@ -270,7 +270,7 @@ exasol shell container
 
 Exasol Personal uses **presets** — self-contained directories of templates and config files — to provision infrastructure and install Exasol. Each deployment combines two presets:
 
-- **Infrastructure preset** — provisions cloud resources (compute, network, storage). Built-in: `aws`, `azure`, `exoscale`, `stackit`.
+- **Infrastructure preset** — provisions deployment resources for a cloud provider or local system. Built-in: `aws`, `azure`, `exoscale`, `stackit`, `local`.
 - **Installation preset** — installs and configures Exasol on the provisioned nodes. Built-in: `ubuntu` (used by default).
 
 ```bash
@@ -289,7 +289,7 @@ exasol presets
 
 ### Local presets
 
-You can store your own preset directories anywhere on your filesystem and pass the path directly to `exasol install`. This lets you target additional cloud platforms or customize provisioning without modifying the launcher.
+You can store your own preset directories anywhere on your filesystem and pass the path directly to `exasol install`. This lets you target additional infrastructure platforms or customize provisioning without modifying the launcher.
 
 ### Building your own preset
 

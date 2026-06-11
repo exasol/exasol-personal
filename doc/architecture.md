@@ -4,13 +4,13 @@ This document describes the high-level architecture, design philosophy, and tech
 
 ## Overview
 
-The Exasol Personal tool (`exasol`) is a command-line application that automates the deployment and management of Exasol Database on cloud infrastructure. It handles infrastructure provisioning, software installation, and provides database connectivity.
+The Exasol Personal tool (`exasol`) is a command-line application that automates the deployment and management of Exasol Database on supported cloud and local infrastructure. It handles infrastructure provisioning, software installation, and provides database connectivity.
 
 **What you'll find here:**
 - Design philosophy and requirements
 - Technical choices and rationale
 - High-level application workflow
-- Cloud infrastructure approach
+- Infrastructure approach
 - Interfaces and integration points
 
 **What's documented elsewhere:**
@@ -54,7 +54,7 @@ The Exasol Personal tool (`exasol`) is a command-line application that automates
 - No silent failures or data loss
 
 **Expandability**
-- Pluggable infrastructure presets per cloud provider
+- Pluggable infrastructure presets per deployment target
 - Pluggable installation presets per operating system / approach
 - Extensible configuration system
 - Template-based customization
@@ -71,11 +71,11 @@ The Exasol Personal tool (`exasol`) is a command-line application that automates
 
 ### Platform Support
 - **Deployment platforms:** Users can run the tool on Linux, macOS, or Windows
-- **Cloud targets:** Currently AWS (others can be added)
+- **Deployment targets:** Cloud presets and local deployment backends
 - **Distribution:** Single statically-compiled binary per platform
 
 ### Prerequisites
-- **Cloud credentials:** Must be configured via environment variables (e.g., `AWS_PROFILE`)
+- **Infrastructure credentials:** Cloud presets require provider credentials via environment variables (e.g., `AWS_PROFILE`)
 - **Network access:** Required for cloud API calls and software downloads
 - **Disk space:** Sufficient for deployment directory (~500MB)
 
@@ -102,8 +102,8 @@ The `init` command prepares a deployment directory:
 
 The `deploy` command provisions infrastructure and installs the database:
 
-1. **Validate inputs** - Check deployment directory (state + manifests) and cloud credentials
-2. **Execute Infrastructure-as-Code** - Run OpenTofu to provision cloud resources
+1. **Validate inputs** - Check deployment directory (state + manifests) and infrastructure prerequisites
+2. **Provision resources** - Run the selected backend to create deployment resources
 3. **Wait for infrastructure ready** - Poll until instances are accessible
 4. **Execute and monitor installation** - Run the selected installation preset and report progress
 5. **Store connection information** - Save connection details locally
@@ -126,7 +126,7 @@ The `connect` command provides database access:
 The `destroy` command tears down all resources:
 
 1. Read deployment state
-2. Execute OpenTofu destroy to remove cloud resources
+2. Execute the selected backend destroy operation to remove deployment resources
 3. Clean up state files (optional)
 
 ## Cloud Infrastructure Architecture

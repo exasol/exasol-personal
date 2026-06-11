@@ -28,7 +28,7 @@ The infrastructure template selected for deployment. It defines the infrastructu
 The installation template that defines how software is installed on provisioned infrastructure. It should ideally be independent of the infrastructure preset and work with any.
 
 ### Active Deployment
-A successfully provisioned and running Exasol deployment, including cloud infrastructure, database process, and valid state.
+A successfully provisioned and running Exasol deployment, including deployment resources, database process, and valid state.
 
 ### Running Database
 An initialized and operational Exasol database ready to accept SQL connections and queries.
