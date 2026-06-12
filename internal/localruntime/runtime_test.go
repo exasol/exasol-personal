@@ -17,6 +17,7 @@ import (
 
 	"github.com/exasol/exasol-personal/assets/localruntimebin"
 	"github.com/exasol/exasol-personal/internal/config"
+	"golang.org/x/crypto/ssh"
 )
 
 const windowsGOOS = "windows"
@@ -187,6 +188,41 @@ func TestEnsureSSHKey_PreservesExistingAuthorizedKeys(t *testing.T) {
 	}
 	if strings.TrimSpace(lines[1]) == "" {
 		t.Fatalf("expected launcher key to be appended, got %q", lines[1])
+	}
+}
+
+func TestEnsureSSHKey_GeneratesEd25519Key(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	localRuntime := newRuntime(deployment, Config{})
+
+	// When
+	if err := localRuntime.ensureSSHKey(); err != nil {
+		t.Fatalf("expected SSH key setup to succeed, got %v", err)
+	}
+
+	// Then
+	privateKey, err := os.ReadFile(localRuntime.paths.PrivateKeyPath)
+	if err != nil {
+		t.Fatalf("expected generated SSH private key to be readable, got %v", err)
+	}
+	signer, err := ssh.ParsePrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("expected generated SSH private key to parse, got %v", err)
+	}
+	if signer.PublicKey().Type() != ssh.KeyAlgoED25519 {
+		t.Fatalf("expected ED25519 SSH key, got %q", signer.PublicKey().Type())
+	}
+
+	authorizedKeysPath := filepath.Join(localRuntime.paths.ShareDir, authorizedKeysFile)
+	authorizedKeys, err := os.ReadFile(authorizedKeysPath)
+	if err != nil {
+		t.Fatalf("expected generated authorized keys to be readable, got %v", err)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(string(authorizedKeys)), ssh.KeyAlgoED25519+" ") {
+		t.Fatalf("expected ED25519 authorized key, got %q", string(authorizedKeys))
 	}
 }
 
