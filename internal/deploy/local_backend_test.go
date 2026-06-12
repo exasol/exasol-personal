@@ -266,9 +266,12 @@ func TestLocalContainerShellCommand_UsesPodmanDirectlyWithMountedRootfsFallback(
 	t.Parallel()
 
 	// Given / When
-	command := localContainerShellCommand()
+	command, err := localContainerShellCommand()
 
 	// Then
+	if err != nil {
+		t.Fatalf("expected local shell command to render, got error: %v", err)
+	}
 	if strings.Contains(command, "doas") {
 		t.Fatalf("expected local shell command to avoid doas, got %q", command)
 	}
@@ -287,10 +290,10 @@ func TestLocalContainerShellCommand_UsesPodmanDirectlyWithMountedRootfsFallback(
 	if !strings.Contains(command, localDBContainerName) {
 		t.Fatalf("expected local shell command to target %q, got %q", localDBContainerName, command)
 	}
-	if !strings.Contains(command, localLegacyDBContainerName) {
+	if !strings.Contains(command, localRunnerCompatibilityDBContainerName) {
 		t.Fatalf(
-			"expected local shell command to fall back to %q, got %q",
-			localLegacyDBContainerName,
+			"expected local shell command to support runner container %q, got %q",
+			localRunnerCompatibilityDBContainerName,
 			command,
 		)
 	}

@@ -1,0 +1,8 @@
+=== Local Shell Instructions ===
+  Local endpoint: {{ .DisplayHost }}
+  Exasol Local database container shell: exasol shell container
+  Host shell (VM OS): exasol shell host
+  Alternative: {{ .SSHCommand }}
+
+Note: exasol destroy deletes the local VM disk/data and launcher-managed share for this deployment.
+
