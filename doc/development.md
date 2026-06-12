@@ -101,7 +101,7 @@ If you prefer to use Go commands directly (or Task is unavailable):
 go generate ./...
 
 # For macOS Apple Silicon builds, stage the Exasol Local runner for embedding.
-# This uses RUNNER_PATH or the runtime artifact configured in resources.yaml.
+# This uses RUNNER_PATH or the runtime artifact configured in assets/resources/resources.yaml.
 go run ./tools/localrunner stage
 
 # Build the binary

@@ -34,7 +34,6 @@ tasks:
     desc: Stage Exasol Local runner binary for go:embed when targeting macOS Apple Silicon
     vars:
       RUNNER_PATH: '{{default "" .RUNNER_PATH}}'
-      LOCAL_RUNNER_RESOURCE_ID: '{{default "exasol-local-runner" .LOCAL_RUNNER_RESOURCE_ID}}'
       TARGET_GOOS: '{{default "" .TARGET_GOOS}}'
       TARGET_GOARCH: '{{default "" .TARGET_GOARCH}}'
     cmds:
@@ -42,7 +41,6 @@ tasks:
         go run ./tools/localrunner stage
         {{if .TARGET_GOOS}}-goos {{.TARGET_GOOS}}{{end}}
         {{if .TARGET_GOARCH}}-goarch {{.TARGET_GOARCH}}{{end}}
-        -resource-id {{.LOCAL_RUNNER_RESOURCE_ID}}
         -runner-path "{{.RUNNER_PATH}}"
         -target assets/localruntimebin/generated/darwin/arm64/mac-runner-aarch64
 
