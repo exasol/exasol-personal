@@ -9,12 +9,14 @@ import (
 	"github.com/exasol/exasol-personal/assets"
 )
 
-const localContainerShellScriptAssetPath = "scripts/container_shell.sh"
+const localContainerShellScriptAssetPath = "local/files/container_shell.sh"
 
-func readLocalAsset(assetPath string) (string, error) {
-	content, err := assets.LocalAssets.ReadFile(assets.LocalAssetDir + "/" + assetPath)
+func readLocalInfrastructureAsset(assetPath string) (string, error) {
+	content, err := assets.InfrastructureAssets.ReadFile(
+		assets.InfrastructureAssetDir + "/" + assetPath,
+	)
 	if err != nil {
-		return "", fmt.Errorf("failed to read local asset %q: %w", assetPath, err)
+		return "", fmt.Errorf("failed to read local infrastructure asset %q: %w", assetPath, err)
 	}
 
 	return string(content), nil

@@ -21,24 +21,21 @@ import (
 )
 
 const (
-	localSupportedOS                        = "darwin"
-	localSupportedArch                      = "arm64"
-	localAllowUnsupportedEnv                = "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM"
-	localSkipDatabaseWaitEnv                = "EXASOL_LOCAL_SKIP_DB_WAIT"
-	localDefaultCPUCount                    = 2
-	localDefaultMemoryMB                    = 2048
-	localDefaultDataSizeGB                  = 100
-	localDeploymentBackend                  = "local"
-	localDeploymentPublicHost               = "127.0.0.1"
-	localSSHUser                            = "root"
-	localDBUser                             = "sys"
-	localDBPassword                         = "exasol"
-	localDBContainerName                    = "exasol-local-db"
-	localRunnerCompatibilityDBContainerName = "exasol-nano-db"
-	localManifestFileMode                   = 0o600
-	localCPUCountConfigName                 = "cpu_count"
-	localMemoryMBConfigName                 = "memory_mb"
-	localDataSizeGBConfigName               = "data_size_gb"
+	localSupportedOS          = "darwin"
+	localSupportedArch        = "arm64"
+	localAllowUnsupportedEnv  = "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM"
+	localDefaultCPUCount      = 2
+	localDefaultMemoryMB      = 2048
+	localDefaultDataSizeGB    = 100
+	localDeploymentBackend    = "local"
+	localDeploymentPublicHost = "127.0.0.1"
+	localSSHUser              = "root"
+	localDBUser               = "sys"
+	localDBPassword           = "exasol"
+	localManifestFileMode     = 0o600
+	localCPUCountConfigName   = "cpu_count"
+	localMemoryMBConfigName   = "memory_mb"
+	localDataSizeGBConfigName = "data_size_gb"
 )
 
 var errUnsupportedLocalPlatform = errors.New(
@@ -274,19 +271,7 @@ func (b *localBackend) OpenCOSShell(ctx context.Context) error {
 }
 
 func localContainerShellCommand() (string, error) {
-	command, err := readLocalAsset(localContainerShellScriptAssetPath)
-	if err != nil {
-		return "", err
-	}
-
-	command = strings.ReplaceAll(command, "__LOCAL_DB_CONTAINER_NAME__", localDBContainerName)
-	command = strings.ReplaceAll(
-		command,
-		"__LOCAL_RUNNER_COMPATIBILITY_DB_CONTAINER_NAME__",
-		localRunnerCompatibilityDBContainerName,
-	)
-
-	return command, nil
+	return readLocalInfrastructureAsset(localContainerShellScriptAssetPath)
 }
 
 // localSSHRemoteUnsafe follows the deploy package convention that Unsafe helpers
