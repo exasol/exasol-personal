@@ -60,6 +60,7 @@ The release process is configured in `.goreleaser.yaml`, which defines:
 
 - **Build matrix**: OS and architecture combinations
 - **Binary naming**: Naming conventions for executables
+- **Binary size policy**: Raw binary optimization flags documented in [Binary Size Optimization](binary_size.md)
 - **Archives**: Packaging format (tar.gz, zip)
 - **Checksums**: SHA256 checksums for verification
 - **Release notes**: Automatically generated from commits
