@@ -72,6 +72,7 @@ task build
 ```
 
 Builds apply the project's raw binary size optimization policy; see [Binary Size Optimization](binary_size.md).
+For local debugger sessions, use `DEBUG_BUILD=true` with `task build` or `task build-windows` to preserve debug information.
 
 ### Cross-Compilation
 
