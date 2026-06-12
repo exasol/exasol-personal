@@ -7,7 +7,7 @@
 
 # Exasol Personal
 
-**The High-Performance Analytics Engine — Free for Personal Use**
+**The Analytics Database for Agentic AI — Free for Personal Use**
 
 *Deploy a full-scale Exasol database on your own infrastructure in minutes*
 
@@ -19,11 +19,12 @@
 
 ## 🔥 Key Features
 
+- 🤖 **Built for Agentic AI** — Connect AI agents and LLM tools directly through a scriptable CLI
+- 🧠 **Built-in AI Functions** — Leverage native AI/ML capabilities with GPU acceleration, right where your data lives
 - 🏎️ **In-Memory Performance** — Run complex analytics at in-memory speed with Exasol's industry-leading analytics engine
 - 🏢 **Full Enterprise Features** — Access all enterprise-scale capabilities of the Exasol database, completely free for personal use
 - ♾️ **Unlimited Data** — Store and analyze unlimited amounts of data with no artificial limits
 - 📈 **Scalable Architecture** — Scale up to any number of nodes using Exasol's MPP (Massively Parallel Processing) architecture
-- 🤖 **Built-in AI Functions** — Leverage native AI/ML capabilities with GPU acceleration
 - ⚙️ **Simple Deployment** — Spin up Exasol on AWS, Azure, Exoscale, STACKIT, or your local system with just a few commands
 - 🖥️ **Cross-Platform CLI** — Install and manage your cluster using the Exasol Launcher on Linux, macOS, or Windows
 
@@ -167,15 +168,6 @@ FILE 'product_reviews.parquet';
 
 Both tables are distributed by `PRODUCT_ID`, enabling efficient joins between them.
 
-
-## ⚙️ Choosing cluster size and compute instance types
-
-By default the launcher deploys a single-node cluster on a memory-optimized instance (e.g. `r6i.xlarge` on AWS, `Standard_E4s_v3` on Azure, `standard.extra-large` on Exoscale, `m2i.4` on STACKIT). To change the number of nodes or the instance type, use the `--cluster-size` and `--instance-type` options:
-```bash
-exasol install <preset> --cluster-size <number> --instance-type <string>
-```
-If the deployment process is interrupted, resources that were already created will not be removed automatically and cloud resources may continue to accrue cost. In that case, use `exasol destroy` to clean up the deployment, or remove the resources manually in the target environment.
-
 ## ⏯️ Start and stop Exasol Personal
 
 To save costs, you can temporarily stop Exasol Personal by using the following command:
@@ -217,6 +209,15 @@ If you have already deleted the deployment directory and the Exasol Launcher, yo
 
 For local deployments, `exasol destroy` deletes the local VM disk/data and launcher-managed share for that deployment.
 
+## ⚙️ Cloud: Choosing cluster size and compute instance types
+
+By default the launcher deploys a single-node cluster on a memory-optimized instance in the cloud (e.g. `r6i.xlarge` on AWS, `Standard_E4s_v3` on Azure, `standard.extra-large` on Exoscale, `m2i.4` on STACKIT). To change the number of nodes or the instance type, use the `--cluster-size` and `--instance-type` options:
+```bash
+exasol install <preset> --cluster-size <number> --instance-type <string>
+```
+If the deployment process is interrupted, resources that were already created will not be removed automatically and cloud resources may continue to accrue cost. In that case, use `exasol destroy` to clean up the deployment, or remove the resources manually in the target environment.
+
+
 ## 🔜 Next steps
 
 Once the deployment process is complete, use `exasol info` for information about how to connect to your Exasol database. The credentials for connecting to the database from a client are stored in the file `secrets.json` in the deployment directory.
@@ -251,6 +252,8 @@ Exasol Admin is an easy-to-use web interface that you can use to administer your
 - The credentials for connecting to Exasol Admin are stored in the file `secrets.json` in the deployment directory.
 
 Your browser may show a security warning when connecting to Exasol Admin because of the self-signed certificate. Accept this warning and continue.
+
+Currently, Exasol Admin is only available on cloud deployments.
 
 ## 🔒 Connect using SSH
 
