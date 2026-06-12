@@ -6,8 +6,8 @@ package localruntime
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -43,7 +43,6 @@ const (
 	dirMode            = 0o750
 	privateFileMode    = 0o600
 	executableFileMode = 0o700
-	sshKeyBits         = 4096
 	maxTCPPort         = 65535
 )
 
@@ -389,13 +388,17 @@ func (runtime *localRuntime) ensureSSHKey() error {
 		return fmt.Errorf("failed to inspect local SSH key: %w", err)
 	}
 
-	privateKey, err := rsa.GenerateKey(rand.Reader, sshKeyBits)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return fmt.Errorf("failed to generate local SSH key: %w", err)
 	}
+	privateKeyPKCS8, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		return fmt.Errorf("failed to marshal local SSH private key: %w", err)
+	}
 	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+		Type:  "PRIVATE KEY",
+		Bytes: privateKeyPKCS8,
 	})
 	if err := os.MkdirAll(filepath.Dir(runtime.paths.PrivateKeyPath), dirMode); err != nil {
 		return fmt.Errorf("failed to create local SSH key directory: %w", err)
