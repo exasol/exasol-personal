@@ -289,6 +289,9 @@ func localContainerShellCommand() (string, error) {
 	return command, nil
 }
 
+// localSSHRemoteUnsafe follows the deploy package convention that Unsafe helpers
+// must only be called from code that already owns the required deployment lock.
+// It does not mean the SSH connection skips additional security checks.
 func localSSHRemoteUnsafe(deployment config.DeploymentDir) (*remote.SSHRemote, error) {
 	options, err := localSSHConnectionOptions(deployment)
 	if err != nil {
