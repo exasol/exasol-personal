@@ -96,7 +96,7 @@ jobs:
         continue-on-error: true
         id: run-tests
         run: |
-          task tests-e2e INFRA=${{ inputs.infra }} ALLURE_DIR=${{ env.ALLURE_RESULTS }}
+          task tests-deployment INFRA=${{ inputs.infra }} E2E=true ALLURE_DIR=${{ env.ALLURE_RESULTS }}
 
       - name: Upload raw Allure results
         if: always()

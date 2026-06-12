@@ -33,3 +33,6 @@ tests/allure-report/
 *.key
 # Added by goreleaser init:
 dist/
+
+# Environment file
+.env

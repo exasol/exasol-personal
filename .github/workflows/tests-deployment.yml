@@ -13,11 +13,19 @@ on:
           - ubuntu-latest
           - windows-latest
           - macos-latest
+      e2e:
+        description: Also run e2e tests alongside deployment tests
+        required: false
+        default: false
+        type: boolean
 
 permissions: {}
 
 env:
   STATUS_DESC: "Deployment tests testing Exasol launcher end to end"
+  ALLURE_RESULTS: tests/allure-results
+  ALLURE_REPORT: tests/allure-report
+  ALLURE_GH_PAGES_SUBDIR: tests-deployment
 
 jobs:
   plan-tests-deployment:
@@ -136,6 +144,17 @@ jobs:
         with:
           infra: ${{ matrix.infra }}
           task: ${{ matrix.task }}
+          e2e: ${{ inputs.e2e }}
+          allure_dir: ${{ env.ALLURE_RESULTS }}
+
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.infra }}-${{ matrix.os }}
+          path: ${{ env.ALLURE_RESULTS }}
+          if-no-files-found: warn
+          retention-days: 14
 
       - uses: ./.github/actions/status-set
         if: always()
@@ -144,3 +163,76 @@ jobs:
           status: ${{ job.status }}
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  publish-allure:
+    needs: tests-deployment
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all Allure results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          path: ${{ env.ALLURE_RESULTS }}
+          merge-multiple: true
+
+      - name: Fetch previous Allure history from gh-pages
+        uses: actions/checkout@v6
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages-checkout
+
+      - name: Stage Allure history for the next report
+        shell: bash
+        run: |
+          mkdir -p "${{ env.ALLURE_RESULTS }}/history"
+          prev_history="gh-pages-checkout/${{ env.ALLURE_GH_PAGES_SUBDIR }}/history"
+          if [ -d "${prev_history}" ]; then
+            cp -r "${prev_history}/." "${{ env.ALLURE_RESULTS }}/history/"
+            echo "Restored Allure history from gh-pages."
+          else
+            echo "No previous history found at ${prev_history}; starting fresh."
+          fi
+
+      - name: Generate Allure HTML report
+        uses: simple-elf/allure-report-action@v1.12
+        with:
+          allure_results: ${{ env.ALLURE_RESULTS }}
+          allure_report: ${{ env.ALLURE_REPORT }}
+          gh_pages: gh-pages-checkout
+          allure_history: ${{ env.ALLURE_GH_PAGES_SUBDIR }}
+          keep_reports: 20
+
+      - name: Publish Allure report to gh-pages
+        if: github.event_name == 'workflow_dispatch'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
+          destination_dir: ${{ env.ALLURE_GH_PAGES_SUBDIR }}
+          keep_files: true
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: "docs(deployment): publish Allure report for run ${{ github.run_id }}"
+
+      - name: Surface report URL in job summary
+        if: always()
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repo="${GITHUB_REPOSITORY##*/}"
+          url="https://${owner}.github.io/${repo}/${{ env.ALLURE_GH_PAGES_SUBDIR }}/"
+          {
+            echo "## Allure report"
+            echo
+            echo "[Open report](${url})"
+            echo
+            echo "_Available after the first successful publish; may take a minute for GitHub Pages to propagate._"
+          } >> "$GITHUB_STEP_SUMMARY"

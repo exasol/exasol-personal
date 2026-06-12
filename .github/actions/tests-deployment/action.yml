@@ -9,6 +9,14 @@ inputs:
     description: Taskfile target to execute for deployment tests.
     required: false
     default: tests-deployment
+  e2e:
+    description: Also run e2e tests alongside deployment tests.
+    required: false
+    default: "false"
+  allure_dir:
+    description: Directory to write Allure results into (enables --alluredir and --clean-alluredir).
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -16,4 +24,12 @@ runs:
       uses: ./.github/actions/setup-python
     - name: Run Deployment Tests
       shell: bash
-      run: task ${{ inputs.task }} INFRA=${{ inputs.infra }}
+      run: |
+        args="INFRA=${{ inputs.infra }}"
+        if [ "${{ inputs.e2e }}" = "true" ]; then
+          args="${args} E2E=true"
+        fi
+        if [ -n "${{ inputs.allure_dir }}" ]; then
+          args="${args} ALLURE_DIR=${{ inputs.allure_dir }}"
+        fi
+        task ${{ inputs.task }} ${args}
