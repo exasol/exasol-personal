@@ -93,11 +93,15 @@ tasks:
     desc: Build the binary
     deps:
       - generate
+    env:
+      CGO_ENABLED: "0"
     cmds:
       - |
         version=$(git describe --tags --abbrev=0) # First character is "v".
         go build -o {{.BUILD_DIR_NAME}}/{{.BINARY_NAME}} \
-          -ldflags "-X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}
+          -trimpath \
+          -gcflags=all=-l \
+          -ldflags "-s -w -X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}
 
   build-windows:
     desc: Cross-compile the Windows binary (defaults to GOARCH=amd64)
@@ -112,7 +116,9 @@ tasks:
       - |
         version=$(git describe --tags --abbrev=0) # First character is "v".
         go build -o {{.BUILD_DIR_NAME}}/{{.OUTPUT_NAME}} \
-          -ldflags "-X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}
+          -trimpath \
+          -gcflags=all=-l \
+          -ldflags "-s -w -X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}
 
 
   deps-update-golang:

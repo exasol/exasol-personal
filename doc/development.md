@@ -71,6 +71,8 @@ task build
 # Result: bin/exasol (or bin/exasol.exe on Windows)
 ```
 
+Builds apply the project's raw binary size optimization policy; see [Binary Size Optimization](binary_size.md).
+
 ### Cross-Compilation
 
 Build for different platforms using Go's cross-compilation:
