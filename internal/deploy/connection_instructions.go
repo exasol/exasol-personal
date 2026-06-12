@@ -98,7 +98,7 @@ func readConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails,
 	}, nil
 }
 
-func GetSQLInstructions(connectionDetails *ConnectionDetails) string {
+func GetSQLInstructions(connectionDetails *ConnectionDetails) (string, error) {
 	certificateLine := ""
 	if connectionDetails.CertFingerprint != "" {
 		certificateLine = "  - Certificate Fingerprint: " + connectionDetails.CertFingerprint + "\n"
@@ -127,19 +127,25 @@ To connect using the CLI:
 	instructions += getAdminUIInstructions(connectionDetails)
 
 	if !connectionDetails.ShellSupported {
-		return instructions
+		return instructions, nil
 	}
 
 	if connectionDetails.Backend == localDeploymentBackend {
-		return instructions + `=== Local Shell Instructions ===
-  Local endpoint: ` + displayHostname(connectionDetails) + `
-  Exasol Local database container shell: exasol shell container
-  Host shell (VM OS): exasol shell host
-  Alternative: ` + connectionDetails.SSHCommand + `
+		localInstructions, err := renderLocalAssetTemplate(
+			localShellInstructionsTemplateAssetPath,
+			struct {
+				DisplayHost string
+				SSHCommand  string
+			}{
+				DisplayHost: displayHostname(connectionDetails),
+				SSHCommand:  connectionDetails.SSHCommand,
+			},
+		)
+		if err != nil {
+			return "", err
+		}
 
-Note: exasol destroy deletes the local VM disk/data and launcher-managed share for this deployment.
-
-`
+		return instructions + localInstructions, nil
 	}
 
 	return instructions + `=== SSH Connection Instructions ===
@@ -148,7 +154,7 @@ Note: exasol destroy deletes the local VM disk/data and launcher-managed share f
   Host shell (OS): exasol shell host
   Alternative: ` + connectionDetails.SSHCommand + `
 
-`
+`, nil
 }
 
 func getAdminUIInstructions(connectionDetails *ConnectionDetails) string {
@@ -233,11 +239,11 @@ func getConnectionInstructionsTextUnsafe(
 		}
 		overview := connectionDetails.DeploymentOverview
 		overview.DeploymentState = wfState
-		content := renderDeploymentOverview(
-			overview,
-		) + GetSQLInstructions(
-			connectionDetails,
-		) + GetDocumentationLink()
+		sqlInstructions, err := GetSQLInstructions(connectionDetails)
+		if err != nil {
+			return "", err
+		}
+		content := renderDeploymentOverview(overview) + sqlInstructions + GetDocumentationLink()
 
 		return content, nil
 	case StatusStopped:

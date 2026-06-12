@@ -79,9 +79,11 @@ func TestGetSQLInstructions_OmitsAdminUIWhenMetadataMissing(t *testing.T) {
 	}
 
 	// When
-	instructions := GetSQLInstructions(connectionDetails)
-
+	instructions, err := GetSQLInstructions(connectionDetails)
 	// Then
+	if err != nil {
+		t.Fatalf("expected SQL instructions to render, got error: %v", err)
+	}
 	if !strings.Contains(instructions, "exasol connect") {
 		t.Fatalf("expected CLI instructions, got %q", instructions)
 	}
@@ -111,9 +113,11 @@ func TestGetSQLInstructions_IncludesAdminUIWhenMetadataPresent(t *testing.T) {
 	}
 
 	// When
-	instructions := GetSQLInstructions(connectionDetails)
-
+	instructions, err := GetSQLInstructions(connectionDetails)
 	// Then
+	if err != nil {
+		t.Fatalf("expected SQL instructions to render, got error: %v", err)
+	}
 	for _, expected := range []string{
 		"Administration UI",
 		"https://admin.example.local:8443",

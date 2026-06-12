@@ -21,24 +21,24 @@ import (
 )
 
 const (
-	localSupportedOS           = "darwin"
-	localSupportedArch         = "arm64"
-	localAllowUnsupportedEnv   = "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM"
-	localSkipDatabaseWaitEnv   = "EXASOL_LOCAL_SKIP_DB_WAIT"
-	localDefaultCPUCount       = 2
-	localDefaultMemoryMB       = 2048
-	localDefaultDataSizeGB     = 100
-	localDeploymentBackend     = "local"
-	localDeploymentPublicHost  = "127.0.0.1"
-	localSSHUser               = "root"
-	localDBUser                = "sys"
-	localDBPassword            = "exasol"
-	localDBContainerName       = "exasol-local-db"
-	localLegacyDBContainerName = "exasol-nano-db"
-	localManifestFileMode      = 0o600
-	localCPUCountConfigName    = "cpu_count"
-	localMemoryMBConfigName    = "memory_mb"
-	localDataSizeGBConfigName  = "data_size_gb"
+	localSupportedOS                        = "darwin"
+	localSupportedArch                      = "arm64"
+	localAllowUnsupportedEnv                = "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM"
+	localSkipDatabaseWaitEnv                = "EXASOL_LOCAL_SKIP_DB_WAIT"
+	localDefaultCPUCount                    = 2
+	localDefaultMemoryMB                    = 2048
+	localDefaultDataSizeGB                  = 100
+	localDeploymentBackend                  = "local"
+	localDeploymentPublicHost               = "127.0.0.1"
+	localSSHUser                            = "root"
+	localDBUser                             = "sys"
+	localDBPassword                         = "exasol"
+	localDBContainerName                    = "exasol-local-db"
+	localRunnerCompatibilityDBContainerName = "exasol-nano-db"
+	localManifestFileMode                   = 0o600
+	localCPUCountConfigName                 = "cpu_count"
+	localMemoryMBConfigName                 = "memory_mb"
+	localDataSizeGBConfigName               = "data_size_gb"
 )
 
 var errUnsupportedLocalPlatform = errors.New(
@@ -265,40 +265,33 @@ func (b *localBackend) OpenCOSShell(ctx context.Context) error {
 		return err
 	}
 
-	command := localContainerShellCommand()
+	command, err := localContainerShellCommand()
+	if err != nil {
+		return err
+	}
 
 	return sshRemote.RunInteractiveCommand(ctx, command, os.Stdout, os.Stderr)
 }
 
-func localContainerShellCommand() string {
-	return strings.Join([]string{
-		"container_name=" + localDBContainerName + ";",
-		"if ! podman container exists \"$container_name\"; then",
-		"container_name=" + localLegacyDBContainerName + ";",
-		"fi;",
-		"if ! podman container exists \"$container_name\"; then",
-		"echo \"Exasol Local database container not found\" >&2;",
-		"podman ps -a >&2;",
-		"exit 125;",
-		"fi;",
-		"for shell_path in /bin/bash /usr/bin/bash /bin/sh /usr/bin/sh /bin/ash /usr/bin/ash; do",
-		"if podman exec \"$container_name\" \"$shell_path\" -c 'exit 0' >/dev/null 2>&1; then",
-		"exec podman exec -it \"$container_name\" \"$shell_path\";",
-		"fi;",
-		"done;",
-		"rootfs=$(podman mount \"$container_name\") || exit $?;",
-		"pid=$(podman inspect \"$container_name\" --format '{{.State.Pid}}') || exit $?;",
-		"echo \"Exasol Local database container image does not include a shell; " +
-			"using VM shell with container rootfs mounted as working directory.\";",
-		"echo \"Container rootfs: $rootfs\";",
-		"cd \"$rootfs\" || exit $?;",
-		"if [ -n \"$pid\" ] && [ \"$pid\" != \"0\" ]; then",
-		"exec nsenter --target \"$pid\" --uts --ipc --net /bin/sh;",
-		"fi;",
-		"exec /bin/sh",
-	}, " ")
+func localContainerShellCommand() (string, error) {
+	command, err := readLocalAsset(localContainerShellScriptAssetPath)
+	if err != nil {
+		return "", err
+	}
+
+	command = strings.ReplaceAll(command, "__LOCAL_DB_CONTAINER_NAME__", localDBContainerName)
+	command = strings.ReplaceAll(
+		command,
+		"__LOCAL_RUNNER_COMPATIBILITY_DB_CONTAINER_NAME__",
+		localRunnerCompatibilityDBContainerName,
+	)
+
+	return command, nil
 }
 
+// localSSHRemoteUnsafe follows the deploy package convention that Unsafe helpers
+// must only be called from code that already owns the required deployment lock.
+// It does not mean the SSH connection skips additional security checks.
 func localSSHRemoteUnsafe(deployment config.DeploymentDir) (*remote.SSHRemote, error) {
 	options, err := localSSHConnectionOptions(deployment)
 	if err != nil {

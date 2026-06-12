@@ -17,6 +17,7 @@ import (
 
 	"github.com/exasol/exasol-personal/assets/localruntimebin"
 	"github.com/exasol/exasol-personal/internal/config"
+	"golang.org/x/crypto/ssh"
 )
 
 const windowsGOOS = "windows"
@@ -190,6 +191,41 @@ func TestEnsureSSHKey_PreservesExistingAuthorizedKeys(t *testing.T) {
 	}
 }
 
+func TestEnsureSSHKey_GeneratesEd25519Key(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	localRuntime := newRuntime(deployment, Config{})
+
+	// When
+	if err := localRuntime.ensureSSHKey(); err != nil {
+		t.Fatalf("expected SSH key setup to succeed, got %v", err)
+	}
+
+	// Then
+	privateKey, err := os.ReadFile(localRuntime.paths.PrivateKeyPath)
+	if err != nil {
+		t.Fatalf("expected generated SSH private key to be readable, got %v", err)
+	}
+	signer, err := ssh.ParsePrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("expected generated SSH private key to parse, got %v", err)
+	}
+	if signer.PublicKey().Type() != ssh.KeyAlgoED25519 {
+		t.Fatalf("expected ED25519 SSH key, got %q", signer.PublicKey().Type())
+	}
+
+	authorizedKeysPath := filepath.Join(localRuntime.paths.ShareDir, authorizedKeysFile)
+	authorizedKeys, err := os.ReadFile(authorizedKeysPath)
+	if err != nil {
+		t.Fatalf("expected generated authorized keys to be readable, got %v", err)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(string(authorizedKeys)), ssh.KeyAlgoED25519+" ") {
+		t.Fatalf("expected ED25519 authorized key, got %q", string(authorizedKeys))
+	}
+}
+
 func TestStop_InvokesOriginalRunnerStop(t *testing.T) {
 	t.Parallel()
 
@@ -274,75 +310,6 @@ func TestWaitForDaemonExit_RejectsStillRunningPID(t *testing.T) {
 	// Then
 	if err == nil {
 		t.Fatal("expected still-running PID to prevent stop completion")
-	}
-}
-
-func TestStart_DoesNotOverwriteExistingRunner(t *testing.T) {
-	t.Parallel()
-
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("fake local runner script is POSIX-only")
-	}
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
-	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
-	}
-	existingRunner := `#!/bin/sh
-set -eu
-case "$1" in
-  init)
-    mkdir -p vm vm-shared
-    ;;
-  start)
-    if [ "$2" != "2" ] || [ "$3" != "2048" ] || [ "$4" != "100" ]; then
-      echo "unexpected sizing args: $*" >&2
-      exit 3
-    fi
-    printf 'existing' > start-called
-    cat > vm-state.json <<'JSON'
-{"vm_name":"exasol-local-vm","vm_ip":"192.168.64.2","ports":{"ssh":20022,"db":28563,"ui":0}}
-JSON
-    ;;
-  *)
-    echo "unexpected command: $1" >&2
-    exit 2
-    ;;
-esac
-	`
-	writeExecutableTestFile(t, localRuntime.paths.RunnerPath, []byte(existingRunner))
-
-	// When
-	runtimeConfig := Config{CPUCount: 2, MemoryMB: 2048, DataSizeGB: 100}
-	state, err := Start(
-		context.Background(),
-		deployment,
-		runtimeConfig,
-		nil,
-		nil,
-	)
-	// Then
-	if err != nil {
-		t.Fatalf("expected start to succeed with existing runner, got %v", err)
-	}
-	if state.DBPort != 28563 || state.SSHPort != 20022 || state.UIPort != 0 {
-		t.Fatalf("unexpected endpoint state: %#v", state)
-	}
-	marker, err := os.ReadFile(filepath.Join(localRuntime.paths.WorkDir, "start-called"))
-	if err != nil {
-		t.Fatalf("expected existing runner marker, got %v", err)
-	}
-	if string(marker) != "existing" {
-		t.Fatalf("expected existing runner to be used, got marker %q", string(marker))
-	}
-	data, err := os.ReadFile(localRuntime.paths.RunnerPath)
-	if err != nil {
-		t.Fatalf("expected runner to be readable, got %v", err)
-	}
-	if string(data) != existingRunner {
-		t.Fatalf("expected start not to overwrite existing runner, got %q", string(data))
 	}
 }
 

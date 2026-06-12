@@ -5,6 +5,7 @@ package runtimeartifacts
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -292,6 +293,64 @@ func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 	}
 	if path2 != path1 {
 		t.Fatalf("expected cache hit to return same path, got %q and %q", path1, path2)
+	}
+}
+
+func TestManager_RequestExtractsZipResource(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deploymentDir := t.TempDir()
+	archivePath := writeZipFixture(
+		t,
+		deploymentDir,
+		"artifact.zip",
+		map[string]string{
+			"launcher":      "runner",
+			"nested/README": "readme",
+		},
+	)
+	sum := sha256OfTestFile(t, archivePath)
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("failed to read artifact fixture: %v", err)
+	}
+	server := newArtifactServer(t, "artifact.zip", archiveData)
+	spec := ResourceSpec{
+		"artifact": {
+			Extract: true,
+			Artifact: map[string]ArtifactSpec{
+				"darwin/arm64": {
+					URL:          server.URL + "/artifact.zip",
+					Sha256:       sum,
+					DownloadPath: "artifact.zip",
+					ResourcePath: "launcher",
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, deploymentDir, "darwin", "arm64")
+
+	// When
+	path, err := manager.Request(context.Background(), "artifact")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	assertPathInCache(
+		t,
+		deploymentDir,
+		path,
+		"artifact",
+		"darwin_arm64",
+		filepath.Join("artifact", "launcher"),
+	)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected resolved path to be readable, got %v", err)
+	}
+	if string(data) != "runner" {
+		t.Fatalf("expected resolved resource content, got %q", string(data))
 	}
 }
 
@@ -689,6 +748,45 @@ func writeTarGzMultiFixture(
 	}
 	if err := gzipWriter.Close(); err != nil {
 		t.Fatalf("failed to close gzip writer: %v", err)
+	}
+	if err := outputFile.Close(); err != nil {
+		t.Fatalf("failed to close fixture file: %v", err)
+	}
+
+	return path
+}
+
+func writeZipFixture(t *testing.T, dir, name string, entries map[string]string) string {
+	t.Helper()
+
+	path := filepath.Join(dir, name)
+	outputFile, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("failed to create fixture: %v", err)
+	}
+	writer := zip.NewWriter(outputFile)
+
+	keys := make([]string, 0, len(entries))
+	for key := range entries {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, entryName := range keys {
+		header := &zip.FileHeader{
+			Name:   entryName,
+			Method: zip.Deflate,
+		}
+		header.SetMode(0o755)
+		entry, err := writer.CreateHeader(header)
+		if err != nil {
+			t.Fatalf("failed to create zip entry: %v", err)
+		}
+		if _, err := entry.Write([]byte(entries[entryName])); err != nil {
+			t.Fatalf("failed to write zip entry: %v", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("failed to close zip writer: %v", err)
 	}
 	if err := outputFile.Close(); err != nil {
 		t.Fatalf("failed to close fixture file: %v", err)

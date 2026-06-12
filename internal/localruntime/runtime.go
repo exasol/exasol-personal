@@ -6,8 +6,8 @@ package localruntime
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -43,7 +43,6 @@ const (
 	dirMode            = 0o750
 	privateFileMode    = 0o600
 	executableFileMode = 0o700
-	sshKeyBits         = 4096
 	maxTCPPort         = 65535
 )
 
@@ -113,32 +112,34 @@ type runnerState struct {
 	Ports     runnerPorts `json:"ports"`
 }
 
-func Deploy(
+func Prepare(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	runtimeConfig Config,
 	out, outErr io.Writer,
-) (*State, error) {
+) error {
 	runtime := newRuntime(deployment, runtimeConfig)
-	if err := runtime.prepare(ctx, out, outErr); err != nil {
-		return nil, err
-	}
-
-	return runtime.start(ctx, out, outErr)
+	return runtime.prepare(ctx, out, outErr)
 }
 
-func Start(
+func RunCommand(
 	ctx context.Context,
 	deployment config.DeploymentDir,
-	runtimeConfig Config,
+	args []string,
 	out, outErr io.Writer,
-) (*State, error) {
-	runtime := newRuntime(deployment, runtimeConfig)
-	if err := runtime.prepare(ctx, out, outErr); err != nil {
+) error {
+	runtime := newRuntime(deployment, Config{})
+	return runtime.runnerCommand(ctx, args, out, outErr)
+}
+
+func ReadState(deployment config.DeploymentDir) (*State, error) {
+	runtime := newRuntime(deployment, Config{})
+	state, err := readRunnerState(runtime.paths.StatePath)
+	if err != nil {
 		return nil, err
 	}
 
-	return runtime.start(ctx, out, outErr)
+	return runtime.toState(state)
 }
 
 func Stop(ctx context.Context, deployment config.DeploymentDir, out, outErr io.Writer) error {
@@ -215,32 +216,6 @@ func (runtime *localRuntime) initializeVMIfNeeded(
 	}
 
 	return runtime.runnerCommand(ctx, []string{"init"}, out, outErr)
-}
-
-func (runtime *localRuntime) start(ctx context.Context, out, outErr io.Writer) (*State, error) {
-	if err := os.Remove(runtime.paths.StatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("failed to remove stale local VM state: %w", err)
-	}
-	if err := runtime.runnerCommand(
-		ctx,
-		[]string{
-			"start",
-			strconv.Itoa(runtime.runtimeConfig.CPUCount),
-			strconv.Itoa(runtime.runtimeConfig.MemoryMB),
-			strconv.Itoa(runtime.runtimeConfig.DataSizeGB),
-		},
-		out,
-		outErr,
-	); err != nil {
-		return nil, err
-	}
-
-	state, err := readRunnerState(runtime.paths.StatePath)
-	if err != nil {
-		return nil, err
-	}
-
-	return runtime.toState(state)
 }
 
 func (runtime *localRuntime) toState(state *runnerState) (*State, error) {
@@ -389,13 +364,17 @@ func (runtime *localRuntime) ensureSSHKey() error {
 		return fmt.Errorf("failed to inspect local SSH key: %w", err)
 	}
 
-	privateKey, err := rsa.GenerateKey(rand.Reader, sshKeyBits)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return fmt.Errorf("failed to generate local SSH key: %w", err)
 	}
+	privateKeyPKCS8, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		return fmt.Errorf("failed to marshal local SSH private key: %w", err)
+	}
 	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+		Type:  "PRIVATE KEY",
+		Bytes: privateKeyPKCS8,
 	})
 	if err := os.MkdirAll(filepath.Dir(runtime.paths.PrivateKeyPath), dirMode); err != nil {
 		return fmt.Errorf("failed to create local SSH key directory: %w", err)
