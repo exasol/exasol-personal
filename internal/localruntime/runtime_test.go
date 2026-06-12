@@ -147,19 +147,72 @@ func TestEnsureRunnerExecutable_DoesNotOverwriteExistingRunner(t *testing.T) {
 	}
 }
 
-func TestEnsureSSHKey_PreservesExistingAuthorizedKeys(t *testing.T) {
+func TestPrepare_UsesExistingRunnerWithSSHKey(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("fake local runner script is POSIX-only")
+	}
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	localRuntime := newRuntime(deployment, Config{})
+	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
+		t.Fatalf("failed to create local runtime directory: %v", err)
+	}
+	existingRunner := `#!/bin/sh
+set -eu
+case "$1" in
+  init)
+    if [ "$2" != "--ssh-key" ] || [ ! -f "$3" ]; then
+      echo "expected init --ssh-key <private-key>, got: $*" >&2
+      exit 4
+    fi
+    printf '%s' "$3" > init-key
+    mkdir -p vm
+    ;;
+  *)
+    echo "unexpected command: $1" >&2
+    exit 2
+    ;;
+esac
+`
+	writeExecutableTestFile(t, localRuntime.paths.RunnerPath, []byte(existingRunner))
+
+	// When
+	err := localRuntime.prepare(context.Background(), nil, nil)
+	// Then
+	if err != nil {
+		t.Fatalf("expected prepare to succeed with existing runner, got %v", err)
+	}
+	keyPath, err := os.ReadFile(filepath.Join(localRuntime.paths.WorkDir, "init-key"))
+	if err != nil {
+		t.Fatalf("expected runner init key marker, got %v", err)
+	}
+	if string(keyPath) != localRuntime.paths.PrivateKeyPath {
+		t.Fatalf("expected init key %q, got %q", localRuntime.paths.PrivateKeyPath, string(keyPath))
+	}
+	data, err := os.ReadFile(localRuntime.paths.RunnerPath)
+	if err != nil {
+		t.Fatalf("expected runner to be readable, got %v", err)
+	}
+	if string(data) != existingRunner {
+		t.Fatalf("expected prepare not to overwrite existing runner, got %q", string(data))
+	}
+}
+
+func TestEnsureSSHKey_PreservesExistingPrivateKey(t *testing.T) {
 	t.Parallel()
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	localRuntime := newRuntime(deployment, Config{})
-	runnerKey := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKAVO4cmQ+ROEQB2/IAaUVt6s4vTz5lyMgRxKAxlwPqJ"
-	authorizedKeysPath := filepath.Join(localRuntime.paths.ShareDir, authorizedKeysFile)
-	if err := os.MkdirAll(localRuntime.paths.ShareDir, 0o750); err != nil {
-		t.Fatalf("failed to create local managed share: %v", err)
+	existingKey := []byte("existing private key")
+	if err := os.MkdirAll(filepath.Dir(localRuntime.paths.PrivateKeyPath), 0o750); err != nil {
+		t.Fatalf("failed to create local key directory: %v", err)
 	}
-	if err := os.WriteFile(authorizedKeysPath, []byte(runnerKey+"\n"), 0o600); err != nil {
-		t.Fatalf("failed to write existing authorized keys: %v", err)
+	if err := os.WriteFile(localRuntime.paths.PrivateKeyPath, existingKey, 0o600); err != nil {
+		t.Fatalf("failed to write existing private key: %v", err)
 	}
 
 	// When
@@ -171,23 +224,12 @@ func TestEnsureSSHKey_PreservesExistingAuthorizedKeys(t *testing.T) {
 	}
 
 	// Then
-	data, err := os.ReadFile(authorizedKeysPath)
+	data, err := os.ReadFile(localRuntime.paths.PrivateKeyPath)
 	if err != nil {
-		t.Fatalf("expected authorized keys to be readable, got %v", err)
+		t.Fatalf("expected private key to be readable, got %v", err)
 	}
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) != 2 {
-		t.Fatalf(
-			"expected runner key plus launcher key, got %d keys:\n%s",
-			len(lines),
-			string(data),
-		)
-	}
-	if lines[0] != runnerKey {
-		t.Fatalf("expected runner key to be preserved first, got %q", lines[0])
-	}
-	if strings.TrimSpace(lines[1]) == "" {
-		t.Fatalf("expected launcher key to be appended, got %q", lines[1])
+	if string(data) != string(existingKey) {
+		t.Fatalf("expected private key to be preserved, got %q", string(data))
 	}
 }
 
@@ -216,13 +258,10 @@ func TestEnsureSSHKey_GeneratesEd25519Key(t *testing.T) {
 		t.Fatalf("expected ED25519 SSH key, got %q", signer.PublicKey().Type())
 	}
 
-	authorizedKeysPath := filepath.Join(localRuntime.paths.ShareDir, authorizedKeysFile)
-	authorizedKeys, err := os.ReadFile(authorizedKeysPath)
-	if err != nil {
-		t.Fatalf("expected generated authorized keys to be readable, got %v", err)
-	}
-	if !strings.HasPrefix(strings.TrimSpace(string(authorizedKeys)), ssh.KeyAlgoED25519+" ") {
-		t.Fatalf("expected ED25519 authorized key, got %q", string(authorizedKeys))
+	if _, err := os.Stat(filepath.Join(localRuntime.paths.WorkDir, "vm-shared")); err == nil {
+		t.Fatal("expected SSH key setup not to create managed share")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed to inspect managed share: %v", err)
 	}
 }
 
@@ -310,75 +349,6 @@ func TestWaitForDaemonExit_RejectsStillRunningPID(t *testing.T) {
 	// Then
 	if err == nil {
 		t.Fatal("expected still-running PID to prevent stop completion")
-	}
-}
-
-func TestStart_DoesNotOverwriteExistingRunner(t *testing.T) {
-	t.Parallel()
-
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("fake local runner script is POSIX-only")
-	}
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
-	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
-	}
-	existingRunner := `#!/bin/sh
-set -eu
-case "$1" in
-  init)
-    mkdir -p vm vm-shared
-    ;;
-  start)
-    if [ "$2" != "2" ] || [ "$3" != "2048" ] || [ "$4" != "100" ]; then
-      echo "unexpected sizing args: $*" >&2
-      exit 3
-    fi
-    printf 'existing' > start-called
-    cat > vm-state.json <<'JSON'
-{"vm_name":"exasol-local-vm","vm_ip":"192.168.64.2","ports":{"ssh":20022,"db":28563,"ui":0}}
-JSON
-    ;;
-  *)
-    echo "unexpected command: $1" >&2
-    exit 2
-    ;;
-esac
-	`
-	writeExecutableTestFile(t, localRuntime.paths.RunnerPath, []byte(existingRunner))
-
-	// When
-	runtimeConfig := Config{CPUCount: 2, MemoryMB: 2048, DataSizeGB: 100}
-	state, err := Start(
-		context.Background(),
-		deployment,
-		runtimeConfig,
-		nil,
-		nil,
-	)
-	// Then
-	if err != nil {
-		t.Fatalf("expected start to succeed with existing runner, got %v", err)
-	}
-	if state.DBPort != 28563 || state.SSHPort != 20022 || state.UIPort != 0 {
-		t.Fatalf("unexpected endpoint state: %#v", state)
-	}
-	marker, err := os.ReadFile(filepath.Join(localRuntime.paths.WorkDir, "start-called"))
-	if err != nil {
-		t.Fatalf("expected existing runner marker, got %v", err)
-	}
-	if string(marker) != "existing" {
-		t.Fatalf("expected existing runner to be used, got marker %q", string(marker))
-	}
-	data, err := os.ReadFile(localRuntime.paths.RunnerPath)
-	if err != nil {
-		t.Fatalf("expected runner to be readable, got %v", err)
-	}
-	if string(data) != existingRunner {
-		t.Fatalf("expected start not to overwrite existing runner, got %q", string(data))
 	}
 }
 

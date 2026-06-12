@@ -25,7 +25,6 @@ import (
 	"github.com/exasol/exasol-personal/assets/localruntimebin"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/util"
-	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -33,10 +32,8 @@ const (
 	runtimeDirName     = "runtime"
 	RunnerFileName     = localruntimebin.RunnerBinaryName
 	vmDirName          = "vm"
-	managedShareDir    = "vm-shared"
 	vmStateFileName    = "vm-state.json"
 	vmPIDFileName      = "vm.pid"
-	authorizedKeysFile = "authorized_keys"
 	PrivateKeyFileName = "node_access.pem"
 	stopPollInterval   = 500 * time.Millisecond
 	stopTimeout        = 90 * time.Second
@@ -66,7 +63,6 @@ type Paths struct {
 	WorkDir        string
 	RunnerPath     string
 	VMDir          string
-	ShareDir       string
 	StatePath      string
 	PrivateKeyPath string
 }
@@ -80,7 +76,6 @@ func NewPaths(deployment config.DeploymentDir) Paths {
 		WorkDir:        workDir,
 		RunnerPath:     filepath.Join(workDir, RunnerFileName),
 		VMDir:          filepath.Join(workDir, vmDirName),
-		ShareDir:       filepath.Join(workDir, managedShareDir),
 		StatePath:      filepath.Join(workDir, vmStateFileName),
 		PrivateKeyPath: filepath.Join(root, PrivateKeyFileName),
 	}
@@ -112,32 +107,34 @@ type runnerState struct {
 	Ports     runnerPorts `json:"ports"`
 }
 
-func Deploy(
+func Prepare(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	runtimeConfig Config,
 	out, outErr io.Writer,
-) (*State, error) {
+) error {
 	runtime := newRuntime(deployment, runtimeConfig)
-	if err := runtime.prepare(ctx, out, outErr); err != nil {
-		return nil, err
-	}
-
-	return runtime.start(ctx, out, outErr)
+	return runtime.prepare(ctx, out, outErr)
 }
 
-func Start(
+func RunCommand(
 	ctx context.Context,
 	deployment config.DeploymentDir,
-	runtimeConfig Config,
+	args []string,
 	out, outErr io.Writer,
-) (*State, error) {
-	runtime := newRuntime(deployment, runtimeConfig)
-	if err := runtime.prepare(ctx, out, outErr); err != nil {
+) error {
+	runtime := newRuntime(deployment, Config{})
+	return runtime.runnerCommand(ctx, args, out, outErr)
+}
+
+func ReadState(deployment config.DeploymentDir) (*State, error) {
+	runtime := newRuntime(deployment, Config{})
+	state, err := readRunnerState(runtime.paths.StatePath)
+	if err != nil {
 		return nil, err
 	}
 
-	return runtime.start(ctx, out, outErr)
+	return runtime.toState(state)
 }
 
 func Stop(ctx context.Context, deployment config.DeploymentDir, out, outErr io.Writer) error {
@@ -196,11 +193,11 @@ func (runtime *localRuntime) prepare(
 	if err := runtime.ensureRunnerExecutable(); err != nil {
 		return err
 	}
-	if err := runtime.initializeVMIfNeeded(ctx, out, outErr); err != nil {
+	if err := runtime.ensureSSHKey(); err != nil {
 		return err
 	}
 
-	return runtime.ensureSSHKey()
+	return runtime.initializeVMIfNeeded(ctx, out, outErr)
 }
 
 func (runtime *localRuntime) initializeVMIfNeeded(
@@ -213,33 +210,12 @@ func (runtime *localRuntime) initializeVMIfNeeded(
 		return fmt.Errorf("failed to inspect local VM directory: %w", err)
 	}
 
-	return runtime.runnerCommand(ctx, []string{"init"}, out, outErr)
-}
-
-func (runtime *localRuntime) start(ctx context.Context, out, outErr io.Writer) (*State, error) {
-	if err := os.Remove(runtime.paths.StatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("failed to remove stale local VM state: %w", err)
-	}
-	if err := runtime.runnerCommand(
+	return runtime.runnerCommand(
 		ctx,
-		[]string{
-			"start",
-			strconv.Itoa(runtime.runtimeConfig.CPUCount),
-			strconv.Itoa(runtime.runtimeConfig.MemoryMB),
-			strconv.Itoa(runtime.runtimeConfig.DataSizeGB),
-		},
+		[]string{"init", "--ssh-key", runtime.paths.PrivateKeyPath},
 		out,
 		outErr,
-	); err != nil {
-		return nil, err
-	}
-
-	state, err := readRunnerState(runtime.paths.StatePath)
-	if err != nil {
-		return nil, err
-	}
-
-	return runtime.toState(state)
+	)
 }
 
 func (runtime *localRuntime) toState(state *runnerState) (*State, error) {
@@ -383,7 +359,7 @@ func processRunning(pid int) bool {
 
 func (runtime *localRuntime) ensureSSHKey() error {
 	if _, err := os.Stat(runtime.paths.PrivateKeyPath); err == nil {
-		return runtime.writeAuthorizedKeyFromPrivateKey()
+		return nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to inspect local SSH key: %w", err)
 	}
@@ -411,66 +387,7 @@ func (runtime *localRuntime) ensureSSHKey() error {
 		return fmt.Errorf("failed to write local SSH private key: %w", err)
 	}
 
-	return runtime.writeAuthorizedKeyFromPrivateKey()
-}
-
-func (runtime *localRuntime) writeAuthorizedKeyFromPrivateKey() error {
-	if err := os.MkdirAll(runtime.paths.ShareDir, dirMode); err != nil {
-		return fmt.Errorf("failed to create local managed share: %w", err)
-	}
-
-	authorizedKeyPath := filepath.Join(runtime.paths.ShareDir, authorizedKeysFile)
-
-	return appendPublicKeyFromPrivateKey(runtime.paths.PrivateKeyPath, authorizedKeyPath)
-}
-
-func appendPublicKeyFromPrivateKey(privateKeyPath, authorizedKeyPath string) error {
-	privateKeyPEM, err := os.ReadFile(privateKeyPath)
-	if err != nil {
-		return fmt.Errorf("failed to read SSH private key %s: %w", privateKeyPath, err)
-	}
-	signer, err := ssh.ParsePrivateKey(privateKeyPEM)
-	if err != nil {
-		return fmt.Errorf("failed to parse SSH private key %s: %w", privateKeyPath, err)
-	}
-
-	authorizedKey := ssh.MarshalAuthorizedKey(signer.PublicKey())
-	authorizedKeys, err := appendAuthorizedKeyIfMissing(authorizedKeyPath, authorizedKey)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(authorizedKeyPath, authorizedKeys, privateFileMode); err != nil {
-		return fmt.Errorf("failed to write local authorized keys: %w", err)
-	}
-
 	return nil
-}
-
-func appendAuthorizedKeyIfMissing(path string, authorizedKey []byte) ([]byte, error) {
-	existing, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("failed to read local authorized keys: %w", err)
-	}
-
-	authorizedKey = bytes.TrimSpace(authorizedKey)
-	if len(authorizedKey) == 0 {
-		return existing, nil
-	}
-	for _, line := range bytes.Split(existing, []byte("\n")) {
-		if bytes.Equal(bytes.TrimSpace(line), authorizedKey) {
-			return existing, nil
-		}
-	}
-
-	var result []byte
-	if len(bytes.TrimSpace(existing)) > 0 {
-		result = append(result, bytes.TrimRight(existing, "\n")...)
-		result = append(result, '\n')
-	}
-	result = append(result, authorizedKey...)
-	result = append(result, '\n')
-
-	return result, nil
 }
 
 func readRunnerState(statePath string) (*runnerState, error) {

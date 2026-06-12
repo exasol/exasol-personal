@@ -28,10 +28,8 @@ const (
 )
 
 type runnerConfig struct {
-	resourceID   string
 	targetPath   string
 	runnerPath   string
-	cacheRoot    string
 	targetGOOS   string
 	targetGOARCH string
 }
@@ -50,15 +48,15 @@ func run(ctx context.Context, args []string) error {
 
 	switch args[0] {
 	case "placeholder":
-		return runPlaceholder(args[1:])
+		return preparePlaceholder(args[1:])
 	case "stage":
-		return runStage(ctx, args[1:])
+		return prepareRunner(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown subcommand %q", args[0])
 	}
 }
 
-func runPlaceholder(args []string) error {
+func preparePlaceholder(args []string) error {
 	flags := flag.NewFlagSet("placeholder", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	targetPath := flags.String("target", defaultGeneratedPath, "Placeholder file path")
@@ -82,7 +80,7 @@ func runPlaceholder(args []string) error {
 	return os.WriteFile(*targetPath, []byte(*text), executablePerm)
 }
 
-func runStage(ctx context.Context, args []string) error {
+func prepareRunner(ctx context.Context, args []string) error {
 	config, err := parseRunnerFlags("stage", args)
 	if err != nil {
 		return err
@@ -98,9 +96,34 @@ func runStage(ctx context.Context, args []string) error {
 		return nil
 	}
 
-	sourcePath, err := resolveRunnerSource(ctx, config)
-	if err != nil {
-		return err
+	sourcePath := strings.TrimSpace(config.runnerPath)
+	if sourcePath != "" {
+		info, err := os.Stat(sourcePath)
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return fmt.Errorf("runner source is a directory: %s", sourcePath)
+		}
+	} else {
+		spec, err := runtimeartifacts.ParseSpec(resources.ResourcesYAML)
+		if err != nil {
+			return err
+		}
+		cache, err := runtimeartifacts.NewDefaultCache()
+		if err != nil {
+			return err
+		}
+		manager := runtimeartifacts.NewResourceManagerWithCacheForPlatform(
+			spec,
+			cache,
+			config.targetGOOS,
+			config.targetGOARCH,
+		)
+		sourcePath, err = manager.Request(ctx, defaultResourceID)
+		if err != nil {
+			return err
+		}
 	}
 
 	changed, err := copyExecutable(sourcePath, config.targetPath)
@@ -121,105 +144,22 @@ func parseRunnerFlags(name string, args []string) (runnerConfig, error) {
 	flags := flag.NewFlagSet(name, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 
-	config := runnerConfig{}
-	flags.StringVar(
-		&config.resourceID,
-		"resource-id",
-		defaultResourceID,
-		"Resource ID in resources.yaml",
-	)
+	config := runnerConfig{targetGOOS: runtime.GOOS, targetGOARCH: runtime.GOARCH}
+	if goos := strings.TrimSpace(os.Getenv("GOOS")); goos != "" {
+		config.targetGOOS = goos
+	}
+	if goarch := strings.TrimSpace(os.Getenv("GOARCH")); goarch != "" {
+		config.targetGOARCH = goarch
+	}
 	flags.StringVar(&config.targetPath, "target", defaultGeneratedPath, "Staged runner path")
 	flags.StringVar(&config.runnerPath, "runner-path", "", "Existing runner binary path")
-	flags.StringVar(&config.cacheRoot, "cache-root", "", "Runtime artifact cache root")
-	flags.StringVar(&config.targetGOOS, "goos", targetEnv("GOOS", runtime.GOOS), "Target GOOS")
-	flags.StringVar(
-		&config.targetGOARCH,
-		"goarch",
-		targetEnv("GOARCH", runtime.GOARCH),
-		"Target GOARCH",
-	)
+	flags.StringVar(&config.targetGOOS, "goos", config.targetGOOS, "Target GOOS")
+	flags.StringVar(&config.targetGOARCH, "goarch", config.targetGOARCH, "Target GOARCH")
 	if err := flags.Parse(args); err != nil {
 		return runnerConfig{}, err
 	}
 
-	if strings.TrimSpace(config.resourceID) == "" {
-		return runnerConfig{}, errors.New("resource-id must not be empty")
-	}
-
 	return config, nil
-}
-
-func targetEnv(name, fallback string) string {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		return fallback
-	}
-
-	return value
-}
-
-func resolveRunnerSource(ctx context.Context, config runnerConfig) (string, error) {
-	if source := strings.TrimSpace(config.runnerPath); source != "" {
-		return requireFile(source)
-	}
-
-	spec, err := runtimeartifacts.ParseSpec(resources.ResourcesYAML)
-	if err != nil {
-		return "", err
-	}
-
-	return resolveRunnerSourceFromSpec(ctx, config, spec)
-}
-
-func resolveRunnerSourceFromSpec(
-	ctx context.Context,
-	config runnerConfig,
-	spec runtimeartifacts.ResourceSpec,
-) (string, error) {
-	manager, err := newResourceManager(config, spec)
-	if err != nil {
-		return "", err
-	}
-
-	return manager.Request(ctx, config.resourceID)
-}
-
-func requireFile(path string) (string, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", err
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("runner source is a directory: %s", path)
-	}
-
-	return path, nil
-}
-
-func newResourceManager(
-	config runnerConfig,
-	spec runtimeartifacts.ResourceSpec,
-) (*runtimeartifacts.Manager, error) {
-	if strings.TrimSpace(config.cacheRoot) != "" {
-		return runtimeartifacts.NewResourceManagerForPlatform(
-			spec,
-			config.cacheRoot,
-			config.targetGOOS,
-			config.targetGOARCH,
-		), nil
-	}
-
-	cache, err := runtimeartifacts.NewDefaultCache()
-	if err != nil {
-		return nil, err
-	}
-
-	return runtimeartifacts.NewResourceManagerWithCacheForPlatform(
-		spec,
-		cache,
-		config.targetGOOS,
-		config.targetGOARCH,
-	), nil
 }
 
 func copyExecutable(sourcePath, targetPath string) (bool, error) {
@@ -240,33 +180,21 @@ func copyExecutable(sourcePath, targetPath string) (bool, error) {
 		_ = source.Close()
 	}()
 
-	tmpFile, err := os.CreateTemp(filepath.Dir(targetPath), "runner-*")
+	target, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, executablePerm)
 	if err != nil {
 		return false, err
 	}
-	tmpPath := tmpFile.Name()
 
-	_, copyErr := io.Copy(tmpFile, source)
-	closeErr := tmpFile.Close()
+	_, copyErr := io.Copy(target, source)
+	closeErr := target.Close()
 	if copyErr != nil {
-		_ = os.Remove(tmpPath)
-
 		return false, copyErr
 	}
 	if closeErr != nil {
-		_ = os.Remove(tmpPath)
-
 		return false, closeErr
 	}
-	if err := os.Chmod(tmpPath, executablePerm); err != nil {
-		_ = os.Remove(tmpPath)
 
-		return false, err
-	}
-
-	_ = os.Remove(targetPath)
-
-	return true, os.Rename(tmpPath, targetPath)
+	return true, os.Chmod(targetPath, executablePerm)
 }
 
 func sameFileContent(sourcePath, targetPath string) (bool, error) {

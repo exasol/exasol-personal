@@ -16,12 +16,8 @@ var InstallationAssets embed.FS
 //go:embed all:shared/**
 var SharedAssets embed.FS
 
-//go:embed all:local/**
-var LocalAssets embed.FS
-
 const (
 	InfrastructureAssetDir = "infrastructure"
 	InstallationAssetDir   = "installation"
 	SharedAssetDir         = "shared"
-	LocalAssetDir          = "local"
 )

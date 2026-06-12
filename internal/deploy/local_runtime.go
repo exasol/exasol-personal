@@ -16,24 +16,16 @@ import (
 	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
+// Internal escape hatch for fake local-runner integration tests.
+const localSkipDatabaseWaitEnv = "EXASOL_LOCAL_SKIP_DB_WAIT"
+
 func deployLocalRuntime(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	runtimeConfig localRuntimeConfig,
 	out, outErr io.Writer,
 ) error {
-	state, err := localruntime.Deploy(
-		ctx,
-		deployment,
-		toLocalRuntimeConfig(runtimeConfig),
-		out,
-		outErr,
-	)
-	if err != nil {
-		return err
-	}
-
-	return writeLocalRuntimeArtifactsAndWait(ctx, deployment, state)
+	return startLocalRuntime(ctx, deployment, runtimeConfig, out, outErr)
 }
 
 func startLocalRuntime(
@@ -42,13 +34,47 @@ func startLocalRuntime(
 	runtimeConfig localRuntimeConfig,
 	out, outErr io.Writer,
 ) error {
-	state, err := localruntime.Start(
+	if err := localruntime.Prepare(
 		ctx,
 		deployment,
 		toLocalRuntimeConfig(runtimeConfig),
 		out,
 		outErr,
-	)
+	); err != nil {
+		return err
+	}
+
+	return startPreparedLocalRuntime(ctx, deployment, runtimeConfig, out, outErr)
+}
+
+func startPreparedLocalRuntime(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	runtimeConfig localRuntimeConfig,
+	out, outErr io.Writer,
+) error {
+	paths := localruntime.NewPaths(deployment)
+	if err := os.Remove(paths.StatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to remove stale local VM state: %w", err)
+	}
+
+	localConfig := toLocalRuntimeConfig(runtimeConfig)
+	if err := localruntime.RunCommand(
+		ctx,
+		deployment,
+		[]string{
+			"start",
+			strconv.Itoa(localConfig.CPUCount),
+			strconv.Itoa(localConfig.MemoryMB),
+			strconv.Itoa(localConfig.DataSizeGB),
+		},
+		out,
+		outErr,
+	); err != nil {
+		return err
+	}
+
+	state, err := localruntime.ReadState(deployment)
 	if err != nil {
 		return err
 	}

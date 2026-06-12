@@ -262,7 +262,7 @@ func TestLocalSSHConnectionOptions_UsesConnectionMetadataWithoutNodes(t *testing
 	}
 }
 
-func TestLocalContainerShellCommand_UsesPodmanDirectlyWithMountedRootfsFallback(t *testing.T) {
+func TestLocalContainerShellCommand_UsesMountedContainerRootfs(t *testing.T) {
 	t.Parallel()
 
 	// Given / When
@@ -274,8 +274,8 @@ func TestLocalContainerShellCommand_UsesPodmanDirectlyWithMountedRootfsFallback(
 	if strings.Contains(command, "doas") {
 		t.Fatalf("expected local shell command to avoid doas, got %q", command)
 	}
-	if !strings.Contains(command, "podman exec -it") {
-		t.Fatalf("expected local shell command to run podman exec interactively, got %q", command)
+	if strings.Contains(command, "podman exec") {
+		t.Fatalf("expected local shell command not to probe container shells, got %q", command)
 	}
 	if !strings.Contains(command, "podman mount") {
 		t.Fatalf(
@@ -286,15 +286,8 @@ func TestLocalContainerShellCommand_UsesPodmanDirectlyWithMountedRootfsFallback(
 	if !strings.Contains(command, "nsenter") {
 		t.Fatalf("expected local shell command to enter container namespaces, got %q", command)
 	}
-	if !strings.Contains(command, localDBContainerName) {
-		t.Fatalf("expected local shell command to target %q, got %q", localDBContainerName, command)
-	}
-	if !strings.Contains(command, localRunnerCompatibilityDBContainerName) {
-		t.Fatalf(
-			"expected local shell command to support runner container %q, got %q",
-			localRunnerCompatibilityDBContainerName,
-			command,
-		)
+	if !strings.Contains(command, "exasol-local-db") {
+		t.Fatalf("expected local shell command to target exasol-local-db, got %q", command)
 	}
 	if strings.Contains(command, "container_name=container") {
 		t.Fatalf("expected no generic container fallback, got %q", command)
