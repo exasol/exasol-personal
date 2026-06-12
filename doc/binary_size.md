@@ -11,6 +11,8 @@ Release and Task builds use:
 - `-ldflags="-s -w"` to omit symbol table and DWARF debug data.
 - `-gcflags=all=-l` to disable inlining and reduce code size.
 
+For local debugging, Task builds accept `DEBUG_BUILD=true` to preserve debug data and use compiler settings that are friendlier to debuggers. Release builds remain size optimized.
+
 Higher-risk options are intentionally not used by default. UPX-style executable packing, alternative compilers, dependency replacement, and platform-specific build rewrites add more release, signing, debugging, or maintenance risk than their expected benefit justifies for this project.
 
 ## Technique Summary
@@ -24,6 +26,7 @@ Higher-risk options are intentionally not used by default. UPX-style executable 
 | UPX or similar executable packing | Medium | Medium-High | Can reduce raw binary size further, but complicates signing, security tooling, startup behavior, and debugging. | Do not use. |
 | Alternative compilers or libc/linker strategies | High | High | Platform-specific compatibility and toolchain risk. | Do not use. |
 | Dependency replacement for size only | Medium-High | Medium | Requires behavioral replacement and broad testing for modest gains. | Do not pursue for size alone. |
+| Task debug build mode | Low | Low | Keeps local binaries suitable for debugger sessions at the cost of larger binaries. | Support for local development only. |
 
 ## References
 
