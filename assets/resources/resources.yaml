@@ -21,3 +21,11 @@ tofu:
       url: https://github.com/opentofu/opentofu/releases/download/v1.11.5/tofu_1.11.5_windows_amd64.tar.gz
       sha256: 69be358054afcc6a84c0ffb917056d21afc3ec5a0e0f66ffd4f498a1763a0fb8
       resource_path: tofu.exe
+exasol-local-runner:
+  extract: true
+  artifact:
+    darwin/arm64:
+      url: https://github.com/exasol/exasol-local-vm/releases/download/v1.0.0-rc1/mac-runner-aarch64.zip
+      sha256: 9f3fdb37a7f219ab66723f2656218817eab71fb13f802e9c5f4cd70992647e2f
+      download_path: mac-runner-aarch64.zip
+      resource_path: launcher

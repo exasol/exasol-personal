@@ -267,7 +267,6 @@ func TestLocalContainerShellCommand_UsesPodmanDirectlyWithMountedRootfsFallback(
 
 	// Given / When
 	command, err := localContainerShellCommand()
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected local shell command to render, got error: %v", err)
