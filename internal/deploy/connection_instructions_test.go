@@ -80,7 +80,6 @@ func TestGetSQLInstructions_OmitsAdminUIWhenMetadataMissing(t *testing.T) {
 
 	// When
 	instructions, err := GetSQLInstructions(connectionDetails)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected SQL instructions to render, got error: %v", err)
@@ -115,7 +114,6 @@ func TestGetSQLInstructions_IncludesAdminUIWhenMetadataPresent(t *testing.T) {
 
 	// When
 	instructions, err := GetSQLInstructions(connectionDetails)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected SQL instructions to render, got error: %v", err)

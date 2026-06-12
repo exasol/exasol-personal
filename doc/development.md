@@ -83,7 +83,7 @@ GOOS=windows GOARCH=amd64 task build
 GOOS=darwin GOARCH=arm64 task build
 ```
 
-**Note:** The launcher resolves [OpenTofu](https://opentofu.org/) at runtime, so builds no longer need platform-specific OpenTofu downloads. For macOS Apple Silicon builds, `task generate` stages the Exasol Local runner from `RUNNER_PATH`, a cached runner, or the public Exasol Local VM release download.
+**Note:** The launcher resolves [OpenTofu](https://opentofu.org/) at runtime, so builds no longer need platform-specific OpenTofu downloads. For macOS Apple Silicon builds, `task generate` stages the Exasol Local runner from `RUNNER_PATH` or the runtime artifact configured in `assets/resources/resources.yaml`.
 
 ```bash
 GOOS=darwin GOARCH=arm64 task generate RUNNER_PATH=/path/to/launcher
@@ -98,7 +98,7 @@ If you prefer to use Go commands directly (or Task is unavailable):
 go generate ./...
 
 # For macOS Apple Silicon builds, stage the Exasol Local runner for embedding.
-# This uses RUNNER_PATH, a cached runner, or the release download.
+# This uses RUNNER_PATH or the runtime artifact configured in resources.yaml.
 go run ./tools/localrunner stage
 
 # Build the binary

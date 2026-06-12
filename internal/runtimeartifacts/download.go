@@ -5,6 +5,7 @@ package runtimeartifacts
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -65,10 +66,37 @@ func extractArtifact(archivePath, resourcePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := os.MkdirAll(extractedRoot, dirPerm); err != nil {
+		return "", err
+	}
 
-	file, err := os.Open(archivePath)
+	switch {
+	case isTarGzArchive(archivePath):
+		err = extractTarGzArtifact(archivePath, extractedRoot)
+	case strings.HasSuffix(filepath.Base(archivePath), ".zip"):
+		err = extractZipArtifact(archivePath, extractedRoot)
+	default:
+		err = fmt.Errorf("extraction not implemented for %s", archivePath)
+	}
 	if err != nil {
 		return "", err
+	}
+
+	resolvedPath, err := extractedResourcePath(extractedRoot, resourcePath)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(resolvedPath); err != nil {
+		return "", err
+	}
+
+	return resolvedPath, nil
+}
+
+func extractTarGzArtifact(archivePath, extractedRoot string) error {
+	file, err := os.Open(archivePath)
+	if err != nil {
+		return err
 	}
 	defer func() {
 		_ = file.Close()
@@ -76,15 +104,11 @@ func extractArtifact(archivePath, resourcePath string) (string, error) {
 
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer func() {
 		_ = gzipReader.Close()
 	}()
-
-	if err := os.MkdirAll(extractedRoot, dirPerm); err != nil {
-		return "", err
-	}
 
 	tarReader := tar.NewReader(gzipReader)
 	extracted := false
@@ -94,14 +118,14 @@ func extractArtifact(archivePath, resourcePath string) (string, error) {
 			break
 		}
 		if err != nil {
-			return "", err
+			return err
 		}
 
 		cleanName := filepath.Clean(filepath.FromSlash(hdr.Name))
 		if cleanName == "." || cleanName == ".." ||
 			strings.HasPrefix(cleanName, ".."+string(filepath.Separator)) ||
 			filepath.IsAbs(cleanName) {
-			return "", fmt.Errorf(
+			return fmt.Errorf(
 				"refusing to extract archive entry %q outside %s",
 				hdr.Name,
 				extractedRoot,
@@ -114,31 +138,31 @@ func extractArtifact(archivePath, resourcePath string) (string, error) {
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(targetPath, mode); err != nil {
-				return "", err
+				return err
 			}
 			if err := os.Chmod(targetPath, mode); err != nil {
-				return "", err
+				return err
 			}
 			extracted = true
 		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(targetPath), dirPerm); err != nil {
-				return "", err
+				return err
 			}
 
 			out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 			if err != nil {
-				return "", err
+				return err
 			}
 			// #nosec G110 -- archive contents are trusted runtime artifacts.
 			if _, err := io.Copy(out, tarReader); err != nil {
 				_ = out.Close()
-				return "", err
+				return err
 			}
 			if err := out.Close(); err != nil {
-				return "", err
+				return err
 			}
 			if err := os.Chmod(targetPath, mode); err != nil {
-				return "", err
+				return err
 			}
 			extracted = true
 		default:
@@ -147,18 +171,94 @@ func extractArtifact(archivePath, resourcePath string) (string, error) {
 	}
 
 	if !extracted {
-		return "", fmt.Errorf("no extractable entries found in archive %s", archivePath)
+		return fmt.Errorf("no extractable entries found in archive %s", archivePath)
 	}
 
-	resolvedPath, err := extractedResourcePath(extractedRoot, resourcePath)
+	return nil
+}
+
+func extractZipArtifact(archivePath, extractedRoot string) error {
+	reader, err := zip.OpenReader(archivePath)
 	if err != nil {
-		return "", err
+		return err
 	}
-	if _, err := os.Stat(resolvedPath); err != nil {
-		return "", err
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	extracted := false
+	for _, entry := range reader.File {
+		cleanName := filepath.Clean(filepath.FromSlash(entry.Name))
+		if cleanName == "." || cleanName == ".." ||
+			strings.HasPrefix(cleanName, ".."+string(filepath.Separator)) ||
+			filepath.IsAbs(cleanName) {
+			return fmt.Errorf(
+				"refusing to extract archive entry %q outside %s",
+				entry.Name,
+				extractedRoot,
+			)
+		}
+
+		mode := entry.FileInfo().Mode().Perm()
+		if entry.FileInfo().IsDir() {
+			if mode == 0 {
+				mode = dirPerm
+			}
+			targetPath := filepath.Join(extractedRoot, cleanName)
+			if err := os.MkdirAll(targetPath, mode); err != nil {
+				return err
+			}
+			if err := os.Chmod(targetPath, mode); err != nil {
+				return err
+			}
+			extracted = true
+
+			continue
+		}
+
+		if mode == 0 {
+			mode = filePerm
+		}
+		if err := extractZipFile(entry, filepath.Join(extractedRoot, cleanName), mode); err != nil {
+			return err
+		}
+		extracted = true
 	}
 
-	return resolvedPath, nil
+	if !extracted {
+		return fmt.Errorf("no extractable entries found in archive %s", archivePath)
+	}
+
+	return nil
+}
+
+func extractZipFile(entry *zip.File, targetPath string, mode os.FileMode) error {
+	input, err := entry.Open()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = input.Close()
+	}()
+
+	if err := os.MkdirAll(filepath.Dir(targetPath), dirPerm); err != nil {
+		return err
+	}
+
+	out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	// #nosec G110 -- archive contents are trusted runtime artifacts.
+	if _, err := io.Copy(out, input); err != nil {
+		_ = out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+
+	return os.Chmod(targetPath, mode)
 }
 
 func downloadFile(ctx context.Context, url, destPath string) error {
@@ -227,9 +327,17 @@ func archiveExtractionRoot(archivePath string) (string, error) {
 		archiveName = strings.TrimSuffix(archiveName, ".tar.gz")
 	case strings.HasSuffix(archiveName, ".tgz"):
 		archiveName = strings.TrimSuffix(archiveName, ".tgz")
+	case strings.HasSuffix(archiveName, ".zip"):
+		archiveName = strings.TrimSuffix(archiveName, ".zip")
 	default:
 		return "", fmt.Errorf("extraction not implemented for %s", archivePath)
 	}
 
 	return filepath.Join(outputDir, archiveName), nil
+}
+
+func isTarGzArchive(archivePath string) bool {
+	archiveName := filepath.Base(archivePath)
+
+	return strings.HasSuffix(archiveName, ".tar.gz") || strings.HasSuffix(archiveName, ".tgz")
 }
