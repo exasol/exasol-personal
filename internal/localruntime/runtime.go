@@ -112,32 +112,34 @@ type runnerState struct {
 	Ports     runnerPorts `json:"ports"`
 }
 
-func Deploy(
+func Prepare(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	runtimeConfig Config,
 	out, outErr io.Writer,
-) (*State, error) {
+) error {
 	runtime := newRuntime(deployment, runtimeConfig)
-	if err := runtime.prepare(ctx, out, outErr); err != nil {
-		return nil, err
-	}
-
-	return runtime.start(ctx, out, outErr)
+	return runtime.prepare(ctx, out, outErr)
 }
 
-func Start(
+func RunCommand(
 	ctx context.Context,
 	deployment config.DeploymentDir,
-	runtimeConfig Config,
+	args []string,
 	out, outErr io.Writer,
-) (*State, error) {
-	runtime := newRuntime(deployment, runtimeConfig)
-	if err := runtime.prepare(ctx, out, outErr); err != nil {
+) error {
+	runtime := newRuntime(deployment, Config{})
+	return runtime.runnerCommand(ctx, args, out, outErr)
+}
+
+func ReadState(deployment config.DeploymentDir) (*State, error) {
+	runtime := newRuntime(deployment, Config{})
+	state, err := readRunnerState(runtime.paths.StatePath)
+	if err != nil {
 		return nil, err
 	}
 
-	return runtime.start(ctx, out, outErr)
+	return runtime.toState(state)
 }
 
 func Stop(ctx context.Context, deployment config.DeploymentDir, out, outErr io.Writer) error {
@@ -214,32 +216,6 @@ func (runtime *localRuntime) initializeVMIfNeeded(
 	}
 
 	return runtime.runnerCommand(ctx, []string{"init"}, out, outErr)
-}
-
-func (runtime *localRuntime) start(ctx context.Context, out, outErr io.Writer) (*State, error) {
-	if err := os.Remove(runtime.paths.StatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("failed to remove stale local VM state: %w", err)
-	}
-	if err := runtime.runnerCommand(
-		ctx,
-		[]string{
-			"start",
-			strconv.Itoa(runtime.runtimeConfig.CPUCount),
-			strconv.Itoa(runtime.runtimeConfig.MemoryMB),
-			strconv.Itoa(runtime.runtimeConfig.DataSizeGB),
-		},
-		out,
-		outErr,
-	); err != nil {
-		return nil, err
-	}
-
-	state, err := readRunnerState(runtime.paths.StatePath)
-	if err != nil {
-		return nil, err
-	}
-
-	return runtime.toState(state)
 }
 
 func (runtime *localRuntime) toState(state *runnerState) (*State, error) {

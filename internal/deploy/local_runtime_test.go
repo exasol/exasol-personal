@@ -9,6 +9,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -210,6 +212,78 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 	}
 	if info.ClusterState != StatusStopped {
 		t.Fatalf("expected cluster state %q, got %q", StatusStopped, info.ClusterState)
+	}
+}
+
+func TestStartLocalRuntime_DoesNotOverwriteExistingRunner(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake local runner script is POSIX-only")
+	}
+
+	// Given
+	t.Setenv(localSkipDatabaseWaitEnv, "1")
+	deployment := newTestDeploymentWithState(t)
+	paths := localruntime.NewPaths(deployment)
+	if err := os.MkdirAll(paths.WorkDir, 0o750); err != nil {
+		t.Fatalf("failed to create local runtime work dir: %v", err)
+	}
+	existingRunner := `#!/bin/sh
+set -eu
+case "$1" in
+  init)
+    mkdir -p vm vm-shared
+    ;;
+  start)
+    if [ "$2" != "2" ] || [ "$3" != "2048" ] || [ "$4" != "100" ]; then
+      echo "unexpected sizing args: $*" >&2
+      exit 3
+    fi
+    printf 'existing' > start-called
+    cat > vm-state.json <<'JSON'
+{"vm_name":"exasol-local-vm","vm_ip":"192.168.64.2","ports":{"ssh":20022,"db":28563,"ui":0}}
+JSON
+    ;;
+  *)
+    echo "unexpected command: $1" >&2
+    exit 2
+    ;;
+esac
+`
+	writeExecutableTestFile(t, paths.RunnerPath, []byte(existingRunner))
+
+	// When
+	err := startLocalRuntime(
+		context.Background(),
+		deployment,
+		localRuntimeConfig{cpuCount: 2, memoryMB: 2048, dataSizeGB: 100},
+		nil,
+		nil,
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("expected start to succeed with existing runner, got %v", err)
+	}
+	marker, err := os.ReadFile(filepath.Join(paths.WorkDir, "start-called"))
+	if err != nil {
+		t.Fatalf("expected existing runner marker, got %v", err)
+	}
+	if string(marker) != "existing" {
+		t.Fatalf("expected existing runner to be used, got marker %q", string(marker))
+	}
+	data, err := os.ReadFile(paths.RunnerPath)
+	if err != nil {
+		t.Fatalf("expected runner to be readable, got %v", err)
+	}
+	if string(data) != existingRunner {
+		t.Fatalf("expected start not to overwrite existing runner, got %q", string(data))
+	}
+	info, err := config.ReadDeploymentInfo(deployment)
+	if err != nil {
+		t.Fatalf("expected deployment info to be readable, got %v", err)
+	}
+	if info.Connection.DBPort != localTestDatabasePort ||
+		info.Connection.SSHPort != strconv.Itoa(localTestSSHForwardedPort) {
+		t.Fatalf("unexpected local connection info: %#v", info.Connection)
 	}
 }
 
