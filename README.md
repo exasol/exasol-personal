@@ -264,9 +264,13 @@ Exasol Personal uses **presets** — self-contained directories of templates and
 ```bash
 exasol install <infra-preset> [install-preset]
 
-exasol install aws            # built-in preset by name
-exasol install ./my-preset    # local preset by path (starts with . / ~ or contains /)
-exasol install ./my-infra ./my-install   # both presets from local paths
+exasol install aws                                       # built-in preset by name
+exasol install ./my-preset                               # local preset by path (starts with . / ~ or contains /)
+exasol install https://github.com/org/preset.git         # git repository (HEAD)
+exasol install https://github.com/org/preset.git@v1.0    # git repository at branch or tag
+exasol install https://example.com/preset.tar.gz         # remote archive (re-fetched on every run)
+exasol install file:///path/to/preset-dir                # local directory via URI
+exasol install file:///path/to/preset.tar.gz             # local archive (re-extracted on every run)
 ```
 
 List all available built-in presets, including cloud and local targets:
@@ -278,6 +282,17 @@ exasol presets
 ### Local presets
 
 You can store your own preset directories anywhere on your filesystem and pass the path directly to `exasol install`. This lets you target additional infrastructure platforms or customize provisioning without modifying the launcher.
+
+### External presets
+
+In addition to built-in names and local paths, `exasol install` accepts external sources:
+
+- **Git repository** — `https://github.com/org/preset.git` or `git@github.com:org/preset.git`. Append `@branch-or-tag` to pin a specific ref. The repository is cloned once per commit and cached; repeated runs at the same commit reuse the cache.
+- **Remote archive** — An `https://` or `http://` URL ending in `.tar.gz`, `.tgz`, or `.zip`. The archive is re-downloaded on every run because no checksum is provided.
+- **Local directory via URI** — `file:///absolute/path`. The directory is used directly without copying.
+- **Local archive via URI** — `file:///absolute/path/to/preset.tar.gz`. The archive is re-extracted on every run.
+
+See [doc/presets.md](doc/presets.md) for the full preset contract, caching behavior, and troubleshooting.
 
 ### Building your own preset
 
