@@ -37,7 +37,7 @@ func TestPrepare_WritesVars(t *testing.T) {
 	t.Parallel()
 
 	deploymentDir := t.TempDir()
-	cfg := NewTofuConfigFromDeployment(deploymentDir, presets.InfrastructureTofu{})
+	cfg := NewTofuConfigFromDeployment(deploymentDir, presets.InfrastructureTofu{}, nil)
 
 	expectNoErr(t, os.MkdirAll(cfg.WorkDir(), 0o700))
 
@@ -71,7 +71,7 @@ func TestConfigure_WritesVarsWithoutBinary(t *testing.T) {
 	t.Parallel()
 
 	deploymentDir := t.TempDir()
-	cfg := NewTofuConfigFromDeployment(deploymentDir, presets.InfrastructureTofu{})
+	cfg := NewTofuConfigFromDeployment(deploymentDir, presets.InfrastructureTofu{}, nil)
 	binaryPath := filepath.Join(deploymentDir, "tofu")
 	cfg.tofuBinaryPath = binaryPath
 
@@ -94,7 +94,7 @@ func TestPrepare_ErrorsWhenVariablesMissing(t *testing.T) {
 	t.Parallel()
 
 	deploymentDir := t.TempDir()
-	cfg := NewTofuConfigFromDeployment(deploymentDir, presets.InfrastructureTofu{})
+	cfg := NewTofuConfigFromDeployment(deploymentDir, presets.InfrastructureTofu{}, nil)
 
 	expectNoErr(t, os.MkdirAll(cfg.WorkDir(), 0o700))
 

@@ -10,13 +10,22 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/exasol/exasol-personal/internal/tofu"
+	"github.com/exasol/exasol-personal/assets/resources"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
 func main() {
 	flag.Parse()
 
-	binaryPath, err := tofu.ResolveBinaryPath(context.Background())
+	spec, err := runtimeartifacts.ParseSpec(resources.ResourcesYAML)
+	if err != nil {
+		log.Fatal(err)
+	}
+	manager, err := runtimeartifacts.NewResourceManager(spec)
+	if err != nil {
+		log.Fatal(err)
+	}
+	binaryPath, err := manager.Request(context.Background(), "tofu")
 	if err != nil {
 		log.Fatal(err)
 	}
