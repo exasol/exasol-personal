@@ -11,6 +11,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
 // Default tofu configuration values.
@@ -24,27 +25,28 @@ const (
 // Config captures optional tofu settings from an infrastructure preset.
 type Config struct {
 	// All absolute!
-	deploymentRoot string
 	workDir        string
 	tofuBinaryPath string
 	variablesFile  string
 	varsOutputFile string
 	planeFile      string
 	stateFile      string
+	manager        *runtimeartifacts.Manager
 }
 
 // Construct a tofu config from a deployment directory and a preset manifest.
 func NewTofuConfigFromDeployment(
 	deploymentDir string,
 	presetTofuConfig presets.InfrastructureTofu,
+	manager *runtimeartifacts.Manager,
 ) *Config {
 	infraDir := path.Join(deploymentDir, config.InfrastructureFilesDirectory)
 
 	return newTofuConfig(
-		deploymentDir,
 		infraDir,
 		presetTofuConfig.VariablesFile,
 		presetTofuConfig.VarsOutputFile,
+		manager,
 	)
 }
 
@@ -54,10 +56,10 @@ func NewTofuConfigFromPreset(
 	presetTofuConfig presets.InfrastructureTofu,
 ) *Config {
 	return newTofuConfig(
-		"",
 		infraDir,
 		presetTofuConfig.VariablesFile,
 		presetTofuConfig.VarsOutputFile,
+		nil,
 	)
 }
 
@@ -65,10 +67,10 @@ func NewTofuConfigFromPreset(
 // SSOT for all relative paths etc. Don't construct them anywhere else
 // Pathes are either relative to work dir or absolute!
 func newTofuConfig(
-	deploymentRoot string,
 	workDir string,
 	variablesRelFilepath string,
 	varsOutputRelFilepath string,
+	manager *runtimeartifacts.Manager,
 ) *Config {
 	planFile := path.Join(workDir, DefaultPlanFile)
 	stateFile := path.Join(workDir, DefaultStateFile)
@@ -90,12 +92,12 @@ func newTofuConfig(
 	varsOutputFile = path.Join(workDir, varsOutputFile)
 
 	return &Config{
-		deploymentRoot: deploymentRoot,
 		workDir:        workDir,
 		variablesFile:  variablesFile,
 		varsOutputFile: varsOutputFile,
 		planeFile:      planFile,
 		stateFile:      stateFile,
+		manager:        manager,
 	}
 }
 
@@ -111,11 +113,11 @@ func (c *Config) TofuBinaryPath(ctx context.Context) (string, error) {
 		return c.tofuBinaryPath, nil
 	}
 
-	if c.deploymentRoot == "" {
-		return "", errors.New("tofu deployment root is not configured")
+	if c.manager == nil {
+		return "", errors.New("tofu binary path is not configured")
 	}
 
-	binaryPath, err := ResolveBinaryPath(ctx)
+	binaryPath, err := c.manager.Request(ctx, "tofu")
 	if err != nil {
 		return "", err
 	}
