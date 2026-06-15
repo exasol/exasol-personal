@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -312,13 +313,18 @@ func validateInfrastructurePreset(infrastructurePreset PresetRef) error {
 		return validatePresetDir(infrastructurePreset.Path, "infrastructure.yaml")
 	}
 
-	for _, k := range presets.ListEmbeddedInfrastructuresPresets() {
+	known := presets.ListEmbeddedInfrastructuresPresets()
+	for _, k := range known {
 		if k == infrastructurePreset.Name {
 			return nil
 		}
 	}
 
-	return fmt.Errorf("unknown infrastructure preset %q", infrastructurePreset.Name)
+	return fmt.Errorf(
+		"unknown infrastructure preset %q; available: %s",
+		infrastructurePreset.Name,
+		strings.Join(known, ", "),
+	)
 }
 
 func validateInstallationPreset(installationPreset PresetRef) error {
@@ -326,13 +332,18 @@ func validateInstallationPreset(installationPreset PresetRef) error {
 		return validatePresetDir(installationPreset.Path, "installation.yaml")
 	}
 
-	for _, k := range presets.ListEmbeddedInstallationsPresets() {
+	known := presets.ListEmbeddedInstallationsPresets()
+	for _, k := range known {
 		if k == installationPreset.Name {
 			return nil
 		}
 	}
 
-	return fmt.Errorf("unknown installation preset %q", installationPreset.Name)
+	return fmt.Errorf(
+		"unknown installation preset %q; available: %s",
+		installationPreset.Name,
+		strings.Join(known, ", "),
+	)
 }
 
 func validatePresetDir(dir string, requiredFile string) error {
