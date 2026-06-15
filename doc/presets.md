@@ -280,3 +280,92 @@ If you want infrastructure and installation presets to remain mix-and-match, tre
 If you intentionally break the contract (different host paths, different discovery layout, different metadata files), you can still do so by defining a **compatible subset** (a “preset family”) where infrastructure and installation presets are designed together.
 
 When you do that, document the differences in the preset README(s) and ensure the launcher integration remains clear (especially around monitoring, progress reporting, and failure modes).
+
+## External preset sources
+
+In addition to embedded preset names and local filesystem paths, the launcher accepts external URIs as preset arguments.
+
+### Source classification
+
+The launcher classifies a preset argument as external when it begins with a URI scheme:
+
+| Pattern | Classification |
+|---|---|
+| `file:///path` | Local directory or archive |
+| `https://host/repo.git` | Git repository |
+| `http://host/repo.git` | Git repository |
+| `git://host/repo.git` | Git repository |
+| `git@host:path.git` | Git repository via SSH |
+| `https://host/archive.tar.gz` | Remote archive |
+| `http://host/archive.tar.gz` | Remote archive |
+
+Arguments that do not start with a URI scheme (no `://` or `git@`) are matched against embedded preset names first, then treated as filesystem paths.
+
+### Git repositories
+
+Specify a git repository by its URL. Append `@branch-or-tag` to clone a specific ref:
+
+```bash
+exasol install https://github.com/org/infra-preset.git
+exasol install https://github.com/org/infra-preset.git@v2.1
+exasol install git@github.com:org/infra-preset.git@main
+```
+
+**Ref resolution** — Before cloning, the launcher lists the remote references to resolve the ref to a commit hash. The commit hash is used as the cache identity: clones at the same commit are reused; a new commit triggers a fresh shallow clone.
+
+**SSH authentication** — `git@` URLs authenticate via the SSH agent (`SSH_AUTH_SOCK`). If the SSH agent is not available, the launcher returns an error; key files are not used as a fallback.
+
+**`@ref` syntax** — Refs can be branch names, tag names, or full commit SHAs, appended after the last `@`. For SCP-style `git@` URLs the ref follows the repository path (e.g. `git@github.com:org/repo.git@main`). The `@ref` suffix is only valid on git source URLs; using it on a plain archive URL returns an error.
+
+### Remote archives
+
+An `https://` or `http://` URL ending in a recognised archive extension is treated as a remote archive:
+
+```bash
+exasol install https://example.com/preset-v1.0.tar.gz
+exasol install https://example.com/preset.zip
+```
+
+Because no checksum is supplied at the CLI level, the archive is re-downloaded on every run. The launcher logs a message explaining the re-fetch. To avoid repeated downloads, host the archive at a stable URL and consider pinning via a checksummed preset definition.
+
+Supported archive formats: `.tar.gz`, `.tgz`, `.zip`.
+
+### Local paths via `file://`
+
+Use `file://` to reference a local directory or archive with an explicit URI rather than a bare path:
+
+```bash
+exasol install file:///home/user/my-preset-dir     # directory, used directly
+exasol install file:///home/user/preset.tar.gz     # archive, re-extracted every run
+```
+
+A `file://` URI pointing to a regular file that is not a supported archive format returns an error.
+
+### Caching behavior
+
+| Source kind | Cache identity | Re-fetch policy |
+|---|---|---|
+| Git repository | Commit hash | Cached per commit; re-cloned on new commit |
+| Checksummed archive (static spec) | SHA-256 checksum | Cached; re-fetched only if checksum changes |
+| No-checksum archive (CLI) | N/A | Always re-fetched |
+| `file://` directory | N/A | Always used directly (no copy) |
+| `file://` archive | N/A | Always re-extracted |
+
+### Preset manifest verification
+
+After resolution, the launcher verifies that the resolved directory contains the expected manifest file:
+
+- Infrastructure preset: `infrastructure.yaml`
+- Installation preset: `installation.yaml`
+
+If the manifest is missing, the launcher reports an error before attempting any deployment.
+
+### Troubleshooting
+
+| Error | Cause | Fix |
+|---|---|---|
+| `ref "X" not found` | Branch or tag does not exist in the remote | Check the ref name |
+| `no SSH credentials available for ... (SSH agent not running)` | SSH agent is not running | Start the SSH agent (`eval $(ssh-agent)` and `ssh-add`) |
+| `does not contain the expected ... manifest` | The resolved directory lacks the manifest file | Confirm the repository or archive root contains `infrastructure.yaml` / `installation.yaml` |
+| `resource path must be a directory or a supported archive file` | `file://` URI points to a plain file | Use a directory or `.tar.gz` / `.tgz` / `.zip` archive |
+| `@ref syntax ... is only valid on git source URLs` | `@suffix` appended to a non-git URL | Remove the `@ref` or use a `.git` URL |
