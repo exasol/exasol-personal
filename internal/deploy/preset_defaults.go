@@ -11,6 +11,10 @@ import (
 )
 
 func ResolveDefaultInstallationPreset(infrastructurePreset PresetRef) (PresetRef, error) {
+	if err := validateInfrastructurePreset(infrastructurePreset); err != nil {
+		return PresetRef{}, err
+	}
+
 	infrastructureManifest, err := readInfrastructureManifestFromPreset(infrastructurePreset)
 	if err != nil {
 		return PresetRef{}, fmt.Errorf(
