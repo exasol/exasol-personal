@@ -1,0 +1,73 @@
+Exasol Personal Deployment Overview
+Deployment directory: {{ .DeploymentDir }}
+{{- if .DeploymentID }}
+Deployment ID: {{ .DeploymentID }}
+{{- end }}
+Deployment State: {{ .DeploymentState }}
+{{- with .Deployment }}
+{{- if .ClusterSize }}
+Cluster Size: {{ .ClusterSize }}
+{{- end }}
+{{- if .ClusterState }}
+Cluster State: {{ .ClusterState }}
+{{- end }}
+{{- end }}
+{{- with .Connection }}
+
+=== How to Connect from a Graphical SQL Client ===
+To connect using a client of your choice:
+1. Create a new database connection.
+2. Choose 'Exasol' as the driver.
+3. Enter the following values below in 'Database':
+  - Server: {{ .DisplayHostname }}
+  - Port: {{ .DBPort }}
+  - UserId: {{ .Username }}
+{{- if .CertFingerprint }}
+  - Certificate Fingerprint: {{ .CertFingerprint }}
+{{- else if .InsecureSkipTLS }}
+  - Certificate Validation: disable validation / use nocertcheck for the current deployment setup
+{{- end }}
+  - Password: <stored in {{ .SecretsFilePath }}>
+
+=== CLI Connection Instructions ===
+To connect using the CLI:
+  exasol connect
+
+{{ if .HasAdminUI -}}
+=== How to open the Administration UI ===
+  URL: {{ .AdminUI.URL }}
+{{- if .AdminUI.Username }}
+  Username: {{ .AdminUI.Username }}
+{{- end }}
+{{- if .AdminUISecured }}
+  Password: <stored in {{ .SecretsFilePath }}>
+{{- end }}
+{{- if .AdminUI.CertFingerprint }}
+  Certificate Fingerprint: {{ .AdminUI.CertFingerprint }}
+{{- else if .AdminUI.InsecureSkipCertValidation }}
+  Certificate Validation: accept the certificate if necessary
+{{- end }}
+
+{{ end -}}
+{{ if .ShellSupported }}{{ if .IsLocalBackend }}
+=== Host Shell Instructions ===
+  Local endpoint: {{ .DisplayHostname }}
+  Host shell (VM OS): exasol shell host
+  Alternative: {{ .SSHCommand }}
+
+Note: exasol destroy deletes the local VM disk/data and launcher-managed share for this deployment.
+{{ else }}
+=== SSH Connection Instructions ===
+  Public IP: {{ .PublicIp }}
+  Host shell (OS): exasol shell host
+  Alternative: {{ .SSHCommand }}
+{{ end }}{{ end }}
+{{- end }}
+
+{{- with .Connection }}
+=== SQL clients documentation ===
+  https://docs.exasol.com/db/latest/connect_exasol/sql_clients.htm
+
+{{- end }}
+=== Exasol Product Documentation ===
+  https://docs.exasol.com/

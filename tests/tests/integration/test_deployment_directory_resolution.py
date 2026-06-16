@@ -165,7 +165,7 @@ def test_init_creates_default_deployment_dir(exasol_path: str, tmp_path: Path) -
     _assert_deployment_dir_logged(result.stderr, default_dir, "default")
 
 
-def test_initialized_state_error_mentions_resolved_default_dir(
+def test_info_reports_uninitialized_resolved_default_dir(
     exasol_path: str, tmp_path: Path
 ) -> None:
     # Given no initialized deployment is available in the current or default directory
@@ -176,17 +176,17 @@ def test_initialized_state_error_mentions_resolved_default_dir(
     default_dir = home / ".exasol" / "personal" / "deployments" / "default"
     launcher = str(Path(exasol_path).resolve())
 
-    # When a command requiring initialized state is invoked
+    # When info is invoked without an explicit deployment directory
     result = subprocess.run(
         [launcher, "info"],
         cwd=cwd,
         env=_env_with_home(home),
         capture_output=True,
         text=True,
-        check=False,
+        check=True,
     )
 
-    # Then the error explains the resolved deployment directory
-    assert result.returncode != 0
-    assert "deployment directory is not initialized" in result.stderr.lower()
-    assert f"in {json.dumps(str(default_dir))}" in result.stderr
+    # Then info reports the resolved default directory and guides the user
+    assert "No Exasol Personal deployment exists" in result.stdout
+    assert str(default_dir) in result.stdout
+    assert "exasol install <infra preset>" in result.stdout
