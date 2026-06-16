@@ -42,12 +42,12 @@ func (v DeploymentConfigValue) DisplayName() string {
 // (for example "name:aws" or "path:/abs/preset"); DisplayName and
 // Description come from the extracted manifest and are informational only.
 type PresetIdentityInfo struct {
-	Selector    string
-	Kind        string
-	Name        string
-	Path        string
-	DisplayName string
-	Description string
+	Selector    string `json:"selector,omitempty"`
+	Kind        string `json:"kind,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Path        string `json:"path,omitempty"`
+	DisplayName string `json:"displayName,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 type DeploymentConfigurationSection struct {

@@ -26,6 +26,11 @@ const (
 	StatusDatabaseReady            = "database_ready"
 )
 
+const notInitializedMessage = "No Exasol Personal deployment exists in this " +
+	"deployment directory yet. " +
+	"Run `exasol install <infra preset>` to create and start one, or pass " +
+	"`--deployment-dir <path>` to inspect an existing deployment."
+
 type StatusOutput struct {
 	DeploymentDir string `json:"deploymentDir"`
 	Status        string `json:"status"`
@@ -273,9 +278,8 @@ func staleOperationInProgressMessage(operation string) string {
 
 func notInitializedStatus() *StatusOutput {
 	return &StatusOutput{
-		Status: StatusNotInitialized,
-		Message: "No workflow state file was found. " +
-			"Run `init` or `install` to start a new deployment in this directory.",
+		Status:  StatusNotInitialized,
+		Message: notInitializedMessage,
 	}
 }
 
