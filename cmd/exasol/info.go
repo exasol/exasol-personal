@@ -5,23 +5,20 @@ package main
 
 import (
 	"context"
-	"fmt"
+	_ "embed"
+	"encoding/json"
 	"io"
 	"os"
+	"text/template"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
 
-const deploymentInfoCmdShortDesc = "Prints a summary of your Exasol deployment."
+const deploymentInfoCmdShortDesc = "Prints information about your Exasol deployment."
 
 const deploymentInfoCmdLongDesc = deploymentInfoCmdShortDesc + `
-
-Shows key deployment attributes in plain text, including:
-
-- Deployment name, Deployment State, Cluster size and Cluster State
-- Connection details appropriate for the active deployment backend
 
 You can use the '--json' option to print the output in JSON format.
 
@@ -30,12 +27,24 @@ Example usage:
     exasol info --json
 `
 
+//go:embed info_text.tmpl
+var deploymentInfoTextTemplateSource string
+
+var deploymentInfoTextTemplate = template.Must(
+	template.New("deployment-info-text").Parse(deploymentInfoTextTemplateSource),
+)
+
 func fetchDeploymentInfoJSON(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	writer io.Writer,
 ) error {
-	return deploy.PrintConnectionInsInJson(ctx, deployment, writer)
+	report, err := deploy.GetDeploymentInfoReport(ctx, deployment)
+	if err != nil {
+		return err
+	}
+
+	return renderDeploymentInfoJSON(writer, report)
 }
 
 func fetchDeploymentInfoText(
@@ -43,25 +52,29 @@ func fetchDeploymentInfoText(
 	deployment config.DeploymentDir,
 	writer io.Writer,
 ) error {
-	content, err := deploy.GetConnectionInstructionsText(ctx, deployment)
+	report, err := deploy.GetDeploymentInfoReport(ctx, deployment)
 	if err != nil {
 		return err
 	}
 
-	_, err = fmt.Fprintln(writer, content)
-
-	return err
+	return renderDeploymentInfoText(writer, report)
 }
 
-func addConnectionInstructionsTerminalOutput(deployment config.DeploymentDir) error {
-	content, err := os.ReadFile(deployment.ConnectionInstructionsPath())
-	if err != nil {
-		return err
-	}
+func renderDeploymentInfoJSON(
+	writer io.Writer,
+	report *deploy.DeploymentInfoReport,
+) error {
+	encoder := json.NewEncoder(writer)
+	encoder.SetIndent("", "  ")
 
-	addTerminalOutput(string(content))
+	return encoder.Encode(report)
+}
 
-	return nil
+func renderDeploymentInfoText(
+	writer io.Writer,
+	report *deploy.DeploymentInfoReport,
+) error {
+	return deploymentInfoTextTemplate.Execute(writer, report)
 }
 
 var deploymentInfoCmd = &cobra.Command{
@@ -84,7 +97,6 @@ var deploymentInfoCmd = &cobra.Command{
 // nolint: gochecknoinits
 func init() {
 	requireMinorVersionCompatibility(deploymentInfoCmd, CurrentLauncherVersion)
-	requireInitializedDeploymentDir(deploymentInfoCmd)
 	registerDeploymentDirFlag(deploymentInfoCmd, commonFlags)
 	registerOutputFlags(deploymentInfoCmd, commonFlags)
 	rootCmd.AddCommand(deploymentInfoCmd)

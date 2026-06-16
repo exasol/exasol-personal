@@ -1,6 +1,7 @@
 # Copyright 2026 Exasol AG
 # SPDX-License-Identifier: MIT
 
+import json
 from pathlib import Path
 
 from .helpers import first_infrastructure_preset_id_or_skip, run_command
@@ -49,7 +50,44 @@ def test_info_command_exists(exasol_path: str) -> None:
     """Verify info command is available."""
     result = run_command([exasol_path, "info", "--help"])
     assert result.returncode == 0
-    assert "Prints a summary" in result.stdout
+    assert "Prints information about your Exasol deployment." in result.stdout
+
+
+def test_info_reports_missing_deployment_without_error(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given an empty deployment directory
+    deployment_dir = tmp_path / "deployment"
+    deployment_dir.mkdir()
+
+    # When info is invoked before a deployment exists
+    result = run_command([exasol_path, "info", "--deployment-dir", str(deployment_dir)])
+
+    # Then it exits successfully and guides the user toward creating a deployment
+    assert "No Exasol Personal deployment exists" in result.stdout
+    assert str(deployment_dir) in result.stdout
+    assert "exasol install <infra preset>" in result.stdout
+    assert "exasol presets list" in result.stdout
+
+
+def test_info_json_reports_missing_deployment_without_error(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given an empty deployment directory
+    deployment_dir = tmp_path / "deployment"
+    deployment_dir.mkdir()
+
+    # When info is invoked as JSON before a deployment exists
+    result = run_command(
+        [exasol_path, "info", "--json", "--deployment-dir", str(deployment_dir)]
+    )
+
+    # Then automation can branch on structured state instead of parsing an error
+    data = json.loads(result.stdout)
+    assert data["deploymentState"] == "not_initialized"
+    assert data["deploymentDir"] == str(deployment_dir)
+    assert "message" not in data
+    assert "actions" not in data
 
 
 def test_info_command_init_deployment(exasol_path: str, tmp_path: Path) -> None:

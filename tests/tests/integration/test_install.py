@@ -208,7 +208,8 @@ esac
         env=env,
     )
     info_data = json.loads(info_result.stdout)
-    assert info_data["backend"] == "local"
+    assert info_data["deploymentState"] == "running"
+    assert info_data["connection"]["backend"] == "local"
     assert info_data["connection"]["dbPort"] == LOCAL_TEST_DB_PORT
     assert "adminUi" not in info_data["connection"]
     assert "uiPort" not in info_data["connection"]
