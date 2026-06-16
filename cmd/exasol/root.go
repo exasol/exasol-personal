@@ -34,7 +34,9 @@ Getting Started:
 
 	Note: Cloud presets require provider credentials in your environment.
   Use "exasol init --help", "exasol install --help", or "exasol presets list" to see the preset
-  compatibility matrix.`
+  compatibility matrix.
+
+  AI agent skills: https://github.com/exasol-labs/exasol-agent-skills`
 
 	rootCmdExample = `  exasol install aws`
 
