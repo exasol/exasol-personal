@@ -72,13 +72,9 @@ func TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles(t *te
 	if err := os.WriteFile(statePath, []byte("state"), 0o600); err != nil {
 		t.Fatalf("write state file failed: %v", err)
 	}
-	spec, err := runtimeartifacts.ParseSpec(resources.ResourcesYAML)
+	mgr, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
 	if err != nil {
-		t.Fatalf("parse resources spec failed: %v", err)
-	}
-	mgr, err := runtimeartifacts.NewResourceManager(spec)
-	if err != nil {
-		t.Fatalf("create artifact manager failed: %v", err)
+		t.Fatalf("create artifact manager: %v", err)
 	}
 	tofuBinaryPath, err := mgr.Request(context.Background(), "tofu")
 	if err != nil {

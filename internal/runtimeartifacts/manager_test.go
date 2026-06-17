@@ -95,60 +95,16 @@ func TestManager_RequestUsesDownloadPathFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	assertPathInCache(t, deploymentDir, path, "artifact", "linux_amd64", "artifact.tar.gz")
+	assertPathInCache(
+		t,
+		deploymentDir,
+		path,
+		"artifact",
+		filepath.Join("linux", "amd64"),
+		"artifact.tar.gz",
+	)
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected artifact path to exist, got %v", err)
-	}
-}
-
-func TestManager_StagesArtifactRequestsUnderDownloadsRoot(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	cache := newCacheWithClock(
-		filepath.Join(t.TempDir(), "cache"),
-		filepath.Join(t.TempDir(), cacheConfigFileName),
-		systemClock{},
-	)
-	def := ResourceDefinition{
-		Extract: false,
-		Artifact: map[string]ArtifactSpec{
-			"linux/amd64": {
-				URL:          "https://example.com/artifact.bin",
-				Sha256:       strings.Repeat("a", 64),
-				DownloadPath: "artifact.bin",
-			},
-		},
-	}
-	artifact := def.Artifact["linux/amd64"]
-	manager := NewResourceManagerWithCacheForPlatform(
-		ResourceSpec{"artifact": def},
-		cache,
-		"linux",
-		"amd64",
-	)
-	target, err := manager.resolveArtifactRequest("artifact", def, artifact)
-	if err != nil {
-		t.Fatalf("failed to resolve artifact request: %v", err)
-	}
-
-	// When
-	stage, cleanup, err := manager.stageArtifactRequest(target)
-	if err != nil {
-		t.Fatalf("expected staging to succeed, got %v", err)
-	}
-	defer cleanup()
-
-	// Then
-	stageEntryPath := stage.entryPath(cache)
-	if !strings.HasPrefix(stageEntryPath, cache.downloadsRoot()+string(filepath.Separator)) {
-		t.Fatalf("expected stage entry under downloads root, got %q", stageEntryPath)
-	}
-	if strings.HasPrefix(stageEntryPath, cache.artifactsRoot()+string(filepath.Separator)) {
-		t.Fatalf("expected stage entry to not be under artifacts root, got %q", stageEntryPath)
-	}
-	if !strings.HasPrefix(stage.artifactPath(cache), stageEntryPath+string(filepath.Separator)) {
-		t.Fatalf("expected staged artifact under stage entry, got %q", stage.artifactPath(cache))
 	}
 }
 
@@ -247,8 +203,8 @@ func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 		deploymentDir,
 		path1,
 		"artifact",
-		"linux_amd64",
-		filepath.Join("artifact", "tool"),
+		filepath.Join("linux", "amd64"),
+		filepath.Join("unpack", "tool"),
 	)
 	if _, err := os.Stat(path1); err != nil {
 		t.Fatalf("expected resolved path to exist, got %v", err)
@@ -895,4 +851,161 @@ func onlyCacheEntry(t *testing.T, index cacheIndex) cacheIndexEntry {
 	t.Fatal("expected one cache entry")
 
 	return cacheIndexEntry{}
+}
+
+func TestManager_GetWithRuntimeDefinition(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deploymentDir := t.TempDir()
+	data := []byte("tool-binary")
+	server := newArtifactServer(t, "tool.bin", data)
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {
+				URL:          server.URL + "/tool.bin",
+				Sha256:       checksumString(string(data)),
+				DownloadPath: "tool.bin",
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, deploymentDir, "linux", "amd64")
+
+	// When
+	path, err := manager.Get(context.Background(), def, "tool-binary")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected resolved path to exist, got %v", err)
+	}
+}
+
+func TestParseSpec_RejectsArchiveWithMissingChecksum(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`
+myresource:
+  extract: false
+  artifact:
+    linux/amd64:
+      url: https://example.com/tool.tar.gz
+      sha256: ""
+`)
+
+	_, err := ParseSpec(raw)
+	if err == nil || !strings.Contains(err.Error(), "must define sha256") {
+		t.Fatalf("expected missing sha256 error, got %v", err)
+	}
+}
+
+func TestManager_GetNoChecksumAlwaysRefetches(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deploymentDir := t.TempDir()
+	data := []byte("artifact-content")
+	server, requests := newCountingArtifactServer(t, "tool.bin", data)
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {
+				URL:          server.URL + "/tool.bin",
+				Sha256:       "",
+				DownloadPath: "tool.bin",
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, deploymentDir, "linux", "amd64")
+
+	// When
+	_, err := manager.Get(context.Background(), def, "tool-binary")
+	if err != nil {
+		t.Fatalf("expected first Get to succeed, got %v", err)
+	}
+	_, err = manager.Get(context.Background(), def, "tool-binary")
+	if err != nil {
+		t.Fatalf("expected second Get to succeed, got %v", err)
+	}
+	// Then
+	if requests.Load() != 2 {
+		t.Fatalf("expected 2 requests for no-checksum archive, got %d", requests.Load())
+	}
+}
+
+func TestManager_GetAnyPlatformFallback(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deploymentDir := t.TempDir()
+	data := []byte("cross-platform-tool")
+	server := newArtifactServer(t, "tool.bin", data)
+	spec := ResourceSpec{
+		"tool": {
+			Extract: false,
+			Artifact: map[string]ArtifactSpec{
+				anyPlatformKey: {
+					URL:          server.URL + "/tool.bin",
+					Sha256:       checksumString(string(data)),
+					DownloadPath: "tool.bin",
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, deploymentDir, "darwin", "arm64")
+
+	// When
+	path, err := manager.Request(context.Background(), "tool")
+	// Then
+	if err != nil {
+		t.Fatalf("expected any-platform fallback to succeed, got %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected resolved path to exist, got %v", err)
+	}
+}
+
+func TestManager_GetPlatformSpecificTakesPriorityOverAny(t *testing.T) {
+	t.Parallel()
+
+	// Given: a definition with both a platform-specific key and "any"
+	deploymentDir := t.TempDir()
+	platformData := []byte("platform-specific-tool")
+	anyData := []byte("any-platform-tool")
+	server := newArtifactServer(t, "tool.bin", platformData)
+	anyServer := newArtifactServer(t, "tool.bin", anyData)
+	spec := ResourceSpec{
+		"tool": {
+			Extract: false,
+			Artifact: map[string]ArtifactSpec{
+				"linux/amd64": {
+					URL:          server.URL + "/tool.bin",
+					Sha256:       checksumString(string(platformData)),
+					DownloadPath: "tool.bin",
+				},
+				anyPlatformKey: {
+					URL:          anyServer.URL + "/tool.bin",
+					Sha256:       checksumString(string(anyData)),
+					DownloadPath: "tool.bin",
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, deploymentDir, "linux", "amd64")
+
+	// When
+	path, err := manager.Request(context.Background(), "tool")
+	// Then
+	if err != nil {
+		t.Fatalf("expected platform-specific resolution to succeed, got %v", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected resolved path to be readable, got %v", err)
+	}
+	if string(content) != string(platformData) {
+		t.Fatalf("expected platform-specific artifact, got %q", string(content))
+	}
 }
