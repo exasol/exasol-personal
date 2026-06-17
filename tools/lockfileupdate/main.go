@@ -146,11 +146,7 @@ func updateLockfileForPreset(ctx context.Context, presetDir string, platforms []
 		return fmt.Errorf("copy preset dir to temp: %w", err)
 	}
 
-	spec, err := runtimeartifacts.ParseSpec(resources.ResourcesYAML)
-	if err != nil {
-		return fmt.Errorf("parse resources spec: %w", err)
-	}
-	manager, err := runtimeartifacts.NewResourceManager(spec)
+	manager, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
 	if err != nil {
 		return fmt.Errorf("create artifact manager: %w", err)
 	}

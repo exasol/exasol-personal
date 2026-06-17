@@ -101,17 +101,13 @@ func newDeploymentBackend(
 		return nil, err
 	}
 
-	spec, err := runtimeartifacts.ParseSpec(resources.ResourcesYAML)
-	if err != nil {
-		return nil, err
-	}
-	manager, err := runtimeartifacts.NewResourceManager(spec)
-	if err != nil {
-		return nil, err
-	}
-
 	switch kind {
 	case backendTypeTofu:
+		manager, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
+		if err != nil {
+			return nil, err
+		}
+
 		return newTofuBackend(deployment, manifest, manager), nil
 	case backendTypeLocal:
 		return newLocalBackend(deployment, manifest), nil

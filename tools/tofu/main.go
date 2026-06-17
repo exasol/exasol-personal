@@ -17,11 +17,7 @@ import (
 func main() {
 	flag.Parse()
 
-	spec, err := runtimeartifacts.ParseSpec(resources.ResourcesYAML)
-	if err != nil {
-		log.Fatal(err)
-	}
-	manager, err := runtimeartifacts.NewResourceManager(spec)
+	manager, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
 	if err != nil {
 		log.Fatal(err)
 	}
