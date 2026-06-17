@@ -15,6 +15,20 @@ import (
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
+func TestResolvePreset_NonGitURLWithRefReturnsError(t *testing.T) {
+	t.Parallel()
+
+	_, err := ResolvePreset(
+		context.Background(),
+		nil,
+		"https://example.com/preset.tar.gz@something",
+		presets.PresetTypeInfrastructure,
+	)
+	if err == nil || !strings.Contains(err.Error(), "@ref syntax") {
+		t.Fatalf("expected @ref error for non-git URL, got %v", err)
+	}
+}
+
 func TestResolvePreset_FileDirectory(t *testing.T) {
 	t.Parallel()
 
@@ -39,17 +53,8 @@ func TestResolvePreset_FileDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected resolution to succeed, got %v", err)
 	}
-	// FileSource returns the source directory path as a redirect.
-	resolved, resErr := filepath.EvalSymlinks(path)
-	if resErr != nil {
-		t.Fatalf("expected path to be resolvable, got %v", resErr)
-	}
-	wantResolved, resErr := filepath.EvalSymlinks(presetDir)
-	if resErr != nil {
-		t.Fatalf("expected presetDir to be resolvable, got %v", resErr)
-	}
-	if resolved != wantResolved {
-		t.Fatalf("expected path to resolve to preset directory, got %q", resolved)
+	if path != presetDir {
+		t.Fatalf("expected path to be preset directory %q, got %q", presetDir, path)
 	}
 }
 
