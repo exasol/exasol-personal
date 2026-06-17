@@ -19,7 +19,7 @@ source "${SCRIPT_DIR}/logging.sh"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
 
-c4_version='4.29.0'
+c4_version='4.31.0'
 
 log_step_info "Preparing system..."
 

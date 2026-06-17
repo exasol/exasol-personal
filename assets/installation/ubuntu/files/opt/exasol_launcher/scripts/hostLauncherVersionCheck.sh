@@ -34,7 +34,7 @@ if [[ -z "${version_check_url}" ]]; then
   version_check_url="${DEFAULT_VERSION_CHECK_URL}"
 fi
 if [[ -z "${exasol_version}" ]]; then
-  exasol_version="2025.2.0"
+  exasol_version="2026.1.0"
 fi
 
 # Missing launcher-governed values means init/deploy artifacts are incomplete.
