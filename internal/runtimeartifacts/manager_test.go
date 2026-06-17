@@ -5,7 +5,6 @@ package runtimeartifacts
 
 import (
 	"archive/tar"
-	"archive/zip"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -298,8 +297,8 @@ func TestManager_RequestExtractsZipResource(t *testing.T) {
 		deploymentDir,
 		path,
 		"artifact",
-		"darwin_arm64",
-		filepath.Join("artifact", "launcher"),
+		filepath.Join("darwin", "arm64"),
+		filepath.Join("unpack", "launcher"),
 	)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -714,41 +713,7 @@ func writeTarGzMultiFixture(
 
 func writeZipFixture(t *testing.T, dir, name string, entries map[string]string) string {
 	t.Helper()
-
-	path := filepath.Join(dir, name)
-	outputFile, err := os.Create(path)
-	if err != nil {
-		t.Fatalf("failed to create fixture: %v", err)
-	}
-	writer := zip.NewWriter(outputFile)
-
-	keys := make([]string, 0, len(entries))
-	for key := range entries {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, entryName := range keys {
-		header := &zip.FileHeader{
-			Name:   entryName,
-			Method: zip.Deflate,
-		}
-		header.SetMode(0o755)
-		entry, err := writer.CreateHeader(header)
-		if err != nil {
-			t.Fatalf("failed to create zip entry: %v", err)
-		}
-		if _, err := entry.Write([]byte(entries[entryName])); err != nil {
-			t.Fatalf("failed to write zip entry: %v", err)
-		}
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("failed to close zip writer: %v", err)
-	}
-	if err := outputFile.Close(); err != nil {
-		t.Fatalf("failed to close fixture file: %v", err)
-	}
-
-	return path
+	return writeZipFixtureEntries(t, dir, name, entries)
 }
 
 func sha256OfTestFile(t *testing.T, path string) string {
@@ -1090,4 +1055,44 @@ func TestManager_GetPlatformSpecificTakesPriorityOverAny(t *testing.T) {
 	if string(content) != string(platformData) {
 		t.Fatalf("expected platform-specific artifact, got %q", string(content))
 	}
+}
+
+func TestManager_GetZipExtraction(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	srcDir := t.TempDir()
+	archivePath := writeZipArchiveFixture(t, srcDir, "preset.zip", "tool", "tool-content")
+	cacheDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: true,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {
+				URL:          "file://" + archivePath,
+				ResourcePath: "tool",
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+
+	// When
+	path, err := manager.Get(context.Background(), def, "preset")
+	// Then
+	if err != nil {
+		t.Fatalf("expected zip extraction to succeed, got %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected extracted file to be readable, got %v", err)
+	}
+	if string(data) != "tool-content" {
+		t.Fatalf("expected %q, got %q", "tool-content", string(data))
+	}
+}
+
+func writeZipArchiveFixture(t *testing.T, dir, archiveName, entryName, content string) string {
+	t.Helper()
+	return writeZipFixtureEntries(t, dir, archiveName, map[string]string{
+		entryName: content,
+	})
 }
