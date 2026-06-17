@@ -20,7 +20,9 @@ import (
 func IsExternalPresetURI(arg string) bool {
 	return strings.HasPrefix(arg, "file://") ||
 		strings.HasPrefix(arg, "http://") ||
-		strings.HasPrefix(arg, "https://")
+		strings.HasPrefix(arg, "https://") ||
+		strings.HasPrefix(arg, "git://") ||
+		strings.HasPrefix(arg, "git@")
 }
 
 // ResolvePreset resolves an external preset URI to a local directory path and
@@ -31,6 +33,16 @@ func ResolvePreset(
 	uri string,
 	presetType string,
 ) (string, error) {
+	repoURL, ref := runtimeartifacts.ParseGitURL(uri)
+	if ref != "" && !runtimeartifacts.IsGitSourceURL(repoURL) {
+		return "", fmt.Errorf(
+			"@ref syntax (%q) is only valid on git source URLs;"+
+				" %q does not appear to be a git repository",
+			ref,
+			repoURL,
+		)
+	}
+
 	def := runtimeartifacts.ResourceDefinition{
 		Extract: needsExtraction(uri),
 		Artifact: map[string]runtimeartifacts.ArtifactSpec{
