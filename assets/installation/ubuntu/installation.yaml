@@ -11,7 +11,7 @@ variables:
     exasol_version:
       description: Exasol database version to install. Only change this if you are sure the release is compatible.
       type: string
-      default: "2025.2.0"
+      default: "2026.1.0"
     no_db_version_check:
       description: Disable the daily database version check (C4).
       type: bool
