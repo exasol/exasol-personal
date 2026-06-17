@@ -40,6 +40,10 @@ func TestLooksLikeExternalPresetURI(t *testing.T) {
 		want bool
 	}{
 		{"file:///path", true},
+		{"https://example.com/repo.git", true},
+		{"http://example.com/repo.git", true},
+		{"git://example.com/repo.git", true},
+		{"git@github.com:org/repo.git", true},
 		{"aws", false},
 		{"./local", false},
 		{"/abs/path", false},
