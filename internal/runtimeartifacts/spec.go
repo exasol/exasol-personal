@@ -121,8 +121,23 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 	if strings.TrimSpace(a.URL) == "" {
 		return fmt.Errorf("resource %q artifact %q must define url", ctx.resourceID, ctx.variant)
 	}
-	if strings.TrimSpace(a.Sha256) == "" {
-		return fmt.Errorf("resource %q artifact %q must define sha256", ctx.resourceID, ctx.variant)
+	if IsGitSourceURL(a.URL) {
+		if strings.TrimSpace(a.Sha256) != "" {
+			return fmt.Errorf(
+				"resource %q artifact %q must not define sha256 for a git source"+
+					" (commit hash is used instead)",
+				ctx.resourceID,
+				ctx.variant,
+			)
+		}
+	} else {
+		if strings.TrimSpace(a.Sha256) == "" {
+			return fmt.Errorf(
+				"resource %q artifact %q must define sha256",
+				ctx.resourceID,
+				ctx.variant,
+			)
+		}
 	}
 	if !ctx.extract && strings.TrimSpace(a.ResourcePath) != "" {
 		return fmt.Errorf(
