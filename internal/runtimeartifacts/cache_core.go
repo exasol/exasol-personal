@@ -58,6 +58,7 @@ type cacheIndexEntry struct {
 	EntryPath    string    `json:"entryPath"`
 	ArtifactPath string    `json:"artifactPath"`
 	ResolvedPath string    `json:"resolvedPath"`
+	RedirectPath string    `json:"redirectPath,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 	LastUsedAt   time.Time `json:"lastUsedAt"`
 	SizeBytes    int64     `json:"sizeBytes"`
