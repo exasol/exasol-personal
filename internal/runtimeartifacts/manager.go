@@ -62,6 +62,7 @@ var sources = []Source{
 
 var extractors = []Extractor{
 	&TarGzExtractor{},
+	&ZipExtractor{},
 }
 
 type artifactIdentityPayload struct {
