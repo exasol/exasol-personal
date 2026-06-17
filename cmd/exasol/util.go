@@ -5,12 +5,15 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/exasol/exasol-personal/internal/presets"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
 // UserConfirmationValidator is a function that takes an user input as a String,
@@ -71,22 +74,39 @@ func looksLikePathPresetArg(arg string) bool {
 		strings.ContainsAny(arg, `/\\`)
 }
 
-func presetRefFromArg(arg string) deploy.PresetRef {
+// resolvePresetRef resolves a preset argument to a PresetRef.
+// Plain names (no path separators or URI scheme) are returned as embedded preset
+// names. Everything else is resolved as a runtime artifact.
+func resolvePresetRef(
+	ctx context.Context,
+	arg string,
+	presetType string,
+) (deploy.PresetRef, error) {
 	arg = strings.TrimSpace(arg)
-	if looksLikePathPresetArg(arg) {
-		return deploy.PresetRef{Path: arg}
+	if !deploy.IsExternalPresetURI(arg) && !looksLikePathPresetArg(arg) {
+		return deploy.PresetRef{Name: arg}, nil
 	}
 
-	return deploy.PresetRef{Name: arg}
+	manager, err := runtimeartifacts.NewManager()
+	if err != nil {
+		return deploy.PresetRef{}, err
+	}
+	resolvedPath, err := deploy.ResolvePreset(ctx, manager, arg, presetType)
+	if err != nil {
+		return deploy.PresetRef{}, err
+	}
+
+	return deploy.PresetRef{Path: resolvedPath}, nil
 }
 
 func resolveInstallationPresetRef(
+	ctx context.Context,
 	args []string,
 	index int,
 	infrastructurePreset deploy.PresetRef,
 ) (deploy.PresetRef, error) {
 	if index >= 0 && index < len(args) && strings.TrimSpace(args[index]) != "" {
-		return presetRefFromArg(args[index]), nil
+		return resolvePresetRef(ctx, args[index], presets.PresetTypeInstallation)
 	}
 
 	return deploy.ResolveDefaultInstallationPreset(infrastructurePreset)

@@ -5,6 +5,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -42,12 +43,21 @@ func TestScanInfrastructurePresetFromArgs_PositionalName(t *testing.T) {
 }
 
 func TestScanInfrastructurePresetFromArgs_PositionalPath(t *testing.T) {
-	preset, err := scanInfrastructurePresetSelection([]string{"init", "./my-infra-preset"})
+	presetDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(presetDir, presets.InfrastructureManifestFilename),
+		[]byte("kind: infrastructure"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	preset, err := scanInfrastructurePresetSelection([]string{"init", presetDir})
 	if err != nil || preset == nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if preset.Path != "./my-infra-preset" {
-		t.Fatalf("unexpected preset: %#v", preset)
+	if preset.Path == "" || preset.Name != "" {
+		t.Fatalf("expected resolved path, got: %#v", preset)
 	}
 }
 
@@ -95,14 +105,23 @@ func TestScanInstallationPresetFromArgs_DefaultFromInfrastructure(t *testing.T) 
 }
 
 func TestScanInstallationPresetFromArgs_ExplicitInstallation(t *testing.T) {
+	presetDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(presetDir, presets.InstallationManifestFilename),
+		[]byte("kind: installation"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
 	preset, err := scanInstallationPresetSelection(
-		[]string{"install", presets.DefaultInfrastructure, "./install-preset"},
+		[]string{"install", presets.DefaultInfrastructure, presetDir},
 	)
 	if err != nil || preset == nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if preset.Path != "./install-preset" {
-		t.Fatalf("unexpected preset: %#v", preset)
+	if preset.Path == "" || preset.Name != "" {
+		t.Fatalf("expected resolved path, got: %#v", preset)
 	}
 }
 

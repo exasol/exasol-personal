@@ -60,8 +60,15 @@ func init() {
 		}
 		infraVars := collectInfrastructureVariableOverrides(cmd)
 		installVars := collectInstallationVariableOverrides(cmd)
-		infraPreset := presetRefFromArg(args[0])
-		installPreset, err := resolveInstallationPresetRef(args, 1, infraPreset)
+		infraPreset, err := resolvePresetRef(
+			cmd.Context(),
+			args[0],
+			presets.PresetTypeInfrastructure,
+		)
+		if err != nil {
+			return err
+		}
+		installPreset, err := resolveInstallationPresetRef(cmd.Context(), args, 1, infraPreset)
 		if err != nil {
 			return err
 		}
