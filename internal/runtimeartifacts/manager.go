@@ -56,6 +56,7 @@ type Extractor interface {
 }
 
 var sources = []Source{
+	&GitSource{},
 	&FileSource{},
 	&HttpSource{},
 }

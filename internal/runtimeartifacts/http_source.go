@@ -16,7 +16,8 @@ import (
 type HttpSource struct{}
 
 func (*HttpSource) CanFetch(url string) bool {
-	return (strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://"))
+	return (strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")) &&
+		!IsGitSourceURL(url)
 }
 
 func (*HttpSource) Fetch(ctx context.Context, url, dstPath string) (string, error) {

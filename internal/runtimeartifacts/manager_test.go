@@ -900,6 +900,85 @@ func TestManager_GetNoChecksumAlwaysRefetches(t *testing.T) {
 	}
 }
 
+func TestManager_GetGitSourceCachedOnSameCommit(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	repoDir, _ := createTestGitRepo(t, map[string]string{"preset.txt": "content"})
+	cacheDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: repoDir},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+
+	// When — first fetch clones the repo
+	path, err := manager.Get(context.Background(), def, "preset")
+	if err != nil {
+		t.Fatalf("first Get failed: %v", err)
+	}
+
+	// Corrupt a file in the cache to detect whether Fetch is called again.
+	corruptedFile := filepath.Join(path, "preset.txt")
+	if err := os.WriteFile(corruptedFile, []byte("corrupted"), filePerm); err != nil {
+		t.Fatalf("corrupt failed: %v", err)
+	}
+
+	// When — second Get with same commit; Identify returns same hash → cache hit
+	path2, err := manager.Get(context.Background(), def, "preset")
+	if err != nil {
+		t.Fatalf("second Get failed: %v", err)
+	}
+
+	// Then — same path returned, Fetch was not called (corrupted content preserved)
+	if path != path2 {
+		t.Fatalf("expected same cache path, got %q vs %q", path, path2)
+	}
+	got, err := os.ReadFile(corruptedFile)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	if string(got) != "corrupted" {
+		t.Fatalf("expected cache hit (corrupted content preserved), got %q", string(got))
+	}
+}
+
+func TestManager_GetGitSourceRefetchesOnNewCommit(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	repoDir, _ := createTestGitRepo(t, map[string]string{"v1.txt": "v1"})
+	cacheDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: repoDir},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+
+	_, err := manager.Get(context.Background(), def, "preset")
+	if err != nil {
+		t.Fatalf("first Get failed: %v", err)
+	}
+
+	// Advance the remote
+	addCommitToTestRepo(t, repoDir, "v2.txt", "v2")
+
+	// When — second Get with new commit
+	path, err := manager.Get(context.Background(), def, "preset")
+	if err != nil {
+		t.Fatalf("second Get failed: %v", err)
+	}
+
+	// Then — new content is present
+	if _, err := os.Stat(filepath.Join(path, "v2.txt")); err != nil {
+		t.Fatalf("expected v2.txt after re-fetch, got %v", err)
+	}
+}
+
 func TestManager_GetFileDirectoryReturnedDirectly(t *testing.T) {
 	t.Parallel()
 
