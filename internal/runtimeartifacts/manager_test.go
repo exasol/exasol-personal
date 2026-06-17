@@ -935,6 +935,88 @@ func TestManager_GetNoChecksumAlwaysRefetches(t *testing.T) {
 	}
 }
 
+func TestManager_GetFileDirectoryReturnedDirectly(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	presetDir := t.TempDir()
+	cacheDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: "file://" + presetDir},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+
+	// When
+	path, err := manager.Get(context.Background(), def, "preset-dir")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	// Fetch returns a redirect path for local directories; the Manager records it
+	// in the cache index but does not write an artifact to the cache directory.
+	if strings.HasPrefix(path, cacheDir) {
+		t.Fatalf("expected original path, not a cache path; got %q", path)
+	}
+	if path != presetDir {
+		t.Fatalf("expected path %q, got %q", presetDir, path)
+	}
+}
+
+func TestManager_GetFileDirectoryMissingReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: "file:///nonexistent/path/to/preset"},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+
+	// When
+	_, err := manager.Get(context.Background(), def, "preset-missing")
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("expected does-not-exist error, got %v", err)
+	}
+}
+
+func TestManager_GetFileArchiveExtractedIntoCache(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	srcDir := t.TempDir()
+	archivePath := writeTarGzFixture(t, srcDir, "preset.tar.gz", "tool")
+	cacheDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: true,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: "file://" + archivePath, ResourcePath: "tool"},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+
+	// When
+	path, err := manager.Get(context.Background(), def, "preset")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if strings.HasPrefix(path, srcDir) {
+		t.Fatalf("expected path inside cache, got %q", path)
+	}
+	if !strings.HasPrefix(path, cacheDir) {
+		t.Fatalf("expected path under cache root %q, got %q", cacheDir, path)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected extracted tool to exist, got %v", err)
+	}
+}
+
 func TestManager_GetAnyPlatformFallback(t *testing.T) {
 	t.Parallel()
 

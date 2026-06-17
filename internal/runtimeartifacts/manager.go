@@ -43,12 +43,20 @@ type Source interface {
 	Fetch(ctx context.Context, url, dstPath string) (redirectPath string, err error)
 }
 
+// Identifier is an optional interface for Source types that can resolve their
+// content identity before fetching. The returned string is used as a synthetic
+// Sha256 so the standard cache machinery handles deduplication.
+type Identifier interface {
+	Identify(ctx context.Context, url string) (string, error)
+}
+
 type Extractor interface {
 	CanExtract(filename string) bool
 	Extract(srcPath, dstPath string) error
 }
 
 var sources = []Source{
+	&FileSource{},
 	&HttpSource{},
 }
 
@@ -137,6 +145,12 @@ func (m *Manager) Get(
 		return "", err
 	}
 
+	// If the source can identify its content before fetching, use that identity
+	// as a synthetic Sha256 so the standard cache machinery handles the rest.
+	if strings.TrimSpace(artifact.Sha256) == "" {
+		artifact.Sha256 = m.identify(ctx, artifact)
+	}
+
 	entry, err := m.resolveEntry(resourceID, def, artifact)
 	if err != nil {
 		return "", err
@@ -198,7 +212,25 @@ func (m *Manager) Request(ctx context.Context, resourceID string) (string, error
 	return m.Get(ctx, def, resourceID)
 }
 
-func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, entry cacheIndexEntry) error {
+func (*Manager) identify(ctx context.Context, artifact ArtifactSpec) string {
+	for _, src := range sources {
+		if !src.CanFetch(artifact.URL) {
+			continue
+		}
+		if id, ok := src.(Identifier); ok {
+			hash, err := id.Identify(ctx, artifact.URL)
+			if err != nil {
+				return hash
+			}
+		}
+
+		break
+	}
+
+	return ""
+}
+
+func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, entry *cacheIndexEntry) error {
 	for _, source := range sources {
 		if !source.CanFetch(artifact.URL) {
 			continue
@@ -207,8 +239,14 @@ func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, entry cacheI
 		fetchPath := m.cache.absolutePath(entry.ArtifactPath)
 
 		_ = os.MkdirAll(filepath.Dir(fetchPath), dirPerm)
-		if _, err := source.Fetch(ctx, artifact.URL, fetchPath); err != nil {
+		redirectPath, err := source.Fetch(ctx, artifact.URL, fetchPath)
+		if err != nil {
 			return err
+		}
+		if redirectPath != "" {
+			entry.RedirectPath = redirectPath
+
+			return nil
 		}
 
 		info, err := os.Stat(fetchPath)
@@ -235,6 +273,9 @@ func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, entry cacheI
 
 func (m *Manager) extract(entry cacheIndexEntry) error {
 	filename := m.cache.absolutePath(entry.ArtifactPath)
+	if entry.RedirectPath != "" {
+		filename = entry.RedirectPath
+	}
 
 	for _, extractor := range extractors {
 		if extractor.CanExtract(filename) {
@@ -271,8 +312,11 @@ func (m *Manager) getCacheEntry(
 		return "", nil
 	}
 
-	resolvedPath := m.cache.absolutePath(target.ResolvedPath)
-	if _, err := os.Stat(resolvedPath); err != nil {
+	pathToStat := m.cache.absolutePath(entry.ResolvedPath)
+	if entry.RedirectPath != "" && !entry.Extract {
+		pathToStat = entry.RedirectPath
+	}
+	if _, err := os.Stat(pathToStat); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", nil
 		}
@@ -289,7 +333,11 @@ func (m *Manager) getCacheEntry(
 		return "", err
 	}
 
-	return resolvedPath, nil
+	if entry.RedirectPath != "" && !entry.Extract {
+		return entry.RedirectPath, nil
+	}
+
+	return m.cache.absolutePath(entry.ResolvedPath), nil
 }
 
 func (m *Manager) writeIndexAfterCleanup(index *cacheIndex) error {
@@ -307,7 +355,7 @@ func (m *Manager) refresh(
 	entry *cacheIndexEntry,
 	index *cacheIndex,
 ) (string, error) {
-	if err := m.fetch(ctx, artifact, *entry); err != nil {
+	if err := m.fetch(ctx, artifact, entry); err != nil {
 		return "", errors.Join(fmt.Errorf("failed to fetch resource %q", resourceID), err)
 	}
 
@@ -333,6 +381,10 @@ func (m *Manager) refresh(
 
 	if err := m.writeIndexAfterCleanup(index); err != nil {
 		return "", err
+	}
+
+	if entry.RedirectPath != "" && !entry.Extract {
+		return entry.RedirectPath, nil
 	}
 
 	return m.cache.absolutePath(entry.ResolvedPath), nil
