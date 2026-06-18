@@ -13,6 +13,7 @@ import pytest
 from .helpers import first_infrastructure_preset_id_or_skip, run_command
 
 LOCAL_TEST_DB_PORT = 28563
+LOCAL_MINIMUM_MEMORY_MB = 4096
 
 
 def test_install_requires_infra_preset_arg(exasol_path: str) -> None:
@@ -110,6 +111,90 @@ def test_init_local_rejects_unsupported_platform_before_writing_files(
     sys.platform.startswith("win"),
     reason="fake local runner script is POSIX-only",
 )
+def test_init_local_accepts_explicit_minimum_memory(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a local deployment directory on a test-enabled unsupported platform
+    deployment_dir = tmp_path / "deployment"
+    deployment_dir.mkdir()
+    env = {
+        **os.environ,
+        "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM": "1",
+    }
+
+    # When init is invoked with the minimum supported memory
+    result = run_command(
+        [
+            exasol_path,
+            "init",
+            "local",
+            "--deployment-dir",
+            str(deployment_dir),
+            "--memory-mb",
+            "4096",
+        ],
+        env=env,
+    )
+
+    # Then the deployment is initialized with that value
+    assert result.returncode == 0
+    config_result = run_command(
+        [
+            exasol_path,
+            "config",
+            "get",
+            "--json",
+            "memory-mb",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+    config_data = json.loads(config_result.stdout)
+    configured_memory_mb = config_data["infrastructure"]["options"]["memory-mb"]
+    assert configured_memory_mb == LOCAL_MINIMUM_MEMORY_MB
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="fake local runner script is POSIX-only",
+)
+def test_init_local_rejects_memory_below_minimum(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a local deployment directory on a test-enabled unsupported platform
+    deployment_dir = tmp_path / "deployment"
+    deployment_dir.mkdir()
+    env = {
+        **os.environ,
+        "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM": "1",
+    }
+
+    # When init is invoked below the supported minimum memory
+    with pytest.raises(CalledProcessError) as exc:
+        run_command(
+            [
+                exasol_path,
+                "init",
+                "local",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--memory-mb",
+                "4095",
+            ],
+            env=env,
+        )
+
+    # Then the user sees the minimum-memory validation message
+    assert (
+        "local memory-mb must be at least 4096 mb" in (exc.value.stderr or "").lower()
+    )
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="fake local runner script is POSIX-only",
+)
 def test_deploy_local_with_prestaged_fake_runner(
     exasol_path: str, tmp_path: Path
 ) -> None:
@@ -164,10 +249,27 @@ esac
         env=env,
     )
     assert init_result.returncode == 0
+    config_result = run_command(
+        [
+            exasol_path,
+            "config",
+            "get",
+            "--json",
+            "memory-mb",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+    expected_memory_mb = json.loads(config_result.stdout)["infrastructure"]["options"][
+        "memory-mb"
+    ]
 
     runner_target = deployment_dir / "local" / "runtime" / "mac-runner-aarch64"
     runner_target.parent.mkdir(parents=True)
-    runner_target.write_bytes(runner.read_bytes())
+    runner_target.write_text(
+        runner.read_text().replace('"2048"', str(expected_memory_mb))
+    )
     runner_target.chmod(0o700)
 
     # When local deploy is invoked

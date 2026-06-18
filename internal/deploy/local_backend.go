@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -21,21 +22,26 @@ import (
 )
 
 const (
-	localSupportedOS          = "darwin"
-	localSupportedArch        = "arm64"
-	localAllowUnsupportedEnv  = "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM"
-	localDefaultCPUCount      = 2
-	localDefaultMemoryMB      = 2048
-	localDefaultDataSizeGB    = 100
-	localDeploymentBackend    = "local"
-	localDeploymentPublicHost = "127.0.0.1"
-	localSSHUser              = "root"
-	localDBUser               = "sys"
-	localDBPassword           = "exasol"
-	localManifestFileMode     = 0o600
-	localCPUCountConfigName   = "cpu_count"
-	localMemoryMBConfigName   = "memory_mb"
-	localDataSizeGBConfigName = "data_size_gb"
+	localSupportedOS           = "darwin"
+	localSupportedArch         = "arm64"
+	localAllowUnsupportedEnv   = "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM"
+	hostMemoryDefaultDivisor   = 2
+	bytesPerMegabyte           = 1024 * 1024
+	localDefaultCPUCount       = 2
+	localMinimumMemoryMB       = 4096
+	localMinimumHostMemoryMB   = 8192
+	localDefaultDataSizeGB     = 100
+	localDeploymentBackend     = "local"
+	localDeploymentPublicHost  = "127.0.0.1"
+	localSSHUser               = "root"
+	localDBUser                = "sys"
+	localDBPassword            = "exasol"
+	localDBContainerName       = "exasol-local-db"
+	localLegacyDBContainerName = "exasol-nano-db"
+	localManifestFileMode      = 0o600
+	localCPUCountConfigName    = "cpu_count"
+	localMemoryMBConfigName    = "memory_mb"
+	localDataSizeGBConfigName  = "data_size_gb"
 )
 
 var errUnsupportedLocalPlatform = errors.New(
@@ -63,7 +69,7 @@ func (*localBackend) SetupWorkspace(_ context.Context) error {
 }
 
 func (b *localBackend) Configure(
-	_ context.Context,
+	ctx context.Context,
 	overrides map[string]string,
 	_ DeploymentMetadata,
 	_ DeploymentLayout,
@@ -72,7 +78,7 @@ func (b *localBackend) Configure(
 		return errors.New("local infrastructure manifest is missing")
 	}
 
-	local := ensureLocalManifestConfig(b.manifest)
+	local := ensureLocalManifestConfig(ctx, b.manifest)
 
 	for name, rawValue := range overrides {
 		name = strings.TrimSpace(name)
@@ -96,7 +102,7 @@ func (b *localBackend) Configure(
 		}
 	}
 
-	if _, err := resolveLocalRuntimeConfig(b.manifest); err != nil {
+	if _, err := resolveLocalRuntimeConfig(b.manifest, detectLocalHostMemoryMB(ctx)); err != nil {
 		return err
 	}
 
@@ -116,11 +122,12 @@ func (b *localBackend) Configure(
 }
 
 func (b *localBackend) ReadConfiguration() ([]DeploymentConfigValue, error) {
-	runtimeConfig, err := resolveLocalRuntimeConfig(b.manifest)
+	detectedHostMemoryMB := detectLocalHostMemoryMB(context.Background())
+	runtimeConfig, err := resolveLocalRuntimeConfig(b.manifest, detectedHostMemoryMB)
 	if err != nil {
 		return nil, err
 	}
-	defaults := defaultLocalRuntimeConfig()
+	defaults := defaultLocalRuntimeConfig(detectedHostMemoryMB)
 
 	return []DeploymentConfigValue{
 		localIntConfigValue(
@@ -202,9 +209,10 @@ func localIntConfigValue(name string, value, defaultValue int) DeploymentConfigV
 func localConfigVariableDefinitions(
 	manifest *presets.InfrastructureManifest,
 ) map[string]ConfigVariableDefinition {
-	runtimeConfig, err := resolveLocalRuntimeConfig(manifest)
+	detectedHostMemoryMB := detectLocalHostMemoryMB(context.Background())
+	runtimeConfig, err := resolveLocalRuntimeConfig(manifest, detectedHostMemoryMB)
 	if err != nil {
-		runtimeConfig = defaultLocalRuntimeConfig()
+		runtimeConfig = defaultLocalRuntimeConfig(detectedHostMemoryMB)
 	}
 
 	return map[string]ConfigVariableDefinition{
@@ -230,10 +238,11 @@ func localConfigVariableDefinitions(
 }
 
 func ensureLocalManifestConfig(
+	ctx context.Context,
 	manifest *presets.InfrastructureManifest,
 ) *presets.InfrastructureLocal {
 	if manifest.Local == nil {
-		defaults := defaultLocalRuntimeConfig()
+		defaults := defaultLocalRuntimeConfig(detectLocalHostMemoryMB(ctx))
 		manifest.Local = &presets.InfrastructureLocal{
 			CPUCount:   defaults.cpuCount,
 			MemoryMB:   defaults.memoryMB,
@@ -329,42 +338,93 @@ type localRuntimeConfig struct {
 	dataSizeGB int
 }
 
-func defaultLocalRuntimeConfig() localRuntimeConfig {
+func defaultLocalRuntimeConfig(detectedHostMemoryMB int) localRuntimeConfig {
+	// Fall back to the minimum supported VM memory when host detection is unavailable
+	memoryMB := localMinimumMemoryMB
+	if detectedHostMemoryMB > 0 {
+		// The host-memory gate ensures this computed default stays at or above the minimum.
+		memoryMB = detectedHostMemoryMB / hostMemoryDefaultDivisor
+	}
+
 	return localRuntimeConfig{
 		cpuCount:   localDefaultCPUCount,
-		memoryMB:   localDefaultMemoryMB,
+		memoryMB:   memoryMB,
 		dataSizeGB: localDefaultDataSizeGB,
 	}
 }
 
-func resolveLocalRuntimeConfig(
-	manifest *presets.InfrastructureManifest,
-) (localRuntimeConfig, error) {
-	runtimeConfig := defaultLocalRuntimeConfig()
-	if manifest == nil || manifest.Local == nil {
-		return runtimeConfig, nil
+func detectLocalHostMemoryMB(ctx context.Context) int {
+	if runtime.GOOS != localSupportedOS {
+		return 0
 	}
 
-	if manifest.Local.CPUCount != 0 {
-		runtimeConfig.cpuCount = manifest.Local.CPUCount
+	output, err := exec.CommandContext(
+		ctx,
+		"sysctl",
+		"-n",
+		"hw.memsize",
+	).Output()
+	if err != nil {
+		return 0
 	}
-	if manifest.Local.MemoryMB != 0 {
-		runtimeConfig.memoryMB = manifest.Local.MemoryMB
+
+	value, err := strconv.ParseUint(strings.TrimSpace(string(output)), 10, 64)
+	if err != nil {
+		return 0
 	}
-	if manifest.Local.DataSizeGB != 0 {
-		runtimeConfig.dataSizeGB = manifest.Local.DataSizeGB
+
+	return int(value / bytesPerMegabyte)
+}
+
+func resolveLocalRuntimeConfig(
+	manifest *presets.InfrastructureManifest,
+	detectedHostMemoryMB int,
+) (localRuntimeConfig, error) {
+	runtimeConfig := defaultLocalRuntimeConfig(detectedHostMemoryMB)
+	if manifest != nil && manifest.Local != nil {
+		if manifest.Local.CPUCount != 0 {
+			runtimeConfig.cpuCount = manifest.Local.CPUCount
+		}
+		if manifest.Local.MemoryMB != 0 {
+			runtimeConfig.memoryMB = manifest.Local.MemoryMB
+		}
+		if manifest.Local.DataSizeGB != 0 {
+			runtimeConfig.dataSizeGB = manifest.Local.DataSizeGB
+		}
 	}
-	if runtimeConfig.cpuCount <= 0 {
-		return localRuntimeConfig{}, errors.New("local cpuCount must be greater than zero")
-	}
-	if runtimeConfig.memoryMB <= 0 {
-		return localRuntimeConfig{}, errors.New("local memoryMB must be greater than zero")
-	}
-	if runtimeConfig.dataSizeGB <= 0 {
-		return localRuntimeConfig{}, errors.New("local dataSizeGB must be greater than zero")
+
+	if err := validateLocalRuntimeConfig(runtimeConfig, detectedHostMemoryMB); err != nil {
+		return localRuntimeConfig{}, err
 	}
 
 	return runtimeConfig, nil
+}
+
+func validateLocalRuntimeConfig(
+	runtimeConfig localRuntimeConfig,
+	detectedHostMemoryMB int,
+) error {
+	if runtimeConfig.cpuCount <= 0 {
+		return errors.New("local cpuCount must be greater than zero")
+	}
+	if runtimeConfig.dataSizeGB <= 0 {
+		return errors.New("local dataSizeGB must be greater than zero")
+	}
+	if detectedHostMemoryMB > 0 && detectedHostMemoryMB < localMinimumHostMemoryMB {
+		return fmt.Errorf(
+			"local deployment requires at least %d MB host memory (detected %d MB)",
+			localMinimumHostMemoryMB,
+			detectedHostMemoryMB,
+		)
+	}
+	if runtimeConfig.memoryMB < localMinimumMemoryMB {
+		return fmt.Errorf(
+			"local memory-mb must be at least %d MB",
+			localMinimumMemoryMB,
+		)
+	}
+
+	return nil
 }
 
 func (b *localBackend) Deploy(
@@ -375,7 +435,7 @@ func (b *localBackend) Deploy(
 	if err := b.ValidateEnvironment(); err != nil {
 		return err
 	}
-	runtimeConfig, err := resolveLocalRuntimeConfig(b.manifest)
+	runtimeConfig, err := resolveLocalRuntimeConfig(b.manifest, detectLocalHostMemoryMB(ctx))
 	if err != nil {
 		return err
 	}
@@ -391,7 +451,7 @@ func (b *localBackend) Start(
 	if err := b.ValidateEnvironment(); err != nil {
 		return err
 	}
-	runtimeConfig, err := resolveLocalRuntimeConfig(b.manifest)
+	runtimeConfig, err := resolveLocalRuntimeConfig(b.manifest, detectLocalHostMemoryMB(ctx))
 	if err != nil {
 		return err
 	}
