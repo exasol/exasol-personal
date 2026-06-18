@@ -15,6 +15,10 @@ const secretsFileName = "secrets.json"
 type Secrets struct {
 	DbPassword      string `json:"dbPassword"`
 	AdminUiPassword string `json:"adminUiPassword,omitempty"`
+	// SaaSToken is the Exasol SaaS access token. It authenticates both the
+	// account-level REST API and the database connection (used as the password
+	// for the SaaS database user), so no separate database password is stored.
+	SaaSToken string `json:"saasToken,omitempty"`
 }
 
 func SecretsFilePath(deployment DeploymentDir) (string, error) {

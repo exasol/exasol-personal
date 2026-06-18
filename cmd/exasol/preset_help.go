@@ -48,21 +48,18 @@ func embeddedPresetCompatibilityMatrix() string {
 
 	columnWidths := map[string]int{}
 	for installID := range installManifests {
-		width := len(installID)
-		if width < len("yes") {
-			width = len("yes")
-		}
+		width := max(len(installID), len("yes"))
 		columnWidths[installID] = width
 	}
 
 	var builder strings.Builder
 	_, _ = builder.WriteString("Compatibility matrix (embedded presets):\n")
-	_, _ = builder.WriteString(fmt.Sprintf("  %-*s", firstColumnWidth, "infrastructure"))
+	_, _ = fmt.Fprintf(&builder, "  %-*s", firstColumnWidth, "infrastructure")
 	for _, installID := range installIDs {
 		if _, ok := installManifests[installID]; !ok {
 			continue
 		}
-		_, _ = builder.WriteString(fmt.Sprintf("  %-*s", columnWidths[installID], installID))
+		_, _ = fmt.Fprintf(&builder, "  %-*s", columnWidths[installID], installID)
 	}
 	_ = builder.WriteByte('\n')
 
@@ -71,7 +68,7 @@ func embeddedPresetCompatibilityMatrix() string {
 		if !ok {
 			continue
 		}
-		_, _ = builder.WriteString(fmt.Sprintf("  %-*s", firstColumnWidth, infraID))
+		_, _ = fmt.Fprintf(&builder, "  %-*s", firstColumnWidth, infraID)
 		for _, installID := range installIDs {
 			installManifest, ok := installManifests[installID]
 			if !ok {
@@ -81,7 +78,7 @@ func embeddedPresetCompatibilityMatrix() string {
 			if embeddedPresetPairCompatible(infraManifest, installManifest) {
 				cell = "yes"
 			}
-			_, _ = builder.WriteString(fmt.Sprintf("  %-*s", columnWidths[installID], cell))
+			_, _ = fmt.Fprintf(&builder, "  %-*s", columnWidths[installID], cell)
 		}
 		_ = builder.WriteByte('\n')
 	}

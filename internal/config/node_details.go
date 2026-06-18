@@ -38,6 +38,19 @@ type DeploymentInfo struct {
 	SubnetId         string                    `json:"subnetId,omitempty"`
 	Nodes            map[string]DeploymentNode `json:"nodes,omitempty"`
 	Connection       *DeploymentConnection     `json:"connection,omitempty"`
+	SaaS             *DeploymentSaaS           `json:"saas,omitempty"`
+}
+
+// DeploymentSaaS caches the non-secret SaaS migration target resolved from the
+// SaaS API, so connection and migration commands do not have to re-query it.
+type DeploymentSaaS struct {
+	AccountId string `json:"accountId,omitempty"`
+	Region    string `json:"region,omitempty"`
+	DbUuid    string `json:"dbUuid,omitempty"`
+	Host      string `json:"host,omitempty"`
+	Port      int    `json:"port,omitempty"`
+	JDBC      string `json:"jdbc,omitempty"`
+	Username  string `json:"username,omitempty"`
 }
 
 type DeploymentNode struct {

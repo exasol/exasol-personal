@@ -9,19 +9,21 @@ This guide provides detailed instructions for developers working on the Exasol P
 - **[Go](https://golang.org/doc/install)** - See `go.mod` for required version
 - **[Python](https://www.python.org/downloads/)** - Required for integration and deployment tests
 - **[Task](https://taskfile.dev/)** - Build automation tool
+
   ```bash
   # Install Task (recommended method)
   sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
-  
+
   # Or install from Go
   go install github.com/go-task/task/v3/cmd/task@latest
   ```
-  
+
   Ensure the installation directory is in your `PATH`.
 
 ### Supported Platforms
 
 Development is supported on:
+
 - **Linux** (primary development platform)
 - **macOS** (Intel and Apple Silicon)
 - **Windows**
@@ -116,6 +118,7 @@ GOOS=windows GOARCH=amd64 go build -o bin/exasol.exe ./cmd/exasol
 ### Essential Task Commands
 
 View all available tasks:
+
 ```bash
 task --list
 ```
@@ -125,39 +128,46 @@ task --list
 1. **Make code changes**
 
 2. **Generate code** (if needed):
+
    ```bash
    task generate
    ```
+
    Run this after modifying generated code or interfaces.
 
 3. **Format code**:
+
    ```bash
    task fmt
    ```
 
 4. **Run linters**:
+
    ```bash
    task lint
-   
+
    # Or auto-fix some issues
    task lint-golang-fix
    ```
 
 5. **Run tests**:
+
    ```bash
    # Go unit tests
    task tests-unit
-   
+
    # Python integration tests (requires test setup)
    task tests-integration
    ```
 
 6. **Build**:
+
    ```bash
    task build
    ```
 
 7. **Test manually**:
+
    ```bash
    ./bin/exasol <command>
    ```
@@ -165,6 +175,7 @@ task --list
 ### All-in-One
 
 Run the full pipeline:
+
 ```bash
 task all    # Runs lint, test, and build
 ```
@@ -208,6 +219,7 @@ task lint-golang-fix
 ```
 
 Configuration files:
+
 - `.golangci.yml` - Go linting configuration
 - `.tflint.hcl` - Terraform/OpenTofu linting
 - `tests/pyproject.toml` - Python linting and type checking
@@ -219,16 +231,16 @@ See [Best Practices](best_practices.md) for project-specific coding guidelines a
 ## Common Issues
 
 **OpenTofu binary not found:**
-- OpenTofu is resolved at runtime through the per-user runtime artifact cache.
-- Use `exasol diag cache` to inspect cache state, `exasol cache clean --invalid` to remove artifacts that fail integrity checks, and `exasol cache clean --partial-downloads` to remove interrupted downloads.
-- For direct tofu invocations in development workflows, use `task fmt-terraform` or `go run ./tools/tofu/main.go ...`.
 
-**Windows fails with `tofu init -lockfile=readonly` due to missing hashes in `.terraform.lock.hcl`:**
+- OpenTofu is resolved at runtime through the per-user runtime artifact cache.
+- Use `exasol diag cache` to inspect cache state, `exasol cache clean --invalid` to remove artifacts that fail integrity checks, and `exasol cache clean --partial-downloads` to remove interrupted downloads. For direct tofu invocations in development workflows, use `task fmt-terraform` or `go run ./tools/tofu/main.go ...`.
+  **Windows fails with `tofu init -lockfile=readonly` due to missing hashes in `.terraform.lock.hcl`:**
 - Regenerate the lockfiles with hashes for all supported platforms: run `task tofu-lock-update`.
 - This updates the committed lockfile(s) under `assets/infrastructure/` without leaving temporary `.terraform/` directories behind.
 - Presets that don't use OpenTofu (no `tofu:` section in `infrastructure.yaml` or no `.tf` files) are skipped.
 
 **Tests fail with AWS errors:**
+
 - Verify AWS credentials are configured (`AWS_PROFILE` or credential files)
 - Check AWS permissions
 
@@ -246,6 +258,7 @@ Standard [Go module](https://go.dev/ref/mod) commands also work for managing Go 
 The project uses GitHub Actions for continuous integration and automated releases.
 
 **CI Pipeline** - See [CI Documentation](ci.md) for details on:
+
 - Automated linting and testing on every push
 - Manual deployment tests
 

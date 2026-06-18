@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/presets"
@@ -47,13 +48,8 @@ func embeddedPresetExists(ids []string, name string) bool {
 	if needle == "" {
 		return false
 	}
-	for _, id := range ids {
-		if id == needle {
-			return true
-		}
-	}
 
-	return false
+	return slices.Contains(ids, needle)
 }
 
 func resolveEmbeddedPresetHandler(presetName string, typeOpt string) (*presetTypeHandler, error) {

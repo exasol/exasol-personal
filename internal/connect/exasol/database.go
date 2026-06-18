@@ -75,6 +75,35 @@ func New(
 	}, nil
 }
 
+// NewWithRefreshToken builds a database handle authenticating with an OpenID
+// refresh token (an Exasol SaaS personal access token is a refresh token) via
+// the driver's token login, rather than a username/password. The driver
+// redeems the refresh token for an access token during login.
+func NewWithRefreshToken(
+	token, host string,
+	port int,
+	optFns ...OptFn,
+) (generaltypes.Databaser, error) {
+	opts := &opts{
+		validateServerCertificate: true,
+		connect:                   defaultConnectFunc,
+	}
+
+	for _, optFn := range optFns {
+		optFn(opts)
+	}
+
+	dsnConfigBuilder := exasol.NewConfigWithRefreshToken(token).
+		Host(host).
+		Port(port).
+		ValidateServerCertificate(opts.validateServerCertificate)
+
+	return &Database{
+		connectionString: dsnConfigBuilder.String(),
+		connect:          opts.connect,
+	}, nil
+}
+
 const WHITESPACE = `\s+`
 
 var localImportRegex = regexp.MustCompile(
