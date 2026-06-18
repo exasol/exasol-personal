@@ -30,6 +30,7 @@ type ConnectionDetails struct {
 	DisplayHost     string
 	DBPort          string
 	AdminUI         *config.DeploymentAdminUI
+	AILab           *config.DeploymentAILab
 	Username        string
 	CertFingerprint string
 	InsecureSkipTLS bool
@@ -39,6 +40,7 @@ type ConnectionDetails struct {
 	SSHPort         string
 	ShellSupported  bool
 	AdminUISecured  bool
+	AILabSecured    bool
 }
 
 type DeploymentOverview struct {
@@ -87,6 +89,7 @@ func readConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails,
 		PublicIp:        connectionInfo.PublicIP,
 		DBPort:          strconv.Itoa(connectionInfo.DBPort),
 		AdminUI:         connectionInfo.AdminUI,
+		AILab:           connectionInfo.AILab,
 		SSHCommand:      connectionInfo.SSHCommand,
 		SSHPort:         connectionInfo.SSHPort,
 		Username:        connectionInfo.Username,
@@ -95,6 +98,7 @@ func readConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails,
 		SecretsFilePath: connectionInfo.SecretsFilePath,
 		ShellSupported:  connectionInfo.ShellSupported,
 		AdminUISecured:  secrets.AdminUiPassword != "",
+		AILabSecured:    secrets.AiLabJupyterPassword != "",
 	}, nil
 }
 
@@ -125,6 +129,7 @@ To connect using the CLI:
 `
 
 	instructions += getAdminUIInstructions(connectionDetails)
+	instructions += getAILabInstructions(connectionDetails)
 
 	if !connectionDetails.ShellSupported {
 		return instructions
@@ -173,6 +178,26 @@ func getAdminUIInstructions(connectionDetails *ConnectionDetails) string {
 	} else if connectionDetails.AdminUI.InsecureSkipCertValidation {
 		instructions += "  Certificate Validation: accept the certificate if necessary\n"
 	}
+
+	return instructions + "\n"
+}
+
+func getAILabInstructions(connectionDetails *ConnectionDetails) string {
+	if connectionDetails == nil || connectionDetails.AILab == nil ||
+		connectionDetails.AILab.URL == "" {
+		return ""
+	}
+
+	instructions := `
+=== How to open the AI Lab ===
+  URL: ` + connectionDetails.AILab.URL + `
+`
+	if connectionDetails.AILabSecured {
+		secretsRef := "<stored in " + connectionDetails.SecretsFilePath + ">"
+		instructions += "  Jupyter password: " + secretsRef + "\n"
+		instructions += "  Config-store master password: " + secretsRef + "\n"
+	}
+	instructions += "  The database and BucketFS connections are pre-configured.\n"
 
 	return instructions + "\n"
 }

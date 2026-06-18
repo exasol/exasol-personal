@@ -72,6 +72,7 @@ type DeploymentConnection struct {
 	DBPort                     int                `json:"dbPort,omitempty"`
 	UIPort                     int                `json:"uiPort,omitempty"`
 	AdminUI                    *DeploymentAdminUI `json:"adminUi,omitempty"`
+	AILab                      *DeploymentAILab   `json:"aiLab,omitempty"`
 	Username                   string             `json:"username,omitempty"`
 	CertFingerprint            string             `json:"certFingerprint,omitempty"`
 	InsecureSkipCertValidation bool               `json:"insecureSkipCertValidation,omitempty"`
@@ -85,6 +86,13 @@ type DeploymentAdminUI struct {
 	Username                   string `json:"username,omitempty"`
 	CertFingerprint            string `json:"certFingerprint,omitempty"`
 	InsecureSkipCertValidation bool   `json:"insecureSkipCertValidation,omitempty"`
+}
+
+// DeploymentAILab holds resolved connection metadata for an optional Exasol AI
+// Lab installed alongside the database. It is present only when the deployment's
+// infrastructure exposes AI Lab.
+type DeploymentAILab struct {
+	URL string `json:"url,omitempty"`
 }
 
 type (

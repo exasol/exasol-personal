@@ -127,3 +127,58 @@ func TestGetSQLInstructions_IncludesAdminUIWhenMetadataPresent(t *testing.T) {
 		}
 	}
 }
+
+func TestGetSQLInstructions_OmitsAILabWhenMetadataMissing(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	connectionDetails := &ConnectionDetails{
+		DisplayHost:     "db.example.local",
+		DBPort:          "8563",
+		Username:        "sys",
+		SecretsFilePath: "/deployment/secrets.json",
+	}
+
+	// When
+	instructions := GetSQLInstructions(connectionDetails)
+
+	// Then
+	if strings.Contains(instructions, "AI Lab") {
+		t.Fatalf("expected AI Lab instructions to be omitted, got %q", instructions)
+	}
+	if !strings.Contains(instructions, "exasol connect") {
+		t.Fatalf("expected SQL instructions to be preserved, got %q", instructions)
+	}
+}
+
+func TestGetSQLInstructions_IncludesAILabWhenMetadataPresent(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	connectionDetails := &ConnectionDetails{
+		DisplayHost:     "db.example.local",
+		DBPort:          "8563",
+		Username:        "sys",
+		SecretsFilePath: "/deployment/secrets.json",
+		AILab: &config.DeploymentAILab{
+			URL: "http://ai.example.local:49494",
+		},
+		AILabSecured: true,
+	}
+
+	// When
+	instructions := GetSQLInstructions(connectionDetails)
+
+	// Then
+	for _, expected := range []string{
+		"How to open the AI Lab",
+		"http://ai.example.local:49494",
+		"Jupyter password: <stored in /deployment/secrets.json>",
+		"Config-store master password: <stored in /deployment/secrets.json>",
+		"pre-configured",
+	} {
+		if !strings.Contains(instructions, expected) {
+			t.Fatalf("expected instructions to contain %q, got %q", expected, instructions)
+		}
+	}
+}

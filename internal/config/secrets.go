@@ -13,8 +13,10 @@ import (
 const secretsFileName = "secrets.json"
 
 type Secrets struct {
-	DbPassword      string `json:"dbPassword"`
-	AdminUiPassword string `json:"adminUiPassword,omitempty"`
+	DbPassword           string `json:"dbPassword"`
+	AdminUiPassword      string `json:"adminUiPassword,omitempty"`
+	AiLabScsPassword     string `json:"aiLabScsPassword,omitempty"`
+	AiLabJupyterPassword string `json:"aiLabJupyterPassword,omitempty"`
 }
 
 func SecretsFilePath(deployment DeploymentDir) (string, error) {
