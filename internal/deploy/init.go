@@ -33,10 +33,14 @@ A copy of the EULA is also included as 'eula.txt' in this directory.
 `
 )
 
-func LocalInitMemoryNotice(deployment config.DeploymentDir) string {
+// LocalLowMemoryNotice returns a workload guidance notice and reports whether
+// the local deployment is configured with low memory. It returns ("", false)
+// for non-local deployments or when configured memory is above the guidance
+// threshold.
+func LocalLowMemoryNotice(deployment config.DeploymentDir) (string, bool) {
 	manifest, err := config.ReadInfrastructureManifest(deployment)
 	if err != nil || manifest == nil || manifest.Backend != backendTypeLocal {
-		return ""
+		return "", false
 	}
 
 	runtimeConfig, err := resolveLocalRuntimeConfig(
@@ -44,10 +48,10 @@ func LocalInitMemoryNotice(deployment config.DeploymentDir) string {
 		detectLocalHostMemoryMB(context.Background()),
 	)
 	if err != nil || runtimeConfig.memoryMB > localInfraMemThresholdMB {
-		return ""
+		return "", false
 	}
 
-	return LocalInfraMemoryNoticeText
+	return LocalInfraMemoryNoticeText, true
 }
 
 // ResolveInfrastructureInfo validates the infrastructure preset name and returns its info.
@@ -122,6 +126,9 @@ func InitDeployment(
 		return err
 	}
 	if err := backend.ValidateEnvironment(); err != nil {
+		return err
+	}
+	if err := validateLocalInitMemory(ctx, infrastructureManifest, infraVars); err != nil {
 		return err
 	}
 

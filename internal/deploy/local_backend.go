@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/remote"
+	"github.com/exasol/exasol-personal/internal/util"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,7 +26,6 @@ const (
 	localSupportedArch         = "arm64"
 	localAllowUnsupportedEnv   = "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM"
 	hostMemoryDefaultDivisor   = 2
-	bytesPerMegabyte           = 1024 * 1024
 	localDefaultCPUCount       = 2
 	localMinimumMemoryMB       = 4096
 	localMinimumHostMemoryMB   = 8192
@@ -79,7 +78,34 @@ func (b *localBackend) Configure(
 	}
 
 	local := ensureLocalManifestConfig(ctx, b.manifest)
+	if err := applyLocalConfigOverrides(local, overrides); err != nil {
+		return err
+	}
 
+	if _, err := resolveLocalRuntimeConfig(b.manifest, detectLocalHostMemoryMB(ctx)); err != nil {
+		return err
+	}
+
+	data, err := yaml.Marshal(b.manifest)
+	if err != nil {
+		return fmt.Errorf("failed to encode local infrastructure manifest: %w", err)
+	}
+	if err := os.WriteFile(
+		b.deployment.InfrastructureManifestPath(),
+		data,
+		localManifestFileMode,
+	); err != nil {
+		return fmt.Errorf("failed to write local infrastructure manifest: %w", err)
+	}
+
+	return nil
+}
+
+// applyLocalConfigOverrides applies raw config overrides onto a local manifest config.
+func applyLocalConfigOverrides(
+	local *presets.InfrastructureLocal,
+	overrides map[string]string,
+) error {
 	for name, rawValue := range overrides {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -102,23 +128,35 @@ func (b *localBackend) Configure(
 		}
 	}
 
-	if _, err := resolveLocalRuntimeConfig(b.manifest, detectLocalHostMemoryMB(ctx)); err != nil {
+	return nil
+}
+
+// validateLocalInitMemory validates local memory limits before any files are
+// written, so a rejected config leaves the deployment directory untouched. It
+// is a no-op for non-local presets.
+func validateLocalInitMemory(
+	ctx context.Context,
+	manifest *presets.InfrastructureManifest,
+	overrides map[string]string,
+) error {
+	if manifest == nil || manifest.Backend != backendTypeLocal {
+		return nil
+	}
+
+	candidate := presets.InfrastructureLocal{}
+	if manifest.Local != nil {
+		candidate = *manifest.Local
+	}
+	if err := applyLocalConfigOverrides(&candidate, overrides); err != nil {
 		return err
 	}
 
-	data, err := yaml.Marshal(b.manifest)
-	if err != nil {
-		return fmt.Errorf("failed to encode local infrastructure manifest: %w", err)
-	}
-	if err := os.WriteFile(
-		b.deployment.InfrastructureManifestPath(),
-		data,
-		localManifestFileMode,
-	); err != nil {
-		return fmt.Errorf("failed to write local infrastructure manifest: %w", err)
-	}
+	_, err := resolveLocalRuntimeConfig(
+		&presets.InfrastructureManifest{Local: &candidate},
+		detectLocalHostMemoryMB(ctx),
+	)
 
-	return nil
+	return err
 }
 
 func (b *localBackend) ReadConfiguration() ([]DeploymentConfigValue, error) {
@@ -354,26 +392,15 @@ func defaultLocalRuntimeConfig(detectedHostMemoryMB int) localRuntimeConfig {
 }
 
 func detectLocalHostMemoryMB(ctx context.Context) int {
-	if runtime.GOOS != localSupportedOS {
-		return 0
-	}
-
-	output, err := exec.CommandContext(
-		ctx,
-		"sysctl",
-		"-n",
-		"hw.memsize",
-	).Output()
+	// Host memory detection is only implemented for macOS today; other platforms
+	// return an error here and fall back to the fixed default, which keeps local
+	// sizing deterministic where local deployments are not yet supported.
+	memoryMB, err := util.GetTotalMemoryMB(ctx)
 	if err != nil {
 		return 0
 	}
 
-	value, err := strconv.ParseUint(strings.TrimSpace(string(output)), 10, 64)
-	if err != nil {
-		return 0
-	}
-
-	return int(value / bytesPerMegabyte)
+	return int(memoryMB)
 }
 
 func resolveLocalRuntimeConfig(

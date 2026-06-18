@@ -189,6 +189,9 @@ def test_init_local_rejects_memory_below_minimum(
     assert (
         "local memory-mb must be at least 4096 mb" in (exc.value.stderr or "").lower()
     )
+    # Then validation happened before extraction, leaving the directory empty
+    # so a corrected retry is not blocked by leftover preset files.
+    assert list(deployment_dir.iterdir()) == []
 
 
 @pytest.mark.skipif(
