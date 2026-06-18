@@ -5,7 +5,7 @@ Exasol Personal users who want to do data science / AI work against their databa
 ## What Changes
 
 - Add an optional **Exasol AI Lab** installation that runs the official `exasol/ai-lab` container (via Podman) on the same infrastructure (e.g. the AWS EC2 instance) that hosts the Exasol database.
-- Make AI Lab installation **opt-in two ways**: a `--with-ai-lab` flag on `exasol install`, and a standalone `exasol ai-lab install` command to add it to an existing running deployment.
+- Make AI Lab installation **opt-in** via a `--with-ai-lab` flag on `exasol install`. (A standalone `exasol ai-lab install` command to add AI Lab to an already-running deployment is **deferred to a follow-up change** — it requires a reconfigure + remote-exec flow that is out of scope here; see design.md.)
 - **Pre-configure** AI Lab so it connects to the local Exasol database and BucketFS automatically, with no manual configuration steps: the launcher seeds AI Lab's Secure Configuration Storage (SCS) with the resolved DB and BucketFS connection parameters.
 - **Auto-generate** the SCS master password and Jupyter password as OpenTofu `random_password` outputs and store them in `secrets.json`, alongside the existing `dbPassword`/`adminUiPassword` (mirroring how those secrets are handled today).
 - **Expose** the AI Lab (Jupyter) port through a dedicated security-group ingress rule, gated by the existing `allowed_cidr` restriction and protected by the Jupyter password.

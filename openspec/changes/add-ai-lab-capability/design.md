@@ -22,8 +22,13 @@ This change adds AI Lab as an opt-in, pre-wired companion to the database. It de
 
 ## Decisions
 
-### Install trigger: both a flag and a standalone command
-`exasol install <preset> --with-ai-lab` covers the greenfield path; `exasol ai-lab install` adds AI Lab to an already-running deployment without redeploying the database. Rationale: users decide they want AI Lab both up front and after the fact, and decoupling the second path avoids forcing a DB redeploy. Alternative (default-on) was rejected — every deployment would pay the shared-instance resource cost and gain an exposed service unconditionally.
+### Install trigger: `--with-ai-lab` now; standalone command deferred
+`exasol install <preset> --with-ai-lab` covers the greenfield path and is delivered in this change. Alternative (default-on) was rejected — every deployment would pay the shared-instance resource cost and gain an exposed service unconditionally.
+
+The originally-planned standalone `exasol ai-lab install` (adding AI Lab to an already-running deployment) is **deferred to a follow-up change**. It is not mechanical: cloud-init and the `postInstall` hook run only on first boot, so re-applying Terraform with `with_ai_lab=true` would add the security-group rule and generate secrets but would **not** re-run `installAiLab.sh` on the already-booted host, nor would the host's `infrastructure.json` contain the `aiLab` block. The follow-up will choose among:
+1. **Reconfigure + remote-exec** — flip `with_ai_lab`, `tofu apply` (SG rule + secrets + metadata), then deliver the AI Lab settings to the host and run `installAiLab.sh` over SSH via the launcher's remote-exec path. Most faithful; reuses the install script.
+2. **Documented reconfigure recipe** — no new command; users add AI Lab via the existing reconfigure flow.
+3. **(chosen for now)** ship the `--with-ai-lab` path and track the command separately.
 
 ### Container runtime: install Podman on the host
 Since Podman is not present, the installation assets add the `podman` package (rootless prerequisites like `uidmap` already exist). We run AI Lab as a **separate rootless Podman container**, independent of C4's database container. Alternative (reuse C4) was rejected: C4 is purpose-built for the database cluster, not arbitrary side containers.

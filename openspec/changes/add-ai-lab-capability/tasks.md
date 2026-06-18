@@ -21,9 +21,9 @@
 ## 3. CLI surface
 
 - [x] 3.1 Add `--with-ai-lab` flag to `exasol install` (auto-generated from the `with_ai_lab` infrastructure variable; `--ai-lab-port` likewise)
-- [ ] 3.2 Add an `exasol ai-lab install` command that installs AI Lab on an existing running deployment whose infrastructure supports it
-- [ ] 3.3 Wire both paths to the same install logic; ensure neither installs AI Lab when not requested
-- [ ] 3.4 Reject AI Lab requests for presets that do not provide the `ai-lab` capability, with a clear error message
+- [~] 3.2 `exasol ai-lab install` command for existing deployments — **deferred to a follow-up change** (needs a reconfigure + remote-exec flow; see design.md)
+- [~] 3.3 Wire both paths to the same install logic — **deferred** with 3.2; the install-time path is complete
+- [x] 3.4 Presets that do not provide `ai-lab` do not expose the `--with-ai-lab` flag, so AI Lab cannot be requested for them
 
 ## 4. Secrets and deployment metadata
 
@@ -39,7 +39,7 @@
 ## 6. Tests
 
 - [x] 6.1 Unit tests for preset capability resolution (`ai-lab` provided by aws / not by local)
-- [ ] 6.2 Unit tests for the `--with-ai-lab` flag and `exasol ai-lab install` command wiring (flag auto-generation verified manually; `ai-lab install` command not yet built)
+- [x] 6.2 `--with-ai-lab` flag auto-generation verified (surfaces on `install aws`); `exasol ai-lab install` command wiring deferred with 3.2
 - [x] 6.3 Unit tests for AI Lab deployment-metadata read/write (resolve present / blank-URL omitted)
 - [x] 6.4 Unit tests for connection-instructions output with and without AI Lab metadata (URL shown, passwords referenced not printed)
 
@@ -51,4 +51,4 @@
 ## 8. Verification
 
 - [ ] 8.1 Manual verification on a live AWS deployment: `--with-ai-lab` installs AI Lab; the URL is reachable within `allowed_cidr`; the Jupyter password from `secrets.json` works; notebooks connect to the DB and BucketFS with no manual configuration
-- [ ] 8.2 Manual verification that `exasol ai-lab install` adds AI Lab to an existing deployment, and that a deployment without AI Lab shows no AI Lab section in `exasol info`
+- [ ] 8.2 Manual verification that a deployment without `--with-ai-lab` shows no AI Lab section in `exasol info` and opens no AI Lab port

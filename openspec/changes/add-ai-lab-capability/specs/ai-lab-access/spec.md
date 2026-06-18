@@ -22,17 +22,13 @@ The system SHALL install AI Lab only when the user explicitly requests it, and S
 - **WHEN** a user runs `exasol install` for a supporting preset with the `--with-ai-lab` flag
 - **THEN** the launcher installs the database and additionally installs AI Lab on the same infrastructure
 
-#### Scenario: Add AI Lab to an existing deployment
-- **WHEN** a user runs `exasol ai-lab install` against a running deployment whose infrastructure supports AI Lab and that does not yet have AI Lab
-- **THEN** the launcher installs AI Lab on that deployment's infrastructure without redeploying the database
-
 #### Scenario: Install without requesting AI Lab
 - **WHEN** a user runs `exasol install` without `--with-ai-lab`
 - **THEN** the launcher deploys only the database and does not install AI Lab
 
 #### Scenario: Request AI Lab on an unsupported preset
-- **WHEN** a user requests AI Lab for a deployment whose infrastructure does not provide the `ai-lab` capability
-- **THEN** the launcher refuses the request and explains that the infrastructure does not support AI Lab
+- **WHEN** a user targets a preset whose infrastructure does not provide the `ai-lab` capability
+- **THEN** the `--with-ai-lab` option is not offered for that preset, so AI Lab cannot be requested for it
 
 ### Requirement: AI Lab runs as a container alongside the database
 The system SHALL run AI Lab as the official Exasol AI Lab container, managed by Podman, on the same infrastructure that hosts the database.
