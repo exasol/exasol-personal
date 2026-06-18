@@ -179,6 +179,7 @@ func runInitForFreshDeployment(
 		return err
 	}
 	addTerminalNotice(deploy.EulaNoticeText)
+	addTerminalNotice(deploy.LocalInitMemoryNotice(deployment))
 
 	return nil
 }
