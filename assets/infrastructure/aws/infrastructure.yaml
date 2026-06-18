@@ -5,6 +5,7 @@ backend: tofu
 compatibility:
   provides:
     - admin-ui
+    - ai-lab
     - remote-exec
 
 tofu:

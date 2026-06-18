@@ -10,6 +10,9 @@ packages:
   - net-tools
   - jq
   - uidmap
+  # Container runtime for the optional AI Lab container (installed on all nodes;
+  # only used on n11 when AI Lab is enabled).
+  - podman
 
 runcmd:
   - "echo 'EXASOL-INSTALL-SUBSTEP: System package installation and updates completed'"
