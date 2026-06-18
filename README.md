@@ -37,7 +37,7 @@ A cloud account on one of the supported platforms with permission to provision c
 - **Azure** — [Set up an Azure account for Exasol Personal](./HOWTO_SETUP_AZURE_ACCOUNT.md)
 - **Exoscale** — [Set up an Exoscale account for Exasol Personal](./HOWTO_SETUP_EXOSCALE_ACCOUNT.md)
 - **STACKIT** — [Set up a STACKIT account for Exasol Personal](./HOWTO_SETUP_STACKIT_ACCOUNT.md)
-- **Local** — local deployment on macOS
+- **Local** — local deployment on macOS, with at least 8 GB RAM
 
 
 ## 🏎️ Quick Start (macOS / Linux)
@@ -184,7 +184,7 @@ exasol start
 ```
 The IP addresses of the nodes will change when you restart Exasol Personal. Check the output of the `start` command to know how to connect to the deployment after a restart.
 
-For local deployments, which currently require macOS, the launcher manages a local VM runtime and an internal deployment share inside the deployment directory. The initial local database credentials are `sys` / `exasol`. `exasol shell host` opens the local VM shell, and `exasol shell container` opens a shell inside the local database container.
+For local deployments, which currently require macOS with at least 8 GB RAM, the launcher manages a local VM runtime and an internal deployment share inside the deployment directory. If you do not configure local VM memory explicitly, it defaults to about 50% of detected host memory. Configured local VM memory must be at least 4096 MB. The initial local database credentials are `sys` / `exasol`. `exasol shell host` opens the local VM shell, and `exasol shell container` opens a shell inside the local database container.
 
 ## 🗑️ Remove Exasol Personal
 
