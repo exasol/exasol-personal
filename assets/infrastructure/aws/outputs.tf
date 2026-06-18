@@ -74,6 +74,7 @@ locals {
     var.with_ai_lab ? {
       aiLabScsPassword     = random_password.ai_lab_scs.result
       aiLabJupyterPassword = random_password.ai_lab_jupyter.result
+      aiLabBfsPassword     = random_password.ai_lab_bfs.result
     } : {}
   )
 }

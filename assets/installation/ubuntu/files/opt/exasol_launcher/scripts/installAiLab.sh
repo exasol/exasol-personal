@@ -22,17 +22,27 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "${SCRIPT_DIR}/logging.sh"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
+# shellcheck source=./shared_post_install.sh
+source "${SCRIPT_DIR}/shared_post_install.sh" # provides C4_PATH
 
 readonly AILAB_IMAGE="docker.io/exasol/ai-lab:latest"
 readonly AILAB_CONTAINER="exasol-ai-lab"
 readonly AILAB_VOLUME="exasol-ai-lab-notebooks"
 # Jupyter always listens on 49494 inside the container.
 readonly AILAB_CONTAINER_PORT=49494
-# The SCS file the AI Lab notebooks load from the notebooks directory.
-readonly AILAB_SCS_FILE="/home/jupyter/notebooks/ai_lab_config.db"
+# The SCS file the AI Lab notebooks load from the notebooks directory by default.
+readonly AILAB_SCS_FILE="/home/jupyter/notebooks/ai_lab_secure_configuration_storage.sqlite"
 # The notebook-connector library lives in the JupyterLab virtualenv, not the
 # system python, so the SCS must be seeded with that interpreter.
 readonly AILAB_PYTHON="/home/jupyter/jupyterenv/bin/python3"
+# Default database schema pre-created so notebooks are ready to use without
+# running the main configuration notebook.
+readonly AILAB_DB_SCHEMA="AI_LAB"
+# Dedicated BucketFS bucket pre-created for AI Lab, in the default BucketFS service.
+readonly AILAB_BFS_BUCKET="ailab_bucket"
+readonly AILAB_BFS_SERVICE="bfsdefault"
+# BucketFS HTTP auth user for write access on Exasol.
+readonly AILAB_BFS_USER="w"
 
 enabled="$(infra_jq -er '.aiLab.enabled // false')"
 if [[ "${enabled}" != "true" ]]; then
@@ -46,6 +56,10 @@ ai_lab_port="$(infra_jq -er '.aiLab.port')"
 jupyter_password="$(infra_jq -er '.aiLab.jupyterPasswordB64' | base64 -d)"
 scs_password="$(infra_jq -er '.aiLab.scsPasswordB64' | base64 -d)"
 db_password="$(infra_jq -er '.dbPasswordB64' | base64 -d)"
+# BucketFS bucket password: confd's bucket_add expects it base64-encoded, while
+# the SCS / BucketFS HTTP auth needs it in plain text.
+bfs_password_b64="$(infra_jq -er '.aiLab.bfsPasswordB64')"
+bfs_password="$(printf '%s' "${bfs_password_b64}" | base64 -d)"
 
 # This script runs as the unprivileged 'ubuntu' user, so Podman runs rootless
 # directly (no runuser). This hook runs from a systemd service with no user
@@ -103,6 +117,31 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
+log_substep_info "Ensuring BucketFS bucket '${AILAB_BFS_BUCKET}' exists"
+# Create a dedicated bucket for AI Lab in the default BucketFS service if it does
+# not already exist. confd_client runs inside the COS container, reached via c4
+# connect (same pattern as the archive-volume hook). bucket_add takes the
+# read/write passwords in plain text (it stores them base64-encoded), so we pass
+# the same plain-text password the SCS uses; params go as JSON to stay safe
+# regardless of password punctuation.
+PLAY_ID="$("${C4_PATH}" config -e .play.id)"
+{
+  printf 'BUCKET=%q\n' "${AILAB_BFS_BUCKET}"
+  printf 'BFS=%q\n' "${AILAB_BFS_SERVICE}"
+  printf 'PW=%q\n' "${bfs_password}"
+  cat <<'CONNECTEOF'
+set -Eeuo pipefail
+if confd_client -c bucketfs_info -a "bucketfs_name: ${BFS}" -j \
+  | jq -e --arg b "${BUCKET}" '.buckets[$b] // empty' >/dev/null 2>&1; then
+  echo "Bucket ${BUCKET} already exists; leaving it unchanged"
+else
+  PARAMS=$(jq -nc --arg b "${BUCKET}" --arg s "${BFS}" --arg p "${PW}" \
+    '{bucket_name:$b,bucketfs_name:$s,public:true,read_password:$p,write_password:$p}')
+  confd_client -c bucket_add -A "${PARAMS}"
+fi
+CONNECTEOF
+} | "${C4_PATH}" connect -s cos -i "${PLAY_ID}"
+
 log_substep_info "Pre-seeding AI Lab connection configuration (SCS)"
 # The database and BucketFS run on the host; from a rootless container the host
 # is reachable via host.containers.internal. Exasol Personal uses a self-signed
@@ -113,6 +152,11 @@ log_substep_info "Pre-seeding AI Lab connection configuration (SCS)"
 podman exec -i --user jupyter \
   --env SCS_PASSWORD="${scs_password}" \
   --env DB_PASSWORD="${db_password}" \
+  --env DB_SCHEMA="${AILAB_DB_SCHEMA}" \
+  --env BFS_SERVICE="${AILAB_BFS_SERVICE}" \
+  --env BFS_BUCKET="${AILAB_BFS_BUCKET}" \
+  --env BFS_USER="${AILAB_BFS_USER}" \
+  --env BFS_PASSWORD="${bfs_password}" \
   "${AILAB_CONTAINER}" "${AILAB_PYTHON}" - "${AILAB_SCS_FILE}" <<'PY'
 import os
 import sys
@@ -120,6 +164,7 @@ import sys
 from pathlib import Path
 from exasol.nb_connector.secret_store import Secrets
 from exasol.nb_connector.ai_lab_config import AILabConfig as K, StorageBackend
+from exasol.nb_connector.connections import open_pyexasol_connection
 
 scs = Secrets(Path(sys.argv[1]), master_password=os.environ["SCS_PASSWORD"])
 
@@ -132,13 +177,21 @@ scs.save(K.db_user, "sys")
 scs.save(K.db_password, os.environ["DB_PASSWORD"])
 scs.save(K.db_encryption, "True")
 scs.save(K.cert_vld, "False")
+scs.save(K.db_schema, os.environ["DB_SCHEMA"])
 
-# BucketFS connection.
+# BucketFS connection (default service is HTTPS on 2581, so encryption is on).
 scs.save(K.bfs_host_name, "host.containers.internal")
 scs.save(K.bfs_port, "2581")
-scs.save(K.bfs_service, "bfsdefault")
-scs.save(K.bfs_bucket, "default")
-scs.save(K.bfs_encryption, "False")
+scs.save(K.bfs_service, os.environ["BFS_SERVICE"])
+scs.save(K.bfs_bucket, os.environ["BFS_BUCKET"])
+scs.save(K.bfs_user, os.environ["BFS_USER"])
+scs.save(K.bfs_password, os.environ["BFS_PASSWORD"])
+scs.save(K.bfs_encryption, "True")
+
+# Pre-create the database schema so notebooks are ready to use without running
+# the main configuration notebook (this mirrors its "Create DB schema" step).
+with open_pyexasol_connection(scs, compression=True) as con:
+    con.execute(f'CREATE SCHEMA IF NOT EXISTS "{os.environ["DB_SCHEMA"]}"')
 PY
 
 log_substep_info "Configuring AI Lab to restart on reboot"

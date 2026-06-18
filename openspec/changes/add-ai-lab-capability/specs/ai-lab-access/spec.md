@@ -54,10 +54,14 @@ The system SHALL pre-configure AI Lab so that it connects to the deployment's Ex
 
 #### Scenario: BucketFS connection is pre-seeded
 - **WHEN** AI Lab is installed for a deployment
-- **THEN** AI Lab's secure configuration is seeded with the BucketFS connection parameters for the deployment so notebooks can use BucketFS without manual entry
+- **THEN** a dedicated BucketFS bucket is created for AI Lab if it does not already exist, with a generated write password, and AI Lab's secure configuration is seeded with that bucket's name, user, and password so notebooks can use BucketFS without manual entry
+
+#### Scenario: Database schema is pre-created
+- **WHEN** AI Lab is installed for a deployment
+- **THEN** a default database schema is created (if absent) and recorded in AI Lab's configuration, so notebooks are ready to use without running the main configuration notebook
 
 #### Scenario: Self-signed certificate is handled
-- **WHEN** the deployment's database presents a self-signed certificate
+- **WHEN** the deployment's database or BucketFS presents a self-signed certificate
 - **THEN** the pre-seeded AI Lab configuration connects successfully without requiring the user to disable certificate validation manually
 
 ### Requirement: AI Lab secrets are generated and stored

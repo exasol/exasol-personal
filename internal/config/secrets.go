@@ -17,6 +17,7 @@ type Secrets struct {
 	AdminUiPassword      string `json:"adminUiPassword,omitempty"`
 	AiLabScsPassword     string `json:"aiLabScsPassword,omitempty"`
 	AiLabJupyterPassword string `json:"aiLabJupyterPassword,omitempty"`
+	AiLabBfsPassword     string `json:"aiLabBfsPassword,omitempty"`
 }
 
 func SecretsFilePath(deployment DeploymentDir) (string, error) {

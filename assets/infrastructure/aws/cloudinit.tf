@@ -109,6 +109,7 @@ locals {
       port               = var.ai_lab_port
       scsPasswordB64     = base64encode(var.with_ai_lab ? random_password.ai_lab_scs.result : "")
       jupyterPasswordB64 = base64encode(var.with_ai_lab ? random_password.ai_lab_jupyter.result : "")
+      bfsPasswordB64     = base64encode(var.with_ai_lab ? random_password.ai_lab_bfs.result : "")
     }
 
     # Cloud-provider specific values needed by optional infra hooks.
