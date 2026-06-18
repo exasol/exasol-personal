@@ -3,8 +3,17 @@ name: Deployment Tests
 on:
   workflow_dispatch:
     inputs:
+      suite:
+        description: Which test suite to run
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - cloud
+          - local
       os:
-        description: Operating system selector
+        description: Operating system selector (cloud suite only)
         required: false
         default: all
         type: choice
@@ -21,6 +30,7 @@ env:
 
 jobs:
   plan-tests-deployment:
+    if: ${{ inputs.suite != 'local' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -57,6 +67,7 @@ jobs:
           echo "matrix=${filtered_plan_json}" >> "${GITHUB_OUTPUT}"
 
   tests-deployment:
+    if: ${{ inputs.suite != 'local' }}
     needs: plan-tests-deployment
     environment:
       name: deployment-tests
@@ -145,6 +156,44 @@ jobs:
         if: always()
         with:
           context: tests-deployment-${{ matrix.infra }}-${{ matrix.os }}
+          status: ${{ job.status }}
+          description: ${{ env.STATUS_DESC }}
+          target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  tests-deployment-local:
+    if: ${{ inputs.suite != 'cloud' }}
+    environment:
+      name: deployment-tests
+    runs-on:
+      - self-hosted
+      - macOS
+      - ARM64
+      - virtualization
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/status-set
+        with:
+          context: tests-deployment-local-self-hosted
+          status: pending
+          description: ${{ env.STATUS_DESC }}
+          target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - uses: ./.github/actions/build
+      - uses: ./.github/actions/tests-deployment
+        with:
+          infra: local
+          task: tests-deployment-local
+          system-python: 'true'
+
+      - uses: ./.github/actions/status-set
+        if: always()
+        with:
+          context: tests-deployment-local-self-hosted
           status: ${{ job.status }}
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

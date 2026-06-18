@@ -109,6 +109,8 @@ def reusable_deployment(
 
 @pytest.mark.installation_e2e
 def test_connectable(reusable_deployment: Deployment) -> None:
+    # Note: not marked local_e2e — db_connectable() reads deployment.json nodes
+    # which the local backend does not populate.
     assert reusable_deployment.db_connectable()
 
 
@@ -121,6 +123,7 @@ def test_connectable(reusable_deployment: Deployment) -> None:
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.installation_e2e
+@pytest.mark.local_e2e
 def test_single_query(reusable_deployment: Deployment) -> None:
     query: Final = "SELECT * FROM Dual"
 
@@ -143,6 +146,7 @@ def test_single_query(reusable_deployment: Deployment) -> None:
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.installation_e2e
+@pytest.mark.local_e2e
 def test_exit_command(reusable_deployment: Deployment) -> None:
     queries: Final = [
         "exit",
@@ -161,6 +165,7 @@ def test_exit_command(reusable_deployment: Deployment) -> None:
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.installation_e2e
+@pytest.mark.local_e2e
 def test_multiple_queries(reusable_deployment: Deployment) -> None:
     queries: Final = [
         "CREATE SCHEMA test_multiple_queries;",
@@ -200,6 +205,7 @@ def test_multiple_queries(reusable_deployment: Deployment) -> None:
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.installation_e2e
+@pytest.mark.local_e2e
 def test_file_import(reusable_deployment: Deployment) -> None:
     people_csv_path: Final = Path(__file__).parent / Path("assets/people.csv")
 
@@ -244,6 +250,7 @@ def test_file_import(reusable_deployment: Deployment) -> None:
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.installation_e2e
+@pytest.mark.local_e2e
 def test_connect_table_width(reusable_deployment: Deployment) -> None:
     queries: Final = [
         "CREATE SCHEMA test_connect_table_width;",
@@ -273,16 +280,21 @@ def test_connect_table_width(reusable_deployment: Deployment) -> None:
         stderr=slave_fd,
     )
 
-    # Read the stdout of the connect command, KiB at a time.
-    os.close(slave_fd)
+    # Set non-blocking before draining: on macOS, closing slave_fd first causes
+    # immediate EIO on master_fd even if data is buffered. Keep slave_fd open and
+    # use non-blocking reads so we don't hang waiting for more data.
+    fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+    fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
     output_raw = b""
     try:
         while chunk := os.read(master_fd, 1024):
             output_raw += chunk
     except OSError:
         pass
-
-    os.close(master_fd)
+    finally:
+        os.close(slave_fd)
+        os.close(master_fd)
 
     output_lines = [line.rstrip("\r") for line in str(output_raw, "utf-8").split("\n")]
     output = "\n".join(output_lines).strip("\n")
@@ -303,6 +315,7 @@ def test_connect_table_width(reusable_deployment: Deployment) -> None:
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.installation_e2e
+@pytest.mark.local_e2e
 def test_connect_interactive_shows_version_and_exit_hint(
     reusable_deployment: Deployment,
 ) -> None:
@@ -323,7 +336,11 @@ def test_connect_interactive_shows_version_and_exit_hint(
     finally:
         if proc.poll() is None:
             proc.kill()
-        os.close(slave_fd)
+
+    # Drain master_fd before closing slave_fd: on macOS, closing slave_fd first
+    # causes immediate EIO on master_fd even if data is buffered.
+    fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+    fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
     output_raw = b""
     try:
@@ -332,6 +349,7 @@ def test_connect_interactive_shows_version_and_exit_hint(
     except OSError:
         pass
     finally:
+        os.close(slave_fd)
         os.close(master_fd)
 
     output = output_raw.decode("utf-8", errors="replace")
@@ -345,7 +363,15 @@ def test_connect_interactive_shows_version_and_exit_hint(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.installation_e2e
-def test_diag_cos_runs_confd_client(reusable_deployment: Deployment) -> None:
+@pytest.mark.local_e2e
+def test_diag_cos_runs_confd_client(
+    reusable_deployment: Deployment, infra: str
+) -> None:
+    if infra == "local":
+        pytest.skip(
+            "confd_client is a COS tool; local deployments use a VM shell"
+            " fallback where it is not available"
+        )
     # Given: A running deployment and a PTY for an interactive container shell session.
     launcher_path = reusable_deployment.launcher.launcher_path
     deployment_dir = reusable_deployment.deployment_dir.name
@@ -370,7 +396,10 @@ def test_diag_cos_runs_confd_client(reusable_deployment: Deployment) -> None:
         if proc.poll() is None:
             proc.kill()
 
-        os.close(slave_fd)
+    # Drain master_fd before closing slave_fd: on macOS, closing slave_fd first
+    # causes immediate EIO on master_fd even if data is buffered.
+    fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+    fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
     # Read all output from the PTY.
     output_raw = b""
@@ -380,6 +409,7 @@ def test_diag_cos_runs_confd_client(reusable_deployment: Deployment) -> None:
     except OSError:
         pass
     finally:
+        os.close(slave_fd)
         os.close(master_fd)
 
     output = output_raw.decode("utf-8", errors="replace")
@@ -394,7 +424,13 @@ def test_diag_cos_runs_confd_client(reusable_deployment: Deployment) -> None:
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.installation_e2e
-def test_license_session_limit(reusable_deployment: Deployment) -> None:
+@pytest.mark.local_e2e
+def test_license_session_limit(reusable_deployment: Deployment, infra: str) -> None:
+    if infra == "local":
+        pytest.skip(
+            "Session limit enforcement is not yet implemented for local deployments"
+        )
+
     # license_session_limit is the limit defined in Exasol Personal
     # license. This value should match it.
     license_session_limit: Final = 20
