@@ -280,3 +280,13 @@ If you want infrastructure and installation presets to remain mix-and-match, tre
 If you intentionally break the contract (different host paths, different discovery layout, different metadata files), you can still do so by defining a **compatible subset** (a “preset family”) where infrastructure and installation presets are designed together.
 
 When you do that, document the differences in the preset README(s) and ensure the launcher integration remains clear (especially around monitoring, progress reporting, and failure modes).
+
+## Adding AI Lab to another infrastructure preset
+
+The cloud-agnostic AI Lab installer lives once in the installation preset (`assets/installation/ubuntu/files/opt/exasol_launcher/scripts/installAiLab.sh`, plus the `podman` package in `cloudconf`). An infrastructure preset opts in by replicating the three provider-specific bits already present in the AWS preset:
+
+1. **Declare the capability** — add `ai-lab` to `compatibility.provides` in `infrastructure.yaml`.
+2. **Expose the port** — add a firewall/security-group ingress rule for `var.ai_lab_port`, gated on `var.with_ai_lab` and restricted to `var.allowed_cidr` (the rule is provider-specific; there is no shared abstraction).
+3. **Wire variables, secrets, metadata, and the hook** — add the `with_ai_lab` and `ai_lab_port` variables; generate `random_password` resources for the SCS and Jupyter passwords and emit them into `secrets.json` (`aiLabScsPassword`/`aiLabJupyterPassword`) when enabled; emit the `aiLab` connection object into `deployment.json`; and in `cloudinit.tf` inject the `aiLab` block (`enabled`, `port`, base64 passwords) into `infrastructure.json` and register `installAiLab.sh` in `postInstall.scripts`.
+
+The enablement is an **infrastructure** variable (not an installation variable) because it must be known at Terraform plan time to conditionally create the firewall rule, secrets, outputs, and hook registration.

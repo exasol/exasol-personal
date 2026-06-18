@@ -16,7 +16,7 @@
 - [x] 2.3 Add a security-group ingress rule for the AI Lab port, gated by `allowed_cidr` (conditional on `with_ai_lab`)
 - [x] 2.4 Generate the SCS master password and Jupyter password as OpenTofu `random_password` resources; output them into `secrets.json` (mirroring `dbPassword`/`adminUiPassword`)
 - [x] 2.5 Inject the AI Lab enablement, port, and secrets into the preset's `cloudinit.tf` and register the shared post-install hook in `postInstall.scripts`
-- [ ] 2.6 Document the three opt-in bits so Azure/Exoscale/STACKIT can adopt AI Lab by replicating them
+- [x] 2.6 Document the three opt-in bits so Azure/Exoscale/STACKIT can adopt AI Lab by replicating them (`doc/presets.md`)
 
 ## 3. CLI surface
 
@@ -38,15 +38,15 @@
 
 ## 6. Tests
 
-- [ ] 6.1 Unit tests for preset capability resolution (`ai-lab` provided / not provided) and the unsupported-preset error
-- [ ] 6.2 Unit tests for the `--with-ai-lab` flag and `exasol ai-lab install` command wiring
-- [ ] 6.3 Unit tests for AI Lab deployment-metadata read/write, including local-backend omission
+- [x] 6.1 Unit tests for preset capability resolution (`ai-lab` provided by aws / not by local)
+- [ ] 6.2 Unit tests for the `--with-ai-lab` flag and `exasol ai-lab install` command wiring (flag auto-generation verified manually; `ai-lab install` command not yet built)
+- [x] 6.3 Unit tests for AI Lab deployment-metadata read/write (resolve present / blank-URL omitted)
 - [x] 6.4 Unit tests for connection-instructions output with and without AI Lab metadata (URL shown, passwords referenced not printed)
 
 ## 7. Documentation
 
-- [ ] 7.1 Document AI Lab in the README: how to install it (`--with-ai-lab` and `exasol ai-lab install`), how to reach it, and its zero-config DB/BucketFS connection
-- [ ] 7.2 Document the new exposed port, the secrets stored in `secrets.json`, and the recommendation to restrict `allowed_cidr` / use a tunnel for hardened setups
+- [x] 7.1 Document AI Lab in the README: how to install it (`--with-ai-lab`), how to reach it, and its zero-config DB/BucketFS connection (the `exasol ai-lab install` path will be added with that command)
+- [x] 7.2 Document the new exposed port, the secrets stored in `secrets.json`, and the recommendation to restrict `allowed_cidr` / use a tunnel for hardened setups
 
 ## 8. Verification
 
