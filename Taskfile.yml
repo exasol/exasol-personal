@@ -223,6 +223,26 @@ tasks:
       - |
         poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{if .STACKIT_PROJECT_ID}}--stackit-project-id={{.STACKIT_PROJECT_ID}}{{end}} -m "installation_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
 
+  tests-deployment-local:
+    desc: Run local VM deployment tests (macOS Apple Silicon only)
+    deps: [tests-setup]
+    dir: '{{.TESTS_DIR}}'
+    cmds:
+      - poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra=local -m "local_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
+
+  run-deployment-tests:
+    desc: Trigger the deployment tests workflow on the current pushed commit (`task run-deployment-tests SUITE=local`, `task run-deployment-tests OS=macos-latest`)
+    vars:
+      OS: '{{default "all" .OS}}'
+      SUITE: '{{default "all" .SUITE}}'
+    cmds:
+      - .github/scripts/run-deployment-tests.sh "{{.OS}}" "{{.SUITE}}"
+
+  download-ci-artifacts:
+    desc: Download built artifacts from the latest successful CI run on the current branch into ci-downloads/
+    cmds:
+      - .github/scripts/download-ci-artifacts.sh ci-downloads
+
   lint-ruff:
     desc: Run ruff check
     cmds:

@@ -91,7 +91,9 @@ class Launcher:
         if config is None:
             config = DeploymentConfig()
 
-        init_args = [config.infra, "--cluster-size", str(config.cluster_size)]
+        init_args = [config.infra]
+        if config.infra != "local":
+            init_args.extend(["--cluster-size", str(config.cluster_size)])
 
         if config.instance_type is not None:
             init_args.extend(["--instance-type", config.instance_type])
