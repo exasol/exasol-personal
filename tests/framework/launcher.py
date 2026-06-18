@@ -81,18 +81,10 @@ class Launcher:
             },
         )
 
-    def init(
-        self,
-        deployment_dir: str,
-        *args: str,
-        config: DeploymentConfig | None = None,
-        **kwargs: Unpack[SubprocessRunKwargs],
-    ) -> CompletedProcess[str]:
-        if config is None:
-            config = DeploymentConfig()
-
-        init_args = [config.infra, "--cluster-size", str(config.cluster_size)]
-
+    def _build_init_args(self, config: DeploymentConfig) -> list[str]:
+        init_args = [config.infra]
+        if config.infra != "local":
+            init_args.extend(["--cluster-size", str(config.cluster_size)])
         if config.instance_type is not None:
             init_args.extend(["--instance-type", config.instance_type])
         if config.data_volume_size is not None:
@@ -109,11 +101,22 @@ class Launcher:
                 location = os.getenv("TF_VAR_LOCATION") or os.getenv("AZURE_LOCATION")
             if location is not None and location.strip() != "":
                 init_args.extend(["--location", location])
+        return init_args
+
+    def init(
+        self,
+        deployment_dir: str,
+        *args: str,
+        config: DeploymentConfig | None = None,
+        **kwargs: Unpack[SubprocessRunKwargs],
+    ) -> CompletedProcess[str]:
+        if config is None:
+            config = DeploymentConfig()
 
         return self.run_command(
             "init",
             deployment_dir,
-            *init_args,
+            *self._build_init_args(config),
             *args,
             **kwargs,
         )

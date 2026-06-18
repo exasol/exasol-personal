@@ -31,6 +31,7 @@ markers = [
   "launcher_tests: Tests that validate launcher CLI and behavioral contracts without real cloud deployment.",
   "installation_e2e: End-to-end tests focused on installation-level behavior.",
   "infrastructure_e2e: End-to-end tests focused on cloud infrastructure behavior.",
+  "local_e2e: End-to-end tests for the local macOS VM deployment.",
   "provider_aws: Tests that assert AWS-specific behavior.",
   "provider_azure: Tests that assert Azure-specific behavior.",
   "provider_stackit: Tests that assert STACKIT-specific behavior.",

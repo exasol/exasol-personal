@@ -29,3 +29,4 @@ coverage.out
 *.key
 # Added by goreleaser init:
 dist/
+ci-downloads/
