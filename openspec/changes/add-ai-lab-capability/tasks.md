@@ -4,9 +4,9 @@
 - [x] 1.2 Add a post-install hook script (alongside the existing shared scripts, e.g. `installExasol.sh`/`runInfraHookScripts.sh`) that pulls the latest `exasol/ai-lab` image and runs it via Podman, publishing the AI Lab port and mounting a persistent notebooks volume
 - [x] 1.3 Set the Jupyter password on the container from the value injected by the infrastructure preset
 - [x] 1.4 Generate/seed the SCS: write the master password and the database connection parameters (host, port, user, password, encryption, `cert_vld=false`, `storage_backend=onprem`, `use_itde=false`) and the BucketFS parameters (`bfs_*`) using the notebook-connector configuration keys
-- [ ] 1.5 Confirm the seeded SCS file name/location matches what the AI Lab notebooks load by default, and that connection works against the self-signed DB certificate (needs live verification)
+- [x] 1.5 Confirm the seeded SCS file name/location matches what the AI Lab notebooks load by default, and that connection works against the self-signed DB certificate — VERIFIED on AWS: SCS at `/home/jupyter/notebooks/ai_lab_config.db` (owned by `jupyter`), `open_pyexasol_connection` returned `SELECT 1 → [(1,)]`, version `2026.1.0` with `cert_vld=false`
 - [x] 1.6 Install a Podman Quadlet/systemd unit and enable user lingering so AI Lab restarts after reboot and survives deployment stop/start
-- [ ] 1.7 Verify the AI Lab container does not interfere with the C4-managed database container (rootless isolation) (needs live verification)
+- [x] 1.7 Verify the AI Lab container does not interfere with the C4-managed database container (rootless isolation) — VERIFIED on AWS: AI Lab container runs rootless alongside the C4 DB container; DB stays queryable while AI Lab is up
 - [x] 1.8 Enablement flag (default off): realized as an **infrastructure** variable `with_ai_lab` (must be known at Terraform plan time) and surfaced to the host via `infrastructure.json` `aiLab.enabled`, rather than an installation-preset variable
 
 ## 2. Infrastructure preset opt-in (AWS first)
@@ -50,5 +50,5 @@
 
 ## 8. Verification
 
-- [ ] 8.1 Manual verification on a live AWS deployment: `--with-ai-lab` installs AI Lab; the URL is reachable within `allowed_cidr`; the Jupyter password from `secrets.json` works; notebooks connect to the DB and BucketFS with no manual configuration
+- [x] 8.1 Manual verification on a live AWS deployment — VERIFIED: `--with-ai-lab` flowed to `with_ai_lab=true`; `deployment.json` carries the `aiLab` URL; `secrets.json` holds `aiLabJupyterPassword`/`aiLabScsPassword`; SG opens 49494 and Jupyter is reachable externally (HTTP 302); notebooks connect to the DB via the pre-seeded SCS with no manual config. (Five `installAiLab.sh` bugs found and fixed via live testing: runuser, slirp host-loopback, exec user, exec `-i`/venv-python, systemd runtime-dir, plus a first-run retry.) Remaining: a final clean deploy to see the launcher reach "running" and render the AI Lab section in `exasol info`
 - [ ] 8.2 Manual verification that a deployment without `--with-ai-lab` shows no AI Lab section in `exasol info` and opens no AI Lab port
