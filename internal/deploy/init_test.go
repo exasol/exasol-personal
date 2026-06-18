@@ -15,6 +15,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/zclconf/go-cty/cty"
+	"gopkg.in/yaml.v3"
 )
 
 func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
@@ -245,5 +246,66 @@ func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), ErrDeploymentDirectoryNotEmpty.Error()) {
 		t.Fatalf("expected ErrDeploymentDirectoryNotEmpty, got: %v", err)
+	}
+}
+
+func TestLocalInitMemoryNotice_ReturnsNoticeForLowLocalMemory(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	writeTestInfrastructureManifest(t, deployment, &presets.InfrastructureManifest{
+		Name:        "Local",
+		Description: "Local preset",
+		Backend:     backendTypeLocal,
+		Local: &presets.InfrastructureLocal{
+			MemoryMB: 4096,
+		},
+	})
+
+	notice := LocalInitMemoryNotice(deployment)
+
+	if notice != LocalInfraMemoryNoticeText {
+		t.Fatalf("expected local workload guidance notice, got %q", notice)
+	}
+}
+
+func TestLocalInitMemoryNotice_OmitsNoticeForHigherLocalMemory(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	writeTestInfrastructureManifest(t, deployment, &presets.InfrastructureManifest{
+		Name:        "Local",
+		Description: "Local preset",
+		Backend:     backendTypeLocal,
+		Local: &presets.InfrastructureLocal{
+			MemoryMB: 12288,
+		},
+	})
+
+	notice := LocalInitMemoryNotice(deployment)
+
+	if notice != "" {
+		t.Fatalf("expected no local workload guidance notice, got %q", notice)
+	}
+}
+
+func writeTestInfrastructureManifest(
+	t *testing.T,
+	deployment config.DeploymentDir,
+	manifest *presets.InfrastructureManifest,
+) {
+	t.Helper()
+
+	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o750); err != nil {
+		t.Fatalf("failed to create infrastructure directory: %v", err)
+	}
+
+	data, err := yaml.Marshal(manifest)
+	if err != nil {
+		t.Fatalf("failed to encode infrastructure manifest: %v", err)
+	}
+
+	if err := os.WriteFile(deployment.InfrastructureManifestPath(), data, 0o600); err != nil {
+		t.Fatalf("failed to write infrastructure manifest: %v", err)
 	}
 }
