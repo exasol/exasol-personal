@@ -249,7 +249,7 @@ func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {
 	}
 }
 
-func TestLocalInitMemoryNotice_ReturnsNoticeForLowLocalMemory(t *testing.T) {
+func TestLocalLowMemoryNotice_ReturnsNoticeForLowLocalMemory(t *testing.T) {
 	t.Parallel()
 
 	deployment := config.NewDeploymentDir(t.TempDir())
@@ -262,14 +262,17 @@ func TestLocalInitMemoryNotice_ReturnsNoticeForLowLocalMemory(t *testing.T) {
 		},
 	})
 
-	notice := LocalInitMemoryNotice(deployment)
+	notice, hasLowMemory := LocalLowMemoryNotice(deployment)
 
+	if !hasLowMemory {
+		t.Fatal("expected low memory to be reported")
+	}
 	if notice != LocalInfraMemoryNoticeText {
 		t.Fatalf("expected local workload guidance notice, got %q", notice)
 	}
 }
 
-func TestLocalInitMemoryNotice_OmitsNoticeForHigherLocalMemory(t *testing.T) {
+func TestLocalLowMemoryNotice_OmitsNoticeForHigherLocalMemory(t *testing.T) {
 	t.Parallel()
 
 	deployment := config.NewDeploymentDir(t.TempDir())
@@ -282,10 +285,10 @@ func TestLocalInitMemoryNotice_OmitsNoticeForHigherLocalMemory(t *testing.T) {
 		},
 	})
 
-	notice := LocalInitMemoryNotice(deployment)
+	notice, hasLowMemory := LocalLowMemoryNotice(deployment)
 
-	if notice != "" {
-		t.Fatalf("expected no local workload guidance notice, got %q", notice)
+	if hasLowMemory {
+		t.Fatalf("expected no low memory report, got notice %q", notice)
 	}
 }
 

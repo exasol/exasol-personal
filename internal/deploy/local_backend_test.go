@@ -206,6 +206,54 @@ func TestValidateLocalRuntimeConfig_AcceptsMinimumMemory(t *testing.T) {
 	}
 }
 
+func TestValidateLocalInitMemory_RejectsOverrideBelowMinimum(t *testing.T) {
+	t.Parallel()
+
+	manifest := &presets.InfrastructureManifest{Backend: backendTypeLocal}
+
+	err := validateLocalInitMemory(
+		context.Background(),
+		manifest,
+		map[string]string{localMemoryMBConfigName: "4095"},
+	)
+	if err == nil {
+		t.Fatal("expected minimum memory validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "local memory-mb must be at least 4096 MB") {
+		t.Fatalf("unexpected minimum memory error: %v", err)
+	}
+}
+
+func TestValidateLocalInitMemory_AcceptsValidOverride(t *testing.T) {
+	t.Parallel()
+
+	manifest := &presets.InfrastructureManifest{Backend: backendTypeLocal}
+
+	err := validateLocalInitMemory(
+		context.Background(),
+		manifest,
+		map[string]string{localMemoryMBConfigName: "4096"},
+	)
+	if err != nil {
+		t.Fatalf("expected valid override to be accepted, got %v", err)
+	}
+}
+
+func TestValidateLocalInitMemory_IgnoresNonLocalBackend(t *testing.T) {
+	t.Parallel()
+
+	manifest := &presets.InfrastructureManifest{Backend: backendTypeTofu}
+
+	err := validateLocalInitMemory(
+		context.Background(),
+		manifest,
+		map[string]string{localMemoryMBConfigName: "4095"},
+	)
+	if err != nil {
+		t.Fatalf("expected non-local backend to be ignored, got %v", err)
+	}
+}
+
 func TestLocalBackendSetupWorkspace_Noops(t *testing.T) {
 	t.Parallel()
 

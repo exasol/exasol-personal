@@ -179,7 +179,9 @@ func runInitForFreshDeployment(
 		return err
 	}
 	addTerminalNotice(deploy.EulaNoticeText)
-	addTerminalNotice(deploy.LocalInitMemoryNotice(deployment))
+	if notice, hasLowMemory := deploy.LocalLowMemoryNotice(deployment); hasLowMemory {
+		addTerminalNotice(notice)
+	}
 
 	return nil
 }
