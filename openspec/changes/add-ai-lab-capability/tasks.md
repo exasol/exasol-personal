@@ -1,0 +1,54 @@
+## 1. Installation (OS) preset — shared across all clouds
+
+- [ ] 1.1 Install the `podman` package on the host during preparation (in the `ubuntu` installation preset)
+- [ ] 1.2 Add a post-install hook script (alongside the existing shared scripts, e.g. `installExasol.sh`/`runInfraHookScripts.sh`) that pulls the latest `exasol/ai-lab` image and runs it via Podman, publishing the AI Lab port and mounting a persistent notebooks volume
+- [ ] 1.3 Set the Jupyter password on the container from the value injected by the infrastructure preset
+- [ ] 1.4 Generate/seed the SCS: write the master password and the database connection parameters (host, port, user, password, encryption, `cert_vld=false`, `storage_backend=onprem`, `use_itde=false`) and the BucketFS parameters (`bfs_*`) using the notebook-connector configuration keys
+- [ ] 1.5 Confirm the seeded SCS file name/location matches what the AI Lab notebooks load by default, and that connection works against the self-signed DB certificate
+- [ ] 1.6 Install a Podman Quadlet/systemd unit and enable user lingering so AI Lab restarts after reboot and survives deployment stop/start
+- [ ] 1.7 Verify the AI Lab container does not interfere with the C4-managed database container (rootless isolation)
+- [ ] 1.8 Add an installation-preset variable controlling whether AI Lab is installed (default off)
+
+## 2. Infrastructure preset opt-in (AWS first)
+
+- [ ] 2.1 Declare `ai-lab` in the AWS preset's `compatibility.provides`
+- [ ] 2.2 Add an infrastructure-preset variable for the AI Lab port (default 49494)
+- [ ] 2.3 Add a security-group ingress rule for the AI Lab port, gated by `allowed_cidr`
+- [ ] 2.4 Generate the SCS master password and Jupyter password as OpenTofu `random_password` resources; output them into `secrets.json` (mirroring `dbPassword`/`adminUiPassword`)
+- [ ] 2.5 Inject the AI Lab enablement, port, and secrets into the preset's `cloudinit.tf` and register the shared post-install hook in `postInstall.scripts`
+- [ ] 2.6 Document the three opt-in bits so Azure/Exoscale/STACKIT can adopt AI Lab by replicating them
+
+## 3. CLI surface
+
+- [ ] 3.1 Add `--with-ai-lab` flag to `exasol install` that requests AI Lab installation for supporting presets
+- [ ] 3.2 Add an `exasol ai-lab install` command that installs AI Lab on an existing running deployment whose infrastructure supports it
+- [ ] 3.3 Wire both paths to the same install logic; ensure neither installs AI Lab when not requested
+- [ ] 3.4 Reject AI Lab requests for presets that do not provide the `ai-lab` capability, with a clear error message
+
+## 4. Secrets and deployment metadata
+
+- [x] 4.1 Add `aiLabScsPassword` and `aiLabJupyterPassword` (omitempty) to the `config.Secrets` struct and ensure they are read from `secrets.json`
+- [ ] 4.2 Add an optional AI Lab connection object to `deployment.json` and write it from the active backend only when AI Lab is installed (Go side done: `DeploymentAILab` struct + `DeploymentConnection.AILab` + clone/resolve into `ConnectionInfo`; write-from-backend is the Terraform `outputs.tf` side — pending)
+- [x] 4.3 Ensure the local backend (and any non-supporting infrastructure) omits AI Lab metadata (optional `aiLab` field; only populated when the infra writes it)
+
+## 5. Connection information output
+
+- [x] 5.1 Extend connection instructions / `exasol info` to show the AI Lab URL when AI Lab metadata is present, and point the user to `secrets.json` for the Jupyter and SCS master passwords (do not print the secrets), mirroring how the DB/Admin UI passwords are handled
+- [x] 5.2 Ensure the AI Lab section is omitted when no AI Lab metadata is present, preserving SQL connection instructions
+
+## 6. Tests
+
+- [ ] 6.1 Unit tests for preset capability resolution (`ai-lab` provided / not provided) and the unsupported-preset error
+- [ ] 6.2 Unit tests for the `--with-ai-lab` flag and `exasol ai-lab install` command wiring
+- [ ] 6.3 Unit tests for AI Lab deployment-metadata read/write, including local-backend omission
+- [x] 6.4 Unit tests for connection-instructions output with and without AI Lab metadata (URL shown, passwords referenced not printed)
+
+## 7. Documentation
+
+- [ ] 7.1 Document AI Lab in the README: how to install it (`--with-ai-lab` and `exasol ai-lab install`), how to reach it, and its zero-config DB/BucketFS connection
+- [ ] 7.2 Document the new exposed port, the secrets stored in `secrets.json`, and the recommendation to restrict `allowed_cidr` / use a tunnel for hardened setups
+
+## 8. Verification
+
+- [ ] 8.1 Manual verification on a live AWS deployment: `--with-ai-lab` installs AI Lab; the URL is reachable within `allowed_cidr`; the Jupyter password from `secrets.json` works; notebooks connect to the DB and BucketFS with no manual configuration
+- [ ] 8.2 Manual verification that `exasol ai-lab install` adds AI Lab to an existing deployment, and that a deployment without AI Lab shows no AI Lab section in `exasol info`
