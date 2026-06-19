@@ -6,6 +6,7 @@ package deploy
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,28 @@ import (
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 )
+
+type logCaptureHandler struct {
+	records []slog.Record
+}
+
+func (*logCaptureHandler) Enabled(context.Context, slog.Level) bool {
+	return true
+}
+
+func (h *logCaptureHandler) Handle(_ context.Context, record slog.Record) error {
+	h.records = append(h.records, record.Clone())
+
+	return nil
+}
+
+func (h *logCaptureHandler) WithAttrs([]slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *logCaptureHandler) WithGroup(string) slog.Handler {
+	return h
+}
 
 func TestValidateLocalPlatform_AcceptsMacOSAppleSilicon(t *testing.T) {
 	t.Parallel()
@@ -337,6 +360,44 @@ func TestLocalBackendConfigure_WritesSizingValuesToManifest(t *testing.T) {
 		written.Local.DataSizeGB != 250 {
 		t.Fatalf("unexpected local manifest configuration: %#v", written.Local)
 	}
+}
+
+func TestLocalBackendConfigure_WarnsForLowMemory(t *testing.T) {
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o750); err != nil {
+		t.Fatalf("failed to create infrastructure dir: %v", err)
+	}
+	manifest := &presets.InfrastructureManifest{
+		Name:        "Local",
+		Description: "Local preset",
+		Backend:     backendTypeLocal,
+		Local:       &presets.InfrastructureLocal{},
+	}
+	logCapture := &logCaptureHandler{}
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(logCapture))
+	defer slog.SetDefault(originalLogger)
+
+	// When
+	backend := newLocalBackend(deployment, manifest)
+	err := backend.Configure(
+		context.Background(),
+		map[string]string{localMemoryMBConfigName: "8192"},
+		DeploymentMetadata{},
+		DeploymentLayout{},
+	)
+
+	// Then
+	if err != nil {
+		t.Fatalf("expected local configuration to be written, got %v", err)
+	}
+	for _, record := range logCapture.records {
+		if record.Level == slog.LevelWarn && record.Message == localInfraMemoryNoticeText {
+			return
+		}
+	}
+	t.Fatalf("expected warning log %q, got %#v", localInfraMemoryNoticeText, logCapture.records)
 }
 
 func TestLocalBackendConfigure_RejectsInvalidSizingValues(t *testing.T) {

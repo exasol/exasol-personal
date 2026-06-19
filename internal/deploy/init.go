@@ -18,12 +18,9 @@ import (
 )
 
 const (
-	baseURL                    = "https://www.exasol.com/terms-and-conditions/"
-	eulaURI                    = "#h-exasol-personal-end-user-license-agreement"
-	eulaURL                    = baseURL + eulaURI
-	localInfraMemThresholdMB   = 8192
-	LocalInfraMemoryNoticeText = "Info: For medium to heavy local workloads, " +
-		"consider increasing VM memory to 8-16 GB."
+	baseURL        = "https://www.exasol.com/terms-and-conditions/"
+	eulaURI        = "#h-exasol-personal-end-user-license-agreement"
+	eulaURL        = baseURL + eulaURI
 	EulaNoticeText = `For your reference:
 By using the Exasol Personal launcher, you accept its End User License Agreement (EULA):
 ` + eulaURL + `
@@ -32,27 +29,6 @@ A copy of the EULA is also included as 'eula.txt' in this directory.
 
 `
 )
-
-// LocalLowMemoryNotice returns a workload guidance notice and reports whether
-// the local deployment is configured with low memory. It returns ("", false)
-// for non-local deployments or when configured memory is above the guidance
-// threshold.
-func LocalLowMemoryNotice(deployment config.DeploymentDir) (string, bool) {
-	manifest, err := config.ReadInfrastructureManifest(deployment)
-	if err != nil || manifest == nil || manifest.Backend != backendTypeLocal {
-		return "", false
-	}
-
-	runtimeConfig, err := resolveLocalRuntimeConfig(
-		manifest,
-		detectLocalHostMemoryMB(context.Background()),
-	)
-	if err != nil || runtimeConfig.memoryMB > localInfraMemThresholdMB {
-		return "", false
-	}
-
-	return LocalInfraMemoryNoticeText, true
-}
 
 // ResolveInfrastructureInfo validates the infrastructure preset name and returns its info.
 func ResolveInfrastructureInfo(infrastructureName string) (*InfrastructureInfo, error) {

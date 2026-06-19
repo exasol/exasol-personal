@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"runtime"
 	"strconv"
@@ -29,6 +30,9 @@ const (
 	localDefaultCPUCount       = 2
 	localMinimumMemoryMB       = 4096
 	localMinimumHostMemoryMB   = 8192
+	localInfraMemThresholdMB   = 8192
+	localInfraMemoryNoticeText = "Info: For medium to heavy local workloads, " +
+		"consider increasing VM memory to 8-16 GB."
 	localDefaultDataSizeGB     = 100
 	localDeploymentBackend     = "local"
 	localDeploymentPublicHost  = "127.0.0.1"
@@ -82,7 +86,8 @@ func (b *localBackend) Configure(
 		return err
 	}
 
-	if _, err := resolveLocalRuntimeConfig(b.manifest, detectLocalHostMemoryMB(ctx)); err != nil {
+	runtimeConfig, err := resolveLocalRuntimeConfig(b.manifest, detectLocalHostMemoryMB(ctx))
+	if err != nil {
 		return err
 	}
 
@@ -96,6 +101,9 @@ func (b *localBackend) Configure(
 		localManifestFileMode,
 	); err != nil {
 		return fmt.Errorf("failed to write local infrastructure manifest: %w", err)
+	}
+	if runtimeConfig.memoryMB <= localInfraMemThresholdMB {
+		slog.Warn(localInfraMemoryNoticeText, "memory_mb", runtimeConfig.memoryMB)
 	}
 
 	return nil
