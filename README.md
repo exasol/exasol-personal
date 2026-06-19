@@ -31,13 +31,13 @@
 
 ## ✅ Prerequisites
 
-A cloud account on one of the supported platforms with permission to provision compute instances, or a macOS Apple Silicon system for local deployment:
+A cloud account on one of the supported platforms with permission to provision compute instances, or a macOS system for local deployment:
 
 - **AWS** — [Set up an AWS account for Exasol Personal](./HOWTO_SETUP_AWS_ACCOUNT.md)
 - **Azure** — [Set up an Azure account for Exasol Personal](./HOWTO_SETUP_AZURE_ACCOUNT.md)
 - **Exoscale** — [Set up an Exoscale account for Exasol Personal](./HOWTO_SETUP_EXOSCALE_ACCOUNT.md)
 - **STACKIT** — [Set up a STACKIT account for Exasol Personal](./HOWTO_SETUP_STACKIT_ACCOUNT.md)
-- **Local** — local deployment on macOS Apple Silicon only
+- **Local** — local deployment on macOS
 
 
 ## 🏎️ Quick Start (macOS / Linux)
@@ -64,10 +64,10 @@ exasol install exoscale   # Exoscale
 
 ```bash
 exasol install stackit    # STACKIT
-````
+```
 
 ```bash
-exasol install local      # local system, macOS Apple Silicon only
+exasol install local      # local system, macOS
 ```
 
 Read on for Windows instructions and full details.
@@ -94,7 +94,7 @@ Read on for Windows instructions and full details.
    exasol install azure      # Microsoft Azure
    exasol install exoscale   # Exoscale
    exasol install stackit    # STACKIT
-   exasol install local      # local system, macOS Apple Silicon only
+   exasol install local      # local system, macOS
    ```
    The `exasol install` command does the following:
    - Generates backend files in the deployment directory
@@ -116,12 +116,12 @@ Runtime tools such as OpenTofu are downloaded on demand and reused from a per-us
 
 ## 📊 Load Sample Data
 
-To get started quickly, Exasol provides two sample datasets hosted on S3 that you can import directly using SQL.
+To get started quickly, Exasol provides a sample dataset hosted on S3 that you can import using SQL.
 
-You can load it directly by executing this command:
+You can load it directly by executing this command in your deployment directory (e.g. `~/.exasol/personal/deployments/default` for a default deployment):
 
 ```bash
-exasol connect < sample.sql
+exasol connect -f sample.sql
 ```
 
 Alternatively, connect with a SQL client of your choice and paste the statements below:
@@ -176,7 +176,7 @@ exasol stop
 ```
 This stops the compute instance(s) that Exasol Personal is running on.
 
-Networking and data volumes that the database data is stored on will continue to incur costs when compute instances are stopped.
+Networking and the data volumes where the database data is stored will continue to incur costs when compute instances are stopped.
 
 To start Exasol Personal again, use the following command:
 ```bash
@@ -184,7 +184,7 @@ exasol start
 ```
 The IP addresses of the nodes will change when you restart Exasol Personal. Check the output of the `start` command to know how to connect to the deployment after a restart.
 
-For local deployments, which currently require macOS Apple Silicon, the launcher manages a local VM runtime and an internal deployment share inside the deployment directory. The initial local database credentials are `sys` / `exasol`. `exasol shell host` opens the local VM shell, and `exasol shell container` opens a shell inside the local database container.
+For local deployments, which currently require macOS, the launcher manages a local VM runtime and an internal deployment share inside the deployment directory. The initial local database credentials are `sys` / `exasol`. `exasol shell host` opens the local VM shell, and `exasol shell container` opens a shell inside the local database container.
 
 ## 🗑️ Remove Exasol Personal
 
@@ -246,7 +246,7 @@ See also...
 
 ## 🧑‍💻 Exasol Admin
 
-Exasol Admin is an easy-to-use web interface that you can use to administer your new Exasol database. Instructions for how to access Exasol Admin is shown in the terminal output at the end of the install process.
+Exasol Admin is an easy-to-use web interface that you can use to administer your new Exasol database. Instructions on how to access Exasol Admin are shown in the terminal output at the end of the install process.
 
 - To find the Exasol Admin URL after the installation has completed, use `exasol info`.
 - The credentials for connecting to Exasol Admin are stored in the file `secrets.json` in the deployment directory.
