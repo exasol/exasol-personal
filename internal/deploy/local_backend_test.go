@@ -362,6 +362,7 @@ func TestLocalBackendConfigure_WritesSizingValuesToManifest(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // This test temporarily replaces the process-wide default logger.
 func TestLocalBackendConfigure_WarnsForLowMemory(t *testing.T) {
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
@@ -387,7 +388,6 @@ func TestLocalBackendConfigure_WarnsForLowMemory(t *testing.T) {
 		DeploymentMetadata{},
 		DeploymentLayout{},
 	)
-
 	// Then
 	if err != nil {
 		t.Fatalf("expected local configuration to be written, got %v", err)
