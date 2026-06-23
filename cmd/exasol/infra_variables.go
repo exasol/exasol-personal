@@ -210,6 +210,12 @@ func collectInfrastructureVariableOverrides(cmd *cobra.Command) map[string]strin
 }
 
 func scanInfrastructurePresetSelection(args []string) (*deploy.PresetRef, error) {
+	// Handle "exasol help init local" form: strip the leading "help" token so the
+	// preset scanner finds the actual command. Cobra registers its help subcommand
+	// lazily inside ExecuteC, so rootCmd.Find won't resolve it at this point.
+	if len(args) > 0 && args[0] == helpCommandName {
+		args = args[1:]
+	}
 	cmd, remainingArgs := preregisteredCommand(args)
 	if cmd != initCmd && cmd != installCmd {
 		return nil, errors.New("no command with infrastructure preset argument found")

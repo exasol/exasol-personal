@@ -192,6 +192,9 @@ func collectInstallationVariableOverrides(cmd *cobra.Command) map[string]string 
 }
 
 func scanInstallationPresetSelection(args []string) (*deploy.PresetRef, error) {
+	if len(args) > 0 && args[0] == helpCommandName {
+		args = args[1:]
+	}
 	cmd, remainingArgs := preregisteredCommand(args)
 	if cmd != initCmd && cmd != installCmd {
 		return nil, errors.New("no command with installation preset argument found")
