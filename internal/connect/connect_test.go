@@ -51,6 +51,7 @@ var (
 type stubQueryResult struct {
 	columnNames []string
 	rows        [][]string
+	values      [][]any
 	truncated   bool
 }
 
@@ -60,6 +61,22 @@ func (s stubQueryResult) ColumnNames() []string {
 
 func (s stubQueryResult) Rows() [][]string {
 	return s.rows
+}
+
+func (s stubQueryResult) Values() [][]any {
+	if s.values != nil {
+		return s.values
+	}
+
+	values := make([][]any, len(s.rows))
+	for i, row := range s.rows {
+		values[i] = make([]any, len(row))
+		for j, value := range row {
+			values[i][j] = value
+		}
+	}
+
+	return values
 }
 
 func (s stubQueryResult) Truncated() bool {
@@ -116,6 +133,30 @@ func TestPrintResultJSON(t *testing.T) {
 			expected:   unknownPrettyJSON,
 			normalized: JSONFormatPretty,
 		},
+		{
+			name:   "renders typed values without html escaping",
+			format: JSONFormatCompact,
+			result: stubQueryResult{
+				columnNames: []string{"N", "OK", "MISSING", "TEXT", "CREATED_AT"},
+				rows: [][]string{{
+					"42",
+					"true",
+					"<nil>",
+					"<tag>&value",
+					"2026-06-23T12:00:00Z",
+				}},
+				values: [][]any{{
+					int64(42),
+					true,
+					nil,
+					"<tag>&value",
+					"2026-06-23T12:00:00Z",
+				}},
+			},
+			expected: "{\"columns\":[\"N\",\"OK\",\"MISSING\",\"TEXT\",\"CREATED_AT\"]," +
+				"\"rows\":[[42,true,null,\"<tag>&value\",\"2026-06-23T12:00:00Z\"]]}\n",
+			normalized: JSONFormatCompact,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -135,9 +176,21 @@ func TestPrintResultJSON(t *testing.T) {
 			var decoded jsonQueryResult
 			require.NoError(t, json.Unmarshal(buf.Bytes(), &decoded))
 			require.Equal(t, test.result.columnNames, decoded.Columns)
-			require.Equal(t, test.result.rows, decoded.Rows)
+			require.Equal(t, jsonRoundTripValues(t, test.result.Values()), decoded.Rows)
 		})
 	}
+}
+
+func jsonRoundTripValues(t *testing.T, values [][]any) [][]any {
+	t.Helper()
+
+	data, err := json.Marshal(values)
+	require.NoError(t, err)
+
+	var decoded [][]any
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	return decoded
 }
 
 func TestResolveNonInteractiveSQL(t *testing.T) {

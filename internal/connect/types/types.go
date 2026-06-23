@@ -11,6 +11,7 @@ import "context"
 type QueryResulter interface {
 	ColumnNames() []string
 	Rows() [][]string
+	Values() [][]any
 	// Truncated reports whether more rows were available than are returned by
 	// Rows, because retrieval was capped by a row limit.
 	Truncated() bool
