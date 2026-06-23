@@ -10,6 +10,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/connect/exasol/types"
 	"github.com/exasol/exasol-personal/internal/connect/exasol/types/typesfakes"
@@ -176,6 +177,7 @@ func TestExec(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, []string{"col1", "col2"}, result.ColumnNames())
 				require.Equal(t, [][]string{{"val1", "val2"}}, result.Rows())
+				require.Equal(t, [][]any{{"val1", "val2"}}, result.Values())
 				require.False(t, result.Truncated())
 			},
 		},
@@ -197,6 +199,7 @@ func TestExec(t *testing.T) {
 				require.NoError(t, err)
 				require.Empty(t, result.ColumnNames())
 				require.Empty(t, result.Rows())
+				require.Empty(t, result.Values())
 				require.False(t, result.Truncated())
 			},
 		},
@@ -209,6 +212,7 @@ func TestExec(t *testing.T) {
 				require.Equal(t, 1, mocks.fakeConnector.ExecCallCount())
 				require.Equal(t, []string{}, result.ColumnNames())
 				require.Equal(t, [][]string{}, result.Rows())
+				require.Equal(t, [][]any{}, result.Values())
 			},
 		},
 		{
@@ -221,6 +225,7 @@ func TestExec(t *testing.T) {
 				require.Equal(t, 1, mocks.fakeConnector.ExecCallCount())
 				require.Equal(t, []string{}, result.ColumnNames())
 				require.Equal(t, [][]string{}, result.Rows())
+				require.Equal(t, [][]any{}, result.Values())
 			},
 		},
 	} {
@@ -349,6 +354,47 @@ func TestCollectRows(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Equal(t, [][]string{{"1000000"}}, result.Rows())
+		require.Equal(t, [][]any{{int64(1000000)}}, result.Values())
+	})
+
+	t.Run("preserves json-compatible values beside display strings", func(t *testing.T) {
+		t.Parallel()
+
+		timestamp := time.Date(2026, 6, 23, 12, 30, 45, 123000000, time.UTC)
+		rows := &fakeRows{
+			columns: []string{"n", "fraction", "ok", "missing", "text", "payload", "created_at"},
+			data: [][]driver.Value{{
+				int64(42),
+				float64(1.5),
+				true,
+				nil,
+				"<tag>&value",
+				[]byte("bytes"),
+				timestamp,
+			}},
+		}
+
+		result, err := collectRows(rows, 0)
+
+		require.NoError(t, err)
+		require.Equal(t, [][]string{{
+			"42",
+			"1.5",
+			"true",
+			"<nil>",
+			"<tag>&value",
+			"[98 121 116 101 115]",
+			"2026-06-23 12:30:45.123 +0000 UTC",
+		}}, result.Rows())
+		require.Equal(t, [][]any{{
+			int64(42),
+			float64(1.5),
+			true,
+			nil,
+			"<tag>&value",
+			"bytes",
+			"2026-06-23T12:30:45.123Z",
+		}}, result.Values())
 	})
 
 	t.Run("propagates a non-EOF Next error", func(t *testing.T) {

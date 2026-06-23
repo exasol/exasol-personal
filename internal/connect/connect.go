@@ -86,8 +86,8 @@ func effectiveMaxRows(requested, modeDefault int) int {
 }
 
 type jsonQueryResult struct {
-	Columns []string   `json:"columns"`
-	Rows    [][]string `json:"rows"`
+	Columns []string `json:"columns"`
+	Rows    [][]any  `json:"rows"`
 }
 
 type resultPrinter func(io.Writer, generaltypes.QueryResulter) error
@@ -289,13 +289,14 @@ func printResultJSON(
 	jsonFormat JSONFormat,
 ) error {
 	encoder := json.NewEncoder(output)
+	encoder.SetEscapeHTML(false)
 	if normalizeJSONFormat(jsonFormat) == JSONFormatPretty {
 		encoder.SetIndent("", "  ")
 	}
 
 	return encoder.Encode(jsonQueryResult{
 		Columns: queryResult.ColumnNames(),
-		Rows:    queryResult.Rows(),
+		Rows:    queryResult.Values(),
 	})
 }
 
