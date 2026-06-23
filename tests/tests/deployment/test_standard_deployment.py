@@ -86,8 +86,19 @@ def reusable_deployment(
             time.sleep(5)
 
         logging.info("Waiting for deploy to complete")
+        deploy_timeout = 40 * 60
 
-        deploy_return_code = deployment_proc.wait(timeout=20 * 60)
+        try:
+            deploy_return_code = deployment_proc.wait(timeout=deploy_timeout)
+        except subprocess.TimeoutExpired:
+            deployment_proc.kill()
+            deployment_proc.wait()
+            msg = (
+                f"Deploy command timed out after {deploy_timeout}s\n"
+                f"deployment.log tail:\n{deployment.deployment_log_tail()}"
+            )
+            raise RuntimeError(msg) from None
+
         if deploy_return_code != 0:
             msg = (
                 f"Deploy command failed with code {deploy_return_code}\n"
