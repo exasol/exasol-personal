@@ -1,0 +1,11 @@
+# Github utilities
+version: '3'
+
+tasks:
+  trigger-deployment-tests:
+    desc: Trigger the deployment tests workflow on the current pushed commit (`task run-deployment-tests SUITE=local`, `task run-deployment-tests OS=macos-latest`)
+    vars:
+      OS: '{{default "all" .OS}}'
+      SUITE: '{{default "all" .SUITE}}'
+    cmds:
+      - .github/scripts/run-deployment-tests.sh "{{.OS}}" "{{.SUITE}}"
