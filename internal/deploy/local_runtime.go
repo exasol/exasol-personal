@@ -59,15 +59,19 @@ func startPreparedLocalRuntime(
 	}
 
 	localConfig := toLocalRuntimeConfig(runtimeConfig)
+	startArgs := []string{
+		"start",
+		strconv.Itoa(localConfig.CPUCount),
+		strconv.Itoa(localConfig.MemoryMB),
+		strconv.Itoa(localConfig.DataSizeGB),
+	}
+	if localConfig.Ports != "" {
+		startArgs = append(startArgs, "--ports", localConfig.Ports)
+	}
 	if err := localruntime.RunCommand(
 		ctx,
 		deployment,
-		[]string{
-			"start",
-			strconv.Itoa(localConfig.CPUCount),
-			strconv.Itoa(localConfig.MemoryMB),
-			strconv.Itoa(localConfig.DataSizeGB),
-		},
+		startArgs,
 		out,
 		outErr,
 	); err != nil {
@@ -121,6 +125,7 @@ func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.Config 
 		CPUCount:   runtimeConfig.cpuCount,
 		MemoryMB:   runtimeConfig.memoryMB,
 		DataSizeGB: runtimeConfig.dataSizeGB,
+		Ports:      runtimeConfig.ports,
 	}
 }
 

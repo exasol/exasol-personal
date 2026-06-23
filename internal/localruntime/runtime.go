@@ -47,6 +47,7 @@ type Config struct {
 	CPUCount   int
 	MemoryMB   int
 	DataSizeGB int
+	Ports      string
 }
 
 type State struct {
