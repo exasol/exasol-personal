@@ -45,6 +45,7 @@ const (
 	localCPUCountConfigName    = "cpu_count"
 	localMemoryMBConfigName    = "memory_mb"
 	localDataSizeGBConfigName  = "data_size_gb"
+	localPortsConfigName       = "ports"
 )
 
 var errUnsupportedLocalPlatform = errors.New(
@@ -119,17 +120,29 @@ func applyLocalConfigOverrides(
 		if name == "" {
 			continue
 		}
-		parsed, err := parseLocalPositiveIntConfig(name, strings.TrimSpace(rawValue))
-		if err != nil {
-			return err
-		}
+		rawValue = strings.TrimSpace(rawValue)
 
-		switch canonicalLocalConfigName(name) {
-		case canonicalLocalConfigName(localCPUCountConfigName):
+		canonical := canonicalLocalConfigName(name)
+		switch {
+		case canonical == canonicalLocalConfigName(localPortsConfigName):
+			local.Ports = rawValue
+		case canonical == canonicalLocalConfigName(localCPUCountConfigName):
+			parsed, err := parseLocalPositiveIntConfig(name, rawValue)
+			if err != nil {
+				return err
+			}
 			local.CPUCount = parsed
-		case canonicalLocalConfigName(localMemoryMBConfigName):
+		case canonical == canonicalLocalConfigName(localMemoryMBConfigName):
+			parsed, err := parseLocalPositiveIntConfig(name, rawValue)
+			if err != nil {
+				return err
+			}
 			local.MemoryMB = parsed
-		case canonicalLocalConfigName(localDataSizeGBConfigName):
+		case canonical == canonicalLocalConfigName(localDataSizeGBConfigName):
+			parsed, err := parseLocalPositiveIntConfig(name, rawValue)
+			if err != nil {
+				return err
+			}
 			local.DataSizeGB = parsed
 		default:
 			return fmt.Errorf("unknown local infrastructure configuration option %q", name)
@@ -280,6 +293,11 @@ func localConfigVariableDefinitions(
 			Type:           ConfigVariableTypeNumber,
 			DefaultDisplay: strconv.Itoa(runtimeConfig.dataSizeGB),
 		},
+		localPortsConfigName: {
+			Name:        localPortsConfigName,
+			Description: "Port overrides for the Exasol Local VM (format: <service>:<port>,...)",
+			Type:        ConfigVariableTypeString,
+		},
 	}
 }
 
@@ -382,6 +400,7 @@ type localRuntimeConfig struct {
 	cpuCount   int
 	memoryMB   int
 	dataSizeGB int
+	ports      string
 }
 
 func defaultLocalRuntimeConfig(detectedHostMemoryMB int) localRuntimeConfig {
@@ -426,6 +445,7 @@ func resolveLocalRuntimeConfig(
 		if manifest.Local.DataSizeGB != 0 {
 			runtimeConfig.dataSizeGB = manifest.Local.DataSizeGB
 		}
+		runtimeConfig.ports = manifest.Local.Ports
 	}
 
 	if err := validateLocalRuntimeConfig(runtimeConfig, detectedHostMemoryMB); err != nil {

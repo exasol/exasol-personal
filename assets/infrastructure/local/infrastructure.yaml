@@ -4,6 +4,7 @@ backend: local
 
 local:
   cpuCount: 2
+  memoryMB: 2048
   dataSizeGB: 100
 
 compatibility:

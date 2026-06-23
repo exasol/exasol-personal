@@ -24,9 +24,10 @@ type InfrastructureTofu struct {
 //
 //nolint:tagliatelle // These YAML keys are part of the preset contract.
 type InfrastructureLocal struct {
-	CPUCount   int `yaml:"cpuCount,omitempty"`
-	MemoryMB   int `yaml:"memoryMB,omitempty"`
-	DataSizeGB int `yaml:"dataSizeGB,omitempty"`
+	CPUCount   int    `yaml:"cpuCount,omitempty"`
+	MemoryMB   int    `yaml:"memoryMB,omitempty"`
+	DataSizeGB int    `yaml:"dataSizeGB,omitempty"`
+	Ports      string `yaml:"ports,omitempty"`
 }
 
 // InfrastructureManifest represents the infrastructure metadata and optional tofu configuration.
