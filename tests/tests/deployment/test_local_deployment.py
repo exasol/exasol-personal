@@ -47,7 +47,10 @@ def local_ports_deployment(
 def test_ports_override_sets_db_port(
     local_ports_deployment: tuple[Deployment, int],
 ) -> None:
-    """--ports db:<port> passes the port through to the VM runner and the DB is reachable on it."""
+    """--ports db:<port> passes the port through to the VM runner.
+
+    The DB is reachable on the specified port.
+    """
     deployment, custom_db_port = local_ports_deployment
 
     deployment_json = Path(deployment.deployment_dir.name) / "deployment.json"

@@ -436,12 +436,7 @@ def test_diag_cos_runs_confd_client(
 )
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
-def test_license_session_limit(reusable_deployment: Deployment, infra: str) -> None:
-    if infra == "local":
-        pytest.skip(
-            "Session limit enforcement is not yet implemented for local deployments"
-        )
-
+def test_license_session_limit(reusable_deployment: Deployment) -> None:
     # license_session_limit is the limit defined in Exasol Personal
     # license. This value should match it.
     license_session_limit: Final = 20
