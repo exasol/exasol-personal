@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
+const helpCommandName = "help"
+
 func preregisteredCommand(args []string) (*cobra.Command, []string) {
 	cmd, remainingArgs, err := rootCmd.Find(args)
 	if err != nil {
@@ -35,7 +37,7 @@ func preregisteredPositionals(args []string) ([]string, error) {
 	flagset.SetOutput(io.Discard)
 	flagset.SetInterspersed(true)
 	flagset.ParseErrorsAllowlist.UnknownFlags = true
-	flagset.BoolP("help", "h", false, "")
+	flagset.BoolP(helpCommandName, "h", false, "")
 
 	if err := flagset.Parse(args); err != nil && !errors.Is(err, pflag.ErrHelp) {
 		return nil, fmt.Errorf("cannot parse pre-registration args: %w", err)
