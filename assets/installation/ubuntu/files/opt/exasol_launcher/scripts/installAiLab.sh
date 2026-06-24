@@ -76,6 +76,17 @@ for _ in $(seq 1 10); do
   sleep 1
 done
 
+# Podman on Ubuntu 22.04 requires fully-qualified image names by default and
+# refuses short names like "exasol/script-language-container:..." with "no
+# unqualified-search registries defined". The AI Lab exaslct/SLC build uses
+# short names pulled from docker.io, so configure docker.io as the default
+# search registry for the ubuntu user. The user-level file takes precedence
+# over /etc/containers/registries.conf without needing sudo.
+log_substep_info "Configuring Podman unqualified-search registries"
+mkdir -p "${HOME:-/home/ubuntu}/.config/containers"
+printf 'unqualified-search-registries = ["docker.io"]\n' \
+  > "${HOME:-/home/ubuntu}/.config/containers/registries.conf"
+
 # Enable the Podman Docker-compatible API socket so tools inside the AI Lab
 # container that use the Docker SDK (e.g. exaslct / Script Language Container
 # export) can reach it at /var/run/docker.sock. The socket is mounted into the
