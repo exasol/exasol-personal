@@ -195,28 +195,17 @@ with open_pyexasol_connection(scs, compression=True) as con:
 PY
 
 log_substep_info "Configuring AI Lab to restart on reboot"
-# Lingering was enabled above. Install a Quadlet unit so systemd manages the
-# container across reboots.
-quadlet_dir="${HOME:-/home/ubuntu}/.config/containers/systemd"
-mkdir -p "${quadlet_dir}"
-cat > "${quadlet_dir}/${AILAB_CONTAINER}.container" <<QUADLET
-[Container]
-Image=${AILAB_IMAGE}
-ContainerName=${AILAB_CONTAINER}
-Network=slirp4netns:allow_host_loopback=true
-Environment=JUPYTER_PASSWORD=${jupyter_password}
-Volume=${AILAB_VOLUME}:/home/jupyter/notebooks
-PublishPort=${ai_lab_port}:${AILAB_CONTAINER_PORT}
-
-[Service]
-Restart=always
-
-[Install]
-WantedBy=default.target
-QUADLET
+# Ubuntu 22.04 ships Podman 3.4.4 which predates Quadlet (4.4+). Use
+# podman generate systemd to create a plain systemd user service instead.
+systemd_user_dir="${HOME:-/home/ubuntu}/.config/systemd/user"
+mkdir -p "${systemd_user_dir}"
+podman generate systemd \
+  --name "${AILAB_CONTAINER}" \
+  --restart-policy always \
+  > "${systemd_user_dir}/container-${AILAB_CONTAINER}.service"
 
 log_substep_info "Activating AI Lab systemd unit"
 XDG_RUNTIME_DIR="/run/user/$(id -u)" systemctl --user daemon-reload
-XDG_RUNTIME_DIR="/run/user/$(id -u)" systemctl --user enable --now "${AILAB_CONTAINER}"
+XDG_RUNTIME_DIR="/run/user/$(id -u)" systemctl --user enable --now "container-${AILAB_CONTAINER}"
 
 log_step_info "Exasol AI Lab installation completed"
