@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" font-family="'Helvetica Neue', Arial, sans-serif">
+  <!-- Background (Exasol dark teal) -->
+  <rect width="1280" height="720" fill="#002e40"/>
+  <!-- Top accent bar (Exasol green) -->
+  <rect x="0" y="0" width="1280" height="8" fill="#5fc33b"/>
+  <!-- Brand mark -->
+  <g transform="translate(60,64)">
+    <circle cx="9" cy="-5" r="9" fill="#5fc33b"/>
+    <text x="28" y="2" fill="#ffffff" font-size="26" font-weight="700" letter-spacing="3">EXASOL</text>
+    <text x="150" y="2" fill="#9fb6bf" font-size="20" letter-spacing="1">Personal</text>
+  </g>
+  <!-- Headline -->
+  <text x="60" y="150" fill="#ffffff" font-size="48" font-weight="800">AI Lab, one command away</text>
+  <text x="60" y="192" fill="#5fc33b" font-size="24" font-weight="600">A ready-to-use data-science &amp; AI workspace, deployed beside your database</text>
+  <!-- Panels -->
+  <!-- Panel 1: What we built -->
+  <g transform="translate(60,236)">
+    <rect width="360" height="372" rx="14" fill="#08394b" stroke="#0e4a5f" stroke-width="1"/>
+    <rect x="0" y="0" width="360" height="56" rx="14" fill="#0e4a5f"/>
+    <rect x="0" y="28" width="360" height="28" fill="#0e4a5f"/>
+    <text x="24" y="36" fill="#5fc33b" font-size="20" font-weight="700" letter-spacing="1">WHAT WE BUILT</text>
+    <g fill="#dbe7ec" font-size="18">
+      <text x="24" y="96"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>Opt-in AI Lab for Exasol</text>
+      <text x="40" y="120">Personal on AWS</text>
+      <text x="24" y="160"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>JupyterLab container runs</text>
+      <text x="40" y="184">next to the database (Podman)</text>
+      <text x="24" y="224"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>Fully provisioned &amp; pre-wired</text>
+      <text x="40" y="248">by the launcher</text>
+      <text x="24" y="288"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>Validated end-to-end on a</text>
+      <text x="40" y="312">live cloud deployment</text>
+    </g>
+  </g>
+  <!-- Panel 2: User experience -->
+  <g transform="translate(460,236)">
+    <rect width="360" height="372" rx="14" fill="#08394b" stroke="#0e4a5f" stroke-width="1"/>
+    <rect x="0" y="0" width="360" height="56" rx="14" fill="#0e4a5f"/>
+    <rect x="0" y="28" width="360" height="28" fill="#0e4a5f"/>
+    <text x="24" y="36" fill="#5fc33b" font-size="20" font-weight="700" letter-spacing="1">USER EXPERIENCE</text>
+    <g fill="#dbe7ec" font-size="18">
+      <text x="24" y="96"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>One command, zero config</text>
+      <text x="24" y="136"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>Browse the URL shown by</text>
+      <text x="40" y="160"><tspan font-family="monospace" fill="#ffffff">exasol info</tspan></text>
+      <text x="24" y="200"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>Notebooks pre-connected to</text>
+      <text x="40" y="224">the database &amp; BucketFS</text>
+      <text x="24" y="264"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>Schema, bucket &amp; credentials</text>
+      <text x="40" y="288">created automatically</text>
+    </g>
+  </g>
+  <!-- Panel 3: Value -->
+  <g transform="translate(860,236)">
+    <rect width="360" height="372" rx="14" fill="#08394b" stroke="#0e4a5f" stroke-width="1"/>
+    <rect x="0" y="0" width="360" height="56" rx="14" fill="#0e4a5f"/>
+    <rect x="0" y="28" width="360" height="28" fill="#0e4a5f"/>
+    <text x="24" y="36" fill="#5fc33b" font-size="20" font-weight="700" letter-spacing="1">VALUE TO USERS</text>
+    <g fill="#dbe7ec" font-size="18">
+      <text x="24" y="96"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>Minutes, not hours, to a</text>
+      <text x="40" y="120">working AI/ML workspace</text>
+      <text x="24" y="160"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>No setup or connection</text>
+      <text x="40" y="184">wrangling for data scientists</text>
+      <text x="24" y="224"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>Secure: access-gated &amp;</text>
+      <text x="40" y="248">password-protected</text>
+      <text x="24" y="288"><tspan fill="#5fc33b" font-weight="700">▸ </tspan>Bring AI to the data,</text>
+      <text x="40" y="312">not data to the AI</text>
+    </g>
+  </g>
+  <!-- Team credit -->
+  <text x="640" y="632" text-anchor="middle" fill="#9fb6bf" font-size="17">
+    <tspan fill="#5fc33b" font-weight="700">Team  </tspan>Franz Schwab (SE)  ·  Oleg Bobrov (Eng)  ·  Juergen Albertsen (PM)</text>
+  <!-- Footer command + tagline -->
+  <g transform="translate(60,664)">
+    <rect x="-2" y="-26" width="430" height="40" rx="8" fill="#000d14"/>
+    <text x="16" y="1" font-family="monospace" font-size="18" fill="#5fc33b">$ exasol install aws --with-ai-lab</text>
+  </g>
+  <text x="1220" y="668" text-anchor="end" fill="#9fb6bf" font-size="18" font-style="italic">The Analytics Database for Agentic AI</text>
+</svg>
