@@ -232,4 +232,28 @@ log_substep_info "Activating AI Lab systemd unit"
 XDG_RUNTIME_DIR="/run/user/$(id -u)" systemctl --user daemon-reload
 XDG_RUNTIME_DIR="/run/user/$(id -u)" systemctl --user enable --now "container-${AILAB_CONTAINER}"
 
+log_substep_info "Patching exasol_integration_test_docker_environment for Podman compatibility"
+# DockerRegistryImageChecker.handle_log_line raises on any unknown status, but
+# Podman emits "Already exists" for locally-cached layers during a registry pull
+# check (real Docker does too). The unpatched code crashes the SLC export step
+# in the export_as_is notebook. Return None instead of raising so the checker
+# can continue and correctly determine whether the image is in the registry.
+podman exec --user root "${AILAB_CONTAINER}" python3 - <<'PATCHPY'
+import pathlib
+
+path = pathlib.Path(
+    "/home/jupyter/jupyterenv/lib/python3.10/site-packages"
+    "/exasol_integration_test_docker_environment/lib/docker/images/create"
+    "/utils/docker_registry_image_checker.py"
+)
+src = path.read_text()
+old = '        raise Exception(f"Unexpected log line: {log_line}")'
+new = '        return None  # unknown status (e.g. "Already exists") — not an error'
+if old in src:
+    path.write_text(src.replace(old, new))
+    print("Patched docker_registry_image_checker.py")
+else:
+    print("Already patched or pattern not found — skipping")
+PATCHPY
+
 log_step_info "Exasol AI Lab installation completed"
