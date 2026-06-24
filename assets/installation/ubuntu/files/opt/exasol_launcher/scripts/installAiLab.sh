@@ -208,8 +208,15 @@ Environment=JUPYTER_PASSWORD=${jupyter_password}
 Volume=${AILAB_VOLUME}:/home/jupyter/notebooks
 PublishPort=${ai_lab_port}:${AILAB_CONTAINER_PORT}
 
+[Service]
+Restart=always
+
 [Install]
 WantedBy=default.target
 QUADLET
+
+log_substep_info "Activating AI Lab systemd unit"
+XDG_RUNTIME_DIR="/run/user/$(id -u)" systemctl --user daemon-reload
+XDG_RUNTIME_DIR="/run/user/$(id -u)" systemctl --user enable --now "${AILAB_CONTAINER}"
 
 log_step_info "Exasol AI Lab installation completed"
