@@ -1,0 +1,14 @@
+{{- if eq .State "equal" -}}
+You are using the latest version of Exasol Personal ({{ .CurrentVersion }}).
+{{- else if eq .State "older" -}}
+The latest official version of Exasol Personal available is: {{ .LatestVersion.Version }} (you are using {{ .CurrentVersion }}). No newer official version is available.
+{{- else -}}
+The latest official version of Exasol Personal available is: {{ .LatestVersion.Version }} (you are using {{ .CurrentVersion }})
+  Version: {{ .LatestVersion.Version }}
+  Operating System: {{ .LatestVersion.OperatingSystem }}
+  Architecture: {{ .LatestVersion.Architecture }}
+  Filename: {{ .LatestVersion.Filename }}
+  Size: {{ .LatestVersion.Size }} bytes
+  Download URL: {{ .LatestVersion.URL }}
+  SHA256: {{ .LatestVersion.SHA256 }}
+{{- end -}}

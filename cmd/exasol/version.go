@@ -4,9 +4,10 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
-	"fmt"
-	"os"
+	"strings"
+	"text/template"
 
 	// Legacy v3 variants of semver are found in this repo due indirect tflint dependencies.
 	// We should use the modern v4 within the our code though.
@@ -32,6 +33,13 @@ var versionCheckOpts = struct {
 	Latest bool
 }{}
 
+//go:embed version_latest_text.tmpl
+var latestVersionTextTemplateSource string
+
+var latestVersionTextTemplate = template.Must(
+	template.New("version-latest-text").Parse(latestVersionTextTemplateSource),
+)
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: versionCmdShortDesc,
@@ -42,8 +50,18 @@ var versionCmd = &cobra.Command{
 		ctx := cmd.Context()
 
 		if !versionCheckOpts.Latest {
-			_, err := fmt.Fprintln(os.Stdout, semver.MustParse(CurrentLauncherVersion))
-			return err
+			if commonFlags.OutputJson {
+				output, err := formatCurrentVersionJSON(CurrentLauncherVersion)
+				if err != nil {
+					return err
+				}
+				addTerminalOutput(output)
+
+				return nil
+			}
+			addTerminalOutput(formatCurrentVersionText(CurrentLauncherVersion))
+
+			return nil
 		}
 
 		response, err := deploy.FetchLatestVersion(
@@ -55,55 +73,76 @@ var versionCmd = &cobra.Command{
 			return err
 		}
 		if commonFlags.OutputJson {
-			encoder := json.NewEncoder(os.Stdout)
-			encoder.SetIndent("", "  ")
+			content, marshalErr := json.MarshalIndent(response, "", "  ")
+			if marshalErr != nil {
+				return marshalErr
+			}
+			addTerminalOutput(string(content))
 
-			return encoder.Encode(response)
+			return nil
 		}
 
-		return printLatestVersionText(CurrentLauncherVersion, response)
+		text, err := formatLatestVersionText(CurrentLauncherVersion, response)
+		if err != nil {
+			return err
+		}
+		addTerminalOutput(text)
+
+		return nil
 	},
 }
 
-//nolint:revive // Suppress warning about not handing Fprintf errors
-func printLatestVersionText(
-	currentVersion string,
-	response *deploy.VersionCheckResponse,
-) error {
-	if response.LatestVersion.Version == currentVersion {
-		fmt.Fprintf(
-			os.Stdout,
-			"You are using the latest version of Exasol Personal (%s).\n",
-			currentVersion,
-		)
+type currentVersionOutput struct {
+	Version string `json:"version"`
+}
 
-		return nil
+func formatCurrentVersionText(currentVersion string) string {
+	return semver.MustParse(currentVersion).String()
+}
+
+func formatCurrentVersionJSON(currentVersion string) (string, error) {
+	version, err := semver.Parse(currentVersion)
+	if err != nil {
+		return "", err
+	}
+	content, err := json.MarshalIndent(currentVersionOutput{Version: version.String()}, "", "  ")
+	if err != nil {
+		return "", err
 	}
 
-	fmt.Fprintf(
-		os.Stdout,
-		"The latest official version of Exasol Personal available is: %s "+
-			"(you are using %s)\n",
-		response.LatestVersion.Version,
-		currentVersion,
-	)
-	fmt.Fprintf(os.Stdout, "  Version: %s\n", response.LatestVersion.Version)
-	fmt.Fprintf(
-		os.Stdout,
-		"  Operating System: %s\n",
-		response.LatestVersion.OperatingSystem,
-	)
-	fmt.Fprintf(
-		os.Stdout,
-		"  Architecture: %s\n",
-		response.LatestVersion.Architecture,
-	)
-	fmt.Fprintf(os.Stdout, "  Filename: %s\n", response.LatestVersion.Filename)
-	fmt.Fprintf(os.Stdout, "  Size: %d bytes\n", response.LatestVersion.Size)
-	fmt.Fprintf(os.Stdout, "  Download URL: %s\n", response.LatestVersion.URL)
-	fmt.Fprintf(os.Stdout, "  SHA256: %s\n\n", response.LatestVersion.SHA256)
+	return string(content), nil
+}
 
-	return nil
+func formatLatestVersionText(
+	currentVersion string,
+	response *deploy.VersionCheckResponse,
+) (string, error) {
+	latestVersion := response.LatestVersion.Version
+	updateAvailable, err := deploy.IsVersionUpdateAvailable(currentVersion, latestVersion)
+	if err != nil {
+		return "", err
+	}
+	state := "newer"
+	if !updateAvailable && latestVersion == currentVersion {
+		state = "equal"
+	} else if !updateAvailable {
+		state = "older"
+	}
+	var builder strings.Builder
+	err = latestVersionTextTemplate.Execute(&builder, struct {
+		CurrentVersion string
+		LatestVersion  deploy.LatestVersionInfo
+		State          string
+	}{
+		CurrentVersion: currentVersion,
+		LatestVersion:  response.LatestVersion,
+		State:          state,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return builder.String(), nil
 }
 
 func registerVersionCheckFlags() {

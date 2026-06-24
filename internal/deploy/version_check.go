@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blang/semver/v4"
 	"github.com/exasol/exasol-personal/internal/config"
 )
 
@@ -117,6 +118,28 @@ type SilentVersionCheckResult struct {
 	Checked         bool
 	UpdateAvailable bool
 	LatestVersion   string
+}
+
+// IsVersionUpdateAvailable reports whether latestVersion is newer than currentVersion.
+func IsVersionUpdateAvailable(currentVersion, latestVersion string) (bool, error) {
+	current, err := semver.Parse(currentVersion)
+	if err != nil {
+		return false, fmt.Errorf(
+			"failed to parse current launcher version %q: %w",
+			currentVersion,
+			err,
+		)
+	}
+	latest, err := semver.Parse(latestVersion)
+	if err != nil {
+		return false, fmt.Errorf(
+			"failed to parse latest launcher version %q: %w",
+			latestVersion,
+			err,
+		)
+	}
+
+	return latest.GT(current), nil
 }
 
 func parseVersionCheckResponse(body io.Reader) (*VersionCheckResponse, error) {
@@ -229,11 +252,12 @@ func CheckLatestVersionUpdate(
 		return false, "", err
 	}
 	latest := response.LatestVersion.Version
-	if latest == "" || latest == currentVersion {
-		return false, latest, nil
+	available, err := IsVersionUpdateAvailable(currentVersion, latest)
+	if err != nil {
+		return false, latest, err
 	}
 
-	return true, latest, nil
+	return available, latest, nil
 }
 
 // PerformSilentVersionCheck runs a guarded version check and updates state.

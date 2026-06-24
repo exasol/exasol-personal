@@ -54,6 +54,20 @@ The launcher sends the following query parameters:
 
 The response contains a `latestVersion` object with metadata for the newest available release on that platform (version, download URL, checksums, and platform).
 
+### Version ordering policy
+
+The launcher interprets version strings as semantic versions when deciding whether a reported release is an update. An update is available only when the reported `latestVersion.version` has greater semantic version precedence than the current launcher version.
+
+Prerelease identifiers are part of the comparison. For example, `2.0.0` is newer than `2.0.0-rc1`, and `2.0.0-rc1` is newer than `1.4.1`. An older official release such as `1.4.1` is not reported as an update for a newer release candidate such as `2.0.0-rc1`.
+
+If either the current launcher version or the reported version cannot be parsed as a semantic version, the automatic update hint treats the check as a best-effort failure and does not show an update message.
+
+### Output stream policy
+
+Explicit `exasol version` output is primary command output and is written to stdout through the shared terminal-output flush path, including `exasol version --json`, `exasol version --latest`, and `exasol version --latest --json`. JSON output is structured and is never mixed with human-readable update text.
+
+Implicit update hints that can appear while running other commands are metadata, not primary command output. They are emitted as terminal notices on stderr after the command finishes so stdout remains reserved for data that automation might parse.
+
 ## Database version check (daily DB update awareness)
 
 Some Exasol database releases include an internal, non-disruptive **daily version check** (performed by the database/cluster services).
