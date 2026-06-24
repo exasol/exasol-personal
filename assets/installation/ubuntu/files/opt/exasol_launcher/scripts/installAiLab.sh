@@ -76,6 +76,18 @@ for _ in $(seq 1 10); do
   sleep 1
 done
 
+# Enable the Podman Docker-compatible API socket so tools inside the AI Lab
+# container that use the Docker SDK (e.g. exaslct / Script Language Container
+# export) can reach it at /var/run/docker.sock. The socket is mounted into the
+# container below. Without this, the AI Lab export_as_is notebook fails with
+# "No such file or directory" when the Docker client looks for the socket.
+log_substep_info "Enabling Podman Docker-compatible API socket"
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" systemctl --user enable --now podman.socket
+for _ in $(seq 1 15); do
+  [[ -S "${XDG_RUNTIME_DIR}/podman/podman.sock" ]] && break
+  sleep 1
+done
+
 log_substep_info "Pulling AI Lab image ${AILAB_IMAGE}"
 podman pull "${AILAB_IMAGE}"
 
@@ -95,6 +107,7 @@ until podman run \
   --network slirp4netns:allow_host_loopback=true \
   --env JUPYTER_PASSWORD="${jupyter_password}" \
   --volume "${AILAB_VOLUME}:/home/jupyter/notebooks" \
+  --volume "${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock:Z" \
   --publish "${ai_lab_port}:${AILAB_CONTAINER_PORT}" \
   "${AILAB_IMAGE}"; do
   start_attempt=$((start_attempt + 1))
