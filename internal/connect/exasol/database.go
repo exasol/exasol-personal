@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"time"
 
 	"github.com/exasol/exasol-driver-go"
 	"github.com/exasol/exasol-personal/internal/connect/exasol/types"
@@ -146,7 +147,7 @@ func (db *Database) Exec(
 	// driver streams the local file; they never produce a result set.
 	if isImportQuery(query) {
 		_, err := db.conn.Exec(query, nil)
-		return &QueryResult{columnNames: []string{}, rows: [][]string{}}, err
+		return emptyQueryResult(), err
 	}
 
 	// QueryContext returns driver.Rows, which transparently fetches result-set
@@ -165,7 +166,7 @@ func (db *Database) Exec(
 // result is flagged truncated and no additional rows are fetched.
 func collectRows(rows driver.Rows, maxRows int) (*QueryResult, error) {
 	columns := rows.Columns()
-	result := &QueryResult{columnNames: columns, rows: [][]string{}}
+	result := &QueryResult{columnNames: columns, rows: [][]string{}, values: [][]any{}}
 
 	dest := make([]driver.Value, len(columns))
 
@@ -185,11 +186,31 @@ func collectRows(rows driver.Rows, maxRows int) (*QueryResult, error) {
 		}
 
 		row := make([]string, len(columns))
+		values := make([]any, len(columns))
 		for i, value := range dest {
 			row[i] = fmt.Sprint(value)
+			values[i] = jsonValue(value)
 		}
 
 		result.rows = append(result.rows, row)
+		result.values = append(result.values, values)
+	}
+}
+
+func emptyQueryResult() *QueryResult {
+	return &QueryResult{columnNames: []string{}, rows: [][]string{}, values: [][]any{}}
+}
+
+func jsonValue(value driver.Value) any {
+	switch typedValue := value.(type) {
+	case nil, string, bool, int64, float64:
+		return typedValue
+	case []byte:
+		return string(typedValue)
+	case time.Time:
+		return typedValue.Format(time.RFC3339Nano)
+	default:
+		return fmt.Sprint(typedValue)
 	}
 }
 

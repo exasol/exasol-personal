@@ -7,6 +7,7 @@ package exasol
 type QueryResult struct {
 	columnNames []string
 	rows        [][]string
+	values      [][]any
 	truncated   bool
 }
 
@@ -16,6 +17,10 @@ func (qr *QueryResult) ColumnNames() []string {
 
 func (qr *QueryResult) Rows() [][]string {
 	return qr.rows
+}
+
+func (qr *QueryResult) Values() [][]any {
+	return qr.values
 }
 
 func (qr *QueryResult) Truncated() bool {
