@@ -4,7 +4,7 @@
 - [x] 1.2 Add a post-install hook script (alongside the existing shared scripts, e.g. `installExasol.sh`/`runInfraHookScripts.sh`) that pulls the latest `exasol/ai-lab` image and runs it via Podman, publishing the AI Lab port and mounting a persistent notebooks volume
 - [x] 1.3 Set the Jupyter password on the container from the value injected by the infrastructure preset
 - [x] 1.4 Generate/seed the SCS: write the master password and the database connection parameters (host, port, user, password, encryption, `cert_vld=false`, `storage_backend=onprem`, `use_itde=false`) and the BucketFS parameters (`bfs_*`) using the notebook-connector configuration keys
-- [x] 1.5 Confirm the seeded SCS file name/location matches what the AI Lab notebooks load by default, and that connection works against the self-signed DB certificate — VERIFIED on AWS: SCS at `/home/jupyter/notebooks/ai_lab_config.db` (owned by `jupyter`), `open_pyexasol_connection` returned `SELECT 1 → [(1,)]`, version `2026.1.0` with `cert_vld=false`
+- [x] 1.5 Confirm the seeded SCS file name/location matches what the AI Lab notebooks load by default, and that connection works against the self-signed DB certificate — VERIFIED on AWS: SCS at `/home/jupyter/notebooks/ai_lab_secure_configuration_storage.sqlite` (owned by `jupyter`), `open_pyexasol_connection` returned `SELECT 1 → [(1,)]`, version `2026.1.0` with `cert_vld=false`. SCS filename updated from `ai_lab_config.db` to match `notebook-connector` `DEFAULT_FILE_NAME`. Verified compatible with `exasol/ai-lab:6.0.0` / `notebook-connector 3.0.0` (2026-06-24): no path or key changes affect our seeding.
 - [x] 1.6 Install a Podman Quadlet/systemd unit and enable user lingering so AI Lab restarts after reboot and survives deployment stop/start
 - [x] 1.7 Verify the AI Lab container does not interfere with the C4-managed database container (rootless isolation) — VERIFIED on AWS: AI Lab container runs rootless alongside the C4 DB container; DB stays queryable while AI Lab is up
 - [x] 1.8 Enablement flag (default off): realized as an **infrastructure** variable `with_ai_lab` (must be known at Terraform plan time) and surfaced to the host via `infrastructure.json` `aiLab.enabled`, rather than an installation-preset variable
@@ -33,7 +33,7 @@
 
 ## 5. Connection information output
 
-- [x] 5.1 Extend connection instructions / `exasol info` to show the AI Lab URL when AI Lab metadata is present, and point the user to `secrets.json` for the Jupyter and SCS master passwords (do not print the secrets), mirroring how the DB/Admin UI passwords are handled
+- [x] 5.1 Extend connection instructions / `exasol info` to show the AI Lab URL when AI Lab metadata is present, and point the user to `secrets.json` for the Jupyter and SCS master passwords (do not print the secrets), mirroring how the DB/Admin UI passwords are handled. Migrated from string-building to Go template (`connection_instructions.tmpl`) during rebase onto main (2026-06-24); `AILab`/`AILabSecured` fields added to `ConnectionDetails` in `info.go`.
 - [x] 5.2 Ensure the AI Lab section is omitted when no AI Lab metadata is present, preserving SQL connection instructions
 
 ## 6. Tests
@@ -50,5 +50,5 @@
 
 ## 8. Verification
 
-- [x] 8.1 Manual verification on a live AWS deployment — VERIFIED: `--with-ai-lab` flowed to `with_ai_lab=true`; `deployment.json` carries the `aiLab` URL; `secrets.json` holds `aiLabJupyterPassword`/`aiLabScsPassword`; SG opens 49494 and Jupyter is reachable externally (HTTP 302); notebooks connect to the DB via the pre-seeded SCS with no manual config. (Five `installAiLab.sh` bugs found and fixed via live testing: runuser, slirp host-loopback, exec user, exec `-i`/venv-python, systemd runtime-dir, plus a first-run retry.) Remaining: a final clean deploy to see the launcher reach "running" and render the AI Lab section in `exasol info`
-- [ ] 8.2 Manual verification that a deployment without `--with-ai-lab` shows no AI Lab section in `exasol info` and opens no AI Lab port
+- [x] 8.1 Manual verification on a live AWS deployment — VERIFIED: `--with-ai-lab` flowed to `with_ai_lab=true`; `deployment.json` carries the `aiLab` URL; `secrets.json` holds `aiLabJupyterPassword`/`aiLabScsPassword`; SG opens 49494 and Jupyter is reachable externally; notebooks connect to the DB via the pre-seeded SCS with no manual config. Two additional bugs found and fixed post-hackathon (2026-06-24): (1) `installAiLab.sh` wrote the Quadlet file but never called `daemon-reload`/`enable`, so systemd never activated the unit; (2) Ubuntu 22.04 ships Podman 3.4.4 which predates Quadlet (4.4+) — replaced with `podman generate systemd`. Jupyter confirmed reachable after applying fixes to a live deployment.
+- [x] 8.2 Manual verification that a deployment without `--with-ai-lab` shows no AI Lab section in `exasol info` and opens no AI Lab port
