@@ -257,7 +257,11 @@ Currently, Exasol Admin is only available on cloud deployments.
 
 ## 🤖 AI Lab
 
-The [Exasol AI Lab](https://github.com/exasol/ai-lab) is a ready-to-use JupyterLab environment for data science and AI work against your database. You can have it installed and pre-wired automatically on the same infrastructure as your database.
+The [Exasol AI Lab](https://github.com/exasol/ai-lab) is a ready-to-use JupyterLab environment for data science and AI work against your database. You can have it installed and pre-wired automatically on the same infrastructure as your database — **one flag, zero manual configuration**.
+
+<p align="center">
+  <img src="doc/ai_lab_overview.svg" alt="AI Lab overview — AI Lab, one command away" width="100%">
+</p>
 
 Install it together with the database by adding `--with-ai-lab`:
 
@@ -272,6 +276,14 @@ When enabled, the launcher:
 - exposes the AI Lab port (default `49494`, configurable with `--ai-lab-port`) through the deployment's firewall, restricted by `--allowed-cidr` and protected by a generated Jupyter password.
 
 After installation, `exasol info` prints the AI Lab URL. The Jupyter password and the config-store master password are stored in `secrets.json` in the deployment directory (the same place as the database credentials) — they are not printed to the terminal.
+
+### Architecture
+
+<p align="center">
+  <img src="doc/ai_lab_architecture.svg" alt="AI Lab architecture — Browser to CLI to AWS EC2 running Exasol DB and AI Lab container" width="100%">
+</p>
+
+The AI Lab container runs rootless alongside the Exasol database on the same EC2 instance. The launcher opens a dedicated security-group ingress rule for the AI Lab port and injects the database and BucketFS credentials into the container's Secure Configuration Storage (SCS) at install time — so every notebook can connect to the database immediately without any additional setup.
 
 Because the AI Lab port is reachable from anywhere allowed by `--allowed-cidr`, restrict that range (or rely on an SSH tunnel) when exposing it.
 
