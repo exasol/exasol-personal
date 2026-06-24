@@ -46,6 +46,23 @@ def test_version(exasol_path: str) -> None:
     assert version_command_output == tag_expected_str
 
 
+def test_version_json(exasol_path: str) -> None:
+    # Given the current version of the program based on the the latest git version tag
+    git_describe_command_result = run_command(
+        ["git", "describe", "--tags", "--abbrev=0"],
+    )
+    git_tag_version_str = git_describe_command_result.stdout.strip()
+
+    # When I run the version command with JSON output
+    version_command_result = run_command(
+        [exasol_path, "version", "--json"],
+    )
+    version_command_output = json.loads(version_command_result.stdout)
+
+    # Then the version is returned as structured JSON
+    assert version_command_output == {"version": git_tag_version_str[1:]}
+
+
 def test_info_command_exists(exasol_path: str) -> None:
     """Verify info command is available."""
     result = run_command([exasol_path, "info", "--help"])
