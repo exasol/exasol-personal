@@ -119,6 +119,15 @@ func TestConnectCmdExamplesMentionJSONOptions(t *testing.T) {
 	}
 }
 
+func TestConnectCmdExamplesMentionCSVOption(t *testing.T) {
+	t.Parallel()
+
+	expected := `exasol connect --csv -c "SELECT * FROM products" > products.csv`
+	if !strings.Contains(connectCmdExample, expected) {
+		t.Fatalf("expected examples to contain %q", expected)
+	}
+}
+
 func TestConnectCmdExamplesMentionCommandAndFile(t *testing.T) {
 	t.Parallel()
 
@@ -146,6 +155,18 @@ func TestConnectRegistersCommandAndFileFlags(t *testing.T) {
 		if flag == nil || flag.Name != test.name {
 			t.Fatalf("expected -%s to be registered as --%s", test.shorthand, test.name)
 		}
+	}
+}
+
+func TestConnectRegistersCSVFlag(t *testing.T) {
+	t.Parallel()
+
+	flag := connectCmd.Flags().Lookup("csv")
+	if flag == nil {
+		t.Fatal("expected --csv flag to be registered")
+	}
+	if flag.DefValue != "false" {
+		t.Fatalf("expected --csv default false, got %q", flag.DefValue)
 	}
 }
 
@@ -178,6 +199,41 @@ func TestConnectCommandAndFileAreMutuallyExclusive(t *testing.T) {
 	}
 }
 
+// nolint: paralleltest // Builds and executes an isolated command instance.
+func TestConnectJSONAndCSVAreMutuallyExclusive(t *testing.T) {
+	var jsonFormat connect.JSONFormat
+	var csvOutput bool
+
+	cmd := &cobra.Command{
+		Use:           "connect",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(*cobra.Command, []string) error {
+			return nil
+		},
+	}
+	JSONFormatVarP(
+		cmd.Flags(),
+		&jsonFormat,
+		"json",
+		"j",
+		connect.JSONFormatPretty,
+		"",
+	)
+	cmd.Flags().BoolVar(&csvOutput, "csv", false, "")
+	cmd.MarkFlagsMutuallyExclusive("json", "csv")
+
+	cmd.SetArgs([]string{"--json", "--csv"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected an error when both --json and --csv are supplied")
+	}
+	if !strings.Contains(err.Error(), "json") || !strings.Contains(err.Error(), "csv") {
+		t.Fatalf("expected mutual-exclusivity error mentioning both flags, got: %v", err)
+	}
+}
+
 // nolint: paralleltest // Mutates the shared command usage template for inspection.
 func TestConnectUsageShowsJSONFormatUnderFlags(t *testing.T) {
 	originalTemplate := connectCmd.UsageTemplate()
@@ -197,6 +253,12 @@ func TestConnectUsageShowsJSONFormatUnderFlags(t *testing.T) {
 	}
 	if !strings.Contains(usage, "Output in JSON format: pretty, compact") {
 		t.Fatalf("expected usage to describe --json, got:\n%s", usage)
+	}
+	if !strings.Contains(usage, "--csv") {
+		t.Fatalf("expected usage to list --csv under flags, got:\n%s", usage)
+	}
+	if !strings.Contains(usage, "Output in CSV format") {
+		t.Fatalf("expected usage to describe --csv, got:\n%s", usage)
 	}
 	if !strings.Contains(usage, "Examples:") {
 		t.Fatalf("expected usage to include examples, got:\n%s", usage)

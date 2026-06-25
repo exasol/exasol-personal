@@ -20,6 +20,7 @@ Establish an SQL connection to the database instance in an active deployment.
 
 const connectCmdExample = `  exasol connect
   exasol connect --json
+  exasol connect --csv -c "SELECT * FROM products" > products.csv
   exasol connect -c "SELECT 1; SELECT 2"
   exasol connect -f script.sql
 	printf 'SELECT 1;\n' | exasol connect --json=compact`
@@ -83,6 +84,12 @@ func registerConnectFlags() {
 		"Output in JSON format: pretty, compact",
 	)
 
+	connectCmd.Flags().BoolVar(
+		&connectOpts.OutputCSV,
+		"csv", false,
+		"Output in CSV format",
+	)
+
 	connectCmd.Flags().StringVarP(
 		&connectOpts.Command,
 		"command", "c", "",
@@ -96,6 +103,7 @@ func registerConnectFlags() {
 	)
 
 	connectCmd.MarkFlagsMutuallyExclusive("command", "file")
+	connectCmd.MarkFlagsMutuallyExclusive("json", "csv")
 
 	connectCmd.Flags().IntVar(
 		&connectOpts.MaxRows,
