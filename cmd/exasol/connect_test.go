@@ -170,6 +170,44 @@ func TestConnectRegistersCSVFlag(t *testing.T) {
 	}
 }
 
+func TestSelectedConnectOutputFormat(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name     string
+		args     []string
+		expected connect.OutputFormat
+	}{
+		{name: "defaults to table", expected: connect.OutputFormatTable},
+		{name: "json flag selects json", args: []string{"--json"}, expected: connect.OutputFormatJSON},
+		{name: "csv flag selects csv", args: []string{"--csv"}, expected: connect.OutputFormatCSV},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			var jsonFormat connect.JSONFormat
+			cmd := &cobra.Command{Use: "connect"}
+			JSONFormatVarP(
+				cmd.Flags(),
+				&jsonFormat,
+				"json",
+				"j",
+				connect.JSONFormatPretty,
+				"",
+			)
+			cmd.Flags().Bool("csv", false, "")
+
+			if err := cmd.Flags().Parse(test.args); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+
+			if format := selectedConnectOutputFormat(cmd); format != test.expected {
+				t.Fatalf("unexpected format: got %q expected %q", format, test.expected)
+			}
+		})
+	}
+}
+
 // nolint: paralleltest // Builds and executes an isolated command instance.
 func TestConnectCommandAndFileAreMutuallyExclusive(t *testing.T) {
 	// Mirror the registration in registerConnectFlags so we exercise the

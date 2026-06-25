@@ -28,6 +28,14 @@ const (
 	JSONFormatCompact JSONFormat = "compact"
 )
 
+type OutputFormat string
+
+const (
+	OutputFormatTable OutputFormat = "table"
+	OutputFormatJSON  OutputFormat = "json"
+	OutputFormatCSV   OutputFormat = "csv"
+)
+
 func (format JSONFormat) String() string {
 	return string(format)
 }
@@ -55,8 +63,7 @@ type Opts struct {
 	Password                   string
 	InsecureSkipCertValidation bool
 	ExecuteOnSemicolon         bool
-	OutputJSON                 bool
-	OutputCSV                  bool
+	OutputFormat               OutputFormat
 	JSONFormat                 JSONFormat
 	// Command holds inline SQL passed via --command. When set, the statements
 	// are executed non-interactively and the shell is not started.
@@ -175,9 +182,10 @@ func Connect(
 
 	output := os.Stdout
 	printer := printResultTable
-	if opts.OutputCSV {
+	switch opts.OutputFormat {
+	case OutputFormatCSV:
 		printer = printResultCSV
-	} else if opts.OutputJSON {
+	case OutputFormatJSON:
 		printer = newJSONResultPrinter(opts.JSONFormat)
 	}
 
