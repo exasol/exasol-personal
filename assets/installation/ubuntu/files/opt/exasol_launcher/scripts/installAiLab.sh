@@ -92,6 +92,15 @@ printf 'unqualified-search-registries = ["docker.io"]\n' \
 # export) can reach it at /var/run/docker.sock. The socket is mounted into the
 # container below. Without this, the AI Lab export_as_is notebook fails with
 # "No such file or directory" when the Docker client looks for the socket.
+#
+# This is the documented limitation of the containerized AI Lab: by default it
+# "does not allow creating Script Language Containers (SLCs)" because the
+# container has no Docker daemon, and the sanctioned workaround is to mount the
+# daemon socket. See:
+#   https://github.com/exasol/ai-lab/blob/main/doc/user_guide/docker/docker-usage.md
+# The three Podman-specific steps here (this socket, the registries.conf above,
+# and the DockerRegistryImageChecker patch below) adapt that Docker-oriented
+# workaround to the rootless Podman runtime we use on the host.
 log_substep_info "Enabling Podman Docker-compatible API socket"
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" systemctl --user enable --now podman.socket
 for _ in $(seq 1 15); do
