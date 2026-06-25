@@ -59,3 +59,36 @@ def test_ports_override_sets_db_port(
 
     proc = deployment.connect(input="SELECT * FROM Dual", capture_output=True)
     assert "DUMMY" in proc.stdout
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.installation_e2e
+@pytest.mark.local_e2e
+def test_ports_override_stable_across_restarts(
+    local_ports_deployment: tuple[Deployment, int],
+) -> None:
+    """Port assignments from --ports db:<port> survive a stop/start cycle.
+
+    The custom DB port must remain unchanged in deployment.json and the DB
+    must be reachable on that port after the VM is restarted.
+    """
+    deployment, custom_db_port = local_ports_deployment
+
+    deployment_json = Path(deployment.deployment_dir.name) / "deployment.json"
+
+    stop_result = deployment.stop()
+    assert stop_result.returncode == 0
+
+    info = json.loads(deployment_json.read_text())
+    assert info["connection"]["dbPort"] == custom_db_port
+
+    start_result = deployment.start()
+    assert start_result.returncode == 0
+
+    info = json.loads(deployment_json.read_text())
+    assert info["connection"]["dbPort"] == custom_db_port
+
+    proc = deployment.connect(input="SELECT * FROM Dual", capture_output=True)
+    assert "DUMMY" in proc.stdout
