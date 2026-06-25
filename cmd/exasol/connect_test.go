@@ -179,7 +179,11 @@ func TestSelectedConnectOutputFormat(t *testing.T) {
 		expected connect.OutputFormat
 	}{
 		{name: "defaults to table", expected: connect.OutputFormatTable},
-		{name: "json flag selects json", args: []string{"--json"}, expected: connect.OutputFormatJSON},
+		{
+			name:     "json flag selects json",
+			args:     []string{"--json"},
+			expected: connect.OutputFormatJSON,
+		},
 		{name: "csv flag selects csv", args: []string{"--csv"}, expected: connect.OutputFormatCSV},
 	} {
 		t.Run(test.name, func(t *testing.T) {

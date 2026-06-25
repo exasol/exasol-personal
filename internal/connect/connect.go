@@ -183,10 +183,14 @@ func Connect(
 	output := os.Stdout
 	printer := printResultTable
 	switch opts.OutputFormat {
+	case OutputFormatTable:
+		printer = printResultTable
 	case OutputFormatCSV:
 		printer = printResultCSV
 	case OutputFormatJSON:
 		printer = newJSONResultPrinter(opts.JSONFormat)
+	default:
+		printer = printResultTable
 	}
 
 	// The interactive preview cap applies only when an interactive shell is
