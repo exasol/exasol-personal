@@ -27,6 +27,7 @@ const connectCmdExample = `  exasol connect
 
 var connectOpts = connect.Opts{
 	ExecuteOnSemicolon: true,
+	OutputFormat:       connect.OutputFormatTable,
 	JSONFormat:         connect.JSONFormatPretty,
 	MaxRows:            connect.MaxRowsUnset,
 }
@@ -43,10 +44,21 @@ var connectCmd = &cobra.Command{
 			return errors.New("--command and --file are mutually exclusive")
 		}
 
-		connectOpts.OutputJSON = cmd.Flags().Changed("json")
+		connectOpts.OutputFormat = selectedConnectOutputFormat(cmd)
 
 		return deploy.Connect(cmd.Context(), &connectOpts, commonFlags.Deployment())
 	},
+}
+
+func selectedConnectOutputFormat(cmd *cobra.Command) connect.OutputFormat {
+	if cmd.Flags().Changed("csv") {
+		return connect.OutputFormatCSV
+	}
+	if cmd.Flags().Changed("json") {
+		return connect.OutputFormatJSON
+	}
+
+	return connect.OutputFormatTable
 }
 
 func registerConnectFlags() {
@@ -84,8 +96,7 @@ func registerConnectFlags() {
 		"Output in JSON format: pretty, compact",
 	)
 
-	connectCmd.Flags().BoolVar(
-		&connectOpts.OutputCSV,
+	connectCmd.Flags().Bool(
 		"csv", false,
 		"Output in CSV format",
 	)
