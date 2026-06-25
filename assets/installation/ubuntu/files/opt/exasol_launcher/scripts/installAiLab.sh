@@ -254,7 +254,7 @@ log_substep_info "Patching exasol_integration_test_docker_environment for Podman
 # can continue and correctly determine whether the image is in the registry.
 # Done before the systemd handover below so it runs while the container is
 # definitely up from 'podman run', independent of systemd unit activation.
-podman exec --user root "${AILAB_CONTAINER}" python3 - <<'PATCHPY'
+podman exec -i --user root "${AILAB_CONTAINER}" python3 - <<'PATCHPY'
 import pathlib
 
 path = pathlib.Path(
