@@ -98,10 +98,21 @@ printf 'unqualified-search-registries = ["docker.io"]\n' \
 # container has no Docker daemon, and the sanctioned workaround is to mount the
 # daemon socket. See:
 #   https://github.com/exasol/ai-lab/blob/main/doc/user_guide/docker/docker-usage.md
-# The three Podman-specific steps here (this socket, the registries.conf above,
-# and the DockerRegistryImageChecker patch below) adapt that Docker-oriented
+# The Podman-specific steps here (this socket, the registries.conf above, and
+# the DockerRegistryImageChecker patch below) adapt that Docker-oriented
 # workaround to the rootless Podman runtime we use on the host.
+#
+# The socket is created mode 0660 root-owned by default. When bind-mounted into
+# the rootless container, the host 'ubuntu' uid/gid is remapped to the
+# container's root, so the AI Lab's non-root 'jupyter' user (which actually runs
+# exaslct) cannot access it and the Docker client fails with PermissionError.
+# A drop-in sets SocketMode=0666 so the socket is world-accessible from the
+# start and survives reboots (the unit recreates the socket on each boot).
 log_substep_info "Enabling Podman Docker-compatible API socket"
+socket_dropin_dir="${HOME:-/home/ubuntu}/.config/systemd/user/podman.socket.d"
+mkdir -p "${socket_dropin_dir}"
+printf '[Socket]\nSocketMode=0666\n' > "${socket_dropin_dir}/mode.conf"
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" systemctl --user daemon-reload
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" systemctl --user enable --now podman.socket
 for _ in $(seq 1 15); do
   [[ -S "${XDG_RUNTIME_DIR}/podman/podman.sock" ]] && break
