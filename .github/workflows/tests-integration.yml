@@ -1,0 +1,61 @@
+name: Integration Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: Operating system to run tests on
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - ubuntu-latest
+          - windows-latest
+
+permissions: {}
+
+jobs:
+  plan-tests-integration:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        shell: bash
+        env:
+          SELECTED_OS_INPUT: ${{ inputs.os }}
+        run: |
+          selected_os="${SELECTED_OS_INPUT:-}"
+          if [ -z "${selected_os}" ]; then
+            selected_os="all"
+          fi
+
+          full_plan_json='[
+            {"os": "ubuntu-latest"},
+            {"os": "windows-latest"}
+          ]'
+
+          filtered_plan_json="$(jq -c --arg os "${selected_os}" '
+            if $os == "all" then . else map(select(.os == $os)) end
+          ' <<< "${full_plan_json}")"
+
+          echo "matrix=${filtered_plan_json}" >> "${GITHUB_OUTPUT}"
+
+  tests-integration:
+    needs: plan-tests-integration
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan-tests-integration.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/build
+        with:
+          local-runner-token: ${{ secrets.EXASOL_NANO_VM_TOKEN }}
+      - uses: ./.github/actions/tests-integration
