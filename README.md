@@ -232,7 +232,10 @@ To run SQL without entering the interactive shell, pass it directly. Both flags 
 exasol connect -c "SELECT 1; SELECT 2"   # run inline statement(s)
 exasol connect -f script.sql             # run statements from a file
 ```
-`--command` and `--file` are mutually exclusive. In this non-interactive mode, execution stops at the first failing statement and `connect` exits with a non-zero status so scripts can detect errors. Combine with `--json` for machine-readable output.
+`--command` and `--file` are mutually exclusive. In this non-interactive mode, execution stops at the first failing statement and `connect` exits with a non-zero status so scripts can detect errors. Combine with `--json` for machine-readable output, or use `--csv` for CSV output:
+```bash
+exasol connect --csv -c "SELECT * FROM PRODUCTS" > products.csv
+```
 
 In an interactive session, query output is capped at 100 rows by default so a large `SELECT` doesn't flood the terminal; a note is printed when output is truncated. Piped or `--command`/`--file` (non-interactive) execution returns the full result set. Use `--max-rows N` to set the cap explicitly, or `--max-rows 0` for unlimited:
 ```bash
