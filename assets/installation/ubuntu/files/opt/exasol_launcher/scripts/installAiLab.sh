@@ -112,6 +112,18 @@ printf 'unqualified-search-registries = ["docker.io"]\n' \
 # original 0660 mode for this session. So we ALSO chmod the live socket
 # explicitly below: the drop-in covers subsequent reboots, the chmod covers
 # install time. The chmod must run before the container mounts the socket.
+#
+# Security note: mode 0666 looks broad but is NOT world-exposed in practice. The
+# socket lives under ${XDG_RUNTIME_DIR} (/run/user/<uid>), which systemd-logind
+# creates mode 0700 owned by this user. No other host user can traverse that
+# directory, so the only principals that can reach the API socket are this user
+# (and its rootless subuids — i.e. the single-purpose AI Lab container's own
+# root/ubuntu/jupyter). Tighter group-based schemes don't help here: under
+# rootless userns the host owner/group remap to the container's root, the socket
+# inode is recreated on every reboot (so a chgrp would not persist), and a
+# usable container-visible group cannot be produced from the host side. Given
+# the 0700 parent and the single-user appliance model, 0666 is the simplest
+# robust choice. See exasol/ai-lab#535.
 log_substep_info "Enabling Podman Docker-compatible API socket"
 socket_dropin_dir="${HOME:-/home/ubuntu}/.config/systemd/user/podman.socket.d"
 mkdir -p "${socket_dropin_dir}"
