@@ -76,6 +76,69 @@ for _ in $(seq 1 10); do
   sleep 1
 done
 
+# Podman on Ubuntu 22.04 requires fully-qualified image names by default and
+# refuses short names like "exasol/script-language-container:..." with "no
+# unqualified-search registries defined". The AI Lab exaslct/SLC build uses
+# short names pulled from docker.io, so configure docker.io as the default
+# search registry for the ubuntu user. The user-level file takes precedence
+# over /etc/containers/registries.conf without needing sudo.
+log_substep_info "Configuring Podman unqualified-search registries"
+mkdir -p "${HOME:-/home/ubuntu}/.config/containers"
+printf 'unqualified-search-registries = ["docker.io"]\n' \
+  > "${HOME:-/home/ubuntu}/.config/containers/registries.conf"
+
+# Enable the Podman Docker-compatible API socket so tools inside the AI Lab
+# container that use the Docker SDK (e.g. exaslct / Script Language Container
+# export) can reach it at /var/run/docker.sock. The socket is mounted into the
+# container below. Without this, the AI Lab export_as_is notebook fails with
+# "No such file or directory" when the Docker client looks for the socket.
+#
+# This is the documented limitation of the containerized AI Lab: by default it
+# "does not allow creating Script Language Containers (SLCs)" because the
+# container has no Docker daemon, and the sanctioned workaround is to mount the
+# daemon socket. See:
+#   https://github.com/exasol/ai-lab/blob/main/doc/user_guide/docker/docker-usage.md
+# The Podman-specific steps here (this socket, the registries.conf above, and
+# the DockerRegistryImageChecker patch below) adapt that Docker-oriented
+# workaround to the rootless Podman runtime we use on the host.
+#
+# The socket is created mode 0660 root-owned by default. When bind-mounted into
+# the rootless container, the host 'ubuntu' uid/gid is remapped to the
+# container's root, so the AI Lab's non-root 'jupyter' user (which actually runs
+# exaslct) cannot access it and the Docker client fails with PermissionError.
+# A drop-in sets SocketMode=0666 so that on a clean boot the socket is created
+# world-accessible. But podman.socket may already be active (started early via
+# user lingering) before the drop-in is read, in which case it keeps its
+# original 0660 mode for this session. So we ALSO chmod the live socket
+# explicitly below: the drop-in covers subsequent reboots, the chmod covers
+# install time. The chmod must run before the container mounts the socket.
+#
+# Security note: mode 0666 looks broad but is NOT world-exposed in practice. The
+# socket lives under ${XDG_RUNTIME_DIR} (/run/user/<uid>), which systemd-logind
+# creates mode 0700 owned by this user. No other host user can traverse that
+# directory, so the only principals that can reach the API socket are this user
+# (and its rootless subuids — i.e. the single-purpose AI Lab container's own
+# root/ubuntu/jupyter). Tighter group-based schemes don't help here: under
+# rootless userns the host owner/group remap to the container's root, the socket
+# inode is recreated on every reboot (so a chgrp would not persist), and a
+# usable container-visible group cannot be produced from the host side. Given
+# the 0700 parent and the single-user appliance model, 0666 is the simplest
+# robust choice. See exasol/ai-lab#535.
+log_substep_info "Enabling Podman Docker-compatible API socket"
+socket_dropin_dir="${HOME:-/home/ubuntu}/.config/systemd/user/podman.socket.d"
+mkdir -p "${socket_dropin_dir}"
+printf '[Socket]\nSocketMode=0666\n' > "${socket_dropin_dir}/mode.conf"
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" systemctl --user daemon-reload
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" systemctl --user enable --now podman.socket
+podman_sock="${XDG_RUNTIME_DIR}/podman/podman.sock"
+for _ in $(seq 1 15); do
+  [[ -S "${podman_sock}" ]] && break
+  sleep 1
+done
+# Make the live socket accessible to the container's non-root jupyter user
+# regardless of when the unit first created it (see comment above).
+chmod 666 "${podman_sock}" 2>/dev/null || true
+
 log_substep_info "Pulling AI Lab image ${AILAB_IMAGE}"
 podman pull "${AILAB_IMAGE}"
 
@@ -95,6 +158,7 @@ until podman run \
   --network slirp4netns:allow_host_loopback=true \
   --env JUPYTER_PASSWORD="${jupyter_password}" \
   --volume "${AILAB_VOLUME}:/home/jupyter/notebooks" \
+  --volume "${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock:Z" \
   --publish "${ai_lab_port}:${AILAB_CONTAINER_PORT}" \
   "${AILAB_IMAGE}"; do
   start_attempt=$((start_attempt + 1))
@@ -194,22 +258,51 @@ with open_pyexasol_connection(scs, compression=True) as con:
     con.execute(f'CREATE SCHEMA IF NOT EXISTS "{os.environ["DB_SCHEMA"]}"')
 PY
 
-log_substep_info "Configuring AI Lab to restart on reboot"
-# Lingering was enabled above. Install a Quadlet unit so systemd manages the
-# container across reboots.
-quadlet_dir="${HOME:-/home/ubuntu}/.config/containers/systemd"
-mkdir -p "${quadlet_dir}"
-cat > "${quadlet_dir}/${AILAB_CONTAINER}.container" <<QUADLET
-[Container]
-Image=${AILAB_IMAGE}
-ContainerName=${AILAB_CONTAINER}
-Network=slirp4netns:allow_host_loopback=true
-Environment=JUPYTER_PASSWORD=${jupyter_password}
-Volume=${AILAB_VOLUME}:/home/jupyter/notebooks
-PublishPort=${ai_lab_port}:${AILAB_CONTAINER_PORT}
+log_substep_info "Patching exasol_integration_test_docker_environment for Podman compatibility"
+# DockerRegistryImageChecker.handle_log_line raises on any unknown status, but
+# Podman emits "Already exists" for locally-cached layers during a registry pull
+# check (real Docker does too). The unpatched code crashes the SLC export step
+# in the export_as_is notebook. Return None instead of raising so the checker
+# can continue and correctly determine whether the image is in the registry.
+# Done before the systemd handover below so it runs while the container is
+# definitely up from 'podman run', independent of systemd unit activation.
+podman exec -i --user root "${AILAB_CONTAINER}" python3 - <<'PATCHPY'
+import pathlib
 
-[Install]
-WantedBy=default.target
-QUADLET
+path = pathlib.Path(
+    "/home/jupyter/jupyterenv/lib/python3.10/site-packages"
+    "/exasol_integration_test_docker_environment/lib/docker/images/create"
+    "/utils/docker_registry_image_checker.py"
+)
+src = path.read_text()
+old = '        raise Exception(f"Unexpected log line: {log_line}")'
+new = '        return None  # unknown status (e.g. "Already exists") — not an error'
+if old in src:
+    path.write_text(src.replace(old, new))
+    print("Patched docker_registry_image_checker.py")
+else:
+    print("Already patched or pattern not found — skipping")
+PATCHPY
+
+log_substep_info "Configuring AI Lab to restart on reboot"
+# Ubuntu 22.04 ships Podman 3.4.4 which predates Quadlet (4.4+). Use
+# podman generate systemd to create a plain systemd user service instead.
+systemd_user_dir="${HOME:-/home/ubuntu}/.config/systemd/user"
+mkdir -p "${systemd_user_dir}"
+podman generate systemd \
+  --name "${AILAB_CONTAINER}" \
+  --restart-policy always \
+  > "${systemd_user_dir}/container-${AILAB_CONTAINER}.service"
+
+log_substep_info "Activating AI Lab systemd unit"
+# The generated unit's ExecStart runs 'podman start <name>'. If the container is
+# still running from the 'podman run' above, systemd's start/notify handshake
+# fails ("did not take the steps required by its unit configuration") and, under
+# 'set -e', aborts the whole post-install. Stop the container first so systemd
+# cleanly starts and owns it. The container's writable layer (the patch above)
+# and its mounts/volume are preserved across stop/start.
+podman stop "${AILAB_CONTAINER}" >/dev/null 2>&1 || true
+XDG_RUNTIME_DIR="/run/user/$(id -u)" systemctl --user daemon-reload
+XDG_RUNTIME_DIR="/run/user/$(id -u)" systemctl --user enable --now "container-${AILAB_CONTAINER}"
 
 log_step_info "Exasol AI Lab installation completed"

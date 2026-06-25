@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="800" viewBox="0 0 1300 800" font-family="'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L9,5 L0,10 z" fill="#9fb6bf"/>
+    </marker>
+    <marker id="arrG" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L9,5 L0,10 z" fill="#5fc33b"/>
+    </marker>
+  </defs>
+  <rect width="1300" height="800" fill="#002e40"/>
+  <rect x="0" y="0" width="1300" height="8" fill="#5fc33b"/>
+  <!-- Title -->
+  <g transform="translate(40,56)">
+    <circle cx="9" cy="-7" r="9" fill="#5fc33b"/>
+    <text x="28" y="0" fill="#ffffff" font-size="24" font-weight="800" letter-spacing="2">EXASOL</text>
+    <text x="150" y="0" fill="#9fb6bf" font-size="20">Personal — AI Lab architecture</text>
+  </g>
+  <text x="40" y="86" fill="#5fc33b" font-size="16">Green = added by <tspan font-family="monospace">--with-ai-lab</tspan></text>
+  <!-- ===== Left column: user / launcher ===== -->
+  <g>
+    <!-- Browser -->
+    <rect x="40" y="150" width="230" height="74" rx="12" fill="#08394b" stroke="#0e4a5f"/>
+    <text x="58" y="182" fill="#ffffff" font-size="18" font-weight="700">Browser</text>
+    <text x="58" y="206" fill="#9fb6bf" font-size="14">data scientist · user's laptop</text>
+    <!-- CLI -->
+    <rect x="40" y="262" width="230" height="74" rx="12" fill="#08394b" stroke="#0e4a5f"/>
+    <text x="58" y="294" fill="#ffffff" font-size="18" font-weight="700">exasol CLI (launcher)</text>
+    <text x="58" y="318" fill="#9fb6bf" font-size="13" font-family="monospace">install aws --with-ai-lab</text>
+    <!-- Deployment dir -->
+    <rect x="40" y="374" width="230" height="150" rx="12" fill="#08394b" stroke="#0e4a5f"/>
+    <text x="58" y="404" fill="#ffffff" font-size="17" font-weight="700">Deployment directory</text>
+    <text x="58" y="434" fill="#dbe7ec" font-size="14" font-family="monospace">deployment.json</text>
+    <text x="70" y="456" fill="#5fc33b" font-size="13">+ aiLab URL</text>
+    <text x="58" y="484" fill="#dbe7ec" font-size="14" font-family="monospace">secrets.json</text>
+    <text x="70" y="506" fill="#5fc33b" font-size="13">+ Jupyter / SCS / BucketFS pwd</text>
+  </g>
+  <!-- CLI <-> deployment dir -->
+  <line x1="155" y1="336" x2="155" y2="374" stroke="#9fb6bf" stroke-width="1.5"/>
+  <!-- ===== AWS boundary ===== -->
+  <rect x="320" y="120" width="950" height="640" rx="16" fill="#06303f" stroke="#5fc33b" stroke-width="1" stroke-dasharray="2 6"/>
+  <text x="344" y="150" fill="#9fb6bf" font-size="16" font-weight="700">AWS · eu-west-1</text>
+  <!-- Security group band -->
+  <rect x="344" y="166" width="902" height="52" rx="10" fill="#0a3445" stroke="#0e4a5f"/>
+  <text x="360" y="180" fill="#9fb6bf" font-size="12" font-weight="700">SECURITY GROUP (allowed\_cidr)</text>
+  <g font-size="13" font-weight="700">
+    <rect x="360" y="188" width="60" height="22" rx="5" fill="#0e4a5f"/><text x="390" y="203" text-anchor="middle" fill="#dbe7ec">SSH 22</text>
+    <rect x="430" y="188" width="70" height="22" rx="5" fill="#0e4a5f"/><text x="465" y="203" text-anchor="middle" fill="#dbe7ec">SQL 8563</text>
+    <rect x="510" y="188" width="80" height="22" rx="5" fill="#0e4a5f"/><text x="550" y="203" text-anchor="middle" fill="#dbe7ec">Admin 8443</text>
+    <rect x="600" y="188" width="80" height="22" rx="5" fill="#0e4a5f"/><text x="640" y="203" text-anchor="middle" fill="#dbe7ec">BFS 2581</text>
+    <rect x="690" y="188" width="110" height="22" rx="5" fill="#13502a" stroke="#5fc33b"/><text x="745" y="203" text-anchor="middle" fill="#5fc33b">AI Lab 49494</text>
+  </g>
+  <!-- EC2 instance -->
+  <rect x="344" y="240" width="902" height="430" rx="14" fill="#0a3445" stroke="#0e4a5f"/>
+  <text x="364" y="270" fill="#ffffff" font-size="17" font-weight="700">EC2 · r6i.xlarge · Ubuntu 22.04 · rootless Podman</text>
+  <!-- DB container -->
+  <rect x="372" y="296" width="410" height="350" rx="12" fill="#08394b" stroke="#0e4a5f"/>
+  <text x="392" y="328" fill="#ffffff" font-size="18" font-weight="700">Exasol Database</text>
+  <text x="392" y="350" fill="#9fb6bf" font-size="13">C4 / COS container (existing)</text>
+  <g font-size="15" fill="#dbe7ec">
+    <text x="392" y="392">SQL endpoint  <tspan font-family="monospace" fill="#ffffff">:8563</tspan></text>
+    <text x="392" y="420">Admin UI  <tspan font-family="monospace" fill="#ffffff">:8443</tspan></text>
+    <text x="392" y="448">BucketFS (bfsdefault)  <tspan font-family="monospace" fill="#ffffff">:2581</tspan></text>
+  </g>
+  <!-- new objects inside DB -->
+  <rect x="392" y="476" width="360" height="40" rx="8" fill="#0c3a26" stroke="#5fc33b"/>
+  <text x="408" y="501" fill="#5fc33b" font-size="14" font-weight="700">+ schema  AI\_LAB  <tspan fill="#9fb6bf" font-weight="400">(pre-created)</tspan></text>
+  <rect x="392" y="524" width="360" height="40" rx="8" fill="#0c3a26" stroke="#5fc33b"/>
+  <text x="408" y="549" fill="#5fc33b" font-size="14" font-weight="700">+ bucket  ailab\_bucket  <tspan fill="#9fb6bf" font-weight="400">(w/ creds)</tspan></text>
+  <!-- AI Lab container (NEW) -->
+  <rect x="808" y="296" width="410" height="350" rx="12" fill="#0c3a26" stroke="#5fc33b" stroke-width="2"/>
+  <text x="828" y="328" fill="#ffffff" font-size="18" font-weight="700">AI Lab container</text>
+  <rect x="1150" y="310" width="48" height="22" rx="5" fill="#5fc33b"/><text x="1174" y="326" text-anchor="middle" fill="#002e40" font-size="13" font-weight="800">NEW</text>
+  <text x="828" y="350" fill="#9fb6bf" font-size="13">exasol/ai-lab · rootless Podman</text>
+  <g font-size="15" fill="#dbe7ec">
+    <text x="828" y="392">JupyterLab  <tspan font-family="monospace" fill="#ffffff">:49494</tspan></text>
+    <text x="828" y="420">Secure Config Storage (SCS)</text>
+    <text x="844" y="442" fill="#5fc33b" font-size="13">pre-seeded — zero manual setup</text>
+    <text x="828" y="476">DB + BucketFS credentials,</text>
+    <text x="828" y="498">default schema, ready to use</text>
+    <text x="828" y="538" fill="#9fb6bf" font-size="13">restart-persistent (Quadlet + linger)</text>
+  </g>
+  <!-- internal connection AI Lab -> DB -->
+  <line x1="808" y1="430" x2="782" y2="430" stroke="#5fc33b" stroke-width="2" marker-end="url(#arrG)"/>
+  <text x="795" y="700" text-anchor="middle" fill="#5fc33b" font-size="14">AI Lab → DB &amp; BucketFS via <tspan font-family="monospace">host.containers.internal</tspan>  (slirp4netns: allow\_host\_loopback)</text>
+  <!-- ===== cross arrows ===== -->
+  <!-- Browser -> AI Lab :49494 -->
+  <polyline points="270,178 745,178 745,232 1013,232 1013,296" fill="none" stroke="#5fc33b" stroke-width="2" marker-end="url(#arrG)"/>
+  <text x="1020" y="262" fill="#5fc33b" font-size="13">https :49494</text>
+  <!-- CLI -> EC2 (install) -->
+  <line x1="270" y1="299" x2="372" y2="420" stroke="#9fb6bf" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="276" y="356" fill="#9fb6bf" font-size="12">provisions &amp; installs</text>
+  <!-- footer -->
+  <text x="40" y="788" fill="#9fb6bf" font-size="13" font-style="italic">Both containers run on one instance — one DB (not an in-container copy). The launcher provisions, pre-configures, and exposes AI Lab.</text>
+</svg>
