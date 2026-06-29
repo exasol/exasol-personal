@@ -20,12 +20,14 @@ Establish an SQL connection to the database instance in an active deployment.
 
 const connectCmdExample = `  exasol connect
   exasol connect --json
+  exasol connect --csv -c "SELECT * FROM products" > products.csv
   exasol connect -c "SELECT 1; SELECT 2"
   exasol connect -f script.sql
 	printf 'SELECT 1;\n' | exasol connect --json=compact`
 
 var connectOpts = connect.Opts{
 	ExecuteOnSemicolon: true,
+	OutputFormat:       connect.OutputFormatTable,
 	JSONFormat:         connect.JSONFormatPretty,
 	MaxRows:            connect.MaxRowsUnset,
 }
@@ -42,10 +44,21 @@ var connectCmd = &cobra.Command{
 			return errors.New("--command and --file are mutually exclusive")
 		}
 
-		connectOpts.OutputJSON = cmd.Flags().Changed("json")
+		connectOpts.OutputFormat = selectedConnectOutputFormat(cmd)
 
 		return deploy.Connect(cmd.Context(), &connectOpts, commonFlags.Deployment())
 	},
+}
+
+func selectedConnectOutputFormat(cmd *cobra.Command) connect.OutputFormat {
+	if cmd.Flags().Changed("csv") {
+		return connect.OutputFormatCSV
+	}
+	if cmd.Flags().Changed("json") {
+		return connect.OutputFormatJSON
+	}
+
+	return connect.OutputFormatTable
 }
 
 func registerConnectFlags() {
@@ -83,6 +96,11 @@ func registerConnectFlags() {
 		"Output in JSON format: pretty, compact",
 	)
 
+	connectCmd.Flags().Bool(
+		"csv", false,
+		"Output in CSV format",
+	)
+
 	connectCmd.Flags().StringVarP(
 		&connectOpts.Command,
 		"command", "c", "",
@@ -96,6 +114,7 @@ func registerConnectFlags() {
 	)
 
 	connectCmd.MarkFlagsMutuallyExclusive("command", "file")
+	connectCmd.MarkFlagsMutuallyExclusive("json", "csv")
 
 	connectCmd.Flags().IntVar(
 		&connectOpts.MaxRows,

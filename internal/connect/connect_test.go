@@ -181,6 +181,67 @@ func TestPrintResultJSON(t *testing.T) {
 	}
 }
 
+func TestPrintResultCSV(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name     string
+		result   stubQueryResult
+		expected string
+	}{
+		{
+			name: "renders header and rows",
+			result: stubQueryResult{
+				columnNames: []string{"ID", "NAME"},
+				values:      [][]any{{int64(1), "Alice"}, {int64(2), "Bob"}},
+			},
+			expected: "ID,NAME\n1,Alice\n2,Bob\n",
+		},
+		{
+			name: "quotes csv special characters",
+			result: stubQueryResult{
+				columnNames: []string{"ID", "NOTE"},
+				values: [][]any{{
+					int64(1),
+					"Alice, \"A\"\nLine",
+				}},
+			},
+			expected: "ID,NOTE\n1,\"Alice, \"\"A\"\"\nLine\"\n",
+		},
+		{
+			name: "renders null as empty field",
+			result: stubQueryResult{
+				columnNames: []string{"ID", "MISSING", "NAME"},
+				rows:        [][]string{{"1", "<nil>", "Alice"}},
+				values:      [][]any{{int64(1), nil, "Alice"}},
+			},
+			expected: "ID,MISSING,NAME\n1,,Alice\n",
+		},
+		{
+			name: "skips zero-column results",
+			result: stubQueryResult{
+				columnNames: []string{},
+				values:      [][]any{},
+			},
+			expected: "",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			// Given a query result that should be emitted as CSV.
+			// When the result is rendered in CSV mode.
+			err := printResultCSV(&buf, test.result)
+
+			// Then the output follows standard CSV encoding.
+			require.NoError(t, err)
+			require.Equal(t, test.expected, buf.String())
+		})
+	}
+}
+
 func jsonRoundTripValues(t *testing.T, values [][]any) [][]any {
 	t.Helper()
 

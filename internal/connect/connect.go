@@ -5,6 +5,7 @@ package connect
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,14 @@ type JSONFormat string
 const (
 	JSONFormatPretty  JSONFormat = "pretty"
 	JSONFormatCompact JSONFormat = "compact"
+)
+
+type OutputFormat string
+
+const (
+	OutputFormatTable OutputFormat = "table"
+	OutputFormatJSON  OutputFormat = "json"
+	OutputFormatCSV   OutputFormat = "csv"
 )
 
 func (format JSONFormat) String() string {
@@ -54,7 +63,7 @@ type Opts struct {
 	Password                   string
 	InsecureSkipCertValidation bool
 	ExecuteOnSemicolon         bool
-	OutputJSON                 bool
+	OutputFormat               OutputFormat
 	JSONFormat                 JSONFormat
 	// Command holds inline SQL passed via --command. When set, the statements
 	// are executed non-interactively and the shell is not started.
@@ -173,8 +182,15 @@ func Connect(
 
 	output := os.Stdout
 	printer := printResultTable
-	if opts.OutputJSON {
+	switch opts.OutputFormat {
+	case OutputFormatTable:
+		printer = printResultTable
+	case OutputFormatCSV:
+		printer = printResultCSV
+	case OutputFormatJSON:
 		printer = newJSONResultPrinter(opts.JSONFormat)
+	default:
+		printer = printResultTable
 	}
 
 	// The interactive preview cap applies only when an interactive shell is
@@ -298,6 +314,34 @@ func printResultJSON(
 		Columns: queryResult.ColumnNames(),
 		Rows:    queryResult.Values(),
 	})
+}
+
+func printResultCSV(output io.Writer, queryResult generaltypes.QueryResulter) error {
+	columns := queryResult.ColumnNames()
+	if len(columns) == 0 {
+		return nil
+	}
+
+	writer := csv.NewWriter(output)
+	if err := writer.Write(columns); err != nil {
+		return err
+	}
+
+	for _, row := range queryResult.Values() {
+		record := make([]string, len(row))
+		for i, value := range row {
+			if value != nil {
+				record[i] = fmt.Sprint(value)
+			}
+		}
+		if err := writer.Write(record); err != nil {
+			return err
+		}
+	}
+
+	writer.Flush()
+
+	return writer.Error()
 }
 
 func printResultTable(output io.Writer, queryResult generaltypes.QueryResulter) error {
