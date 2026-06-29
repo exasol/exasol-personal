@@ -219,18 +219,22 @@ func runShellImpl(
 // trailing remainder after the final terminator is executed as a final
 // statement, mirroring the shell's end-of-input handling.
 func runStatements(sql string, processInput ProcessInputFunc) error {
-	statements, remainder := splitSemicolonTerminatedStatements(sql)
-	if trailing := strings.TrimSpace(remainder); trailing != "" {
-		statements = append(statements, trailing)
-	}
-
-	for _, statement := range statements {
+	for _, statement := range nonInteractiveStatements(sql) {
 		if err := processInput(strings.TrimSpace(statement)); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func nonInteractiveStatements(sql string) []string {
+	statements, remainder := splitSemicolonTerminatedStatements(sql)
+	if trailing := strings.TrimSpace(remainder); trailing != "" {
+		statements = append(statements, trailing)
+	}
+
+	return statements
 }
 
 // RunShell runs the shell, processing incoming input

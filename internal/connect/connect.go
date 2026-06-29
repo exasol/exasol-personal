@@ -6,7 +6,6 @@ package connect
 import (
 	"context"
 	"encoding/csv"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -194,9 +193,9 @@ func Connect(
 	}
 
 	// The interactive preview cap applies only when an interactive shell is
-	// actually started. --command/--file and piped input return everything by
-	// default, so they behave as non-interactive (unlimited) unless --max-rows
-	// is set explicitly.
+	// actually started. --command/--file and non-interactive JSON execution
+	// return everything by default, so they behave as non-interactive
+	// (unlimited) unless --max-rows is set explicitly.
 	interactiveShell := !nonInteractive && util.IsInteractiveStdin()
 
 	modeDefault := 0
@@ -204,6 +203,17 @@ func Connect(
 		modeDefault = interactivePreviewMaxRows
 	}
 	maxRows := effectiveMaxRows(opts.MaxRows, modeDefault)
+
+	if nonInteractive && opts.OutputFormat == OutputFormatJSON {
+		return runJSONStatements(
+			ctx,
+			nonInteractiveSQL,
+			database,
+			output,
+			opts.JSONFormat,
+			maxRows,
+		)
+	}
 
 	processInput := func(input string) error {
 		// The input string is expected to be trimmed of whitespace
@@ -237,15 +247,25 @@ func Connect(
 		}
 	}
 
-	return RunShellWithOpts(processInput, ShellOpts{ExecuteOnSemicolon: opts.ExecuteOnSemicolon})
+	return RunShellWithOpts(processInput, ShellOpts{
+		ExecuteOnSemicolon: opts.ExecuteOnSemicolon,
+	})
 }
 
 // resolveNonInteractiveSQL returns the SQL to run non-interactively, derived
-// from --file or --command. The boolean reports whether a non-interactive
-// source was supplied; when false, the caller falls back to the interactive
-// shell. A --file that cannot be read yields an error before any database
-// connection is attempted.
+// from --file, --command, or piped stdin in JSON mode. The boolean reports
+// whether a non-interactive source was supplied; when false, the caller falls
+// back to the shell path. A --file that cannot be read yields an error before
+// any database connection is attempted.
 func resolveNonInteractiveSQL(opts *Opts) (string, bool, error) {
+	return resolveNonInteractiveSQLFrom(opts, os.Stdin, util.IsInteractiveStdin())
+}
+
+func resolveNonInteractiveSQLFrom(
+	opts *Opts,
+	stdin io.Reader,
+	interactiveStdin bool,
+) (string, bool, error) {
 	switch {
 	case opts.File != "":
 		contents, err := os.ReadFile(opts.File)
@@ -256,6 +276,13 @@ func resolveNonInteractiveSQL(opts *Opts) (string, bool, error) {
 		return string(contents), true, nil
 	case opts.Command != "":
 		return opts.Command, true, nil
+	case !interactiveStdin && opts.OutputFormat == OutputFormatJSON:
+		contents, err := io.ReadAll(stdin)
+		if err != nil {
+			return "", false, fmt.Errorf("reading piped SQL from stdin: %w", err)
+		}
+
+		return string(contents), true, nil
 	default:
 		return "", false, nil
 	}
@@ -304,16 +331,10 @@ func printResultJSON(
 	queryResult generaltypes.QueryResulter,
 	jsonFormat JSONFormat,
 ) error {
-	encoder := json.NewEncoder(output)
-	encoder.SetEscapeHTML(false)
-	if normalizeJSONFormat(jsonFormat) == JSONFormatPretty {
-		encoder.SetIndent("", "  ")
-	}
-
-	return encoder.Encode(jsonQueryResult{
+	return encodeJSONDocument(output, jsonQueryResult{
 		Columns: queryResult.ColumnNames(),
 		Rows:    queryResult.Values(),
-	})
+	}, jsonFormat)
 }
 
 func printResultCSV(output io.Writer, queryResult generaltypes.QueryResulter) error {

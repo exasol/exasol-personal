@@ -141,6 +141,21 @@ func TestConnectCmdExamplesMentionCommandAndFile(t *testing.T) {
 	}
 }
 
+func TestConnectLongDescriptionMentionsInvocationJSONContract(t *testing.T) {
+	t.Parallel()
+
+	for _, expected := range []string{
+		"one JSON document for",
+		"Statement records include statementType and rowsAffected",
+		"rowsAffected as 0 when the driver does not expose",
+		"Interactive --json sessions continue to print one JSON",
+	} {
+		if !strings.Contains(connectCmdLongDesc, expected) {
+			t.Fatalf("expected long description to contain %q", expected)
+		}
+	}
+}
+
 func TestConnectRegistersCommandAndFileFlags(t *testing.T) {
 	t.Parallel()
 
@@ -162,11 +177,8 @@ func TestConnectRegistersCSVFlag(t *testing.T) {
 	t.Parallel()
 
 	flag := connectCmd.Flags().Lookup("csv")
-	if flag == nil {
-		t.Fatal("expected --csv flag to be registered")
-	}
-	if flag.DefValue != "false" {
-		t.Fatalf("expected --csv default false, got %q", flag.DefValue)
+	if flag == nil || flag.DefValue != "false" {
+		t.Fatal("expected --csv flag to be registered with default false")
 	}
 }
 

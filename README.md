@@ -236,6 +236,7 @@ exasol connect -f script.sql             # run statements from a file
 ```bash
 exasol connect --csv -c "SELECT * FROM PRODUCTS" > products.csv
 ```
+With `--json`, non-interactive execution writes exactly one JSON document to stdout for the full invocation, including multi-statement runs and SQL errors. Interactive `exasol connect --json` continues to emit one JSON document per executed statement.
 
 In an interactive session, query output is capped at 100 rows by default so a large `SELECT` doesn't flood the terminal; a note is printed when output is truncated. Piped or `--command`/`--file` (non-interactive) execution returns the full result set. Use `--max-rows N` to set the cap explicitly, or `--max-rows 0` for unlimited:
 ```bash

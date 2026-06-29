@@ -29,6 +29,11 @@ type fakeRows struct {
 	closeCount int
 }
 
+type fakeResult struct {
+	rowsAffected int64
+	rowsErr      error
+}
+
 func (f *fakeRows) Columns() []string { return f.columns }
 
 func (f *fakeRows) Close() error {
@@ -46,6 +51,18 @@ func (f *fakeRows) Next(dest []driver.Value) error {
 	f.pos++
 
 	return nil
+}
+
+func (fakeResult) LastInsertId() (int64, error) {
+	return 0, errors.New("not implemented")
+}
+
+func (f fakeResult) RowsAffected() (int64, error) {
+	if f.rowsErr != nil {
+		return 0, f.rowsErr
+	}
+
+	return f.rowsAffected, nil
 }
 
 func testDatabaseFactory(t *testing.T, connect types.ConnectFunc) generaltypes.Databaser {
@@ -78,10 +95,18 @@ func TestConnect(t *testing.T) {
 		{
 			name: "database successfully connects",
 			given: func(mocks *mocks) {
-				mocks.fakeConnector.QueryContextReturns(&fakeRows{
-					columns: []string{"v"},
-					data:    [][]driver.Value{{"2025.1.0"}},
-				}, nil)
+				mocks.fakeConnector.QueryContextStub = func(
+					_ context.Context, query string, _ []driver.NamedValue,
+				) (driver.Rows, error) {
+					if strings.Contains(query, "exa_metadata") {
+						return &fakeRows{
+							columns: []string{"v"},
+							data:    [][]driver.Value{{"2025.1.0"}},
+						}, nil
+					}
+
+					return nil, errTest
+				}
 			},
 			then: func(t *testing.T, mocks *mocks, err error) {
 				t.Helper()
@@ -92,7 +117,11 @@ func TestConnect(t *testing.T) {
 		{
 			name: "version query fails",
 			given: func(mocks *mocks) {
-				mocks.fakeConnector.QueryContextReturns(nil, errTest)
+				mocks.fakeConnector.QueryContextStub = func(
+					_ context.Context, _ string, _ []driver.NamedValue,
+				) (driver.Rows, error) {
+					return nil, errTest
+				}
 			},
 			then: func(t *testing.T, mocks *mocks, err error) {
 				t.Helper()
@@ -104,7 +133,11 @@ func TestConnect(t *testing.T) {
 		{
 			name: "version query returns empty result",
 			given: func(mocks *mocks) {
-				mocks.fakeConnector.QueryContextReturns(&fakeRows{columns: []string{}}, nil)
+				mocks.fakeConnector.QueryContextStub = func(
+					_ context.Context, _ string, _ []driver.NamedValue,
+				) (driver.Rows, error) {
+					return &fakeRows{columns: []string{}}, nil
+				}
 			},
 			then: func(t *testing.T, mocks *mocks, err error) {
 				t.Helper()
@@ -157,13 +190,14 @@ func TestExec(t *testing.T) {
 	}
 
 	for _, test := range []struct {
-		name      string
-		query     string
-		maxRows   int
-		queryRows driver.Rows
-		queryErr  error
-		execErr   error
-		then      func(*testing.T, *mocks, generaltypes.QueryResulter, error)
+		name       string
+		query      string
+		maxRows    int
+		queryRows  driver.Rows
+		queryErr   error
+		execResult driver.Result
+		execErr    error
+		then       func(*testing.T, *mocks, generaltypes.QueryResulter, error)
 	}{
 		{
 			name:  "select query",
@@ -178,6 +212,8 @@ func TestExec(t *testing.T) {
 				require.Equal(t, []string{"col1", "col2"}, result.ColumnNames())
 				require.Equal(t, [][]string{{"val1", "val2"}}, result.Rows())
 				require.Equal(t, [][]any{{"val1", "val2"}}, result.Values())
+				require.Equal(t, generaltypes.StatementTypeSelect, result.StatementType())
+				require.Equal(t, int64(0), result.RowsAffected())
 				require.False(t, result.Truncated())
 			},
 		},
@@ -191,21 +227,40 @@ func TestExec(t *testing.T) {
 			},
 		},
 		{
-			name:      "non-resultset statement",
-			query:     "OPEN SCHEMA dummy",
-			queryRows: &fakeRows{columns: []string{}},
-			then: func(t *testing.T, _ *mocks, result generaltypes.QueryResulter, err error) {
+			name:       "non-resultset statement",
+			query:      "OPEN SCHEMA dummy",
+			execResult: fakeResult{rowsAffected: 0},
+			then: func(t *testing.T, mocks *mocks, result generaltypes.QueryResulter, err error) {
 				t.Helper()
 				require.NoError(t, err)
+				require.Equal(t, 1, mocks.fakeConnector.ExecCallCount())
 				require.Empty(t, result.ColumnNames())
 				require.Empty(t, result.Rows())
 				require.Empty(t, result.Values())
+				require.Equal(t, generaltypes.StatementTypeOpenSchema, result.StatementType())
+				require.Equal(t, int64(0), result.RowsAffected())
 				require.False(t, result.Truncated())
 			},
 		},
 		{
-			name:  "file import query",
-			query: "IMPORT INTO dummy FROM LOCAL CSV FILE './dummy.csv'",
+			name:       "dml statement reports rows affected",
+			query:      "UPDATE dummy SET x = 1",
+			execResult: fakeResult{rowsAffected: 3},
+			then: func(t *testing.T, mocks *mocks, result generaltypes.QueryResulter, err error) {
+				t.Helper()
+				require.NoError(t, err)
+				require.Equal(t, 1, mocks.fakeConnector.ExecCallCount())
+				require.Empty(t, result.ColumnNames())
+				require.Empty(t, result.Rows())
+				require.Empty(t, result.Values())
+				require.Equal(t, generaltypes.StatementTypeUpdate, result.StatementType())
+				require.Equal(t, int64(3), result.RowsAffected())
+			},
+		},
+		{
+			name:       "file import query",
+			query:      "IMPORT INTO dummy FROM LOCAL CSV FILE './dummy.csv'",
+			execResult: fakeResult{rowsAffected: 4},
 			then: func(t *testing.T, mocks *mocks, result generaltypes.QueryResulter, err error) {
 				t.Helper()
 				require.NoError(t, err)
@@ -213,6 +268,8 @@ func TestExec(t *testing.T) {
 				require.Equal(t, []string{}, result.ColumnNames())
 				require.Equal(t, [][]string{}, result.Rows())
 				require.Equal(t, [][]any{}, result.Values())
+				require.Equal(t, generaltypes.StatementTypeImport, result.StatementType())
+				require.Equal(t, int64(4), result.RowsAffected())
 			},
 		},
 		{
@@ -226,6 +283,7 @@ func TestExec(t *testing.T) {
 				require.Equal(t, []string{}, result.ColumnNames())
 				require.Equal(t, [][]string{}, result.Rows())
 				require.Equal(t, [][]any{}, result.Values())
+				require.Equal(t, generaltypes.StatementTypeImport, result.StatementType())
 			},
 		},
 	} {
@@ -234,9 +292,8 @@ func TestExec(t *testing.T) {
 
 			mocks := &mocks{&typesfakes.FakeExasolConnector{}}
 
-			// version() (called by Connect) also goes through QueryContext, so
-			// answer the version query separately and reserve the per-case rows
-			// for the query under test.
+			// version() (called by Connect) goes through QueryContext, so answer
+			// it separately and reserve the per-case rows for the query under test.
 			mocks.fakeConnector.QueryContextStub = func(
 				_ context.Context, query string, _ []driver.NamedValue,
 			) (driver.Rows, error) {
@@ -249,7 +306,7 @@ func TestExec(t *testing.T) {
 
 				return test.queryRows, test.queryErr
 			}
-			mocks.fakeConnector.ExecReturns(nil, test.execErr)
+			mocks.fakeConnector.ExecReturns(test.execResult, test.execErr)
 
 			connect := func(string) (types.ExasolConnector, error) {
 				return mocks.fakeConnector, nil
@@ -299,6 +356,112 @@ func TestExecClosesResultRows(t *testing.T) {
 	require.Equal(t, 1, queryRows.closeCount)
 }
 
+func TestExecWrapsSQLErrorWithLiveSessionID(t *testing.T) {
+	t.Parallel()
+
+	fakeConnector := &typesfakes.FakeExasolConnector{}
+	fakeConnector.QueryContextStub = func(
+		_ context.Context, query string, _ []driver.NamedValue,
+	) (driver.Rows, error) {
+		switch {
+		case strings.Contains(query, "exa_metadata"):
+			return &fakeRows{columns: []string{"v"}, data: [][]driver.Value{{"2025.1.0"}}}, nil
+		case strings.Contains(query, "CURRENT_SESSION"):
+			return &fakeRows{
+				columns: []string{"session_id"},
+				data:    [][]driver.Value{{int64(12345)}},
+			}, nil
+		default:
+			return nil, errors.New(
+				"E-EGOD-11: execution failed with SQL error code '42000' and message " +
+					"'syntax error near SELECT'",
+			)
+		}
+	}
+
+	database := testDatabaseFactory(t, func(string) (types.ExasolConnector, error) {
+		return fakeConnector, nil
+	})
+	require.NoError(t, database.Connect(t.Context()))
+
+	_, err := database.Exec(t.Context(), "SELECT * FROM Dual", 0)
+	require.Error(t, err)
+
+	structured := generaltypes.StructuredSQLErrorFromError(err)
+	require.Equal(t, "42000", structured.ErrorCode)
+	require.Equal(t, "42000", structured.SQLState)
+	require.Equal(t, "syntax error near SELECT", structured.Message)
+	require.NotNil(t, structured.SessionID)
+	require.Equal(t, "12345", *structured.SessionID)
+	require.Equal(t, 3, fakeConnector.QueryContextCallCount())
+}
+
+func TestExecPrefersLiveSessionIDOverMessageSessionID(t *testing.T) {
+	t.Parallel()
+
+	fakeConnector := &typesfakes.FakeExasolConnector{}
+	fakeConnector.QueryContextStub = func(
+		_ context.Context, query string, _ []driver.NamedValue,
+	) (driver.Rows, error) {
+		switch {
+		case strings.Contains(query, "exa_metadata"):
+			return &fakeRows{columns: []string{"v"}, data: [][]driver.Value{{"2025.1.0"}}}, nil
+		case strings.Contains(query, "CURRENT_SESSION"):
+			return &fakeRows{
+				columns: []string{"session_id"},
+				data:    [][]driver.Value{{int64(12345)}},
+			}, nil
+		default:
+			return nil, errors.New(
+				"E-EGOD-11: execution failed with SQL error code '42000' and message " +
+					"'syntax error near SELECT in session 99999'",
+			)
+		}
+	}
+
+	database := testDatabaseFactory(t, func(string) (types.ExasolConnector, error) {
+		return fakeConnector, nil
+	})
+	require.NoError(t, database.Connect(t.Context()))
+
+	_, err := database.Exec(t.Context(), "SELECT * FROM Dual", 0)
+	require.Error(t, err)
+
+	structured := generaltypes.StructuredSQLErrorFromError(err)
+	require.NotNil(t, structured.SessionID)
+	require.Equal(t, "12345", *structured.SessionID)
+	require.Equal(t, 3, fakeConnector.QueryContextCallCount())
+}
+
+func TestExecDoesNotFetchSessionIDOnSuccessfulQueries(t *testing.T) {
+	t.Parallel()
+
+	queryRows := &fakeRows{
+		columns: []string{"n"},
+		data:    [][]driver.Value{{int64(1)}},
+	}
+
+	fakeConnector := &typesfakes.FakeExasolConnector{}
+	fakeConnector.QueryContextStub = func(
+		_ context.Context, query string, _ []driver.NamedValue,
+	) (driver.Rows, error) {
+		if strings.Contains(query, "exa_metadata") {
+			return &fakeRows{columns: []string{"v"}, data: [][]driver.Value{{"2025.1.0"}}}, nil
+		}
+
+		return queryRows, nil
+	}
+
+	database := testDatabaseFactory(t, func(string) (types.ExasolConnector, error) {
+		return fakeConnector, nil
+	})
+	require.NoError(t, database.Connect(t.Context()))
+
+	_, err := database.Exec(t.Context(), "SELECT * FROM Dual", 0)
+	require.NoError(t, err)
+	require.Equal(t, 2, fakeConnector.QueryContextCallCount())
+}
+
 func TestCollectRows(t *testing.T) {
 	t.Parallel()
 
@@ -315,7 +478,7 @@ func TestCollectRows(t *testing.T) {
 		t.Parallel()
 
 		rows := makeRows(5)
-		result, err := collectRows(rows, 0)
+		result, err := collectRows(rows, 0, generaltypes.StatementTypeSelect)
 
 		require.NoError(t, err)
 		require.Len(t, result.Rows(), 5)
@@ -327,7 +490,7 @@ func TestCollectRows(t *testing.T) {
 		t.Parallel()
 
 		rows := makeRows(5)
-		result, err := collectRows(rows, 2)
+		result, err := collectRows(rows, 2, generaltypes.StatementTypeSelect)
 
 		require.NoError(t, err)
 		require.Len(t, result.Rows(), 2)
@@ -339,7 +502,7 @@ func TestCollectRows(t *testing.T) {
 		t.Parallel()
 
 		rows := makeRows(2)
-		result, err := collectRows(rows, 2)
+		result, err := collectRows(rows, 2, generaltypes.StatementTypeSelect)
 
 		require.NoError(t, err)
 		require.Len(t, result.Rows(), 2)
@@ -350,7 +513,7 @@ func TestCollectRows(t *testing.T) {
 		t.Parallel()
 
 		rows := &fakeRows{columns: []string{"n"}, data: [][]driver.Value{{int64(1000000)}}}
-		result, err := collectRows(rows, 0)
+		result, err := collectRows(rows, 0, generaltypes.StatementTypeSelect)
 
 		require.NoError(t, err)
 		require.Equal(t, [][]string{{"1000000"}}, result.Rows())
@@ -374,7 +537,7 @@ func TestCollectRows(t *testing.T) {
 			}},
 		}
 
-		result, err := collectRows(rows, 0)
+		result, err := collectRows(rows, 0, generaltypes.StatementTypeSelect)
 
 		require.NoError(t, err)
 		require.Equal(t, [][]string{{
@@ -400,7 +563,7 @@ func TestCollectRows(t *testing.T) {
 	t.Run("propagates a non-EOF Next error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := collectRows(&errRows{err: errTest}, 0)
+		_, err := collectRows(&errRows{err: errTest}, 0, generaltypes.StatementTypeSelect)
 		require.ErrorIs(t, err, errTest)
 	})
 }

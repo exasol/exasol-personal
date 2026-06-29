@@ -16,6 +16,11 @@ const connectCmdShortDesc = "Open an SQL connection to a running database"
 const connectCmdLongDesc = connectCmdShortDesc + `
 
 Establish an SQL connection to the database instance in an active deployment.
+When run non-interactively with --json, stdout contains one JSON document for
+the full invocation. Statement records include statementType and rowsAffected;
+result-set statements report rowsAffected as 0 when the driver does not expose
+affected-row metadata. Interactive --json sessions continue to print one JSON
+document per executed statement instead of an invocation envelope.
 `
 
 const connectCmdExample = `  exasol connect
@@ -23,7 +28,7 @@ const connectCmdExample = `  exasol connect
   exasol connect --csv -c "SELECT * FROM products" > products.csv
   exasol connect -c "SELECT 1; SELECT 2"
   exasol connect -f script.sql
-	printf 'SELECT 1;\n' | exasol connect --json=compact`
+  printf 'SELECT 1;\n' | exasol connect --json=compact`
 
 var connectOpts = connect.Opts{
 	ExecuteOnSemicolon: true,

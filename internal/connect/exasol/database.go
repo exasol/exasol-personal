@@ -11,7 +11,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"regexp"
 	"time"
 
 	"github.com/exasol/exasol-driver-go"
@@ -20,7 +19,10 @@ import (
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
-var ErrNoVersion = errors.New("the database didn't return version when queried")
+var (
+	ErrNoVersion   = errors.New("the database didn't return version when queried")
+	ErrNoSessionID = errors.New("the database didn't return session id when queried")
+)
 
 const closePanicMsg = "tried to call Close before Connect on an instance of Exasol database"
 
@@ -28,7 +30,9 @@ type Database struct {
 	connectionString string
 	connect          types.ConnectFunc
 
-	conn types.ExasolConnector
+	conn              types.ExasolConnector
+	sessionID         *string
+	sessionIDResolved bool
 }
 
 type opts struct {
@@ -74,19 +78,6 @@ func New(
 		connectionString: dsnConfigBuilder.String(),
 		connect:          opts.connect,
 	}, nil
-}
-
-const WHITESPACE = `\s+`
-
-var localImportRegex = regexp.MustCompile(
-	`(?ims)^\s*IMPORT[\s(]+.+FROM` + WHITESPACE + `LOCAL` + WHITESPACE + `CSV.*$`,
-)
-
-// IsImportQuery returns true if the passed query is a file import query.
-//
-// Copied from https://github.com/exasol/exasol-driver-go/blob/main/internal/utils/helper.go
-func isImportQuery(query string) bool {
-	return localImportRegex.MatchString(query)
 }
 
 func defaultConnectFunc(input string) (types.ExasolConnector, error) {
@@ -142,31 +133,50 @@ func (db *Database) Exec(
 	maxRows int,
 ) (generaltypes.QueryResulter, error) {
 	slog.Debug("executing query", "query", query, "max_rows", maxRows)
+	statementType := generaltypes.ClassifyStatement(query)
 
-	// File import queries are executed through the driver's Exec because the
-	// driver streams the local file; they never produce a result set.
-	if isImportQuery(query) {
-		_, err := db.conn.Exec(query, nil)
-		return emptyQueryResult(), err
+	// Non-result statements use the driver's Exec path. IMPORT statements also
+	// belong here; LOCAL IMPORT streams a client-side file and never returns a
+	// result set.
+	if statementType.UsesExecPath() {
+		result, err := db.conn.Exec(query, nil)
+		return statementOnlyQueryResult(
+			statementType,
+			rowsAffected(result),
+		), db.wrapExecutionError(ctx, err)
 	}
 
 	// QueryContext returns driver.Rows, which transparently fetches result-set
 	// chunks (large results) and closes the server-side handle on Close.
 	rows, err := db.conn.QueryContext(ctx, query, nil)
 	if err != nil {
-		return nil, err
+		return nil, db.wrapExecutionError(ctx, err)
 	}
 	defer rows.Close()
 
-	return collectRows(rows, maxRows)
+	result, err := collectRows(rows, maxRows, statementType)
+	if err != nil {
+		return nil, db.wrapExecutionError(ctx, err)
+	}
+
+	return result, nil
 }
 
 // collectRows materializes up to maxRows rows from rows (maxRows == 0 means
 // unlimited). When maxRows is reached and at least one further row exists, the
 // result is flagged truncated and no additional rows are fetched.
-func collectRows(rows driver.Rows, maxRows int) (*QueryResult, error) {
+func collectRows(
+	rows driver.Rows,
+	maxRows int,
+	statementType generaltypes.StatementType,
+) (*QueryResult, error) {
 	columns := rows.Columns()
-	result := &QueryResult{columnNames: columns, rows: [][]string{}, values: [][]any{}}
+	result := &QueryResult{
+		columnNames:   columns,
+		rows:          [][]string{},
+		values:        [][]any{},
+		statementType: statementType,
+	}
 
 	dest := make([]driver.Value, len(columns))
 
@@ -197,8 +207,65 @@ func collectRows(rows driver.Rows, maxRows int) (*QueryResult, error) {
 	}
 }
 
-func emptyQueryResult() *QueryResult {
-	return &QueryResult{columnNames: []string{}, rows: [][]string{}, values: [][]any{}}
+func statementOnlyQueryResult(
+	statementType generaltypes.StatementType,
+	rowsAffected int64,
+) *QueryResult {
+	return &QueryResult{
+		columnNames:   []string{},
+		rows:          [][]string{},
+		values:        [][]any{},
+		statementType: statementType,
+		rowsAffected:  rowsAffected,
+	}
+}
+
+func rowsAffected(result driver.Result) int64 {
+	if result == nil {
+		return 0
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0
+	}
+
+	return rowsAffected
+}
+
+func (db *Database) wrapExecutionError(ctx context.Context, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	structured := generaltypes.StructuredSQLErrorFromError(err)
+	if sessionID := db.ensureSessionID(ctx); sessionID != nil {
+		// Prefer the live session identifier from the connection when available.
+		// Message-derived values are only a fallback for errors that already carry one.
+		structured.SessionID = sessionID
+	}
+
+	return executionError{cause: err, structured: structured}
+}
+
+func (db *Database) ensureSessionID(ctx context.Context) *string {
+	if db.sessionID != nil || db.sessionIDResolved {
+		return db.sessionID
+	}
+
+	// Only attempt the lazy lookup once per connection. On failure we keep the
+	// execution error intact instead of issuing extra metadata queries.
+	db.sessionIDResolved = true
+
+	sessionID, err := db.currentSessionID(ctx)
+	if err != nil {
+		slog.Debug("Couldn't get the database session id", "err", err.Error())
+		return nil
+	}
+
+	db.sessionID = sessionID
+
+	return db.sessionID
 }
 
 func jsonValue(value driver.Value) any {
@@ -218,21 +285,59 @@ func jsonValue(value driver.Value) any {
 func (db *Database) version(ctx context.Context) (string, error) {
 	slog.Debug("getting the database version")
 
-	queryResult, err := db.Exec(ctx,
+	version, found, err := db.queryScalar(ctx,
 		"SELECT param_value FROM exa_metadata WHERE param_name = 'databaseProductVersion'",
-		0,
 	)
 	if err != nil {
 		return "", err
 	}
-
-	rows := queryResult.Rows()
-
-	if len(rows) == 0 || len(rows[0]) == 0 {
+	if !found {
 		return "", ErrNoVersion
 	}
 
-	return rows[0][0], nil
+	return version, nil
+}
+
+func (db *Database) currentSessionID(ctx context.Context) (*string, error) {
+	slog.Debug("getting the database session id")
+
+	sessionID, found, err := db.queryScalar(ctx, "SELECT CURRENT_SESSION")
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, ErrNoSessionID
+	}
+
+	return &sessionID, nil
+}
+
+// queryScalar runs query and returns the first cell of the first row as a
+// string. The boolean reports whether a row and non-nil value were present.
+func (db *Database) queryScalar(ctx context.Context, query string) (string, bool, error) {
+	rows, err := db.conn.QueryContext(ctx, query, nil)
+	if err != nil {
+		return "", false, err
+	}
+	if rows == nil {
+		return "", false, nil
+	}
+	defer rows.Close()
+
+	dest := make([]driver.Value, len(rows.Columns()))
+	if err := rows.Next(dest); err != nil {
+		if errors.Is(err, io.EOF) {
+			return "", false, nil
+		}
+
+		return "", false, err
+	}
+
+	if len(dest) == 0 || dest[0] == nil {
+		return "", false, nil
+	}
+
+	return fmt.Sprint(dest[0]), true, nil
 }
 
 func printVersion(output io.Writer, version string) error {
