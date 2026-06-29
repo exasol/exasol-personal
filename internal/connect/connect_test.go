@@ -5,11 +5,14 @@ package connect
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	generaltypes "github.com/exasol/exasol-personal/internal/connect/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,10 +52,12 @@ var (
 )
 
 type stubQueryResult struct {
-	columnNames []string
-	rows        [][]string
-	values      [][]any
-	truncated   bool
+	columnNames   []string
+	rows          [][]string
+	values        [][]any
+	statementType generaltypes.StatementType
+	rowsAffected  int64
+	truncated     bool
 }
 
 func (s stubQueryResult) ColumnNames() []string {
@@ -77,6 +82,18 @@ func (s stubQueryResult) Values() [][]any {
 	}
 
 	return values
+}
+
+func (s stubQueryResult) StatementType() generaltypes.StatementType {
+	if s.statementType == "" {
+		return generaltypes.StatementTypeUnknown
+	}
+
+	return s.statementType
+}
+
+func (s stubQueryResult) RowsAffected() int64 {
+	return s.rowsAffected
 }
 
 func (s stubQueryResult) Truncated() bool {
@@ -260,7 +277,11 @@ func TestResolveNonInteractiveSQL(t *testing.T) {
 	t.Run("command supplies SQL", func(t *testing.T) {
 		t.Parallel()
 
-		sql, nonInteractive, err := resolveNonInteractiveSQL(&Opts{Command: "SELECT 1"})
+		sql, nonInteractive, err := resolveNonInteractiveSQLFrom(
+			&Opts{Command: "SELECT 1"},
+			bytes.NewBuffer(nil),
+			true,
+		)
 
 		require.NoError(t, err)
 		require.True(t, nonInteractive)
@@ -273,7 +294,11 @@ func TestResolveNonInteractiveSQL(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "script.sql")
 		require.NoError(t, os.WriteFile(path, []byte("SELECT 1; SELECT 2;"), 0o600))
 
-		sql, nonInteractive, err := resolveNonInteractiveSQL(&Opts{File: path})
+		sql, nonInteractive, err := resolveNonInteractiveSQLFrom(
+			&Opts{File: path},
+			bytes.NewBuffer(nil),
+			true,
+		)
 
 		require.NoError(t, err)
 		require.True(t, nonInteractive)
@@ -285,7 +310,11 @@ func TestResolveNonInteractiveSQL(t *testing.T) {
 
 		path := filepath.Join(t.TempDir(), "does-not-exist.sql")
 
-		sql, nonInteractive, err := resolveNonInteractiveSQL(&Opts{File: path})
+		sql, nonInteractive, err := resolveNonInteractiveSQLFrom(
+			&Opts{File: path},
+			bytes.NewBuffer(nil),
+			true,
+		)
 
 		require.Error(t, err)
 		require.ErrorContains(t, err, "reading SQL file")
@@ -296,7 +325,39 @@ func TestResolveNonInteractiveSQL(t *testing.T) {
 	t.Run("no flag falls back to interactive", func(t *testing.T) {
 		t.Parallel()
 
-		sql, nonInteractive, err := resolveNonInteractiveSQL(&Opts{})
+		sql, nonInteractive, err := resolveNonInteractiveSQLFrom(
+			&Opts{},
+			bytes.NewBuffer(nil),
+			true,
+		)
+
+		require.NoError(t, err)
+		require.False(t, nonInteractive)
+		require.Empty(t, sql)
+	})
+
+	t.Run("piped stdin supplies SQL non-interactively for json output", func(t *testing.T) {
+		t.Parallel()
+
+		sql, nonInteractive, err := resolveNonInteractiveSQLFrom(
+			&Opts{OutputFormat: OutputFormatJSON},
+			bytes.NewBufferString("SELECT 1; SELECT 2;"),
+			false,
+		)
+
+		require.NoError(t, err)
+		require.True(t, nonInteractive)
+		require.Equal(t, "SELECT 1; SELECT 2;", sql)
+	})
+
+	t.Run("piped stdin keeps shell path for non json output", func(t *testing.T) {
+		t.Parallel()
+
+		sql, nonInteractive, err := resolveNonInteractiveSQLFrom(
+			&Opts{OutputFormat: OutputFormatTable},
+			bytes.NewBufferString("SELECT 1; SELECT 2;"),
+			false,
+		)
 
 		require.NoError(t, err)
 		require.False(t, nonInteractive)
@@ -304,37 +365,193 @@ func TestResolveNonInteractiveSQL(t *testing.T) {
 	})
 }
 
-func TestRunStatementsRendersEachResult(t *testing.T) {
-	t.Parallel()
-
-	// The non-interactive runner uses the same printer the interactive shell
-	// does, so each statement's result is rendered identically.
-	var buf bytes.Buffer
-
-	result := stubQueryResult{columnNames: []string{"N"}, rows: [][]string{{"1"}}}
-	printer := newJSONResultPrinter(JSONFormatCompact)
-
-	process := func(input string) error {
-		if input == "" {
-			return nil
-		}
-
-		return printer(&buf, result)
-	}
-
-	err := runStatements("SELECT 1; SELECT 1;", process)
-
-	require.NoError(t, err)
-	require.Equal(t, compactJSONResult2x(result), buf.String())
+type stubDatabase struct {
+	results []stubExecResult
+	queries []string
+	maxRows []int
 }
 
-func compactJSONResult2x(result stubQueryResult) string {
-	var buf bytes.Buffer
-	printer := newJSONResultPrinter(JSONFormatCompact)
-	_ = printer(&buf, result)
-	single := buf.String()
+type stubExecResult struct {
+	result stubQueryResult
+	err    error
+}
 
-	return single + single
+func (*stubDatabase) Connect(context.Context) error { return nil }
+func (*stubDatabase) Close() error                  { return nil }
+
+func (db *stubDatabase) Exec(
+	_ context.Context,
+	query string,
+	maxRows int,
+) (generaltypes.QueryResulter, error) {
+	db.queries = append(db.queries, query)
+	db.maxRows = append(db.maxRows, maxRows)
+
+	if len(db.results) == 0 {
+		return nil, errors.New("unexpected Exec call")
+	}
+
+	next := db.results[0]
+	db.results = db.results[1:]
+
+	if next.err != nil {
+		return nil, next.err
+	}
+
+	return next.result, nil
+}
+
+func TestRunJSONStatements(t *testing.T) {
+	t.Parallel()
+
+	t.Run("single statement renders one invocation envelope", func(t *testing.T) {
+		t.Parallel()
+
+		var buf bytes.Buffer
+		database := &stubDatabase{
+			results: []stubExecResult{{
+				result: stubQueryResult{
+					columnNames:   []string{"N"},
+					values:        [][]any{{int64(1)}},
+					statementType: generaltypes.StatementTypeSelect,
+				},
+			}},
+		}
+
+		err := runJSONStatements(t.Context(), "SELECT 1", database, &buf, JSONFormatCompact, 0)
+
+		require.NoError(t, err)
+		require.JSONEq(t, `{
+			"statements": [
+				{
+					"statement": "SELECT 1",
+					"statementType": "SELECT",
+					"rowsAffected": 0,
+					"columns": ["N"],
+					"rows": [[1]],
+					"truncated": false
+				}
+			]
+		}`, buf.String())
+	})
+
+	t.Run("multi statement output includes ddl metadata", func(t *testing.T) {
+		t.Parallel()
+
+		var buf bytes.Buffer
+		database := &stubDatabase{
+			results: []stubExecResult{
+				{
+					result: stubQueryResult{
+						columnNames:   []string{},
+						values:        [][]any{},
+						statementType: generaltypes.StatementTypeOpenSchema,
+						rowsAffected:  0,
+					},
+				},
+				{
+					result: stubQueryResult{
+						columnNames:   []string{"N"},
+						values:        [][]any{},
+						statementType: generaltypes.StatementTypeSelect,
+						rowsAffected:  0,
+					},
+				},
+			},
+		}
+
+		err := runJSONStatements(
+			t.Context(),
+			"OPEN SCHEMA foo; SELECT 1 WHERE FALSE",
+			database,
+			&buf,
+			JSONFormatCompact,
+			0,
+		)
+
+		require.NoError(t, err)
+		require.JSONEq(t, `{
+			"statements": [
+				{
+					"statement": "OPEN SCHEMA foo",
+					"statementType": "OPEN_SCHEMA",
+					"rowsAffected": 0,
+					"columns": [],
+					"rows": [],
+					"truncated": false
+				},
+				{
+					"statement": "SELECT 1 WHERE FALSE",
+					"statementType": "SELECT",
+					"rowsAffected": 0,
+					"columns": ["N"],
+					"rows": [],
+					"truncated": false
+				}
+			]
+		}`, buf.String())
+	})
+
+	t.Run("failing statement is rendered as structured json error", func(t *testing.T) {
+		t.Parallel()
+
+		var buf bytes.Buffer
+		database := &stubDatabase{
+			results: []stubExecResult{
+				{
+					result: stubQueryResult{
+						columnNames:   []string{"N"},
+						values:        [][]any{{int64(1)}},
+						statementType: generaltypes.StatementTypeSelect,
+					},
+				},
+				{
+					err: errors.New(
+						"E-EGOD-11: execution failed with SQL error code '42636' and message " +
+							"'ETL-6009: syntax error near SELECT at line 3, " +
+							"column 7 session 12345'",
+					),
+				},
+			},
+		}
+
+		err := runJSONStatements(
+			t.Context(),
+			"SELECT 1; INVALID SQL",
+			database,
+			&buf,
+			JSONFormatCompact,
+			0,
+		)
+
+		require.Error(t, err)
+		var silentErr interface{ SuppressCLIError() bool }
+		require.ErrorAs(t, err, &silentErr)
+		require.True(t, silentErr.SuppressCLIError())
+		var decoded jsonExecutionResult
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &decoded))
+		require.Len(t, decoded.Statements, 2)
+		require.Equal(t, "SELECT 1", decoded.Statements[0].Statement)
+		require.Equal(t, generaltypes.StatementTypeSelect, decoded.Statements[0].StatementType)
+		require.Equal(t, [][]any{{float64(1)}}, decoded.Statements[0].Rows)
+
+		require.Equal(t, "INVALID SQL", decoded.Statements[1].Statement)
+		require.Equal(t, generaltypes.StatementTypeUnknown, decoded.Statements[1].StatementType)
+		require.NotNil(t, decoded.Statements[1].Error)
+		require.Equal(t, "ETL-6009", decoded.Statements[1].Error.ErrorCode)
+		require.Equal(t, "42636", decoded.Statements[1].Error.SQLState)
+		require.Equal(
+			t,
+			"ETL-6009: syntax error near SELECT at line 3, column 7 session 12345",
+			decoded.Statements[1].Error.Message,
+		)
+		require.NotNil(t, decoded.Statements[1].Error.SessionID)
+		require.Equal(t, "12345", *decoded.Statements[1].Error.SessionID)
+		require.NotNil(t, decoded.Statements[1].Error.Position)
+		require.Equal(t, 3, *decoded.Statements[1].Error.Position.Line)
+		require.Equal(t, 7, *decoded.Statements[1].Error.Position.Column)
+		require.Equal(t, []string{"SELECT 1", "INVALID SQL"}, database.queries)
+	})
 }
 
 func TestEffectiveMaxRows(t *testing.T) {

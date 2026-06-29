@@ -3,12 +3,16 @@
 
 package exasol
 
+import generaltypes "github.com/exasol/exasol-personal/internal/connect/types"
+
 // QueryResult holds the materialized result of a query.
 type QueryResult struct {
-	columnNames []string
-	rows        [][]string
-	values      [][]any
-	truncated   bool
+	columnNames   []string
+	rows          [][]string
+	values        [][]any
+	statementType generaltypes.StatementType
+	rowsAffected  int64
+	truncated     bool
 }
 
 func (qr *QueryResult) ColumnNames() []string {
@@ -21,6 +25,14 @@ func (qr *QueryResult) Rows() [][]string {
 
 func (qr *QueryResult) Values() [][]any {
 	return qr.values
+}
+
+func (qr *QueryResult) StatementType() generaltypes.StatementType {
+	return qr.statementType
+}
+
+func (qr *QueryResult) RowsAffected() int64 {
+	return qr.rowsAffected
 }
 
 func (qr *QueryResult) Truncated() bool {
