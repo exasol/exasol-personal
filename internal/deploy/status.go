@@ -225,6 +225,10 @@ func GetStatus(
 
 	case *config.WorkflowStateRunning:
 		if checkConnection {
+			if s := localVMStoppedStatus(ctx, deployment); s != nil {
+				return s, nil
+			}
+
 			slog.Debug("Testing database connection")
 
 			err = verifyDatabaseConnection(ctx, deployment)
@@ -254,6 +258,32 @@ func GetStatus(
 	default:
 		panic("unknown workflow state")
 	}
+}
+
+// localVMStoppedStatus returns a StatusStopped output when the local VM daemon
+// is not running, so GetStatus can short-circuit before the slower DB probe.
+// Returns nil for non-local deployments or when the VM is running.
+func localVMStoppedStatus(ctx context.Context, deployment config.DeploymentDir) *StatusOutput {
+	if !isLocalDeployment(deployment) {
+		return nil
+	}
+
+	vmStatus, err := getLocalVMStatus(ctx, deployment)
+	if err != nil {
+		slog.Debug("local VM status check failed", "error", err)
+		return nil
+	}
+
+	if !vmStatus.Running {
+		slog.Debug("local VM is not running")
+
+		return &StatusOutput{
+			Status:  StatusStopped,
+			Message: "Deployment stopped. Run `start` to restart or `destroy` to delete resources.",
+		}
+	}
+
+	return nil
 }
 
 func staleOperationInProgressMessage(operation string) string {
