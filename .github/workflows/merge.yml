@@ -17,7 +17,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # this is need because we use "git describe" to get the latest version from git       
           fetch-depth: 0
