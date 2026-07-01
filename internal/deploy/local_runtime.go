@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -84,6 +85,69 @@ func startPreparedLocalRuntime(
 	}
 
 	return writeLocalRuntimeArtifactsAndWait(ctx, deployment, state)
+}
+
+// reconcileLocalVMState corrects a stale WorkflowStateRunning caused by an unclean
+// VM shutdown (e.g. SIGKILL). If the mac-runner socket reports the daemon is not
+// running, the state is updated to WorkflowStateStopped so that subsequent permit
+// checks in Start/Stop see a consistent state.
+//
+// Only reconciles Running→Stopped. Stopped→Running is not corrected, as a VM
+// running outside the launcher's knowledge is an externally-caused inconsistency
+// that should surface as an error rather than be silently accepted.
+//
+// Errors from the VM status check are logged and swallowed — reconciliation is
+// best-effort and must not block the caller's primary operation.
+// The caller must already hold the exclusive deployment lock.
+func reconcileLocalVMState(
+	ctx context.Context,
+	exasolState *config.ExasolPersonalState,
+	deployment config.DeploymentDir,
+) error {
+	if !isLocalDeployment(deployment) {
+		return nil
+	}
+
+	workflowState, err := exasolState.GetWorkflowState()
+	if err != nil {
+		slog.Debug("could not read workflow state during reconciliation", "error", err)
+		return nil
+	}
+
+	if _, ok := workflowState.(*config.WorkflowStateRunning); !ok {
+		return nil
+	}
+
+	vmStatus, err := getLocalVMStatus(ctx, deployment)
+	if err != nil {
+		slog.Warn("could not determine local VM status during reconciliation", "error", err)
+		return nil
+	}
+
+	if !vmStatus.Running {
+		slog.Info("local VM is not running; correcting workflow state to stopped")
+		return exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateStopped{}, deployment)
+	}
+
+	return nil
+}
+
+func isLocalDeployment(deployment config.DeploymentDir) bool {
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return false
+	}
+
+	kind, err := resolveBackendKind(manifest)
+
+	return err == nil && kind == backendTypeLocal
+}
+
+func getLocalVMStatus(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+) (*localruntime.VMStatus, error) {
+	return localruntime.Status(ctx, deployment)
 }
 
 func stopLocalRuntime(
