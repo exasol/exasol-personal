@@ -211,7 +211,33 @@ case "$1" in
     mkdir -p vm vm-shared
     ;;
   start)
-    if [ "$2" != "2" ] || [ "$3" != "2048" ] || [ "$4" != "100" ]; then
+    shift
+    version_check_enabled=""
+    while [ "$#" -gt 3 ]; do
+      case "$1" in
+        --version-check-enabled=*)
+          version_check_enabled="${1#*=}"
+          shift
+          ;;
+        --version-check-enabled)
+          version_check_enabled="$2"
+          shift 2
+          ;;
+        --version-check-url|--version-check-identity|--version-check-interval-seconds|--ports)
+          shift 2
+          ;;
+        *)
+          echo "unexpected start flag: $1" >&2
+          exit 3
+          ;;
+      esac
+    done
+    if [ "${version_check_enabled}" != "false" ]; then
+      echo "expected disabled version check, got: ${version_check_enabled}" >&2
+      exit 3
+    fi
+    printf '%s' "${version_check_enabled}" > start-version-check-enabled
+    if [ "$1" != "2" ] || [ "$2" != "2048" ] || [ "$3" != "100" ]; then
       echo "unexpected sizing args: $*" >&2
       exit 3
     fi
@@ -248,6 +274,7 @@ esac
             "local",
             "--deployment-dir",
             str(deployment_dir),
+            "--no-launcher-version-check",
         ],
         env=env,
     )
@@ -288,6 +315,10 @@ esac
 
     # Then the deployment is initialized and local connection artifacts are written
     assert result.returncode == 0
+    version_check_marker = (
+        deployment_dir / "local" / "runtime" / "start-version-check-enabled"
+    )
+    assert version_check_marker.read_text() == "false"
     deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
     assert deployment_data["backend"] == "local"
     assert "nodes" not in deployment_data

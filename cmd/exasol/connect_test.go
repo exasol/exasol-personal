@@ -177,8 +177,12 @@ func TestConnectRegistersCSVFlag(t *testing.T) {
 	t.Parallel()
 
 	flag := connectCmd.Flags().Lookup("csv")
-	if flag == nil || flag.DefValue != "false" {
-		t.Fatal("expected --csv flag to be registered with default false")
+	if flag == nil {
+		t.Fatal("expected --csv flag to be registered")
+		return
+	}
+	if flag.DefValue != "false" {
+		t.Fatalf("expected --csv default false, got %q", flag.DefValue)
 	}
 }
 

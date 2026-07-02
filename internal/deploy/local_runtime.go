@@ -61,6 +61,11 @@ func startPreparedLocalRuntime(
 
 	localConfig := toLocalRuntimeConfig(runtimeConfig)
 	startArgs := []string{"start"}
+	versionCheckArgs, err := localRunnerVersionCheckArgs(deployment)
+	if err != nil {
+		return err
+	}
+	startArgs = append(startArgs, versionCheckArgs...)
 	if localConfig.Ports != "" {
 		startArgs = append(startArgs, "--ports", localConfig.Ports)
 	}
@@ -87,6 +92,28 @@ func startPreparedLocalRuntime(
 	return writeLocalRuntimeArtifactsAndWait(ctx, deployment, state)
 }
 
+func localRunnerVersionCheckArgs(deployment config.DeploymentDir) ([]string, error) {
+	launcherState, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read local version-check settings: %w", err)
+	}
+
+	if !launcherState.VersionCheckEnabled {
+		return []string{"--version-check-enabled=false"}, nil
+	}
+
+	clusterIdentity := strings.TrimSpace(launcherState.ClusterIdentity)
+	if clusterIdentity == "" {
+		return nil, errors.New("deployment state is missing cluster identity")
+	}
+
+	return []string{
+		"--version-check-enabled=true",
+		"--version-check-url", GetVersionCheckURL(),
+		"--version-check-identity", clusterIdentity,
+	}, nil
+}
+
 // reconcileLocalVMState corrects a stale WorkflowStateRunning caused by an unclean
 // VM shutdown (e.g. SIGKILL). If the mac-runner socket reports the daemon is not
 // running, the state is updated to WorkflowStateStopped so that subsequent permit
@@ -96,7 +123,7 @@ func startPreparedLocalRuntime(
 // running outside the launcher's knowledge is an externally-caused inconsistency
 // that should surface as an error rather than be silently accepted.
 //
-// Errors from the VM status check are logged and swallowed — reconciliation is
+// Errors from the VM status check are logged and swallowed; reconciliation is
 // best-effort and must not block the caller's primary operation.
 // The caller must already hold the exclusive deployment lock.
 func reconcileLocalVMState(
