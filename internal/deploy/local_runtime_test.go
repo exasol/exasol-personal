@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -17,11 +18,54 @@ import (
 
 const (
 	localTestDeploymentID     = "exasol-local-test"
+	localTestClusterIdentity  = "exasol-personal;exasol-local-test;local;local"
 	privateTestFileMode       = 0o600
 	executableTestFileMode    = 0o700
 	localTestDatabasePort     = 28563
 	localTestSSHForwardedPort = 20022
 )
+
+func TestLocalRunnerVersionCheckArgs_PassesLauncherVersionCheckSettings(t *testing.T) {
+	// Given
+	deployment := newTestDeploymentWithVersionCheckState(t, true, localTestClusterIdentity)
+	const expectedURL = "https://example.test/v1/version-check"
+	t.Setenv(VersionCheckURLEnvVar, expectedURL)
+
+	// When
+	args, err := localRunnerVersionCheckArgs(deployment)
+	// Then
+	if err != nil {
+		t.Fatalf("expected version-check args, got %v", err)
+	}
+	expected := []string{
+		"--version-check-enabled=true",
+		"--version-check-url", expectedURL,
+		"--version-check-identity", localTestClusterIdentity,
+	}
+	if !reflect.DeepEqual(args, expected) {
+		t.Fatalf("expected args %#v, got %#v", expected, args)
+	}
+}
+
+func TestLocalRunnerVersionCheckArgs_DisablesRunnerWhenLauncherVersionCheckDisabled(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	// Given
+	deployment := newTestDeploymentWithVersionCheckState(t, false, "")
+
+	// When
+	args, err := localRunnerVersionCheckArgs(deployment)
+	// Then
+	if err != nil {
+		t.Fatalf("expected disabled version-check args, got %v", err)
+	}
+	expected := []string{"--version-check-enabled=false"}
+	if !reflect.DeepEqual(args, expected) {
+		t.Fatalf("expected args %#v, got %#v", expected, args)
+	}
+}
 
 func TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets(t *testing.T) {
 	t.Parallel()
@@ -216,8 +260,23 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 func newTestDeploymentWithState(t *testing.T) config.DeploymentDir {
 	t.Helper()
 
+	return newTestDeploymentWithVersionCheckState(t, false, "")
+}
+
+func newTestDeploymentWithVersionCheckState(
+	t *testing.T,
+	versionCheckEnabled bool,
+	clusterIdentity string,
+) config.DeploymentDir {
+	t.Helper()
+
 	deployment := config.NewDeploymentDir(t.TempDir())
-	state := &config.ExasolPersonalState{DeploymentId: localTestDeploymentID}
+	state := &config.ExasolPersonalState{
+		DeploymentId:        localTestDeploymentID,
+		ClusterIdentity:     clusterIdentity,
+		VersionCheckEnabled: versionCheckEnabled,
+		DeploymentVersion:   "0.0.0",
+	}
 	workflowState := &config.WorkflowStateInitialized{}
 	if err := state.SetWorkflowStateAndWrite(workflowState, deployment); err != nil {
 		t.Fatalf("failed to write launcher state: %v", err)
