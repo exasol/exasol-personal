@@ -138,6 +138,29 @@ func ReadState(deployment config.DeploymentDir) (*State, error) {
 	return runtime.toState(state)
 }
 
+type VMStatus struct {
+	Running bool `json:"running"`
+}
+
+func Status(ctx context.Context, deployment config.DeploymentDir) (*VMStatus, error) {
+	runtime := newRuntime(deployment, Config{})
+	if err := runtime.ensureRunnerExecutable(); err != nil {
+		return nil, err
+	}
+
+	stdout, err := runtime.runnerCommandWithOutput(ctx, []string{"status"})
+	if err != nil {
+		return nil, err
+	}
+
+	var status VMStatus
+	if err := json.Unmarshal([]byte(stdout), &status); err != nil {
+		return nil, fmt.Errorf("failed to parse local runner status output: %w", err)
+	}
+
+	return &status, nil
+}
+
 func Stop(ctx context.Context, deployment config.DeploymentDir, out, outErr io.Writer) error {
 	runtime := newRuntime(deployment, Config{})
 	if err := runtime.ensureRunnerExecutable(); err != nil {
@@ -258,6 +281,35 @@ func writeEmbeddedRunner(targetPath string) error {
 	}
 
 	return nil
+}
+
+// runnerCommandWithOutput runs the runner and returns captured stdout.
+// Use this for commands whose output must be parsed (e.g. status JSON).
+func (runtime *localRuntime) runnerCommandWithOutput(
+	ctx context.Context,
+	args []string,
+) (string, error) {
+	if len(args) == 0 {
+		return "", errors.New("local runner command is empty")
+	}
+
+	cmd := exec.CommandContext(ctx, runtime.paths.RunnerPath, args...)
+	cmd.Dir = runtime.paths.WorkDir
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		detail := strings.TrimSpace(stdout.String() + "\n" + stderr.String())
+		if detail != "" {
+			return "", fmt.Errorf("local runner command %q failed: %w\n%s", args[0], err, detail)
+		}
+
+		return "", fmt.Errorf("local runner command %q failed: %w", args[0], err)
+	}
+
+	return stdout.String(), nil
 }
 
 func (runtime *localRuntime) runnerCommand(

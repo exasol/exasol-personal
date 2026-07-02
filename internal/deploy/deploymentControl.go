@@ -67,6 +67,10 @@ func Start(
 				return err
 			}
 
+			if err := reconcileLocalVMState(ctx, exasolState, deployment); err != nil {
+				return err
+			}
+
 			if err := WorkflowStatePermitsStart(exasolState, deployment); err != nil {
 				return util.LoggedError(err, "run `status` for more information")
 			}
@@ -187,6 +191,10 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 
 			exasolState, err := config.ReadExasolPersonalState(deployment)
 			if err != nil {
+				return err
+			}
+
+			if err = reconcileLocalVMState(ctx, exasolState, deployment); err != nil {
 				return err
 			}
 
