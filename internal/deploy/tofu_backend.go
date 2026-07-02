@@ -276,10 +276,14 @@ func ctyDefaultDisplay(value cty.Value) string {
 	return string(repr)
 }
 
-func (b *tofuBackend) OpenHostShell(ctx context.Context, selectedNode string) error {
+func (b *tofuBackend) OpenHostShell(ctx context.Context, selectedNode string, command string) error {
 	sshRemote, err := sshRemoteForNodeUnsafe(b.deployment, selectedNode)
 	if err != nil {
 		return err
+	}
+
+	if command != "" {
+		return sshRemote.RunInteractiveCommand(ctx, command, os.Stdout, os.Stderr)
 	}
 
 	return sshRemote.Shell(ctx, os.Stdout, os.Stderr)

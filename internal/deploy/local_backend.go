@@ -320,10 +320,15 @@ func ensureLocalManifestConfig(
 func (b *localBackend) OpenHostShell(
 	ctx context.Context,
 	_ string,
+	command string,
 ) error {
 	sshRemote, err := localSSHRemoteUnsafe(b.deployment)
 	if err != nil {
 		return err
+	}
+
+	if command != "" {
+		return sshRemote.RunInteractiveCommand(ctx, command, os.Stdout, os.Stderr)
 	}
 
 	return sshRemote.Shell(ctx, os.Stdout, os.Stderr)

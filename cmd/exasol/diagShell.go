@@ -35,6 +35,7 @@ var diagShellCmd = &cobra.Command{
 			cmd.Context(),
 			commonFlags.Deployment(),
 			diagShellCmdOpts.Node,
+			"",
 		)
 	},
 }
