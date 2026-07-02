@@ -8,9 +8,8 @@ import (
 	"testing"
 )
 
+//nolint:paralleltest // mutates package-level terminal message globals; cannot run in parallel
 func TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout(t *testing.T) {
-	t.Parallel()
-
 	resetTerminalMessages()
 	defer resetTerminalMessages()
 
