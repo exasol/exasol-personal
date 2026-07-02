@@ -45,7 +45,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -63,6 +63,12 @@ jobs:
           path: bin/exasol.exe
       - name: Upload file (Ubuntu)
         if: startsWith(matrix.os, 'ubuntu')
+        uses: actions/upload-artifact@v7
+        with:
+          name: exasol-${{ matrix.os }}
+          path: bin/exasol
+      - name: Upload file (macOS)
+        if: startsWith(matrix.os, 'macos')
         uses: actions/upload-artifact@v7
         with:
           name: exasol-${{ matrix.os }}
