@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -25,6 +24,7 @@ import (
 	"github.com/exasol/exasol-personal/assets/localruntimebin"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/util"
+	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -35,6 +35,7 @@ const (
 	vmStateFileName    = "vm-state.json"
 	vmPIDFileName      = "vm.pid"
 	PrivateKeyFileName = "node_access.pem"
+	openSSHKeyPEMType  = "OPENSSH PRIVATE KEY"
 	stopPollInterval   = 500 * time.Millisecond
 	stopTimeout        = 90 * time.Second
 	dirMode            = 0o750
@@ -359,8 +360,14 @@ func processRunning(pid int) bool {
 }
 
 func (runtime *localRuntime) ensureSSHKey() error {
-	if _, err := os.Stat(runtime.paths.PrivateKeyPath); err == nil {
-		return nil
+	if keyData, err := os.ReadFile(runtime.paths.PrivateKeyPath); err == nil {
+		if isOpenSSHPrivateKey(keyData) {
+			return nil
+		}
+
+		if err := os.Remove(runtime.paths.PrivateKeyPath); err != nil {
+			return fmt.Errorf("failed to replace invalid local SSH key: %w", err)
+		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to inspect local SSH key: %w", err)
 	}
@@ -369,14 +376,11 @@ func (runtime *localRuntime) ensureSSHKey() error {
 	if err != nil {
 		return fmt.Errorf("failed to generate local SSH key: %w", err)
 	}
-	privateKeyPKCS8, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	privateKeyBlock, err := ssh.MarshalPrivateKey(privateKey, "")
 	if err != nil {
 		return fmt.Errorf("failed to marshal local SSH private key: %w", err)
 	}
-	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "PRIVATE KEY",
-		Bytes: privateKeyPKCS8,
-	})
+	privateKeyPEM := pem.EncodeToMemory(privateKeyBlock)
 	if err := os.MkdirAll(filepath.Dir(runtime.paths.PrivateKeyPath), dirMode); err != nil {
 		return fmt.Errorf("failed to create local SSH key directory: %w", err)
 	}
@@ -389,6 +393,18 @@ func (runtime *localRuntime) ensureSSHKey() error {
 	}
 
 	return nil
+}
+
+func isOpenSSHPrivateKey(keyData []byte) bool {
+	block, _ := pem.Decode(keyData)
+	if block == nil || block.Type != openSSHKeyPEMType {
+		return false
+	}
+	if _, err := ssh.ParsePrivateKey(keyData); err != nil {
+		return false
+	}
+
+	return true
 }
 
 func readRunnerState(statePath string) (*runnerState, error) {
