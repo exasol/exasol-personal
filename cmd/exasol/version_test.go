@@ -132,9 +132,8 @@ func TestFormatLatestVersionText_RejectsInvalidVersionData(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // mutates package-level terminal message globals; cannot run in parallel
 func TestVersionCmdQueuesPrimaryOutputForTerminalFlush(t *testing.T) {
-	t.Parallel()
-
 	resetTerminalMessages()
 	defer resetTerminalMessages()
 
