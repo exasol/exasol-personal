@@ -15,11 +15,14 @@ import (
 
 var ErrNoNodesFound = errors.New("no nodes found in the active deployment")
 
-// OpenHostShell starts an interactive shell using stdin stdout & stderr.
+// OpenHostShell starts an interactive shell using stdin stdout & stderr. If
+// command is non-empty, it is run non-interactively instead of starting a
+// shell, and the connection closes once it completes.
 func OpenHostShell(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	selectedNode string,
+	command string,
 ) error {
 	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
 		backend, err := newDeploymentBackendForDeployment(deployment)
@@ -27,7 +30,7 @@ func OpenHostShell(
 			return err
 		}
 
-		return backend.OpenHostShell(ctx, selectedNode)
+		return backend.OpenHostShell(ctx, selectedNode, command)
 	})
 }
 

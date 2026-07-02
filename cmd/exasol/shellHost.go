@@ -17,9 +17,11 @@ If no specific node is specified, connects to the first node available.
 `
 
 var shellHostCmdOpts = struct {
-	Node string
+	Node    string
+	Command string
 }{
-	Node: "",
+	Node:    "",
+	Command: "",
 }
 
 var shellHostCmd = &cobra.Command{
@@ -29,7 +31,12 @@ var shellHostCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		return deploy.OpenHostShell(cmd.Context(), commonFlags.Deployment(), shellHostCmdOpts.Node)
+		return deploy.OpenHostShell(
+			cmd.Context(),
+			commonFlags.Deployment(),
+			shellHostCmdOpts.Node,
+			shellHostCmdOpts.Command,
+		)
 	},
 }
 
@@ -37,6 +44,10 @@ func registerShellHostFlags() {
 	shellHostCmd.Flags().StringVarP(
 		&shellHostCmdOpts.Node, "node", "n", "",
 		"Name of the node to connect to. Connects to the first available node if not specified",
+	)
+	shellHostCmd.Flags().StringVarP(
+		&shellHostCmdOpts.Command, "command", "c", "",
+		"Run the given command non-interactively instead of starting a shell",
 	)
 }
 

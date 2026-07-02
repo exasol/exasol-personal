@@ -46,7 +46,10 @@ type deploymentBackend interface {
 	) error
 	ReadConfiguration() ([]DeploymentConfigValue, error)
 	ReadDeploymentConfigVariables() (map[string]ConfigVariableDefinition, error)
-	OpenHostShell(ctx context.Context, selectedNode string) error
+	// OpenHostShell connects to a host node. If command is empty, an interactive
+	// shell is started; otherwise the given command is run non-interactively and
+	// the connection closes once it completes.
+	OpenHostShell(ctx context.Context, selectedNode string, command string) error
 	OpenCOSShell(ctx context.Context) error
 	Deploy(ctx context.Context, out, outErr io.Writer, options DeployOptions) error
 	Start(ctx context.Context, out, outErr io.Writer, waitTimeoutSeconds int) error

@@ -151,10 +151,11 @@ _FAILURE_ARTIFACT_FILENAMES: Final = (
 )
 
 
-def _save_failure_artifacts(deployment_dir: Path, test_name: str) -> None:
+def _save_failure_artifacts(local_deployment: Deployment, test_name: str) -> None:
     if not FAILURES_DIR.is_dir():
         return
 
+    deployment_dir = Path(local_deployment.deployment_dir.name)
     dest = FAILURES_DIR / test_name
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -166,43 +167,33 @@ def _save_failure_artifacts(deployment_dir: Path, test_name: str) -> None:
         logging.info("Test failed. Copying %s to %s for debugging", source, dest)
         shutil.copy2(source, dest / filename)
 
-    _capture_podman_logs(deployment_dir, dest)
+    _capture_podman_logs(local_deployment, dest)
 
 
-def _capture_podman_logs(deployment_dir: Path, dest: Path) -> None:
-    """SSH into the VM and capture `podman logs` for the DB container, if reachable."""
-    deployment_json = deployment_dir / "deployment.json"
-    if not deployment_json.is_file():
-        return
+def _capture_podman_logs(local_deployment: Deployment, dest: Path) -> None:
+    """Capture `podman logs` for the DB container via `exasol shell host --command`.
 
-    connection = json.loads(deployment_json.read_text()).get("connection", {})
-    ssh_port = connection.get("sshPort")
-    key_path = deployment_dir / "local" / "node_access.pem"
-    if not ssh_port or not key_path.is_file():
-        return
-
+    Goes through the launcher's own SSH client (used by `shell host`/`connect`)
+    rather than the system `ssh` binary, since the generated node_access.pem is a
+    raw PKCS8 Ed25519 key that OpenSSH's own client cannot parse, unlike the
+    launcher's Go ssh library.
+    """
+    # run_command() always passes check=True, so a non-zero exit raises
+    # CalledProcessError rather than returning a failed CompletedProcess.
     try:
-        result = subprocess.run(
-            [
-                "ssh",
-                "-i",
-                str(key_path),
-                "-o",
-                "StrictHostKeyChecking=no",
-                "-o",
-                "UserKnownHostsFile=/dev/null",
-                "-p",
-                str(ssh_port),
-                "root@127.0.0.1",
-                "podman",
-                "logs",
-                "exasol-local-db",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
+        result: subprocess.CompletedProcess[str] | subprocess.CalledProcessError = (
+            local_deployment.launcher.run_command(
+                "shell",
+                local_deployment.deployment_dir.name,
+                "host",
+                "--command",
+                "podman logs exasol-local-db",
+                capture_output=True,
+                timeout=30,
+            )
         )
+    except subprocess.CalledProcessError as exc:
+        result = exc
     except (subprocess.TimeoutExpired, OSError) as exc:
         logging.info("Could not capture podman logs for debugging: %s", exc)
         return
@@ -265,5 +256,5 @@ def test_status_after_forceful_vm_kill(
         logging.info("Waiting for status to report database ready after recovery")
         assert local_deployment.has_status(StatusDatabaseReady)
     except BaseException:
-        _save_failure_artifacts(deployment_dir, "test_status_after_forceful_vm_kill")
+        _save_failure_artifacts(local_deployment, "test_status_after_forceful_vm_kill")
         raise
