@@ -13,3 +13,4 @@ class SubprocessRunKwargs(TypedDict, total=False):
     stdin: StdIO
     stdout: StdIO
     stderr: StdIO
+    timeout: float  # Seconds to wait before raising subprocess.TimeoutExpired.

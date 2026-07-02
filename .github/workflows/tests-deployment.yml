@@ -22,6 +22,11 @@ on:
           - ubuntu-latest
           - windows-latest
           - macos-latest
+      debug_artifacts:
+        description: Preserve deployment directories of failing tests as a downloadable CI artifact
+        required: false
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -183,12 +188,38 @@ jobs:
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
+      - name: Create failures directory for debug artifacts
+        if: ${{ inputs.debug_artifacts }}
+        shell: bash
+        run: mkdir -p tests/failures
+
       - uses: ./.github/actions/build
       - uses: ./.github/actions/tests-deployment
         with:
           infra: local
           task: tests-deployment-local
           system-python: 'true'
+
+      - name: Compress failure artifacts
+        if: ${{ always() && inputs.debug_artifacts }}
+        id: compress-failures
+        shell: bash
+        run: |
+          if [ -d tests/failures ] && [ -n "$(ls -A tests/failures)" ]; then
+            tar -czf failures.tar.gz -C tests failures
+            echo "has_failures=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_failures=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload failure artifacts
+        if: ${{ always() && inputs.debug_artifacts && steps.compress-failures.outputs.has_failures == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          # Namespaced per job so the matrixed cloud tests-deployment job can
+          # add this same step later without artifact name collisions.
+          name: deployment-test-failures-local-self-hosted
+          path: failures.tar.gz
 
       - uses: ./.github/actions/status-set
         if: always()

@@ -175,9 +175,13 @@ class Deployment:
     def destroy(self, *args: str) -> CompletedProcess[str]:
         return self.launcher.destroy(self.deployment_dir.name, *args)
 
-    def start(self, *args: str) -> CompletedProcess[str]:
+    def start(
+        self,
+        *args: str,
+        **kwargs: Unpack[SubprocessRunKwargs],
+    ) -> CompletedProcess[str]:
         """Start the deployment (power on)."""
-        return self.launcher.start(self.deployment_dir.name, *args)
+        return self.launcher.start(self.deployment_dir.name, *args, **kwargs)
 
     def stop(self, *args: str) -> CompletedProcess[str]:
         """Stop the deployment (power off)."""
