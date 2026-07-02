@@ -311,7 +311,7 @@ func TestLocalBackendReadConfiguration_ExposesSizingValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected local configuration values, got %v", err)
 	}
-	defaults := defaultLocalRuntimeConfig(0)
+	defaults := defaultLocalRuntimeConfig(detectLocalHostMemoryMB(context.Background()))
 	assertConfigValue(t, values, localCPUCountConfigName, 4, localDefaultCPUCount)
 	assertConfigValue(t, values, localMemoryMBConfigName, 8192, defaults.memoryMB)
 	assertConfigValue(t, values, localDataSizeGBConfigName, 250, localDefaultDataSizeGB)
