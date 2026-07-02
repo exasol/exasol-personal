@@ -166,6 +166,56 @@ def _save_failure_artifacts(deployment_dir: Path, test_name: str) -> None:
         logging.info("Test failed. Copying %s to %s for debugging", source, dest)
         shutil.copy2(source, dest / filename)
 
+    _capture_podman_logs(deployment_dir, dest)
+
+
+def _capture_podman_logs(deployment_dir: Path, dest: Path) -> None:
+    """SSH into the VM and capture `podman logs` for the DB container, if reachable."""
+    deployment_json = deployment_dir / "deployment.json"
+    if not deployment_json.is_file():
+        return
+
+    connection = json.loads(deployment_json.read_text()).get("connection", {})
+    ssh_port = connection.get("sshPort")
+    key_path = deployment_dir / "local" / "node_access.pem"
+    if not ssh_port or not key_path.is_file():
+        return
+
+    try:
+        result = subprocess.run(
+            [
+                "ssh",
+                "-i",
+                str(key_path),
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+                "-p",
+                str(ssh_port),
+                "root@127.0.0.1",
+                "podman",
+                "logs",
+                "exasol-local-db",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logging.info("Could not capture podman logs for debugging: %s", exc)
+        return
+
+    output_path = dest / "podman-logs.txt"
+    content = (
+        f"exit_code={result.returncode}\n\n"
+        f"STDOUT:\n{result.stdout}\n\n"
+        f"STDERR:\n{result.stderr}"
+    )
+    output_path.write_text(content)
+    logging.info("Captured podman logs for exasol-local-db to %s", output_path)
+
 
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"

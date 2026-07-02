@@ -65,6 +65,10 @@ func verifyDatabaseConnection(ctx context.Context, deployment config.DeploymentD
 		if strings.Contains(driverErr.Error(), "08004") {
 			return nil
 		}
+	} else if probeErr != nil {
+		// Not a SQL-level error (e.g. dial/connection refused, i/o timeout).
+		// Log it too, otherwise a stuck DB probe leaves no trace of why it never connects.
+		slog.Debug("database connection probe failed", "error", probeErr.Error())
 	}
 
 	return probeErr
