@@ -302,6 +302,30 @@ You can store your own preset directories anywhere on your filesystem and pass t
 
 See [doc/presets.md](doc/presets.md) for the full preset contract: manifest schema, required output artifacts, variable channels, and the reference implementations in `assets/infrastructure`.
 
+## 🖥️ System Requirements
+
+The Exasol Launcher runs on:
+
+- **macOS** — 12 (Monterey) or later, on Apple Silicon or Intel.
+- **Linux** — amd64 or arm64.
+- **Windows** — 10 or later, amd64.
+
+Where the database runs depends on the deployment type:
+
+- **Cloud deployments** — the database runs on your provider's infrastructure, so any supported launcher platform above works. The launcher provisions **Ubuntu 22.04 LTS (x86-64)** compute instances on all cloud providers.
+- **Local deployments** — the database runs in a VM on your machine, which requires macOS 15 (Sequoia) or later on Apple Silicon, with at least 8 GB RAM.
+
+## 🚧 Limitations
+
+Local deployments are intended for development and exploration and do not yet support every feature of a cloud deployment:
+
+- **UDFs** — user-defined functions are not available yet (coming soon).
+- **Virtual schemas** — virtual schemas are not available yet (coming soon).
+- **Admin UI** — the Administration UI is not available yet (coming soon).
+- **Multi-node clusters** — a local deployment is a single VM on your machine by design and always runs as a single node.
+
+Cloud deployments support all of the above.
+
 ## ⚖️ Licensing
 
 The Exasol Launcher source code in this repository is open-source software licensed under the [MIT License](./LICENSE). You are free to use, modify, and distribute it. Contributions are made under the same terms.
