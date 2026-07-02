@@ -60,6 +60,11 @@ func startPreparedLocalRuntime(
 
 	localConfig := toLocalRuntimeConfig(runtimeConfig)
 	startArgs := []string{"start"}
+	versionCheckArgs, err := localRunnerVersionCheckArgs(deployment)
+	if err != nil {
+		return err
+	}
+	startArgs = append(startArgs, versionCheckArgs...)
 	if localConfig.Ports != "" {
 		startArgs = append(startArgs, "--ports", localConfig.Ports)
 	}
@@ -84,6 +89,28 @@ func startPreparedLocalRuntime(
 	}
 
 	return writeLocalRuntimeArtifactsAndWait(ctx, deployment, state)
+}
+
+func localRunnerVersionCheckArgs(deployment config.DeploymentDir) ([]string, error) {
+	launcherState, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read local version-check settings: %w", err)
+	}
+
+	if !launcherState.VersionCheckEnabled {
+		return []string{"--version-check-enabled=false"}, nil
+	}
+
+	clusterIdentity := strings.TrimSpace(launcherState.ClusterIdentity)
+	if clusterIdentity == "" {
+		return nil, errors.New("deployment state is missing cluster identity")
+	}
+
+	return []string{
+		"--version-check-enabled=true",
+		"--version-check-url", GetVersionCheckURL(),
+		"--version-check-identity", clusterIdentity,
+	}, nil
 }
 
 func stopLocalRuntime(
