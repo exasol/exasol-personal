@@ -1,0 +1,1700 @@
+task: [local-runner-placeholders] go run ./tools/localrunner placeholder -target assets/localruntimebin/generated/darwin/arm64/mac-runner-aarch64
+task: [tests-unit] go test -v -race ./...
+?   	github.com/exasol/exasol-personal/assets	[no test files]
+?   	github.com/exasol/exasol-personal/assets/localruntimebin	[no test files]
+?   	github.com/exasol/exasol-personal/assets/resources	[no test files]
+=== RUN   TestCacheCommandsDoNotUseDeploymentDirectoryConcerns
+=== PAUSE TestCacheCommandsDoNotUseDeploymentDirectoryConcerns
+=== RUN   TestCacheListCommandInitializesConfig
+--- PASS: TestCacheListCommandInitializesConfig (0.00s)
+=== RUN   TestCacheListCommandRegistersJSONFlag
+=== PAUSE TestCacheListCommandRegistersJSONFlag
+=== RUN   TestCacheCleanCommandRegistersCleanupFlags
+=== PAUSE TestCacheCleanCommandRegistersCleanupFlags
+=== RUN   TestCacheCleanRejectsMultipleCleanupSelectors
+--- PASS: TestCacheCleanRejectsMultipleCleanupSelectors (0.00s)
+=== RUN   TestCacheUnlockHelpWarnsAboutActiveLauncherProcesses
+=== PAUSE TestCacheUnlockHelpWarnsAboutActiveLauncherProcesses
+=== RUN   TestDiagCacheHelpDescribesReadOnlyBehavior
+=== PAUSE TestDiagCacheHelpDescribesReadOnlyBehavior
+=== RUN   TestRenderCacheListJSON
+=== PAUSE TestRenderCacheListJSON
+=== RUN   TestRenderCacheListTextIncludesLastUsedTimestamp
+=== PAUSE TestRenderCacheListTextIncludesLastUsedTimestamp
+=== RUN   TestRenderCacheCleanTextUsesDryRunAndInvalidWording
+=== PAUSE TestRenderCacheCleanTextUsesDryRunAndInvalidWording
+=== RUN   TestRenderCacheDiagnosticsTextIncludesCacheState
+=== PAUSE TestRenderCacheDiagnosticsTextIncludesCacheState
+=== RUN   TestFormatCachePathReturnsRelativePathsInsideCacheRoot
+=== PAUSE TestFormatCachePathReturnsRelativePathsInsideCacheRoot
+=== RUN   TestFormatByteSizeUsesHumanFriendlyUnits
+=== PAUSE TestFormatByteSizeUsesHumanFriendlyUnits
+=== RUN   TestEnforceDeploymentDirectoryCompatibility_FailsEarlyWhenNotInitialized
+=== PAUSE TestEnforceDeploymentDirectoryCompatibility_FailsEarlyWhenNotInitialized
+=== RUN   TestEnforceDeploymentDirectoryCompatibility_HintsLegacyWorkflowStateLayout
+=== PAUSE TestEnforceDeploymentDirectoryCompatibility_HintsLegacyWorkflowStateLayout
+=== RUN   TestRequireMinorVersionDeploymentCompatibility_NormalizesPatchToZero
+=== PAUSE TestRequireMinorVersionDeploymentCompatibility_NormalizesPatchToZero
+=== RUN   TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher
+=== PAUSE TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher
+=== RUN   TestDeploymentCompatibilityRules_StrictRevisionRequirement
+=== PAUSE TestDeploymentCompatibilityRules_StrictRevisionRequirement
+=== RUN   TestDeploymentCompatibilityRules_OlderMinorMinimumAllowsNewerDeploymentsUpToLauncher
+=== PAUSE TestDeploymentCompatibilityRules_OlderMinorMinimumAllowsNewerDeploymentsUpToLauncher
+=== RUN   TestRequireMinorVersionDeploymentCompatibility_DoesNotPanicOnInvalidVersion
+=== PAUSE TestRequireMinorVersionDeploymentCompatibility_DoesNotPanicOnInvalidVersion
+=== RUN   TestConfigCommandsDeclareDeploymentPreRunRequirements
+=== PAUSE TestConfigCommandsDeclareDeploymentPreRunRequirements
+=== RUN   TestFormatConfigurationValuesKeepsPresetTypesSeparate
+=== PAUSE TestFormatConfigurationValuesKeepsPresetTypesSeparate
+=== RUN   TestConfigurationJSONIncludesPresetNames
+=== PAUSE TestConfigurationJSONIncludesPresetNames
+=== RUN   TestJSONFormatValueSet
+=== PAUSE TestJSONFormatValueSet
+=== RUN   TestJSONFormatValueSetRejectsInvalidValue
+=== PAUSE TestJSONFormatValueSetRejectsInvalidValue
+=== RUN   TestJSONFormatVarP_SetsPrettyWhenFlagHasNoValue
+=== PAUSE TestJSONFormatVarP_SetsPrettyWhenFlagHasNoValue
+=== RUN   TestJSONFormatVarP_AcceptsExplicitCompactValue
+=== PAUSE TestJSONFormatVarP_AcceptsExplicitCompactValue
+=== RUN   TestConnectCmdExamplesMentionJSONOptions
+=== PAUSE TestConnectCmdExamplesMentionJSONOptions
+=== RUN   TestConnectCmdExamplesMentionCSVOption
+=== PAUSE TestConnectCmdExamplesMentionCSVOption
+=== RUN   TestConnectCmdExamplesMentionCommandAndFile
+=== PAUSE TestConnectCmdExamplesMentionCommandAndFile
+=== RUN   TestConnectRegistersCommandAndFileFlags
+=== PAUSE TestConnectRegistersCommandAndFileFlags
+=== RUN   TestConnectRegistersCSVFlag
+=== PAUSE TestConnectRegistersCSVFlag
+=== RUN   TestSelectedConnectOutputFormat
+=== PAUSE TestSelectedConnectOutputFormat
+=== RUN   TestConnectCommandAndFileAreMutuallyExclusive
+--- PASS: TestConnectCommandAndFileAreMutuallyExclusive (0.00s)
+=== RUN   TestConnectJSONAndCSVAreMutuallyExclusive
+--- PASS: TestConnectJSONAndCSVAreMutuallyExclusive (0.00s)
+=== RUN   TestConnectUsageShowsJSONFormatUnderFlags
+--- PASS: TestConnectUsageShowsJSONFormatUnderFlags (0.00s)
+=== RUN   TestDeploymentDirFlagUnknownOnCommandWithoutFlag
+=== PAUSE TestDeploymentDirFlagUnknownOnCommandWithoutFlag
+=== RUN   TestDeploymentDirFlagAcceptedAndAbsolutizedOnCommandWithFlag
+=== PAUSE TestDeploymentDirFlagAcceptedAndAbsolutizedOnCommandWithFlag
+=== RUN   TestResolveDeploymentDir_ExplicitFlagWins
+--- PASS: TestResolveDeploymentDir_ExplicitFlagWins (0.00s)
+=== RUN   TestResolveDeploymentDir_CurrentDeploymentDirWinsWhenFlagOmitted
+--- PASS: TestResolveDeploymentDir_CurrentDeploymentDirWinsWhenFlagOmitted (0.00s)
+=== RUN   TestResolveDeploymentDir_DefaultWinsWhenFlagOmittedOutsideDeploymentDir
+--- PASS: TestResolveDeploymentDir_DefaultWinsWhenFlagOmittedOutsideDeploymentDir (0.00s)
+=== RUN   TestResolveDeploymentDir_IgnoresCommandsWithoutDeploymentDirFlag
+=== PAUSE TestResolveDeploymentDir_IgnoresCommandsWithoutDeploymentDirFlag
+=== RUN   TestRequireDeploymentFileLogging
+=== PAUSE TestRequireDeploymentFileLogging
+=== RUN   TestDeploymentLogSessionStartsAfterInit
+=== PAUSE TestDeploymentLogSessionStartsAfterInit
+=== RUN   TestStartDeploymentLogSession_CreatesDeploymentLogWithoutState
+=== PAUSE TestStartDeploymentLogSession_CreatesDeploymentLogWithoutState
+=== RUN   TestStartDeploymentLogSession_CreatesLogFileWhenDeploymentDirectoryDoesNotExistYet
+=== PAUSE TestStartDeploymentLogSession_CreatesLogFileWhenDeploymentDirectoryDoesNotExistYet
+=== RUN   TestRenderDeploymentInfoJSONSerializesReportDirectly
+=== PAUSE TestRenderDeploymentInfoJSONSerializesReportDirectly
+=== RUN   TestRenderDeploymentInfoJSONOmitsTerminalOnlyGuidance
+=== PAUSE TestRenderDeploymentInfoJSONOmitsTerminalOnlyGuidance
+=== RUN   TestRenderDeploymentInfoTextAppendsStateGuidance
+=== PAUSE TestRenderDeploymentInfoTextAppendsStateGuidance
+=== RUN   TestRenderDeploymentInfoTextIncludesInitializedOverview
+=== PAUSE TestRenderDeploymentInfoTextIncludesInitializedOverview
+=== RUN   TestRenderDeploymentInfoTextExplainsActiveOperation
+=== PAUSE TestRenderDeploymentInfoTextExplainsActiveOperation
+=== RUN   TestRegisterInfrastructureVariableFlagsRegistersAllSupportedTypes
+--- PASS: TestRegisterInfrastructureVariableFlagsRegistersAllSupportedTypes (0.00s)
+=== RUN   TestRoutingHandler_DoesNotLeakDebugToTerminal
+=== PAUSE TestRoutingHandler_DoesNotLeakDebugToTerminal
+=== RUN   TestRoutingHandler_DebugRecordWritesToFileSink
+=== PAUSE TestRoutingHandler_DebugRecordWritesToFileSink
+=== RUN   TestRequireEmptyDir_ErrOnMissingDir
+=== PAUSE TestRequireEmptyDir_ErrOnMissingDir
+=== RUN   TestRequireEmptyDir_ErrOnNonEmptyDir
+=== PAUSE TestRequireEmptyDir_ErrOnNonEmptyDir
+=== RUN   TestExportEmbeddedPreset_Infrastructure_WritesManifest
+=== PAUSE TestExportEmbeddedPreset_Infrastructure_WritesManifest
+=== RUN   TestExportEmbeddedPreset_Installation_WritesManifest
+=== PAUSE TestExportEmbeddedPreset_Installation_WritesManifest
+=== RUN   TestFilterPresetCatalog_All
+=== PAUSE TestFilterPresetCatalog_All
+=== RUN   TestFilterPresetCatalog_FilterInfrastructure
+=== PAUSE TestFilterPresetCatalog_FilterInfrastructure
+=== RUN   TestFilterPresetCatalog_FilterInstallation
+=== PAUSE TestFilterPresetCatalog_FilterInstallation
+=== RUN   TestFilterPresetCatalog_InvalidType
+=== PAUSE TestFilterPresetCatalog_InvalidType
+=== RUN   TestRenderPresetListJSON_ValidJSON
+=== PAUSE TestRenderPresetListJSON_ValidJSON
+=== RUN   TestRemoveConfirmationPromptIncludesDeploymentDirectory
+=== PAUSE TestRemoveConfirmationPromptIncludesDeploymentDirectory
+=== RUN   TestDestroyConfirmationPromptWithRemoveIncludesDeploymentDirectory
+=== PAUSE TestDestroyConfirmationPromptWithRemoveIncludesDeploymentDirectory
+=== RUN   TestDestroyConfirmationPromptWithoutRemoveOmitsDeploymentDirectory
+=== PAUSE TestDestroyConfirmationPromptWithoutRemoveOmitsDeploymentDirectory
+=== RUN   TestScanInfrastructurePresetFromArgs_Defaults
+--- PASS: TestScanInfrastructurePresetFromArgs_Defaults (0.00s)
+=== RUN   TestScanInfrastructurePresetFromArgs_PositionalName
+--- PASS: TestScanInfrastructurePresetFromArgs_PositionalName (0.00s)
+=== RUN   TestScanInfrastructurePresetFromArgs_PositionalPath
+--- PASS: TestScanInfrastructurePresetFromArgs_PositionalPath (0.00s)
+=== RUN   TestScanInfrastructurePresetFromArgs_SkipsUnrelatedFlags
+--- PASS: TestScanInfrastructurePresetFromArgs_SkipsUnrelatedFlags (0.00s)
+=== RUN   TestScanInfrastructurePresetFromArgs_InstallCommand
+--- PASS: TestScanInfrastructurePresetFromArgs_InstallCommand (0.00s)
+=== RUN   TestScanInstallationPresetFromArgs_DefaultFromInfrastructure
+--- PASS: TestScanInstallationPresetFromArgs_DefaultFromInfrastructure (0.00s)
+=== RUN   TestScanInstallationPresetFromArgs_ExplicitInstallation
+--- PASS: TestScanInstallationPresetFromArgs_ExplicitInstallation (0.00s)
+=== RUN   TestPreregisteredCommandDetectsConfigSet
+--- PASS: TestPreregisteredCommandDetectsConfigSet (0.00s)
+=== RUN   TestDeploymentDirFromRawArgs_SeparateFlagValue
+--- PASS: TestDeploymentDirFromRawArgs_SeparateFlagValue (0.00s)
+=== RUN   TestDeploymentDirFromRawArgs_EqualsFlagValue
+--- PASS: TestDeploymentDirFromRawArgs_EqualsFlagValue (0.00s)
+=== RUN   TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout
+=== PAUSE TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout
+=== RUN   TestInfrastructureVariableFlagsTitle_IncludesPresetLabel
+--- PASS: TestInfrastructureVariableFlagsTitle_IncludesPresetLabel (0.00s)
+=== RUN   TestInfrastructureVariableFlagsTitle_FallsBackWhenLabelUnknown
+--- PASS: TestInfrastructureVariableFlagsTitle_FallsBackWhenLabelUnknown (0.00s)
+=== RUN   TestFormatCurrentVersionText_ReportsText
+=== PAUSE TestFormatCurrentVersionText_ReportsText
+=== RUN   TestFormatCurrentVersionJSON_ReportsStructuredJSON
+=== PAUSE TestFormatCurrentVersionJSON_ReportsStructuredJSON
+=== RUN   TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions
+=== PAUSE TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions
+=== RUN   TestFormatLatestVersionText_RejectsInvalidVersionData
+=== PAUSE TestFormatLatestVersionText_RejectsInvalidVersionData
+=== RUN   TestVersionCmdQueuesPrimaryOutputForTerminalFlush
+=== PAUSE TestVersionCmdQueuesPrimaryOutputForTerminalFlush
+=== CONT  TestCacheUnlockHelpWarnsAboutActiveLauncherProcesses
+=== CONT  TestDeploymentDirFlagUnknownOnCommandWithoutFlag
+--- PASS: TestCacheUnlockHelpWarnsAboutActiveLauncherProcesses (0.00s)
+=== CONT  TestDeploymentDirFlagAcceptedAndAbsolutizedOnCommandWithFlag
+=== CONT  TestExportEmbeddedPreset_Infrastructure_WritesManifest
+Error: unknown flag: --deployment-dir
+=== CONT  TestRenderDeploymentInfoTextExplainsActiveOperation
+Usage:
+  exasol version [flags]
+
+Flags:
+  -h, --help   help for version
+
+--- PASS: TestDeploymentDirFlagUnknownOnCommandWithoutFlag (0.00s)
+--- PASS: TestDeploymentDirFlagAcceptedAndAbsolutizedOnCommandWithFlag (0.00s)
+=== CONT  TestRenderDeploymentInfoJSONOmitsTerminalOnlyGuidance
+=== CONT  TestSelectedConnectOutputFormat
+=== RUN   TestSelectedConnectOutputFormat/defaults_to_table
+=== PAUSE TestSelectedConnectOutputFormat/defaults_to_table
+=== RUN   TestSelectedConnectOutputFormat/json_flag_selects_json
+=== PAUSE TestSelectedConnectOutputFormat/json_flag_selects_json
+--- PASS: TestRenderDeploymentInfoTextExplainsActiveOperation (0.00s)
+=== CONT  TestConnectRegistersCSVFlag
+--- PASS: TestConnectRegistersCSVFlag (0.00s)
+=== CONT  TestConnectCmdExamplesMentionCommandAndFile
+=== RUN   TestSelectedConnectOutputFormat/csv_flag_selects_csv
+=== CONT  TestConnectCmdExamplesMentionCSVOption
+=== PAUSE TestSelectedConnectOutputFormat/csv_flag_selects_csv
+=== CONT  TestJSONFormatVarP_AcceptsExplicitCompactValue
+=== CONT  TestConnectCmdExamplesMentionJSONOptions
+=== CONT  TestJSONFormatValueSetRejectsInvalidValue
+=== CONT  TestJSONFormatValueSet
+--- PASS: TestConnectCmdExamplesMentionCommandAndFile (0.00s)
+=== CONT  TestConnectRegistersCommandAndFileFlags
+=== RUN   TestJSONFormatValueSet/empty_defaults_to_pretty
+=== CONT  TestConfigurationJSONIncludesPresetNames
+--- PASS: TestConnectCmdExamplesMentionCSVOption (0.00s)
+--- PASS: TestJSONFormatVarP_AcceptsExplicitCompactValue (0.00s)
+--- PASS: TestConnectCmdExamplesMentionJSONOptions (0.00s)
+=== PAUSE TestJSONFormatValueSet/empty_defaults_to_pretty
+--- PASS: TestJSONFormatValueSetRejectsInvalidValue (0.00s)
+--- PASS: TestConnectRegistersCommandAndFileFlags (0.00s)
+=== RUN   TestJSONFormatValueSet/trims_and_lowercases_compact
+=== PAUSE TestJSONFormatValueSet/trims_and_lowercases_compact
+--- PASS: TestConfigurationJSONIncludesPresetNames (0.00s)
+=== RUN   TestJSONFormatValueSet/keeps_pretty
+=== CONT  TestFormatConfigurationValuesKeepsPresetTypesSeparate
+--- PASS: TestFormatConfigurationValuesKeepsPresetTypesSeparate (0.00s)
+=== CONT  TestConfigCommandsDeclareDeploymentPreRunRequirements
+=== PAUSE TestJSONFormatValueSet/keeps_pretty
+=== RUN   TestConfigCommandsDeclareDeploymentPreRunRequirements/config
+=== PAUSE TestConfigCommandsDeclareDeploymentPreRunRequirements/config
+=== RUN   TestConfigCommandsDeclareDeploymentPreRunRequirements/get
+--- PASS: TestRenderDeploymentInfoJSONOmitsTerminalOnlyGuidance (0.00s)
+=== PAUSE TestConfigCommandsDeclareDeploymentPreRunRequirements/get
+=== CONT  TestRequireMinorVersionDeploymentCompatibility_DoesNotPanicOnInvalidVersion
+--- PASS: TestRequireMinorVersionDeploymentCompatibility_DoesNotPanicOnInvalidVersion (0.00s)
+=== CONT  TestJSONFormatVarP_SetsPrettyWhenFlagHasNoValue
+=== CONT  TestDeploymentCompatibilityRules_OlderMinorMinimumAllowsNewerDeploymentsUpToLauncher
+--- PASS: TestJSONFormatVarP_SetsPrettyWhenFlagHasNoValue (0.00s)
+=== CONT  TestDeploymentCompatibilityRules_StrictRevisionRequirement
+--- PASS: TestDeploymentCompatibilityRules_OlderMinorMinimumAllowsNewerDeploymentsUpToLauncher (0.00s)
+=== CONT  TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher
+--- PASS: TestDeploymentCompatibilityRules_StrictRevisionRequirement (0.00s)
+=== RUN   TestConfigCommandsDeclareDeploymentPreRunRequirements/set
+=== CONT  TestRequireMinorVersionDeploymentCompatibility_NormalizesPatchToZero
+--- PASS: TestRequireMinorVersionDeploymentCompatibility_NormalizesPatchToZero (0.00s)
+=== CONT  TestEnforceDeploymentDirectoryCompatibility_FailsEarlyWhenNotInitialized
+=== RUN   TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/allows_same_minor_at_patch_0
+=== PAUSE TestConfigCommandsDeclareDeploymentPreRunRequirements/set
+=== RUN   TestConfigCommandsDeclareDeploymentPreRunRequirements/reset
+=== PAUSE TestConfigCommandsDeclareDeploymentPreRunRequirements/reset
+=== PAUSE TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/allows_same_minor_at_patch_0
+=== RUN   TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_newer_patch_than_launcher
+=== CONT  TestEnforceDeploymentDirectoryCompatibility_HintsLegacyWorkflowStateLayout
+=== PAUSE TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_newer_patch_than_launcher
+=== RUN   TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_newer_minor_than_launcher
+=== PAUSE TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_newer_minor_than_launcher
+2026/07/02 09:49:48 ERROR deployment directory is not initialized command=deploy deployment_dir=/tmp/TestEnforceDeploymentDirectoryCompatibility_FailsEarlyWhenNotIni1699254745/001
+=== RUN   TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_older_than_minimum_minor
+=== PAUSE TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_older_than_minimum_minor
+=== CONT  TestFormatCachePathReturnsRelativePathsInsideCacheRoot
+--- PASS: TestFormatCachePathReturnsRelativePathsInsideCacheRoot (0.00s)
+=== CONT  TestRenderCacheDiagnosticsTextIncludesCacheState
+--- PASS: TestEnforceDeploymentDirectoryCompatibility_FailsEarlyWhenNotInitialized (0.00s)
+2026/07/02 09:49:48 WARN legacy deployment directory detected command=some_init_like_command deployment_dir=/tmp/TestEnforceDeploymentDirectoryCompatibility_HintsLegacyWorkflowS2547381957/001
+=== CONT  TestFormatByteSizeUsesHumanFriendlyUnits
+--- PASS: TestRenderCacheDiagnosticsTextIncludesCacheState (0.00s)
+=== CONT  TestRenderCacheListTextIncludesLastUsedTimestamp
+=== CONT  TestDiagCacheHelpDescribesReadOnlyBehavior
+--- PASS: TestFormatByteSizeUsesHumanFriendlyUnits (0.00s)
+=== CONT  TestRenderCacheListJSON
+=== CONT  TestCacheCleanCommandRegistersCleanupFlags
+=== CONT  TestCacheListCommandRegistersJSONFlag
+=== CONT  TestRenderCacheCleanTextUsesDryRunAndInvalidWording
+=== CONT  TestStartDeploymentLogSession_CreatesDeploymentLogWithoutState
+=== CONT  TestCacheCommandsDoNotUseDeploymentDirectoryConcerns
+--- PASS: TestRenderCacheListTextIncludesLastUsedTimestamp (0.00s)
+=== RUN   TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache
+=== CONT  TestRenderDeploymentInfoJSONSerializesReportDirectly
+=== PAUSE TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache
+=== RUN   TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_list
+=== PAUSE TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_list
+=== RUN   TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_clean
+=== PAUSE TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_clean
+=== RUN   TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_unlock
+=== PAUSE TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_unlock
+=== RUN   TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/diag_cache
+=== PAUSE TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/diag_cache
+=== CONT  TestStartDeploymentLogSession_CreatesLogFileWhenDeploymentDirectoryDoesNotExistYet
+--- PASS: TestDiagCacheHelpDescribesReadOnlyBehavior (0.00s)
+=== CONT  TestDestroyConfirmationPromptWithoutRemoveOmitsDeploymentDirectory
+--- PASS: TestDestroyConfirmationPromptWithoutRemoveOmitsDeploymentDirectory (0.00s)
+--- PASS: TestEnforceDeploymentDirectoryCompatibility_HintsLegacyWorkflowStateLayout (0.00s)
+=== CONT  TestFormatLatestVersionText_RejectsInvalidVersionData
+--- PASS: TestStartDeploymentLogSession_CreatesDeploymentLogWithoutState (0.00s)
+--- PASS: TestFormatLatestVersionText_RejectsInvalidVersionData (0.00s)
+=== CONT  TestFormatCurrentVersionJSON_ReportsStructuredJSON
+=== CONT  TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions
+=== RUN   TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_newer
+=== CONT  TestVersionCmdQueuesPrimaryOutputForTerminalFlush
+=== CONT  TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout
+--- PASS: TestRenderDeploymentInfoJSONSerializesReportDirectly (0.00s)
+=== PAUSE TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_newer
+=== RUN   TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_equal
+==================
+WARNING: DATA RACE
+Write at 0x000001974e10 by goroutine 85:
+  github.com/exasol/exasol-personal/cmd/exasol.resetTerminalMessages()
+      /home/runner/work/exasol-personal/exasol-personal/cmd/exasol/terminal_notice.go:18 +0x48
+  github.com/exasol/exasol-personal/cmd/exasol.TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout()
+      /home/runner/work/exasol-personal/exasol-personal/cmd/exasol/terminal_notice_test.go:14 +0x3c
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1934 +0x21c
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1997 +0x44
+
+Previous write at 0x000001974e10 by goroutine 92:
+  github.com/exasol/exasol-personal/cmd/exasol.resetTerminalMessages()
+      /home/runner/work/exasol-personal/exasol-personal/cmd/exasol/terminal_notice.go:18 +0x48
+  github.com/exasol/exasol-personal/cmd/exasol.TestVersionCmdQueuesPrimaryOutputForTerminalFlush()
+      /home/runner/work/exasol-personal/exasol-personal/cmd/exasol/version_test.go:138 +0x3c
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1934 +0x21c
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1997 +0x44
+
+Goroutine 85 (running) created at:
+  testing.(*T).Run()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1997 +0x9d2
+  testing.runTests.func1()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2477 +0x85
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1934 +0x21c
+  testing.runTests()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2475 +0x96c
+  testing.(*M).Run()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2337 +0xed4
+  main.main()
+      _testmain.go:211 +0x164
+
+Goroutine 92 (running) created at:
+  testing.(*T).Run()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1997 +0x9d2
+  testing.runTests.func1()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2477 +0x85
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1934 +0x21c
+  testing.runTests()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2475 +0x96c
+  testing.(*M).Run()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2337 +0xed4
+  main.main()
+      _testmain.go:211 +0x164
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000001974e30 by goroutine 85:
+  github.com/exasol/exasol-personal/cmd/exasol.resetTerminalMessages()
+      /home/runner/work/exasol-personal/exasol-personal/cmd/exasol/terminal_notice.go:19 +0x84
+  github.com/exasol/exasol-personal/cmd/exasol.TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout()
+      /home/runner/work/exasol-personal/exasol-personal/cmd/exasol/terminal_notice_test.go:14 +0x3c
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1934 +0x21c
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1997 +0x44
+
+Previous write at 0x000001974e30 by goroutine 92:
+  github.com/exasol/exasol-personal/cmd/exasol.resetTerminalMessages()
+      /home/runner/work/exasol-personal/exasol-personal/cmd/exasol/terminal_notice.go:19 +0x84
+  github.com/exasol/exasol-personal/cmd/exasol.TestVersionCmdQueuesPrimaryOutputForTerminalFlush()
+      /home/runner/work/exasol-personal/exasol-personal/cmd/exasol/version_test.go:138 +0x3c
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1934 +0x21c
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1997 +0x44
+
+Goroutine 85 (running) created at:
+  testing.(*T).Run()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1997 +0x9d2
+  testing.runTests.func1()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2477 +0x85
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1934 +0x21c
+  testing.runTests()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2475 +0x96c
+  testing.(*M).Run()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2337 +0xed4
+  main.main()
+      _testmain.go:211 +0x164
+
+Goroutine 92 (running) created at:
+  testing.(*T).Run()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1997 +0x9d2
+  testing.runTests.func1()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2477 +0x85
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:1934 +0x21c
+  testing.runTests()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2475 +0x96c
+  testing.(*M).Run()
+      /opt/hostedtoolcache/go/1.25.8/x64/src/testing/testing.go:2337 +0xed4
+  main.main()
+      _testmain.go:211 +0x164
+==================
+--- PASS: TestCacheCleanCommandRegistersCleanupFlags (0.00s)
+=== NAME  TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions
+    testing.go:1617: race detected during execution of test
+=== NAME  TestVersionCmdQueuesPrimaryOutputForTerminalFlush
+    testing.go:1617: race detected during execution of test
+--- PASS: TestCacheListCommandRegistersJSONFlag (0.00s)
+=== CONT  TestFormatCurrentVersionText_ReportsText
+=== NAME  TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout
+    testing.go:1617: race detected during execution of test
+=== CONT  TestRoutingHandler_DoesNotLeakDebugToTerminal
+=== CONT  TestFilterPresetCatalog_FilterInstallation
+--- PASS: TestRenderCacheCleanTextUsesDryRunAndInvalidWording (0.00s)
+=== CONT  TestRequireEmptyDir_ErrOnNonEmptyDir
+--- PASS: TestRenderCacheListJSON (0.00s)
+--- PASS: TestExportEmbeddedPreset_Infrastructure_WritesManifest (0.00s)
+--- PASS: TestFormatCurrentVersionJSON_ReportsStructuredJSON (0.00s)
+--- PASS: TestStartDeploymentLogSession_CreatesLogFileWhenDeploymentDirectoryDoesNotExistYet (0.00s)
+=== PAUSE TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_equal
+--- FAIL: TestVersionCmdQueuesPrimaryOutputForTerminalFlush (0.00s)
+--- FAIL: TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout (0.00s)
+--- PASS: TestFormatCurrentVersionText_ReportsText (0.00s)
+=== RUN   TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_older
+=== CONT  TestRenderDeploymentInfoTextAppendsStateGuidance
+--- PASS: TestRoutingHandler_DoesNotLeakDebugToTerminal (0.00s)
+--- PASS: TestRequireEmptyDir_ErrOnNonEmptyDir (0.00s)
+=== PAUSE TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_older
+--- PASS: TestRenderDeploymentInfoTextAppendsStateGuidance (0.00s)
+=== CONT  TestRequireEmptyDir_ErrOnMissingDir
+=== CONT  TestRoutingHandler_DebugRecordWritesToFileSink
+=== CONT  TestResolveDeploymentDir_IgnoresCommandsWithoutDeploymentDirFlag
+--- PASS: TestRoutingHandler_DebugRecordWritesToFileSink (0.00s)
+=== CONT  TestRenderDeploymentInfoTextIncludesInitializedOverview
+--- PASS: TestResolveDeploymentDir_IgnoresCommandsWithoutDeploymentDirFlag (0.00s)
+=== CONT  TestRequireDeploymentFileLogging
+--- PASS: TestRequireDeploymentFileLogging (0.00s)
+=== CONT  TestDeploymentLogSessionStartsAfterInit
+--- PASS: TestDeploymentLogSessionStartsAfterInit (0.00s)
+=== CONT  TestDestroyConfirmationPromptWithRemoveIncludesDeploymentDirectory
+--- PASS: TestRenderDeploymentInfoTextIncludesInitializedOverview (0.00s)
+=== CONT  TestRemoveConfirmationPromptIncludesDeploymentDirectory
+--- PASS: TestRequireEmptyDir_ErrOnMissingDir (0.00s)
+=== CONT  TestRenderPresetListJSON_ValidJSON
+--- PASS: TestDestroyConfirmationPromptWithRemoveIncludesDeploymentDirectory (0.00s)
+=== CONT  TestFilterPresetCatalog_All
+--- PASS: TestRemoveConfirmationPromptIncludesDeploymentDirectory (0.00s)
+=== CONT  TestFilterPresetCatalog_InvalidType
+--- PASS: TestFilterPresetCatalog_FilterInstallation (0.00s)
+=== CONT  TestFilterPresetCatalog_FilterInfrastructure
+=== CONT  TestSelectedConnectOutputFormat/defaults_to_table
+=== CONT  TestSelectedConnectOutputFormat/json_flag_selects_json
+=== CONT  TestSelectedConnectOutputFormat/csv_flag_selects_csv
+=== CONT  TestJSONFormatValueSet/keeps_pretty
+=== CONT  TestJSONFormatValueSet/trims_and_lowercases_compact
+=== CONT  TestExportEmbeddedPreset_Installation_WritesManifest
+=== CONT  TestJSONFormatValueSet/empty_defaults_to_pretty
+--- PASS: TestFilterPresetCatalog_All (0.00s)
+=== CONT  TestConfigCommandsDeclareDeploymentPreRunRequirements/config
+--- PASS: TestFilterPresetCatalog_FilterInfrastructure (0.00s)
+=== CONT  TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_newer_patch_than_launcher
+=== CONT  TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_newer_minor_than_launcher
+=== CONT  TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/allows_same_minor_at_patch_0
+=== CONT  TestConfigCommandsDeclareDeploymentPreRunRequirements/set
+=== CONT  TestConfigCommandsDeclareDeploymentPreRunRequirements/reset
+=== CONT  TestConfigCommandsDeclareDeploymentPreRunRequirements/get
+=== CONT  TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_older_than_minimum_minor
+=== CONT  TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/diag_cache
+--- PASS: TestFilterPresetCatalog_InvalidType (0.00s)
+=== CONT  TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache
+=== CONT  TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_clean
+=== NAME  TestSelectedConnectOutputFormat
+    testing.go:1617: race detected during execution of test
+=== CONT  TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_equal
+=== CONT  TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_newer
+=== NAME  TestJSONFormatValueSet
+    testing.go:1617: race detected during execution of test
+--- PASS: TestRenderPresetListJSON_ValidJSON (0.00s)
+=== CONT  TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_unlock
+--- PASS: TestExportEmbeddedPreset_Installation_WritesManifest (0.00s)
+=== NAME  TestConfigCommandsDeclareDeploymentPreRunRequirements
+    testing.go:1617: race detected during execution of test
+=== CONT  TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_list
+=== CONT  TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_older
+=== NAME  TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher
+    testing.go:1617: race detected during execution of test
+--- FAIL: TestSelectedConnectOutputFormat (0.00s)
+    --- PASS: TestSelectedConnectOutputFormat/defaults_to_table (0.00s)
+    --- PASS: TestSelectedConnectOutputFormat/json_flag_selects_json (0.00s)
+    --- PASS: TestSelectedConnectOutputFormat/csv_flag_selects_csv (0.00s)
+--- FAIL: TestJSONFormatValueSet (0.00s)
+    --- PASS: TestJSONFormatValueSet/keeps_pretty (0.00s)
+    --- PASS: TestJSONFormatValueSet/trims_and_lowercases_compact (0.00s)
+    --- PASS: TestJSONFormatValueSet/empty_defaults_to_pretty (0.00s)
+--- FAIL: TestConfigCommandsDeclareDeploymentPreRunRequirements (0.00s)
+    --- PASS: TestConfigCommandsDeclareDeploymentPreRunRequirements/config (0.00s)
+    --- PASS: TestConfigCommandsDeclareDeploymentPreRunRequirements/set (0.00s)
+    --- PASS: TestConfigCommandsDeclareDeploymentPreRunRequirements/reset (0.00s)
+    --- PASS: TestConfigCommandsDeclareDeploymentPreRunRequirements/get (0.00s)
+--- FAIL: TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher (0.00s)
+    --- PASS: TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_newer_patch_than_launcher (0.00s)
+    --- PASS: TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_newer_minor_than_launcher (0.00s)
+    --- PASS: TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/allows_same_minor_at_patch_0 (0.00s)
+    --- PASS: TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher/rejects_deployment_older_than_minimum_minor (0.00s)
+--- FAIL: TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions (0.00s)
+    --- PASS: TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_equal (0.00s)
+    --- PASS: TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_newer (0.00s)
+    --- PASS: TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions/reported_version_is_older (0.00s)
+=== NAME  TestCacheCommandsDoNotUseDeploymentDirectoryConcerns
+    testing.go:1617: race detected during execution of test
+--- FAIL: TestCacheCommandsDoNotUseDeploymentDirectoryConcerns (0.00s)
+    --- PASS: TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/diag_cache (0.00s)
+    --- PASS: TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_clean (0.00s)
+    --- PASS: TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache (0.00s)
+    --- PASS: TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_unlock (0.00s)
+    --- PASS: TestCacheCommandsDoNotUseDeploymentDirectoryConcerns/cache_list (0.00s)
+FAIL
+FAIL	github.com/exasol/exasol-personal/cmd/exasol	0.063s
+=== RUN   TestCheck_AllowsSupportedVersions
+=== PAUSE TestCheck_AllowsSupportedVersions
+=== RUN   TestCheck_RejectsDeploymentNewerThanLauncher_OnPrinciple
+=== PAUSE TestCheck_RejectsDeploymentNewerThanLauncher_OnPrinciple
+=== RUN   TestCheck_IgnoresPrereleaseSuffixes
+=== PAUSE TestCheck_IgnoresPrereleaseSuffixes
+=== RUN   TestCheck_RejectsDeploymentOlderThanCommandMinimum
+=== PAUSE TestCheck_RejectsDeploymentOlderThanCommandMinimum
+=== RUN   TestCheck_RejectsInvalidVersions
+=== PAUSE TestCheck_RejectsInvalidVersions
+=== CONT  TestCheck_RejectsDeploymentNewerThanLauncher_OnPrinciple
+--- PASS: TestCheck_RejectsDeploymentNewerThanLauncher_OnPrinciple (0.00s)
+=== CONT  TestCheck_RejectsInvalidVersions
+=== RUN   TestCheck_RejectsInvalidVersions/missing_deployment
+=== CONT  TestCheck_RejectsDeploymentOlderThanCommandMinimum
+--- PASS: TestCheck_RejectsDeploymentOlderThanCommandMinimum (0.00s)
+=== CONT  TestCheck_IgnoresPrereleaseSuffixes
+--- PASS: TestCheck_IgnoresPrereleaseSuffixes (0.00s)
+=== CONT  TestCheck_AllowsSupportedVersions
+--- PASS: TestCheck_AllowsSupportedVersions (0.00s)
+=== PAUSE TestCheck_RejectsInvalidVersions/missing_deployment
+=== RUN   TestCheck_RejectsInvalidVersions/invalid_deployment
+=== PAUSE TestCheck_RejectsInvalidVersions/invalid_deployment
+=== RUN   TestCheck_RejectsInvalidVersions/invalid_launcher
+=== PAUSE TestCheck_RejectsInvalidVersions/invalid_launcher
+=== RUN   TestCheck_RejectsInvalidVersions/invalid_minimum
+=== PAUSE TestCheck_RejectsInvalidVersions/invalid_minimum
+=== CONT  TestCheck_RejectsInvalidVersions/missing_deployment
+=== CONT  TestCheck_RejectsInvalidVersions/invalid_minimum
+=== CONT  TestCheck_RejectsInvalidVersions/invalid_launcher
+=== CONT  TestCheck_RejectsInvalidVersions/invalid_deployment
+--- PASS: TestCheck_RejectsInvalidVersions (0.00s)
+    --- PASS: TestCheck_RejectsInvalidVersions/missing_deployment (0.00s)
+    --- PASS: TestCheck_RejectsInvalidVersions/invalid_minimum (0.00s)
+    --- PASS: TestCheck_RejectsInvalidVersions/invalid_launcher (0.00s)
+    --- PASS: TestCheck_RejectsInvalidVersions/invalid_deployment (0.00s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/compatibility	1.012s
+=== RUN   TestResolveConnectionInfo_UsesNormalizedDeploymentConnection
+=== PAUSE TestResolveConnectionInfo_UsesNormalizedDeploymentConnection
+=== RUN   TestResolveConnectionInfo_UsesExplicitAdminUIMetadata
+=== PAUSE TestResolveConnectionInfo_UsesExplicitAdminUIMetadata
+=== RUN   TestResolveConnectionInfo_AllowsMissingAdminUIMetadata
+=== PAUSE TestResolveConnectionInfo_AllowsMissingAdminUIMetadata
+=== RUN   TestResolveConnectionInfo_UsesExplicitConnectionCertFingerprint
+=== PAUSE TestResolveConnectionInfo_UsesExplicitConnectionCertFingerprint
+=== RUN   TestResolveConnectionInfo_UsesLegacyNodeTLSCertFingerprintFallback
+=== PAUSE TestResolveConnectionInfo_UsesLegacyNodeTLSCertFingerprintFallback
+=== RUN   TestDeploymentDir_LayoutPaths
+=== PAUSE TestDeploymentDir_LayoutPaths
+=== RUN   TestDeploymentDir_Resolve
+=== PAUSE TestDeploymentDir_Resolve
+=== RUN   TestWorkflowState
+=== PAUSE TestWorkflowState
+=== RUN   TestGetCertFingerprint_NoNodes
+=== PAUSE TestGetCertFingerprint_NoNodes
+=== RUN   TestGetCertFingerprint_EmptyTlsCert_Error
+=== PAUSE TestGetCertFingerprint_EmptyTlsCert_Error
+=== RUN   TestGetCertFingerprint_FallbackWhenN11Missing
+=== PAUSE TestGetCertFingerprint_FallbackWhenN11Missing
+=== RUN   TestReadNodeDetails_PreservesPresetRenderedSSHCommand
+=== PAUSE TestReadNodeDetails_PreservesPresetRenderedSSHCommand
+=== RUN   TestGetSSHDetails_AllowsAbsoluteLegacyKeyPath
+=== PAUSE TestGetSSHDetails_AllowsAbsoluteLegacyKeyPath
+=== RUN   TestReadDeploymentInfo_DerivesAdminUIFromLegacyNodeMetadata
+=== PAUSE TestReadDeploymentInfo_DerivesAdminUIFromLegacyNodeMetadata
+=== RUN   TestGetDeploymentHostPort_NoNodes
+=== PAUSE TestGetDeploymentHostPort_NoNodes
+=== RUN   TestGetDeploymentHostPort_N11Preferred_DnsName
+=== PAUSE TestGetDeploymentHostPort_N11Preferred_DnsName
+=== RUN   TestGetDeploymentHostPort_FallbackFirstNode_WhenN11Missing
+=== PAUSE TestGetDeploymentHostPort_FallbackFirstNode_WhenN11Missing
+=== RUN   TestGetDeploymentHostPort_UsesPublicIp_WhenDnsEmpty
+=== PAUSE TestGetDeploymentHostPort_UsesPublicIp_WhenDnsEmpty
+=== RUN   TestGetDeploymentHostPort_Error_WhenHostEmpty
+=== PAUSE TestGetDeploymentHostPort_Error_WhenHostEmpty
+=== RUN   TestGetDeploymentHostPort_Error_WhenPortEmpty
+=== PAUSE TestGetDeploymentHostPort_Error_WhenPortEmpty
+=== RUN   TestGetDeploymentHostPort_Error_WhenPortNonNumeric
+=== PAUSE TestGetDeploymentHostPort_Error_WhenPortNonNumeric
+=== RUN   TestGetDeploymentHostPort_Error_WhenPortOutOfRange
+=== PAUSE TestGetDeploymentHostPort_Error_WhenPortOutOfRange
+=== CONT  TestResolveConnectionInfo_UsesNormalizedDeploymentConnection
+=== CONT  TestReadDeploymentInfo_DerivesAdminUIFromLegacyNodeMetadata
+=== CONT  TestGetDeploymentHostPort_UsesPublicIp_WhenDnsEmpty
+--- PASS: TestGetDeploymentHostPort_UsesPublicIp_WhenDnsEmpty (0.00s)
+=== CONT  TestGetDeploymentHostPort_Error_WhenPortNonNumeric
+--- PASS: TestGetDeploymentHostPort_Error_WhenPortNonNumeric (0.00s)
+=== CONT  TestGetDeploymentHostPort_Error_WhenHostEmpty
+--- PASS: TestGetDeploymentHostPort_Error_WhenHostEmpty (0.00s)
+=== CONT  TestGetDeploymentHostPort_Error_WhenPortEmpty
+--- PASS: TestGetDeploymentHostPort_Error_WhenPortEmpty (0.00s)
+=== CONT  TestGetDeploymentHostPort_FallbackFirstNode_WhenN11Missing
+--- PASS: TestGetDeploymentHostPort_FallbackFirstNode_WhenN11Missing (0.00s)
+=== CONT  TestGetSSHDetails_AllowsAbsoluteLegacyKeyPath
+--- PASS: TestReadDeploymentInfo_DerivesAdminUIFromLegacyNodeMetadata (0.00s)
+--- PASS: TestResolveConnectionInfo_UsesNormalizedDeploymentConnection (0.00s)
+=== CONT  TestGetCertFingerprint_NoNodes
+--- PASS: TestGetCertFingerprint_NoNodes (0.00s)
+=== CONT  TestGetCertFingerprint_EmptyTlsCert_Error
+--- PASS: TestGetCertFingerprint_EmptyTlsCert_Error (0.00s)
+=== CONT  TestGetCertFingerprint_FallbackWhenN11Missing
+--- PASS: TestGetCertFingerprint_FallbackWhenN11Missing (0.00s)
+=== CONT  TestWorkflowState
+=== RUN   TestWorkflowState/Invalid_state_panics
+=== CONT  TestDeploymentDir_Resolve
+=== PAUSE TestWorkflowState/Invalid_state_panics
+=== RUN   TestWorkflowState/Write_error_(non-writable_dir)
+=== PAUSE TestWorkflowState/Write_error_(non-writable_dir)
+=== RUN   TestWorkflowState/Initialized
+=== PAUSE TestWorkflowState/Initialized
+=== RUN   TestWorkflowState/OperationInProgress
+=== PAUSE TestWorkflowState/OperationInProgress
+=== RUN   TestWorkflowState/Running
+=== PAUSE TestWorkflowState/Running
+=== RUN   TestWorkflowState/Stopped
+=== PAUSE TestWorkflowState/Stopped
+=== RUN   TestWorkflowState/Interrupted
+--- PASS: TestGetSSHDetails_AllowsAbsoluteLegacyKeyPath (0.00s)
+=== PAUSE TestWorkflowState/Interrupted
+=== CONT  TestGetDeploymentHostPort_Error_WhenPortOutOfRange
+=== CONT  TestResolveConnectionInfo_UsesLegacyNodeTLSCertFingerprintFallback
+--- PASS: TestGetDeploymentHostPort_Error_WhenPortOutOfRange (0.00s)
+=== CONT  TestDeploymentDir_LayoutPaths
+--- PASS: TestDeploymentDir_LayoutPaths (0.00s)
+=== RUN   TestWorkflowState/DeploymentFailed
+=== CONT  TestResolveConnectionInfo_UsesExplicitConnectionCertFingerprint
+=== PAUSE TestWorkflowState/DeploymentFailed
+=== RUN   TestWorkflowState/Missing_file_returns_error
+=== PAUSE TestWorkflowState/Missing_file_returns_error
+=== RUN   TestWorkflowState/No_field_set_returns_ErrNoWorkflowStateSet
+=== PAUSE TestWorkflowState/No_field_set_returns_ErrNoWorkflowStateSet
+=== CONT  TestReadNodeDetails_PreservesPresetRenderedSSHCommand
+--- PASS: TestResolveConnectionInfo_UsesLegacyNodeTLSCertFingerprintFallback (0.00s)
+=== CONT  TestGetDeploymentHostPort_N11Preferred_DnsName
+--- PASS: TestGetDeploymentHostPort_N11Preferred_DnsName (0.00s)
+=== CONT  TestResolveConnectionInfo_UsesExplicitAdminUIMetadata
+--- PASS: TestReadNodeDetails_PreservesPresetRenderedSSHCommand (0.00s)
+=== CONT  TestResolveConnectionInfo_AllowsMissingAdminUIMetadata
+--- PASS: TestResolveConnectionInfo_UsesExplicitAdminUIMetadata (0.00s)
+=== CONT  TestGetDeploymentHostPort_NoNodes
+--- PASS: TestGetDeploymentHostPort_NoNodes (0.00s)
+=== CONT  TestWorkflowState/Invalid_state_panics
+=== CONT  TestWorkflowState/Stopped
+--- PASS: TestResolveConnectionInfo_AllowsMissingAdminUIMetadata (0.00s)
+=== CONT  TestWorkflowState/Running
+=== CONT  TestWorkflowState/Initialized
+--- PASS: TestResolveConnectionInfo_UsesExplicitConnectionCertFingerprint (0.01s)
+=== CONT  TestWorkflowState/Write_error_(non-writable_dir)
+=== CONT  TestWorkflowState/Missing_file_returns_error
+2026/07/02 09:49:48 ERROR failed to open config file type="exasol personal state" path=/tmp/TestWorkflowStateWrite_error_(non-writable_dir)2582769578/001/.exasolLauncherState.json
+=== CONT  TestWorkflowState/OperationInProgress
+=== CONT  TestWorkflowState/Interrupted
+=== CONT  TestWorkflowState/DeploymentFailed
+--- PASS: TestDeploymentDir_Resolve (0.01s)
+=== CONT  TestWorkflowState/No_field_set_returns_ErrNoWorkflowStateSet
+--- PASS: TestWorkflowState (0.00s)
+    --- PASS: TestWorkflowState/Invalid_state_panics (0.00s)
+    --- PASS: TestWorkflowState/Running (0.00s)
+    --- PASS: TestWorkflowState/Stopped (0.00s)
+    --- PASS: TestWorkflowState/Write_error_(non-writable_dir) (0.00s)
+    --- PASS: TestWorkflowState/Missing_file_returns_error (0.00s)
+    --- PASS: TestWorkflowState/Initialized (0.00s)
+    --- PASS: TestWorkflowState/OperationInProgress (0.00s)
+    --- PASS: TestWorkflowState/DeploymentFailed (0.00s)
+    --- PASS: TestWorkflowState/No_field_set_returns_ErrNoWorkflowStateSet (0.00s)
+    --- PASS: TestWorkflowState/Interrupted (0.00s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/config	1.026s
+=== RUN   TestPrintResultJSON
+=== PAUSE TestPrintResultJSON
+=== RUN   TestPrintResultCSV
+=== PAUSE TestPrintResultCSV
+=== RUN   TestResolveNonInteractiveSQL
+=== PAUSE TestResolveNonInteractiveSQL
+=== RUN   TestRunStatementsRendersEachResult
+=== PAUSE TestRunStatementsRendersEachResult
+=== RUN   TestEffectiveMaxRows
+=== PAUSE TestEffectiveMaxRows
+=== RUN   TestPrintTruncationFooter
+=== PAUSE TestPrintTruncationFooter
+=== RUN   TestParseJSONFormat
+=== PAUSE TestParseJSONFormat
+=== RUN   TestRunShell
+=== PAUSE TestRunShell
+=== RUN   TestRunStatements
+=== PAUSE TestRunStatements
+=== RUN   TestSplitSemicolonTerminatedStatements
+=== PAUSE TestSplitSemicolonTerminatedStatements
+=== CONT  TestPrintResultJSON
+=== RUN   TestPrintResultJSON/renders_columns_and_rows_as_pretty_json
+=== CONT  TestSplitSemicolonTerminatedStatements
+=== RUN   TestSplitSemicolonTerminatedStatements/keeps_semicolons_inside_single_quotes
+=== PAUSE TestSplitSemicolonTerminatedStatements/keeps_semicolons_inside_single_quotes
+=== RUN   TestSplitSemicolonTerminatedStatements/returns_remaining_unterminated_statement
+=== CONT  TestRunStatements
+=== RUN   TestRunStatements/executes_a_single_statement_without_a_terminator
+=== CONT  TestRunShell
+=== RUN   TestRunShell/single_query_without_semicolon_is_buffered
+=== PAUSE TestPrintResultJSON/renders_columns_and_rows_as_pretty_json
+=== PAUSE TestSplitSemicolonTerminatedStatements/returns_remaining_unterminated_statement
+=== RUN   TestSplitSemicolonTerminatedStatements/keeps_semicolons_inside_double_quotes
+=== PAUSE TestSplitSemicolonTerminatedStatements/keeps_semicolons_inside_double_quotes
+=== PAUSE TestRunStatements/executes_a_single_statement_without_a_terminator
+=== PAUSE TestRunShell/single_query_without_semicolon_is_buffered
+=== RUN   TestPrintResultJSON/renders_columns_and_rows_as_compact_json
+=== RUN   TestSplitSemicolonTerminatedStatements/ignores_semicolons_in_sql_line_comments
+=== PAUSE TestSplitSemicolonTerminatedStatements/ignores_semicolons_in_sql_line_comments
+=== RUN   TestRunStatements/executes_semicolon-separated_statements_in_order
+=== RUN   TestRunShell/EOF_flushes_buffered_statement_without_semicolon
+=== PAUSE TestPrintResultJSON/renders_columns_and_rows_as_compact_json
+=== RUN   TestSplitSemicolonTerminatedStatements/ignores_semicolons_in_sql_block_comments
+=== PAUSE TestRunStatements/executes_semicolon-separated_statements_in_order
+=== PAUSE TestRunShell/EOF_flushes_buffered_statement_without_semicolon
+=== RUN   TestPrintResultJSON/renders_empty_results_as_empty_arrays
+=== PAUSE TestSplitSemicolonTerminatedStatements/ignores_semicolons_in_sql_block_comments
+=== RUN   TestRunStatements/skips_empty_and_trailing_segments
+=== PAUSE TestRunStatements/skips_empty_and_trailing_segments
+=== RUN   TestRunStatements/stops_at_and_returns_the_first_error
+=== RUN   TestRunShell/interrupt
+=== PAUSE TestPrintResultJSON/renders_empty_results_as_empty_arrays
+=== RUN   TestPrintResultJSON/unknown_format_falls_back_to_pretty_json
+=== PAUSE TestRunStatements/stops_at_and_returns_the_first_error
+=== PAUSE TestRunShell/interrupt
+=== PAUSE TestPrintResultJSON/unknown_format_falls_back_to_pretty_json
+=== RUN   TestPrintResultJSON/renders_typed_values_without_html_escaping
+=== PAUSE TestPrintResultJSON/renders_typed_values_without_html_escaping
+=== CONT  TestParseJSONFormat
+=== RUN   TestParseJSONFormat/empty_defaults_to_pretty
+=== CONT  TestPrintTruncationFooter
+--- PASS: TestPrintTruncationFooter (0.00s)
+=== CONT  TestRunStatementsRendersEachResult
+--- PASS: TestRunStatementsRendersEachResult (0.00s)
+=== CONT  TestEffectiveMaxRows
+=== RUN   TestEffectiveMaxRows/unset,_interactive
+=== RUN   TestRunShell/multiline_query_executes_on_semicolon
+=== PAUSE TestRunShell/multiline_query_executes_on_semicolon
+=== PAUSE TestParseJSONFormat/empty_defaults_to_pretty
+=== RUN   TestParseJSONFormat/pretty_accepted
+=== PAUSE TestEffectiveMaxRows/unset,_interactive
+=== RUN   TestRunShell/multiple_queries_same_line_execute_separately
+=== PAUSE TestRunShell/multiple_queries_same_line_execute_separately
+=== CONT  TestResolveNonInteractiveSQL
+=== RUN   TestResolveNonInteractiveSQL/command_supplies_SQL
+=== PAUSE TestResolveNonInteractiveSQL/command_supplies_SQL
+=== RUN   TestResolveNonInteractiveSQL/file_supplies_SQL
+=== PAUSE TestParseJSONFormat/pretty_accepted
+=== RUN   TestParseJSONFormat/compact_accepted
+=== PAUSE TestParseJSONFormat/compact_accepted
+=== RUN   TestEffectiveMaxRows/unset,_unlimited
+=== PAUSE TestEffectiveMaxRows/unset,_unlimited
+=== RUN   TestEffectiveMaxRows/explicit_over_interactive
+=== RUN   TestRunShell/input_processor_error
+=== PAUSE TestResolveNonInteractiveSQL/file_supplies_SQL
+=== RUN   TestResolveNonInteractiveSQL/missing_file_fails_without_running_statements
+=== PAUSE TestResolveNonInteractiveSQL/missing_file_fails_without_running_statements
+=== RUN   TestResolveNonInteractiveSQL/no_flag_falls_back_to_interactive
+=== RUN   TestParseJSONFormat/case_and_whitespace_normalized
+=== PAUSE TestParseJSONFormat/case_and_whitespace_normalized
+=== RUN   TestParseJSONFormat/invalid_value_rejected
+=== PAUSE TestEffectiveMaxRows/explicit_over_interactive
+=== PAUSE TestRunShell/input_processor_error
+=== PAUSE TestResolveNonInteractiveSQL/no_flag_falls_back_to_interactive
+=== PAUSE TestParseJSONFormat/invalid_value_rejected
+=== RUN   TestEffectiveMaxRows/explicit_over_unlimited
+=== RUN   TestRunShell/semicolon_mode_continues_after_a_failed_statement_on_same_line
+=== PAUSE TestRunShell/semicolon_mode_continues_after_a_failed_statement_on_same_line
+=== PAUSE TestEffectiveMaxRows/explicit_over_unlimited
+=== RUN   TestRunShell/line_mode_executes_per_line
+=== CONT  TestPrintResultCSV
+=== RUN   TestPrintResultCSV/renders_header_and_rows
+=== PAUSE TestPrintResultCSV/renders_header_and_rows
+=== RUN   TestPrintResultCSV/quotes_csv_special_characters
+=== PAUSE TestPrintResultCSV/quotes_csv_special_characters
+=== CONT  TestSplitSemicolonTerminatedStatements/keeps_semicolons_inside_double_quotes
+=== CONT  TestRunStatements/executes_a_single_statement_without_a_terminator
+=== RUN   TestEffectiveMaxRows/explicit_zero_is_unlimited
+=== PAUSE TestEffectiveMaxRows/explicit_zero_is_unlimited
+=== PAUSE TestRunShell/line_mode_executes_per_line
+=== RUN   TestPrintResultCSV/renders_null_as_empty_field
+=== CONT  TestSplitSemicolonTerminatedStatements/ignores_semicolons_in_sql_block_comments
+=== CONT  TestSplitSemicolonTerminatedStatements/ignores_semicolons_in_sql_line_comments
+=== CONT  TestSplitSemicolonTerminatedStatements/keeps_semicolons_inside_single_quotes
+=== CONT  TestRunStatements/skips_empty_and_trailing_segments
+=== PAUSE TestPrintResultCSV/renders_null_as_empty_field
+=== RUN   TestPrintResultCSV/skips_zero-column_results
+=== PAUSE TestPrintResultCSV/skips_zero-column_results
+=== CONT  TestSplitSemicolonTerminatedStatements/returns_remaining_unterminated_statement
+=== CONT  TestPrintResultJSON/renders_typed_values_without_html_escaping
+--- PASS: TestSplitSemicolonTerminatedStatements (0.00s)
+    --- PASS: TestSplitSemicolonTerminatedStatements/keeps_semicolons_inside_double_quotes (0.00s)
+    --- PASS: TestSplitSemicolonTerminatedStatements/ignores_semicolons_in_sql_block_comments (0.00s)
+    --- PASS: TestSplitSemicolonTerminatedStatements/ignores_semicolons_in_sql_line_comments (0.00s)
+    --- PASS: TestSplitSemicolonTerminatedStatements/keeps_semicolons_inside_single_quotes (0.00s)
+    --- PASS: TestSplitSemicolonTerminatedStatements/returns_remaining_unterminated_statement (0.00s)
+=== CONT  TestRunStatements/stops_at_and_returns_the_first_error
+=== CONT  TestPrintResultJSON/renders_columns_and_rows_as_compact_json
+=== CONT  TestPrintResultJSON/renders_empty_results_as_empty_arrays
+=== CONT  TestRunStatements/executes_semicolon-separated_statements_in_order
+=== CONT  TestPrintResultJSON/renders_columns_and_rows_as_pretty_json
+--- PASS: TestRunStatements (0.00s)
+    --- PASS: TestRunStatements/executes_a_single_statement_without_a_terminator (0.00s)
+    --- PASS: TestRunStatements/skips_empty_and_trailing_segments (0.00s)
+    --- PASS: TestRunStatements/stops_at_and_returns_the_first_error (0.00s)
+    --- PASS: TestRunStatements/executes_semicolon-separated_statements_in_order (0.00s)
+=== CONT  TestPrintResultJSON/unknown_format_falls_back_to_pretty_json
+=== CONT  TestResolveNonInteractiveSQL/no_flag_falls_back_to_interactive
+=== CONT  TestResolveNonInteractiveSQL/file_supplies_SQL
+=== CONT  TestResolveNonInteractiveSQL/command_supplies_SQL
+=== CONT  TestResolveNonInteractiveSQL/missing_file_fails_without_running_statements
+=== CONT  TestParseJSONFormat/case_and_whitespace_normalized
+=== CONT  TestParseJSONFormat/compact_accepted
+=== CONT  TestParseJSONFormat/pretty_accepted
+=== CONT  TestEffectiveMaxRows/unset,_unlimited
+=== CONT  TestEffectiveMaxRows/explicit_over_unlimited
+=== CONT  TestEffectiveMaxRows/explicit_zero_is_unlimited
+=== CONT  TestEffectiveMaxRows/explicit_over_interactive
+=== CONT  TestEffectiveMaxRows/unset,_interactive
+=== CONT  TestPrintResultCSV/skips_zero-column_results
+=== CONT  TestParseJSONFormat/empty_defaults_to_pretty
+=== CONT  TestRunShell/interrupt
+=== CONT  TestParseJSONFormat/invalid_value_rejected
+=== CONT  TestRunShell/line_mode_executes_per_line
+--- PASS: TestParseJSONFormat (0.00s)
+    --- PASS: TestParseJSONFormat/case_and_whitespace_normalized (0.00s)
+    --- PASS: TestParseJSONFormat/compact_accepted (0.00s)
+    --- PASS: TestParseJSONFormat/pretty_accepted (0.00s)
+    --- PASS: TestParseJSONFormat/empty_defaults_to_pretty (0.00s)
+    --- PASS: TestParseJSONFormat/invalid_value_rejected (0.00s)
+--- PASS: TestResolveNonInteractiveSQL (0.00s)
+    --- PASS: TestResolveNonInteractiveSQL/no_flag_falls_back_to_interactive (0.00s)
+    --- PASS: TestResolveNonInteractiveSQL/command_supplies_SQL (0.00s)
+    --- PASS: TestResolveNonInteractiveSQL/file_supplies_SQL (0.00s)
+    --- PASS: TestResolveNonInteractiveSQL/missing_file_fails_without_running_statements (0.00s)
+=== CONT  TestRunShell/single_query_without_semicolon_is_buffered
+=== CONT  TestRunShell/multiple_queries_same_line_execute_separately
+=== CONT  TestRunShell/semicolon_mode_continues_after_a_failed_statement_on_same_line
+=== CONT  TestRunShell/multiline_query_executes_on_semicolon
+2026/07/02 09:49:48 ERROR inputs processor error
+--- PASS: TestEffectiveMaxRows (0.00s)
+    --- PASS: TestEffectiveMaxRows/unset,_unlimited (0.00s)
+    --- PASS: TestEffectiveMaxRows/explicit_over_unlimited (0.00s)
+    --- PASS: TestEffectiveMaxRows/explicit_zero_is_unlimited (0.00s)
+    --- PASS: TestEffectiveMaxRows/explicit_over_interactive (0.00s)
+    --- PASS: TestEffectiveMaxRows/unset,_interactive (0.00s)
+=== CONT  TestRunShell/EOF_flushes_buffered_statement_without_semicolon
+--- PASS: TestPrintResultJSON (0.00s)
+    --- PASS: TestPrintResultJSON/renders_typed_values_without_html_escaping (0.00s)
+    --- PASS: TestPrintResultJSON/renders_columns_and_rows_as_compact_json (0.00s)
+    --- PASS: TestPrintResultJSON/renders_empty_results_as_empty_arrays (0.00s)
+    --- PASS: TestPrintResultJSON/renders_columns_and_rows_as_pretty_json (0.00s)
+    --- PASS: TestPrintResultJSON/unknown_format_falls_back_to_pretty_json (0.00s)
+=== CONT  TestRunShell/input_processor_error
+=== CONT  TestPrintResultCSV/quotes_csv_special_characters
+2026/07/02 09:49:48 ERROR inputs processor error
+=== CONT  TestPrintResultCSV/renders_header_and_rows
+--- PASS: TestRunShell (0.00s)
+    --- PASS: TestRunShell/interrupt (0.00s)
+    --- PASS: TestRunShell/line_mode_executes_per_line (0.00s)
+    --- PASS: TestRunShell/single_query_without_semicolon_is_buffered (0.00s)
+    --- PASS: TestRunShell/multiline_query_executes_on_semicolon (0.00s)
+    --- PASS: TestRunShell/semicolon_mode_continues_after_a_failed_statement_on_same_line (0.00s)
+    --- PASS: TestRunShell/multiple_queries_same_line_execute_separately (0.00s)
+    --- PASS: TestRunShell/EOF_flushes_buffered_statement_without_semicolon (0.00s)
+    --- PASS: TestRunShell/input_processor_error (0.00s)
+=== CONT  TestPrintResultCSV/renders_null_as_empty_field
+--- PASS: TestPrintResultCSV (0.00s)
+    --- PASS: TestPrintResultCSV/skips_zero-column_results (0.00s)
+    --- PASS: TestPrintResultCSV/quotes_csv_special_characters (0.00s)
+    --- PASS: TestPrintResultCSV/renders_header_and_rows (0.00s)
+    --- PASS: TestPrintResultCSV/renders_null_as_empty_field (0.00s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/connect	1.023s
+=== RUN   TestConnect
+=== PAUSE TestConnect
+=== RUN   TestClose
+=== PAUSE TestClose
+=== RUN   TestExec
+=== PAUSE TestExec
+=== RUN   TestExecClosesResultRows
+=== PAUSE TestExecClosesResultRows
+=== RUN   TestCollectRows
+=== PAUSE TestCollectRows
+=== CONT  TestCollectRows
+=== CONT  TestExec
+=== RUN   TestCollectRows/unlimited_returns_every_row
+=== PAUSE TestCollectRows/unlimited_returns_every_row
+=== CONT  TestClose
+=== RUN   TestCollectRows/limit_truncates_and_stops_fetching
+=== CONT  TestConnect
+=== PAUSE TestCollectRows/limit_truncates_and_stops_fetching
+=== RUN   TestExec/select_query
+=== CONT  TestExecClosesResultRows
+--- PASS: TestClose (0.00s)
+=== RUN   TestCollectRows/limit_equal_to_row_count_is_not_truncated
+=== RUN   TestConnect/database_successfully_connects
+=== PAUSE TestExec/select_query
+=== PAUSE TestConnect/database_successfully_connects
+=== PAUSE TestCollectRows/limit_equal_to_row_count_is_not_truncated
+=== RUN   TestConnect/version_query_fails
+=== RUN   TestExec/select_query_error
+=== RUN   TestCollectRows/integer_DECIMAL_values_render_without_float_artifacts
+=== PAUSE TestConnect/version_query_fails
+Exasol 2025.1.0
+=== PAUSE TestExec/select_query_error
+=== PAUSE TestCollectRows/integer_DECIMAL_values_render_without_float_artifacts
+=== RUN   TestConnect/version_query_returns_empty_result
+=== RUN   TestExec/non-resultset_statement
+=== PAUSE TestConnect/version_query_returns_empty_result
+=== RUN   TestCollectRows/preserves_json-compatible_values_beside_display_strings
+=== PAUSE TestExec/non-resultset_statement
+=== CONT  TestConnect/database_successfully_connects
+=== CONT  TestConnect/version_query_fails
+=== PAUSE TestCollectRows/preserves_json-compatible_values_beside_display_strings
+=== RUN   TestCollectRows/propagates_a_non-EOF_Next_error
+=== PAUSE TestCollectRows/propagates_a_non-EOF_Next_error
+--- PASS: TestExecClosesResultRows (0.00s)
+Exasol 2025.1.0
+=== RUN   TestExec/file_import_query
+=== CONT  TestConnect/version_query_returns_empty_result
+=== PAUSE TestExec/file_import_query
+=== CONT  TestCollectRows/integer_DECIMAL_values_render_without_float_artifacts
+2026/07/02 09:49:49 WARN Couldn't get the database version err=error
+=== RUN   TestExec/file_import_query_error
+=== PAUSE TestExec/file_import_query_error
+=== CONT  TestCollectRows/preserves_json-compatible_values_beside_display_strings
+=== CONT  TestCollectRows/propagates_a_non-EOF_Next_error
+2026/07/02 09:49:49 WARN Couldn't get the database version err="the database didn't return version when queried"
+=== CONT  TestCollectRows/limit_equal_to_row_count_is_not_truncated
+=== CONT  TestCollectRows/unlimited_returns_every_row
+=== CONT  TestCollectRows/limit_truncates_and_stops_fetching
+=== CONT  TestExec/select_query
+--- PASS: TestConnect (0.00s)
+    --- PASS: TestConnect/database_successfully_connects (0.00s)
+    --- PASS: TestConnect/version_query_fails (0.00s)
+    --- PASS: TestConnect/version_query_returns_empty_result (0.00s)
+=== CONT  TestExec/non-resultset_statement
+=== CONT  TestExec/file_import_query_error
+=== CONT  TestExec/file_import_query
+Exasol 2025.1.0
+Exasol 2025.1.0
+Exasol 2025.1.0
+--- PASS: TestCollectRows (0.00s)
+    --- PASS: TestCollectRows/integer_DECIMAL_values_render_without_float_artifacts (0.00s)
+    --- PASS: TestCollectRows/propagates_a_non-EOF_Next_error (0.00s)
+    --- PASS: TestCollectRows/limit_equal_to_row_count_is_not_truncated (0.00s)
+    --- PASS: TestCollectRows/limit_truncates_and_stops_fetching (0.00s)
+    --- PASS: TestCollectRows/preserves_json-compatible_values_beside_display_strings (0.00s)
+    --- PASS: TestCollectRows/unlimited_returns_every_row (0.00s)
+Exasol 2025.1.0
+=== CONT  TestExec/select_query_error
+Exasol 2025.1.0
+--- PASS: TestExec (0.00s)
+    --- PASS: TestExec/select_query (0.00s)
+    --- PASS: TestExec/file_import_query_error (0.00s)
+    --- PASS: TestExec/non-resultset_statement (0.00s)
+    --- PASS: TestExec/file_import_query (0.00s)
+    --- PASS: TestExec/select_query_error (0.00s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/connect/exasol	1.011s
+?   	github.com/exasol/exasol-personal/internal/connect/exasol/types	[no test files]
+?   	github.com/exasol/exasol-personal/internal/connect/exasol/types/typesfakes	[no test files]
+?   	github.com/exasol/exasol-personal/internal/connect/readline	[no test files]
+?   	github.com/exasol/exasol-personal/internal/connect/tablewriter	[no test files]
+?   	github.com/exasol/exasol-personal/internal/connect/types	[no test files]
+?   	github.com/exasol/exasol-personal/internal/connect/types/typesfakes	[no test files]
+=== RUN   TestResolveBackendKind_UsesExplicitBackend
+=== PAUSE TestResolveBackendKind_UsesExplicitBackend
+=== RUN   TestResolveBackendKind_FallsBackToTofuForLegacyManifest
+=== PAUSE TestResolveBackendKind_FallsBackToTofuForLegacyManifest
+=== RUN   TestResolveBackendKind_RejectsUnknownBackend
+=== PAUSE TestResolveBackendKind_RejectsUnknownBackend
+=== RUN   TestNewDeploymentBackend_ReturnsTofuBackendForTofuManifest
+=== PAUSE TestNewDeploymentBackend_ReturnsTofuBackendForTofuManifest
+=== RUN   TestNewDeploymentBackend_AcceptsTofuManifestWithoutTofuSectionAsNoop
+=== PAUSE TestNewDeploymentBackend_AcceptsTofuManifestWithoutTofuSectionAsNoop
+=== RUN   TestNewDeploymentBackend_ReturnsLocalBackendForLocalManifest
+=== PAUSE TestNewDeploymentBackend_ReturnsLocalBackendForLocalManifest
+=== RUN   TestGetConnectionInstructionsTextStoppedDoesNotRequireConnectionHost
+=== PAUSE TestGetConnectionInstructionsTextStoppedDoesNotRequireConnectionHost
+=== RUN   TestGetConnectionInstructionsTextNotInitializedRendersTechnicalState
+=== PAUSE TestGetConnectionInstructionsTextNotInitializedRendersTechnicalState
+=== RUN   TestGetConnectionInstructionsTextNotInitializedHandlesMissingDirectory
+=== PAUSE TestGetConnectionInstructionsTextNotInitializedHandlesMissingDirectory
+=== RUN   TestRenderConnectionInstructionsText_OmitsAdminUIWhenMetadataMissing
+=== PAUSE TestRenderConnectionInstructionsText_OmitsAdminUIWhenMetadataMissing
+=== RUN   TestRenderConnectionInstructionsText_IncludesAdminUIWhenMetadataPresent
+=== PAUSE TestRenderConnectionInstructionsText_IncludesAdminUIWhenMetadataPresent
+=== RUN   TestAppendDeployFailureHint_AddsLauncherLogPath
+=== PAUSE TestAppendDeployFailureHint_AddsLauncherLogPath
+=== RUN   TestAppendDeployFailureHint_AddsDeploymentInfoPathWhenPresent
+=== PAUSE TestAppendDeployFailureHint_AddsDeploymentInfoPathWhenPresent
+=== RUN   TestAppendDeployFailureHintNilInput
+=== PAUSE TestAppendDeployFailureHintNilInput
+=== RUN   TestGenerateDeploymentId_Format
+=== PAUSE TestGenerateDeploymentId_Format
+=== RUN   TestGetDeploymentInfoReportInitializedIncludesOverviewAndPresets
+=== PAUSE TestGetDeploymentInfoReportInitializedIncludesOverviewAndPresets
+=== RUN   TestDeploymentInfoReportOperationInProgressOmitsPartialDeploymentDetails
+=== PAUSE TestDeploymentInfoReportOperationInProgressOmitsPartialDeploymentDetails
+=== RUN   TestDeploymentInfoReportOperationInProgressToleratesMissingIdentity
+=== PAUSE TestDeploymentInfoReportOperationInProgressToleratesMissingIdentity
+=== RUN   TestGetDeploymentInfoReportNotInitializedIncludesStructuredState
+=== PAUSE TestGetDeploymentInfoReportNotInitializedIncludesStructuredState
+=== RUN   TestGetDeploymentInfoReportNotInitializedHandlesMissingDirectory
+=== PAUSE TestGetDeploymentInfoReportNotInitializedHandlesMissingDirectory
+=== RUN   TestInitDeployment_CreatesTfVarsWhenTofuConfigured
+=== PAUSE TestInitDeployment_CreatesTfVarsWhenTofuConfigured
+=== RUN   TestInitDeployment_CreatesDeploymentDir
+=== PAUSE TestInitDeployment_CreatesDeploymentDir
+=== RUN   TestInitDeployment_ErrWhenDirNotEmpty
+=== PAUSE TestInitDeployment_ErrWhenDirNotEmpty
+=== RUN   TestBuildInstallTasks_PreservesRemoteAndLocalSteps
+=== PAUSE TestBuildInstallTasks_PreservesRemoteAndLocalSteps
+=== RUN   TestValidateLocalPlatform_AcceptsMacOSAppleSilicon
+=== PAUSE TestValidateLocalPlatform_AcceptsMacOSAppleSilicon
+=== RUN   TestValidateLocalPlatform_RejectsUnsupportedPlatform
+=== PAUSE TestValidateLocalPlatform_RejectsUnsupportedPlatform
+=== RUN   TestValidateLocalPlatform_AllowsUnsupportedPlatformForTests
+=== PAUSE TestValidateLocalPlatform_AllowsUnsupportedPlatformForTests
+=== RUN   TestResolveLocalRuntimeConfig_UsesDefaults
+=== PAUSE TestResolveLocalRuntimeConfig_UsesDefaults
+=== RUN   TestDefaultLocalRuntimeConfig_UsesHalfHostMemoryWhenAvailable
+=== PAUSE TestDefaultLocalRuntimeConfig_UsesHalfHostMemoryWhenAvailable
+=== RUN   TestResolveLocalRuntimeConfig_UsesManifestValues
+=== PAUSE TestResolveLocalRuntimeConfig_UsesManifestValues
+=== RUN   TestResolveLocalRuntimeConfig_ExplicitMemoryOverridesComputedDefault
+=== PAUSE TestResolveLocalRuntimeConfig_ExplicitMemoryOverridesComputedDefault
+=== RUN   TestResolveLocalRuntimeConfig_RejectsInvalidValues
+=== PAUSE TestResolveLocalRuntimeConfig_RejectsInvalidValues
+=== RUN   TestValidateLocalRuntimeConfig_RejectsHostMemoryBelowMinimum
+=== PAUSE TestValidateLocalRuntimeConfig_RejectsHostMemoryBelowMinimum
+=== RUN   TestValidateLocalRuntimeConfig_PrefersHostMemoryError
+=== PAUSE TestValidateLocalRuntimeConfig_PrefersHostMemoryError
+=== RUN   TestValidateLocalRuntimeConfig_RejectsMemoryBelowMinimum
+=== PAUSE TestValidateLocalRuntimeConfig_RejectsMemoryBelowMinimum
+=== RUN   TestValidateLocalRuntimeConfig_AcceptsMinimumMemory
+=== PAUSE TestValidateLocalRuntimeConfig_AcceptsMinimumMemory
+=== RUN   TestValidateLocalInitMemory_RejectsOverrideBelowMinimum
+=== PAUSE TestValidateLocalInitMemory_RejectsOverrideBelowMinimum
+=== RUN   TestValidateLocalInitMemory_AcceptsValidOverride
+=== PAUSE TestValidateLocalInitMemory_AcceptsValidOverride
+=== RUN   TestValidateLocalInitMemory_IgnoresNonLocalBackend
+=== PAUSE TestValidateLocalInitMemory_IgnoresNonLocalBackend
+=== RUN   TestLocalBackendSetupWorkspace_Noops
+=== PAUSE TestLocalBackendSetupWorkspace_Noops
+=== RUN   TestLocalBackendReadConfiguration_ExposesSizingValues
+=== PAUSE TestLocalBackendReadConfiguration_ExposesSizingValues
+=== RUN   TestLocalBackendConfigure_WritesSizingValuesToManifest
+=== PAUSE TestLocalBackendConfigure_WritesSizingValuesToManifest
+=== RUN   TestLocalBackendConfigure_WarnsForLowMemory
+--- PASS: TestLocalBackendConfigure_WarnsForLowMemory (0.00s)
+=== RUN   TestLocalBackendConfigure_RejectsInvalidSizingValues
+=== PAUSE TestLocalBackendConfigure_RejectsInvalidSizingValues
+=== RUN   TestLocalBackendConfigure_RejectsMemoryBelowMinimum
+=== PAUSE TestLocalBackendConfigure_RejectsMemoryBelowMinimum
+=== RUN   TestLocalSSHConnectionOptions_UsesConnectionMetadataWithoutNodes
+=== PAUSE TestLocalSSHConnectionOptions_UsesConnectionMetadataWithoutNodes
+=== RUN   TestLocalContainerShellCommand_UsesMountedContainerRootfs
+=== PAUSE TestLocalContainerShellCommand_UsesMountedContainerRootfs
+=== RUN   TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets
+=== PAUSE TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets
+=== RUN   TestWriteLocalDeploymentArtifacts_OmitsLocalOnlyCloudMetadataInJSON
+=== PAUSE TestWriteLocalDeploymentArtifacts_OmitsLocalOnlyCloudMetadataInJSON
+=== RUN   TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts
+=== PAUSE TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts
+=== RUN   TestStopLocalRuntime_UpdatesDeploymentInfoState
+=== PAUSE TestStopLocalRuntime_UpdatesDeploymentInfoState
+=== RUN   TestWithDeploymentExclusiveLockReturnsOperationInProgressMessage
+=== PAUSE TestWithDeploymentExclusiveLockReturnsOperationInProgressMessage
+=== RUN   TestWithDeploymentSharedLockReturnsGenericMessageWhenStatusNotInProgress
+=== PAUSE TestWithDeploymentSharedLockReturnsGenericMessageWhenStatusNotInProgress
+=== RUN   TestWithDeploymentSharedLockPreservesContextCancellation
+=== PAUSE TestWithDeploymentSharedLockPreservesContextCancellation
+=== RUN   TestWithDeploymentExclusiveLockReleasesOnSignal
+--- PASS: TestWithDeploymentExclusiveLockReleasesOnSignal (0.03s)
+=== RUN   TestValidatePresetSelection_AcceptsDefaultEmbeddedPair
+=== PAUSE TestValidatePresetSelection_AcceptsDefaultEmbeddedPair
+=== RUN   TestInitDeployment_RejectsIncompatiblePresetPairBeforeMutation
+=== PAUSE TestInitDeployment_RejectsIncompatiblePresetPairBeforeMutation
+=== RUN   TestInitDeployment_RejectsUnsupportedLocalPlatformBeforeMutation
+--- PASS: TestInitDeployment_RejectsUnsupportedLocalPlatformBeforeMutation (0.00s)
+=== RUN   TestResolveDefaultInstallationPreset_UsesCompatibleEmbeddedDefault
+=== PAUSE TestResolveDefaultInstallationPreset_UsesCompatibleEmbeddedDefault
+=== RUN   TestEnsureDeploymentPresetIdentityMatches_RejectsDifferentPreset
+=== PAUSE TestEnsureDeploymentPresetIdentityMatches_RejectsDifferentPreset
+=== RUN   TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles
+=== PAUSE TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles
+=== RUN   TestSetDeploymentConfiguration_PreservesDeploymentCreatedAt
+=== PAUSE TestSetDeploymentConfiguration_PreservesDeploymentCreatedAt
+=== RUN   TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates
+=== PAUSE TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates
+=== RUN   TestDestroyThenRemoveLocalDeploymentDirectoryRemovesLocalFiles
+=== PAUSE TestDestroyThenRemoveLocalDeploymentDirectoryRemovesLocalFiles
+=== RUN   TestDestroyPreservesLocalFilesWhenDestroyFails
+=== PAUSE TestDestroyPreservesLocalFilesWhenDestroyFails
+=== RUN   TestRemoveLocalDeploymentDirectory_RemovesDeploymentDirectory
+=== PAUSE TestRemoveLocalDeploymentDirectory_RemovesDeploymentDirectory
+=== RUN   TestRemoveLocalDeploymentDirectory_RejectsNonDeploymentDirectory
+=== PAUSE TestRemoveLocalDeploymentDirectory_RejectsNonDeploymentDirectory
+=== RUN   TestRemoveLocalDeploymentDirectory_RejectsCurrentDirectoryInsideDeployment
+--- PASS: TestRemoveLocalDeploymentDirectory_RejectsCurrentDirectoryInsideDeployment (0.00s)
+=== RUN   TestValidateDeploymentDirectoryRemovalContext_RejectsLauncherBinaryInsideDeployment
+=== PAUSE TestValidateDeploymentDirectoryRemovalContext_RejectsLauncherBinaryInsideDeployment
+=== RUN   TestValidateDeploymentDirectoryRemovalContext_AllowsOutsidePaths
+=== PAUSE TestValidateDeploymentDirectoryRemovalContext_AllowsOutsidePaths
+=== RUN   TestRemoveLocalDeploymentDirectory_AllowsExtractedPresetManifestsWithoutState
+=== PAUSE TestRemoveLocalDeploymentDirectory_AllowsExtractedPresetManifestsWithoutState
+=== RUN   TestStatus_IncludesDeploymentDirInTextOutput
+=== PAUSE TestStatus_IncludesDeploymentDirInTextOutput
+=== RUN   TestStatus_IncludesDeploymentDirInJSONOutput
+=== PAUSE TestStatus_IncludesDeploymentDirInJSONOutput
+=== RUN   TestStatus_ReportsNotInitializedForMissingDirectory
+=== PAUSE TestStatus_ReportsNotInitializedForMissingDirectory
+=== RUN   TestStatus_ReportsOperationInProgressWhenLockedBeforeStateFileExists
+=== PAUSE TestStatus_ReportsOperationInProgressWhenLockedBeforeStateFileExists
+=== RUN   TestStatus_ReportsStaleDestroyOperationWithRecoveryGuidance
+=== PAUSE TestStatus_ReportsStaleDestroyOperationWithRecoveryGuidance
+=== RUN   TestGetVersionCheckURL_DefaultWhenEnvMissing
+--- PASS: TestGetVersionCheckURL_DefaultWhenEnvMissing (0.00s)
+=== RUN   TestGetVersionCheckURL_UsesEnvOverride
+--- PASS: TestGetVersionCheckURL_UsesEnvOverride (0.00s)
+=== RUN   TestGetVersionCheckDetails_EmptyClusterIdentityWhenNoDeploymentDir
+=== PAUSE TestGetVersionCheckDetails_EmptyClusterIdentityWhenNoDeploymentDir
+=== RUN   TestGetVersionCheckDetails_UsesPersistedClusterIdentityFromState
+=== PAUSE TestGetVersionCheckDetails_UsesPersistedClusterIdentityFromState
+=== RUN   TestGetVersionCheckDetails_EmptyClusterIdentityWhenStateHasNoClusterIdentity
+=== PAUSE TestGetVersionCheckDetails_EmptyClusterIdentityWhenStateHasNoClusterIdentity
+=== RUN   TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering
+=== PAUSE TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering
+=== RUN   TestIsVersionUpdateAvailable_RejectsInvalidVersionData
+=== PAUSE TestIsVersionUpdateAvailable_RejectsInvalidVersionData
+=== CONT  TestResolveBackendKind_FallsBackToTofuForLegacyManifest
+=== CONT  TestValidateLocalInitMemory_IgnoresNonLocalBackend
+--- PASS: TestResolveBackendKind_FallsBackToTofuForLegacyManifest (0.00s)
+=== CONT  TestGetDeploymentInfoReportNotInitializedIncludesStructuredState
+=== CONT  TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering
+=== CONT  TestGetDeploymentInfoReportNotInitializedHandlesMissingDirectory
+--- PASS: TestValidateLocalInitMemory_IgnoresNonLocalBackend (0.00s)
+=== RUN   TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/older_official_release_is_not_newer_than_newer_release_candidate
+=== PAUSE TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/older_official_release_is_not_newer_than_newer_release_candidate
+=== RUN   TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/equal_versions_are_not_updates
+=== PAUSE TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/equal_versions_are_not_updates
+=== CONT  TestIsVersionUpdateAvailable_RejectsInvalidVersionData
+=== RUN   TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/newer_patch_version_is_an_update
+=== RUN   TestIsVersionUpdateAvailable_RejectsInvalidVersionData/invalid_current_version
+=== PAUSE TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/newer_patch_version_is_an_update
+=== PAUSE TestIsVersionUpdateAvailable_RejectsInvalidVersionData/invalid_current_version
+=== RUN   TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/final_release_is_newer_than_its_release_candidate
+=== RUN   TestIsVersionUpdateAvailable_RejectsInvalidVersionData/missing_latest_version
+=== PAUSE TestIsVersionUpdateAvailable_RejectsInvalidVersionData/missing_latest_version
+=== PAUSE TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/final_release_is_newer_than_its_release_candidate
+=== RUN   TestIsVersionUpdateAvailable_RejectsInvalidVersionData/invalid_latest_version
+=== RUN   TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/release_candidate_is_newer_than_older_final_release
+=== PAUSE TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/release_candidate_is_newer_than_older_final_release
+=== PAUSE TestIsVersionUpdateAvailable_RejectsInvalidVersionData/invalid_latest_version
+--- PASS: TestGetDeploymentInfoReportNotInitializedHandlesMissingDirectory (0.00s)
+=== CONT  TestGetVersionCheckDetails_EmptyClusterIdentityWhenNoDeploymentDir
+--- PASS: TestGetVersionCheckDetails_EmptyClusterIdentityWhenNoDeploymentDir (0.00s)
+=== CONT  TestStatus_ReportsOperationInProgressWhenLockedBeforeStateFileExists
+=== CONT  TestStatus_ReportsNotInitializedForMissingDirectory
+=== CONT  TestGetVersionCheckDetails_EmptyClusterIdentityWhenStateHasNoClusterIdentity
+--- PASS: TestGetDeploymentInfoReportNotInitializedIncludesStructuredState (0.00s)
+=== CONT  TestGetVersionCheckDetails_UsesPersistedClusterIdentityFromState
+--- PASS: TestStatus_ReportsNotInitializedForMissingDirectory (0.00s)
+=== CONT  TestStatus_IncludesDeploymentDirInJSONOutput
+--- PASS: TestGetVersionCheckDetails_EmptyClusterIdentityWhenStateHasNoClusterIdentity (0.00s)
+=== CONT  TestStatus_ReportsStaleDestroyOperationWithRecoveryGuidance
+--- PASS: TestGetVersionCheckDetails_UsesPersistedClusterIdentityFromState (0.00s)
+=== CONT  TestStatus_IncludesDeploymentDirInTextOutput
+--- PASS: TestStatus_IncludesDeploymentDirInJSONOutput (0.00s)
+=== CONT  TestValidateDeploymentDirectoryRemovalContext_AllowsOutsidePaths
+--- PASS: TestStatus_IncludesDeploymentDirInTextOutput (0.00s)
+=== CONT  TestValidateDeploymentDirectoryRemovalContext_RejectsLauncherBinaryInsideDeployment
+--- PASS: TestStatus_ReportsStaleDestroyOperationWithRecoveryGuidance (0.00s)
+=== CONT  TestRemoveLocalDeploymentDirectory_RejectsNonDeploymentDirectory
+=== CONT  TestRemoveLocalDeploymentDirectory_RemovesDeploymentDirectory
+=== CONT  TestDestroyPreservesLocalFilesWhenDestroyFails
+--- PASS: TestValidateDeploymentDirectoryRemovalContext_AllowsOutsidePaths (0.00s)
+--- PASS: TestRemoveLocalDeploymentDirectory_RejectsNonDeploymentDirectory (0.00s)
+=== CONT  TestRemoveLocalDeploymentDirectory_AllowsExtractedPresetManifestsWithoutState
+--- PASS: TestValidateDeploymentDirectoryRemovalContext_RejectsLauncherBinaryInsideDeployment (0.00s)
+--- PASS: TestRemoveLocalDeploymentDirectory_AllowsExtractedPresetManifestsWithoutState (0.00s)
+=== CONT  TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates
+=== RUN   TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/running
+=== CONT  TestDestroyThenRemoveLocalDeploymentDirectoryRemovesLocalFiles
+=== PAUSE TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/running
+=== RUN   TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/stopped
+--- PASS: TestRemoveLocalDeploymentDirectory_RemovesDeploymentDirectory (0.00s)
+=== PAUSE TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/stopped
+=== RUN   TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/deployment_failed
+=== PAUSE TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/deployment_failed
+=== RUN   TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/interrupted_during_deploy
+=== PAUSE TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/interrupted_during_deploy
+=== RUN   TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/interrupted_during_destroy
+=== PAUSE TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/interrupted_during_destroy
+=== RUN   TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/operation_in_progress
+=== PAUSE TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/operation_in_progress
+=== CONT  TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles
+--- PASS: TestDestroyPreservesLocalFilesWhenDestroyFails (0.00s)
+=== CONT  TestSetDeploymentConfiguration_PreservesDeploymentCreatedAt
+--- PASS: TestDestroyThenRemoveLocalDeploymentDirectoryRemovesLocalFiles (0.00s)
+=== CONT  TestResolveDefaultInstallationPreset_UsesCompatibleEmbeddedDefault
+--- PASS: TestResolveDefaultInstallationPreset_UsesCompatibleEmbeddedDefault (0.00s)
+=== CONT  TestInitDeployment_RejectsIncompatiblePresetPairBeforeMutation
+--- PASS: TestInitDeployment_RejectsIncompatiblePresetPairBeforeMutation (0.00s)
+=== CONT  TestValidatePresetSelection_AcceptsDefaultEmbeddedPair
+=== CONT  TestWithDeploymentSharedLockPreservesContextCancellation
+--- PASS: TestValidatePresetSelection_AcceptsDefaultEmbeddedPair (0.00s)
+=== CONT  TestEnsureDeploymentPresetIdentityMatches_RejectsDifferentPreset
+--- PASS: TestWithDeploymentSharedLockPreservesContextCancellation (0.00s)
+--- PASS: TestEnsureDeploymentPresetIdentityMatches_RejectsDifferentPreset (0.02s)
+=== CONT  TestWithDeploymentSharedLockReturnsGenericMessageWhenStatusNotInProgress
+--- PASS: TestStatus_ReportsOperationInProgressWhenLockedBeforeStateFileExists (0.05s)
+=== CONT  TestWithDeploymentExclusiveLockReturnsOperationInProgressMessage
+--- PASS: TestSetDeploymentConfiguration_PreservesDeploymentCreatedAt (0.06s)
+=== CONT  TestStopLocalRuntime_UpdatesDeploymentInfoState
+--- PASS: TestStopLocalRuntime_UpdatesDeploymentInfoState (0.00s)
+=== CONT  TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts
+=== CONT  TestLocalBackendConfigure_RejectsMemoryBelowMinimum
+--- PASS: TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts (0.00s)
+--- PASS: TestLocalBackendConfigure_RejectsMemoryBelowMinimum (0.00s)
+=== CONT  TestLocalSSHConnectionOptions_UsesConnectionMetadataWithoutNodes
+--- PASS: TestLocalSSHConnectionOptions_UsesConnectionMetadataWithoutNodes (0.00s)
+=== CONT  TestLocalBackendConfigure_RejectsInvalidSizingValues
+=== CONT  TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets
+--- PASS: TestLocalBackendConfigure_RejectsInvalidSizingValues (0.00s)
+--- PASS: TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets (0.00s)
+=== CONT  TestLocalBackendReadConfiguration_ExposesSizingValues
+--- PASS: TestLocalBackendReadConfiguration_ExposesSizingValues (0.00s)
+=== CONT  TestWriteLocalDeploymentArtifacts_OmitsLocalOnlyCloudMetadataInJSON
+=== CONT  TestLocalBackendSetupWorkspace_Noops
+--- PASS: TestWriteLocalDeploymentArtifacts_OmitsLocalOnlyCloudMetadataInJSON (0.00s)
+--- PASS: TestLocalBackendSetupWorkspace_Noops (0.00s)
+=== CONT  TestLocalContainerShellCommand_UsesMountedContainerRootfs
+--- PASS: TestLocalContainerShellCommand_UsesMountedContainerRootfs (0.00s)
+=== CONT  TestRenderConnectionInstructionsText_OmitsAdminUIWhenMetadataMissing
+--- PASS: TestRenderConnectionInstructionsText_OmitsAdminUIWhenMetadataMissing (0.00s)
+=== CONT  TestResolveLocalRuntimeConfig_UsesManifestValues
+--- PASS: TestResolveLocalRuntimeConfig_UsesManifestValues (0.00s)
+=== CONT  TestInitDeployment_CreatesDeploymentDir
+=== CONT  TestValidateLocalInitMemory_AcceptsValidOverride
+=== CONT  TestDeploymentInfoReportOperationInProgressToleratesMissingIdentity
+--- PASS: TestInitDeployment_CreatesDeploymentDir (0.02s)
+--- PASS: TestValidateLocalInitMemory_AcceptsValidOverride (0.00s)
+--- PASS: TestDeploymentInfoReportOperationInProgressToleratesMissingIdentity (0.00s)
+=== CONT  TestValidateLocalInitMemory_RejectsOverrideBelowMinimum
+--- PASS: TestValidateLocalInitMemory_RejectsOverrideBelowMinimum (0.00s)
+=== CONT  TestGetDeploymentInfoReportInitializedIncludesOverviewAndPresets
+--- PASS: TestGetDeploymentInfoReportInitializedIncludesOverviewAndPresets (0.03s)
+=== CONT  TestGenerateDeploymentId_Format
+--- PASS: TestGenerateDeploymentId_Format (0.00s)
+=== CONT  TestAppendDeployFailureHintNilInput
+=== CONT  TestAppendDeployFailureHint_AddsDeploymentInfoPathWhenPresent
+--- PASS: TestAppendDeployFailureHintNilInput (0.00s)
+--- PASS: TestAppendDeployFailureHint_AddsDeploymentInfoPathWhenPresent (0.00s)
+=== CONT  TestDeploymentInfoReportOperationInProgressOmitsPartialDeploymentDetails
+--- PASS: TestDeploymentInfoReportOperationInProgressOmitsPartialDeploymentDetails (0.03s)
+=== CONT  TestRenderConnectionInstructionsText_IncludesAdminUIWhenMetadataPresent
+--- PASS: TestRenderConnectionInstructionsText_IncludesAdminUIWhenMetadataPresent (0.00s)
+=== CONT  TestLocalBackendConfigure_WritesSizingValuesToManifest
+=== CONT  TestValidateLocalRuntimeConfig_AcceptsMinimumMemory
+--- PASS: TestLocalBackendConfigure_WritesSizingValuesToManifest (0.00s)
+--- PASS: TestValidateLocalRuntimeConfig_AcceptsMinimumMemory (0.00s)
+=== CONT  TestValidateLocalRuntimeConfig_PrefersHostMemoryError
+--- PASS: TestValidateLocalRuntimeConfig_PrefersHostMemoryError (0.00s)
+=== CONT  TestAppendDeployFailureHint_AddsLauncherLogPath
+--- PASS: TestAppendDeployFailureHint_AddsLauncherLogPath (0.00s)
+=== CONT  TestValidateLocalPlatform_AcceptsMacOSAppleSilicon
+--- PASS: TestValidateLocalPlatform_AcceptsMacOSAppleSilicon (0.00s)
+=== CONT  TestResolveLocalRuntimeConfig_ExplicitMemoryOverridesComputedDefault
+=== CONT  TestResolveLocalRuntimeConfig_UsesDefaults
+--- PASS: TestResolveLocalRuntimeConfig_ExplicitMemoryOverridesComputedDefault (0.00s)
+--- PASS: TestResolveLocalRuntimeConfig_UsesDefaults (0.00s)
+=== CONT  TestDefaultLocalRuntimeConfig_UsesHalfHostMemoryWhenAvailable
+=== CONT  TestValidateLocalPlatform_RejectsUnsupportedPlatform
+--- PASS: TestDefaultLocalRuntimeConfig_UsesHalfHostMemoryWhenAvailable (0.00s)
+--- PASS: TestValidateLocalPlatform_RejectsUnsupportedPlatform (0.00s)
+=== CONT  TestNewDeploymentBackend_AcceptsTofuManifestWithoutTofuSectionAsNoop
+--- PASS: TestNewDeploymentBackend_AcceptsTofuManifestWithoutTofuSectionAsNoop (0.00s)
+=== CONT  TestGetConnectionInstructionsTextNotInitializedHandlesMissingDirectory
+--- PASS: TestGetConnectionInstructionsTextNotInitializedHandlesMissingDirectory (0.00s)
+=== CONT  TestGetConnectionInstructionsTextNotInitializedRendersTechnicalState
+--- PASS: TestGetConnectionInstructionsTextNotInitializedRendersTechnicalState (0.00s)
+=== CONT  TestGetConnectionInstructionsTextStoppedDoesNotRequireConnectionHost
+--- PASS: TestGetConnectionInstructionsTextStoppedDoesNotRequireConnectionHost (0.02s)
+=== CONT  TestValidateLocalRuntimeConfig_RejectsHostMemoryBelowMinimum
+--- PASS: TestValidateLocalRuntimeConfig_RejectsHostMemoryBelowMinimum (0.00s)
+=== CONT  TestNewDeploymentBackend_ReturnsLocalBackendForLocalManifest
+--- PASS: TestNewDeploymentBackend_ReturnsLocalBackendForLocalManifest (0.00s)
+=== CONT  TestValidateLocalRuntimeConfig_RejectsMemoryBelowMinimum
+=== CONT  TestResolveLocalRuntimeConfig_RejectsInvalidValues
+=== CONT  TestNewDeploymentBackend_ReturnsTofuBackendForTofuManifest
+--- PASS: TestValidateLocalRuntimeConfig_RejectsMemoryBelowMinimum (0.00s)
+--- PASS: TestResolveLocalRuntimeConfig_RejectsInvalidValues (0.00s)
+--- PASS: TestNewDeploymentBackend_ReturnsTofuBackendForTofuManifest (0.00s)
+=== CONT  TestResolveBackendKind_RejectsUnknownBackend
+--- PASS: TestResolveBackendKind_RejectsUnknownBackend (0.00s)
+=== CONT  TestResolveBackendKind_UsesExplicitBackend
+=== CONT  TestValidateLocalPlatform_AllowsUnsupportedPlatformForTests
+--- PASS: TestResolveBackendKind_UsesExplicitBackend (0.00s)
+=== CONT  TestBuildInstallTasks_PreservesRemoteAndLocalSteps
+--- PASS: TestBuildInstallTasks_PreservesRemoteAndLocalSteps (0.00s)
+=== CONT  TestInitDeployment_ErrWhenDirNotEmpty
+--- PASS: TestValidateLocalPlatform_AllowsUnsupportedPlatformForTests (0.00s)
+--- PASS: TestInitDeployment_ErrWhenDirNotEmpty (0.00s)
+=== CONT  TestInitDeployment_CreatesTfVarsWhenTofuConfigured
+--- PASS: TestInitDeployment_CreatesTfVarsWhenTofuConfigured (0.01s)
+=== CONT  TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/equal_versions_are_not_updates
+=== CONT  TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/final_release_is_newer_than_its_release_candidate
+=== CONT  TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/release_candidate_is_newer_than_older_final_release
+=== CONT  TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/newer_patch_version_is_an_update
+=== CONT  TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/older_official_release_is_not_newer_than_newer_release_candidate
+=== CONT  TestIsVersionUpdateAvailable_RejectsInvalidVersionData/invalid_latest_version
+--- PASS: TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering (0.00s)
+    --- PASS: TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/equal_versions_are_not_updates (0.00s)
+    --- PASS: TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/final_release_is_newer_than_its_release_candidate (0.00s)
+    --- PASS: TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/release_candidate_is_newer_than_older_final_release (0.00s)
+    --- PASS: TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/newer_patch_version_is_an_update (0.00s)
+    --- PASS: TestIsVersionUpdateAvailable_UsesSemanticVersionOrdering/older_official_release_is_not_newer_than_newer_release_candidate (0.00s)
+=== CONT  TestIsVersionUpdateAvailable_RejectsInvalidVersionData/missing_latest_version
+=== CONT  TestIsVersionUpdateAvailable_RejectsInvalidVersionData/invalid_current_version
+=== CONT  TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/running
+--- PASS: TestIsVersionUpdateAvailable_RejectsInvalidVersionData (0.00s)
+    --- PASS: TestIsVersionUpdateAvailable_RejectsInvalidVersionData/invalid_latest_version (0.00s)
+    --- PASS: TestIsVersionUpdateAvailable_RejectsInvalidVersionData/missing_latest_version (0.00s)
+    --- PASS: TestIsVersionUpdateAvailable_RejectsInvalidVersionData/invalid_current_version (0.00s)
+=== CONT  TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/operation_in_progress
+=== CONT  TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/interrupted_during_destroy
+=== CONT  TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/interrupted_during_deploy
+=== CONT  TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/deployment_failed
+=== CONT  TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/stopped
+--- PASS: TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates (0.00s)
+    --- PASS: TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/running (0.00s)
+    --- PASS: TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/operation_in_progress (0.00s)
+    --- PASS: TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/interrupted_during_destroy (0.00s)
+    --- PASS: TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/interrupted_during_deploy (0.00s)
+    --- PASS: TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/deployment_failed (0.00s)
+    --- PASS: TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates/stopped (0.00s)
+--- PASS: TestWithDeploymentSharedLockReturnsGenericMessageWhenStatusNotInProgress (1.00s)
+--- PASS: TestWithDeploymentExclusiveLockReturnsOperationInProgressMessage (1.00s)
+--- PASS: TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles (10.21s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/deploy	11.274s
+=== RUN   TestNewRejectsNonDirectory
+=== PAUSE TestNewRejectsNonDirectory
+=== RUN   TestIsMarkerNameRecognizesDirectoryMutexMarkers
+=== PAUSE TestIsMarkerNameRecognizesDirectoryMutexMarkers
+=== RUN   TestExclusiveLockBlocksSharedUntilTimeout
+=== PAUSE TestExclusiveLockBlocksSharedUntilTimeout
+=== RUN   TestSharedLockCountsAndRelease
+=== PAUSE TestSharedLockCountsAndRelease
+=== RUN   TestSharedAcquireTimeoutLeavesExclusiveMarkerUntouched
+=== PAUSE TestSharedAcquireTimeoutLeavesExclusiveMarkerUntouched
+=== RUN   TestInvalidMarkerFailsStatus
+=== PAUSE TestInvalidMarkerFailsStatus
+=== RUN   TestClearLockRemovesMarker
+=== PAUSE TestClearLockRemovesMarker
+=== RUN   TestSharedLockStressLeavesUnlocked
+    directorymutex_test.go:278: Flaky. With 'invalid marker' error. Somebody fix it
+--- SKIP: TestSharedLockStressLeavesUnlocked (0.00s)
+=== CONT  TestNewRejectsNonDirectory
+=== CONT  TestSharedAcquireTimeoutLeavesExclusiveMarkerUntouched
+=== CONT  TestClearLockRemovesMarker
+--- PASS: TestNewRejectsNonDirectory (0.00s)
+=== CONT  TestExclusiveLockBlocksSharedUntilTimeout
+=== CONT  TestIsMarkerNameRecognizesDirectoryMutexMarkers
+=== RUN   TestIsMarkerNameRecognizesDirectoryMutexMarkers/exclusive
+--- PASS: TestClearLockRemovesMarker (0.00s)
+=== CONT  TestSharedLockCountsAndRelease
+=== PAUSE TestIsMarkerNameRecognizesDirectoryMutexMarkers/exclusive
+=== RUN   TestIsMarkerNameRecognizesDirectoryMutexMarkers/shared
+=== PAUSE TestIsMarkerNameRecognizesDirectoryMutexMarkers/shared
+=== RUN   TestIsMarkerNameRecognizesDirectoryMutexMarkers/non-marker
+=== PAUSE TestIsMarkerNameRecognizesDirectoryMutexMarkers/non-marker
+=== CONT  TestIsMarkerNameRecognizesDirectoryMutexMarkers/non-marker
+=== CONT  TestIsMarkerNameRecognizesDirectoryMutexMarkers/shared
+=== CONT  TestIsMarkerNameRecognizesDirectoryMutexMarkers/exclusive
+--- PASS: TestIsMarkerNameRecognizesDirectoryMutexMarkers (0.00s)
+    --- PASS: TestIsMarkerNameRecognizesDirectoryMutexMarkers/non-marker (0.00s)
+    --- PASS: TestIsMarkerNameRecognizesDirectoryMutexMarkers/shared (0.00s)
+    --- PASS: TestIsMarkerNameRecognizesDirectoryMutexMarkers/exclusive (0.00s)
+=== CONT  TestInvalidMarkerFailsStatus
+--- PASS: TestInvalidMarkerFailsStatus (0.00s)
+--- PASS: TestSharedLockCountsAndRelease (0.00s)
+--- PASS: TestExclusiveLockBlocksSharedUntilTimeout (0.10s)
+--- PASS: TestSharedAcquireTimeoutLeavesExclusiveMarkerUntouched (0.12s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/directorymutex	1.138s
+=== RUN   TestReadRunnerState_ParsesForwardedPorts
+=== PAUSE TestReadRunnerState_ParsesForwardedPorts
+=== RUN   TestReadRunnerState_AcceptsMissingUIPort
+=== PAUSE TestReadRunnerState_AcceptsMissingUIPort
+=== RUN   TestReadRunnerState_RejectsInvalidPorts
+=== PAUSE TestReadRunnerState_RejectsInvalidPorts
+=== RUN   TestDestroy_RemovesLocalRuntime
+=== PAUSE TestDestroy_RemovesLocalRuntime
+=== RUN   TestEnsureRunnerExecutable_DoesNotOverwriteExistingRunner
+=== PAUSE TestEnsureRunnerExecutable_DoesNotOverwriteExistingRunner
+=== RUN   TestPrepare_UsesExistingRunnerWithSSHKey
+=== PAUSE TestPrepare_UsesExistingRunnerWithSSHKey
+=== RUN   TestEnsureSSHKey_PreservesExistingPrivateKey
+=== PAUSE TestEnsureSSHKey_PreservesExistingPrivateKey
+=== RUN   TestEnsureSSHKey_GeneratesEd25519Key
+=== PAUSE TestEnsureSSHKey_GeneratesEd25519Key
+=== RUN   TestStop_InvokesOriginalRunnerStop
+=== PAUSE TestStop_InvokesOriginalRunnerStop
+=== RUN   TestWaitForDaemonExit_IgnoresMissingPIDFile
+=== PAUSE TestWaitForDaemonExit_IgnoresMissingPIDFile
+=== RUN   TestWaitForDaemonExit_RejectsStillRunningPID
+=== PAUSE TestWaitForDaemonExit_RejectsStillRunningPID
+=== RUN   TestWriteEmbeddedRunner_WritesBundledRunner
+=== PAUSE TestWriteEmbeddedRunner_WritesBundledRunner
+=== RUN   TestWriteEmbeddedRunner_DoesNotOverwriteExistingRunner
+=== PAUSE TestWriteEmbeddedRunner_DoesNotOverwriteExistingRunner
+=== CONT  TestReadRunnerState_ParsesForwardedPorts
+=== CONT  TestEnsureSSHKey_PreservesExistingPrivateKey
+=== CONT  TestDestroy_RemovesLocalRuntime
+--- PASS: TestEnsureSSHKey_PreservesExistingPrivateKey (0.00s)
+=== CONT  TestWriteEmbeddedRunner_WritesBundledRunner
+    runtime_test.go:359: embedded local runner is only available for macOS Apple Silicon builds
+--- SKIP: TestWriteEmbeddedRunner_WritesBundledRunner (0.00s)
+=== CONT  TestWriteEmbeddedRunner_DoesNotOverwriteExistingRunner
+=== CONT  TestWaitForDaemonExit_RejectsStillRunningPID
+--- PASS: TestDestroy_RemovesLocalRuntime (0.00s)
+--- PASS: TestWriteEmbeddedRunner_DoesNotOverwriteExistingRunner (0.00s)
+=== CONT  TestStop_InvokesOriginalRunnerStop
+=== CONT  TestWaitForDaemonExit_IgnoresMissingPIDFile
+--- PASS: TestWaitForDaemonExit_IgnoresMissingPIDFile (0.00s)
+=== CONT  TestEnsureSSHKey_GeneratesEd25519Key
+--- PASS: TestReadRunnerState_ParsesForwardedPorts (0.00s)
+=== CONT  TestReadRunnerState_RejectsInvalidPorts
+=== CONT  TestPrepare_UsesExistingRunnerWithSSHKey
+=== CONT  TestReadRunnerState_AcceptsMissingUIPort
+--- PASS: TestStop_InvokesOriginalRunnerStop (0.00s)
+--- PASS: TestReadRunnerState_RejectsInvalidPorts (0.00s)
+--- PASS: TestReadRunnerState_AcceptsMissingUIPort (0.00s)
+=== CONT  TestEnsureRunnerExecutable_DoesNotOverwriteExistingRunner
+--- PASS: TestEnsureRunnerExecutable_DoesNotOverwriteExistingRunner (0.00s)
+--- PASS: TestEnsureSSHKey_GeneratesEd25519Key (0.00s)
+--- PASS: TestPrepare_UsesExistingRunnerWithSSHKey (0.01s)
+--- PASS: TestWaitForDaemonExit_RejectsStillRunningPID (0.01s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/localruntime	1.028s
+=== RUN   TestBuiltInAdminUIPresetsDeclareCapability
+=== PAUSE TestBuiltInAdminUIPresetsDeclareCapability
+=== RUN   TestBuiltInLocalPresetDoesNotDeclareAdminUICapability
+=== PAUSE TestBuiltInLocalPresetDoesNotDeclareAdminUICapability
+=== RUN   TestBuiltInCloudPresetsEmitAdminUIMetadata
+=== PAUSE TestBuiltInCloudPresetsEmitAdminUIMetadata
+=== RUN   TestParseInstallManifest_ReadsCompatibilityRequirements
+=== PAUSE TestParseInstallManifest_ReadsCompatibilityRequirements
+=== RUN   TestParseInstallManifest_ReadsLocalCommandSteps
+=== PAUSE TestParseInstallManifest_ReadsLocalCommandSteps
+=== CONT  TestBuiltInAdminUIPresetsDeclareCapability
+=== RUN   TestBuiltInAdminUIPresetsDeclareCapability/aws
+=== CONT  TestParseInstallManifest_ReadsCompatibilityRequirements
+--- PASS: TestParseInstallManifest_ReadsCompatibilityRequirements (0.00s)
+=== CONT  TestParseInstallManifest_ReadsLocalCommandSteps
+--- PASS: TestParseInstallManifest_ReadsLocalCommandSteps (0.00s)
+=== CONT  TestBuiltInCloudPresetsEmitAdminUIMetadata
+=== RUN   TestBuiltInCloudPresetsEmitAdminUIMetadata/aws
+=== PAUSE TestBuiltInCloudPresetsEmitAdminUIMetadata/aws
+=== PAUSE TestBuiltInAdminUIPresetsDeclareCapability/aws
+=== RUN   TestBuiltInCloudPresetsEmitAdminUIMetadata/azure
+=== RUN   TestBuiltInAdminUIPresetsDeclareCapability/azure
+=== PAUSE TestBuiltInAdminUIPresetsDeclareCapability/azure
+=== PAUSE TestBuiltInCloudPresetsEmitAdminUIMetadata/azure
+=== RUN   TestBuiltInCloudPresetsEmitAdminUIMetadata/exoscale
+=== PAUSE TestBuiltInCloudPresetsEmitAdminUIMetadata/exoscale
+=== RUN   TestBuiltInAdminUIPresetsDeclareCapability/exoscale
+=== CONT  TestBuiltInCloudPresetsEmitAdminUIMetadata/aws
+=== PAUSE TestBuiltInAdminUIPresetsDeclareCapability/exoscale
+=== CONT  TestBuiltInAdminUIPresetsDeclareCapability/aws
+=== CONT  TestBuiltInLocalPresetDoesNotDeclareAdminUICapability
+--- PASS: TestBuiltInLocalPresetDoesNotDeclareAdminUICapability (0.00s)
+=== CONT  TestBuiltInCloudPresetsEmitAdminUIMetadata/azure
+=== CONT  TestBuiltInCloudPresetsEmitAdminUIMetadata/exoscale
+--- PASS: TestBuiltInCloudPresetsEmitAdminUIMetadata (0.00s)
+    --- PASS: TestBuiltInCloudPresetsEmitAdminUIMetadata/aws (0.00s)
+    --- PASS: TestBuiltInCloudPresetsEmitAdminUIMetadata/azure (0.00s)
+    --- PASS: TestBuiltInCloudPresetsEmitAdminUIMetadata/exoscale (0.00s)
+=== CONT  TestBuiltInAdminUIPresetsDeclareCapability/azure
+=== CONT  TestBuiltInAdminUIPresetsDeclareCapability/exoscale
+--- PASS: TestBuiltInAdminUIPresetsDeclareCapability (0.00s)
+    --- PASS: TestBuiltInAdminUIPresetsDeclareCapability/aws (0.00s)
+    --- PASS: TestBuiltInAdminUIPresetsDeclareCapability/exoscale (0.00s)
+    --- PASS: TestBuiltInAdminUIPresetsDeclareCapability/azure (0.00s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/presets	1.016s
+?   	github.com/exasol/exasol-personal/internal/remote	[no test files]
+=== RUN   TestDefaultCacheRootUsesLauncherRuntimeArtifactsNamespace
+=== PAUSE TestDefaultCacheRootUsesLauncherRuntimeArtifactsNamespace
+=== RUN   TestDefaultConfigPathUsesLauncherRootDirectory
+--- PASS: TestDefaultConfigPathUsesLauncherRootDirectory (0.00s)
+=== RUN   TestEnsureCacheConfigCreatesDefaultAndRejectsInvalidRetention
+=== PAUSE TestEnsureCacheConfigCreatesDefaultAndRejectsInvalidRetention
+=== RUN   TestCacheIndexReadWriteRoundTripAndRejectsEscapingPaths
+=== PAUSE TestCacheIndexReadWriteRoundTripAndRejectsEscapingPaths
+=== RUN   TestArtifactIdentityChangesWhenArtifactMetadataChanges
+=== PAUSE TestArtifactIdentityChangesWhenArtifactMetadataChanges
+=== RUN   TestCacheCleanRemovesStaleEntriesAndKeepsRecentEntries
+=== PAUSE TestCacheCleanRemovesStaleEntriesAndKeepsRecentEntries
+=== RUN   TestCacheCleanDryRunDoesNotMutateFilesOrMetadata
+=== PAUSE TestCacheCleanDryRunDoesNotMutateFilesOrMetadata
+=== RUN   TestCacheCleanInvalidRemovesChecksumMismatches
+=== PAUSE TestCacheCleanInvalidRemovesChecksumMismatches
+=== RUN   TestCacheCleanAllWipesCacheContentsAndResetsMetadata
+=== PAUSE TestCacheCleanAllWipesCacheContentsAndResetsMetadata
+=== RUN   TestCacheDiagnoseReportsChecksumMismatchAndUnexpectedPaths
+=== PAUSE TestCacheDiagnoseReportsChecksumMismatchAndUnexpectedPaths
+=== RUN   TestCacheDiagnoseContinuesWhenOneEntryHasInvalidPath
+=== PAUSE TestCacheDiagnoseContinuesWhenOneEntryHasInvalidPath
+=== RUN   TestCacheLockStatusAndUnlockUseDirectoryMutex
+=== PAUSE TestCacheLockStatusAndUnlockUseDirectoryMutex
+=== RUN   TestCacheLockContentionReturnsUserFacingError
+=== PAUSE TestCacheLockContentionReturnsUserFacingError
+=== RUN   TestParseSpec_AllowsEmptySpec
+=== PAUSE TestParseSpec_AllowsEmptySpec
+=== RUN   TestParseSpec_RejectsResourcePathWithoutExtraction
+=== PAUSE TestParseSpec_RejectsResourcePathWithoutExtraction
+=== RUN   TestManager_RequestUsesDownloadPathFallback
+=== PAUSE TestManager_RequestUsesDownloadPathFallback
+=== RUN   TestManager_StagesArtifactRequestsUnderDownloadsRoot
+=== PAUSE TestManager_StagesArtifactRequestsUnderDownloadsRoot
+=== RUN   TestManager_RequestRejectsDownloadPathEscape
+=== PAUSE TestManager_RequestRejectsDownloadPathEscape
+=== RUN   TestManager_RequestUsesPlatformVariantAndCachesIt
+=== PAUSE TestManager_RequestUsesPlatformVariantAndCachesIt
+=== RUN   TestManager_RequestExtractsZipResource
+=== PAUSE TestManager_RequestExtractsZipResource
+=== RUN   TestManager_RequestUpdatesLastUsedAtOnCacheHit
+=== PAUSE TestManager_RequestUpdatesLastUsedAtOnCacheHit
+=== RUN   TestManager_RequestRefreshesMissingCachedFile
+=== PAUSE TestManager_RequestRefreshesMissingCachedFile
+=== RUN   TestManager_RequestRunsAutomaticStaleCleanupWhenDue
+=== PAUSE TestManager_RequestRunsAutomaticStaleCleanupWhenDue
+=== RUN   TestManager_RequestReportsChecksumMismatch
+=== PAUSE TestManager_RequestReportsChecksumMismatch
+=== RUN   TestManager_RequestRefreshesWhenChecksumChanges
+=== PAUSE TestManager_RequestRefreshesWhenChecksumChanges
+=== CONT  TestEnsureCacheConfigCreatesDefaultAndRejectsInvalidRetention
+=== CONT  TestManager_StagesArtifactRequestsUnderDownloadsRoot
+=== CONT  TestCacheLockContentionReturnsUserFacingError
+=== CONT  TestManager_RequestExtractsZipResource
+--- PASS: TestEnsureCacheConfigCreatesDefaultAndRejectsInvalidRetention (0.00s)
+=== CONT  TestCacheLockStatusAndUnlockUseDirectoryMutex
+--- PASS: TestManager_StagesArtifactRequestsUnderDownloadsRoot (0.00s)
+=== CONT  TestCacheDiagnoseReportsChecksumMismatchAndUnexpectedPaths
+--- PASS: TestCacheLockStatusAndUnlockUseDirectoryMutex (0.00s)
+=== CONT  TestCacheDiagnoseContinuesWhenOneEntryHasInvalidPath
+--- PASS: TestCacheLockContentionReturnsUserFacingError (0.01s)
+=== CONT  TestCacheCleanAllWipesCacheContentsAndResetsMetadata
+--- PASS: TestCacheDiagnoseContinuesWhenOneEntryHasInvalidPath (0.02s)
+--- PASS: TestCacheDiagnoseReportsChecksumMismatchAndUnexpectedPaths (0.02s)
+=== CONT  TestCacheCleanInvalidRemovesChecksumMismatches
+=== CONT  TestCacheCleanDryRunDoesNotMutateFilesOrMetadata
+--- PASS: TestCacheCleanDryRunDoesNotMutateFilesOrMetadata (0.01s)
+=== CONT  TestCacheCleanRemovesStaleEntriesAndKeepsRecentEntries
+--- PASS: TestCacheCleanAllWipesCacheContentsAndResetsMetadata (0.02s)
+=== CONT  TestCacheIndexReadWriteRoundTripAndRejectsEscapingPaths
+--- PASS: TestManager_RequestExtractsZipResource (0.03s)
+=== CONT  TestArtifactIdentityChangesWhenArtifactMetadataChanges
+=== CONT  TestDefaultCacheRootUsesLauncherRuntimeArtifactsNamespace
+--- PASS: TestArtifactIdentityChangesWhenArtifactMetadataChanges (0.00s)
+--- PASS: TestDefaultCacheRootUsesLauncherRuntimeArtifactsNamespace (0.00s)
+=== CONT  TestManager_RequestRefreshesMissingCachedFile
+--- PASS: TestCacheIndexReadWriteRoundTripAndRejectsEscapingPaths (0.00s)
+=== CONT  TestManager_RequestRefreshesWhenChecksumChanges
+--- PASS: TestCacheCleanInvalidRemovesChecksumMismatches (0.02s)
+=== CONT  TestManager_RequestRunsAutomaticStaleCleanupWhenDue
+=== CONT  TestManager_RequestUsesDownloadPathFallback
+--- PASS: TestCacheCleanRemovesStaleEntriesAndKeepsRecentEntries (0.01s)
+--- PASS: TestManager_RequestRefreshesMissingCachedFile (0.02s)
+=== CONT  TestManager_RequestUsesPlatformVariantAndCachesIt
+--- PASS: TestManager_RequestRunsAutomaticStaleCleanupWhenDue (0.02s)
+=== CONT  TestManager_RequestRejectsDownloadPathEscape
+--- PASS: TestManager_RequestUsesDownloadPathFallback (0.02s)
+=== CONT  TestParseSpec_RejectsResourcePathWithoutExtraction
+--- PASS: TestParseSpec_RejectsResourcePathWithoutExtraction (0.00s)
+=== CONT  TestParseSpec_AllowsEmptySpec
+--- PASS: TestParseSpec_AllowsEmptySpec (0.00s)
+=== CONT  TestManager_RequestUpdatesLastUsedAtOnCacheHit
+--- PASS: TestManager_RequestRefreshesWhenChecksumChanges (0.04s)
+=== CONT  TestManager_RequestReportsChecksumMismatch
+--- PASS: TestManager_RequestRejectsDownloadPathEscape (0.01s)
+--- PASS: TestManager_RequestUpdatesLastUsedAtOnCacheHit (0.01s)
+--- PASS: TestManager_RequestUsesPlatformVariantAndCachesIt (0.03s)
+2026/07/02 09:49:53 ERROR failed to download resource id=artifact error="resource \"artifact\" checksum mismatch: expected 0000000000000000000000000000000000000000000000000000000000000000, got 939872317c3411d6618404e57e2df2f544225851733a3c59da246b1039b673cc"
+--- PASS: TestManager_RequestReportsChecksumMismatch (0.01s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/runtimeartifacts	1.104s
+=== RUN   TestLogBuffer
+--- PASS: TestLogBuffer (0.00s)
+=== RUN   TestRegexLogger
+=== RUN   TestRegexLogger/waitsForFullLine
+=== RUN   TestRegexLogger/multipleLinesInSingleChunk
+=== RUN   TestRegexLogger/carriesRemaindersAcrossWrites
+=== RUN   TestRegexLogger/expandsCapturedGroups
+=== RUN   TestRegexLogger/capturesWholeLine
+=== RUN   TestRegexLogger/addsNodePrefix
+--- PASS: TestRegexLogger (0.00s)
+    --- PASS: TestRegexLogger/waitsForFullLine (0.00s)
+    --- PASS: TestRegexLogger/multipleLinesInSingleChunk (0.00s)
+    --- PASS: TestRegexLogger/carriesRemaindersAcrossWrites (0.00s)
+    --- PASS: TestRegexLogger/expandsCapturedGroups (0.00s)
+    --- PASS: TestRegexLogger/capturesWholeLine (0.00s)
+    --- PASS: TestRegexLogger/addsNodePrefix (0.00s)
+=== RUN   TestRunLocalCommand
+=== PAUSE TestRunLocalCommand
+=== RUN   TestRunRemoteScript
+=== PAUSE TestRunRemoteScript
+=== CONT  TestRunRemoteScript
+=== CONT  TestRunLocalCommand
+DEBUG pre availableNodes nodes="[{Name:n11 ConnectionOptions:0xc000132000} {Name:n12 ConnectionOptions:0xc000132050} {Name:n13 ConnectionOptions:0xc0001320a0} {Name:n14 ConnectionOptions:0xc0001320f0} {Name:n15 ConnectionOptions:0xc000132140}]"DEBUG running post-deploy scripts scriptCount=1INFO test task echoDEBUG running local command command="&{Description:test task echo Command:[echo {{ .Node }}] Node:* RegexLog:[]}" nodeGlob=*DEBUG Looking up node glob glob=* directorySize=5DEBUG checking node against glob glob=* node=n11DEBUG node matches against glob glob=* node=n11DEBUG checking node against glob glob=* node=n12DEBUG node matches against glob glob=* node=n12DEBUG checking node against glob glob=* node=n13DEBUG node matches against glob glob=* node=n13DEBUG checking node against glob glob=* node=n14DEBUG node matches against glob glob=* node=n14DEBUG checking node against glob glob=* node=n15DEBUG node matches against glob glob=* node=n15DEBUG parsing command part part=echoDEBUG final command part part=echoDEBUG parsing command part part="{{ .Node }}"DEBUG final command part part=n11DEBUG running command command="[echo n11]"DEBUG pre availableNodes nodes="[{Name:n11 ConnectionOptions:0xc000016a50} {Name:n12 ConnectionOptions:0xc000016aa0} {Name:n13 ConnectionOptions:0xc000016af0} {Name:n14 ConnectionOptions:0xc000016b40} {Name:n15 ConnectionOptions:0xc000016b90}]"DEBUG running post-deploy scripts scriptCount=1INFO test taskDEBUG running script on remote script=/tmp/TestRunRemoteScript3532495588/001/script.sh nodeGlob=*DEBUG Looking up node glob glob=* directorySize=5DEBUG checking node against glob glob=* node=n11DEBUG node matches against glob glob=* node=n11DEBUG checking node against glob glob=* node=n12DEBUG node matches against glob glob=* node=n12DEBUG checking node against glob glob=* node=n13DEBUG node matches against glob glob=* node=n13DEBUG checking node against glob glob=* node=n14DEBUG node matches against glob glob=* node=n14DEBUG checking node against glob glob=* node=n15DEBUG node matches against glob glob=* node=n15DEBUG running script against remote nodes nodes="[{Name:n11 ConnectionOptions:0xc000016a50} {Name:n12 ConnectionOptions:0xc000016aa0} {Name:n13 ConnectionOptions:0xc000016af0} {Name:n14 ConnectionOptions:0xc000016b40} {Name:n15 ConnectionOptions:0xc000016b90}]" script=/tmp/TestRunRemoteScript3532495588/001/script.shDEBUG running script in parallelDEBUG attempting to connect to node node=n11DEBUG running mock RunScriptDEBUG attempting to connect to node node=n12DEBUG running mock RunScriptDEBUG attempting to connect to node node=n15DEBUG attempting to connect to node node=n14DEBUG running mock RunScriptDEBUG attempting to connect to node node=n13DEBUG running mock RunScriptDEBUG running mock RunScriptDEBUG post availableNodes nodes="[{Name:n11 ConnectionOptions:0xc000016a50} {Name:n12 ConnectionOptions:0xc000016aa0} {Name:n13 ConnectionOptions:0xc000016af0} {Name:n14 ConnectionOptions:0xc000016b40} {Name:n15 ConnectionOptions:0xc000016b90}]"DEBUG availableNodes nodes="[{Name:n11 ConnectionOptions:0xc0000c8000} {Name:n12 ConnectionOptions:0xc0000c8050} {Name:n13 ConnectionOptions:0xc0000c80a0} {Name:n14 ConnectionOptions:0xc0000c80f0} {Name:n15 ConnectionOptions:0xc0000c8140}]"DEBUG pre availableNodes nodes="[{Name:n11 ConnectionOptions:0xc0000c8190} {Name:n12 ConnectionOptions:0xc0000c81e0} {Name:n13 ConnectionOptions:0xc0000c8230} {Name:n14 ConnectionOptions:0xc0000c8280} {Name:n15 ConnectionOptions:0xc0000c82d0}]"DEBUG running post-deploy scripts scriptCount=1INFO test taskDEBUG running script on remote script=/tmp/TestRunRemoteScript3532495588/002/script.sh nodeGlob=*DEBUG Looking up node glob glob=* directorySize=5DEBUG checking node against glob glob=* node=n11DEBUG node matches against glob glob=* node=n11DEBUG checking node against glob glob=* node=n12DEBUG node matches against glob glob=* node=n12DEBUG checking node against glob glob=* node=n13DEBUG node matches against glob glob=* node=n13DEBUG checking node against glob glob=* node=n14DEBUG node matches against glob glob=* node=n14DEBUG checking node against glob glob=* node=n15DEBUG node matches against glob glob=* node=n15DEBUG running script against remote nodes nodes="[{Name:n11 ConnectionOptions:0xc0000c8190} {Name:n12 ConnectionOptions:0xc0000c81e0} {Name:n13 ConnectionOptions:0xc0000c8230} {Name:n14 ConnectionOptions:0xc0000c8280} {Name:n15 ConnectionOptions:0xc0000c82d0}]" script=/tmp/TestRunRemoteScript3532495588/002/script.shDEBUG running script in serialDEBUG attempting to connect to node node=n11DEBUG running mock RunScriptDEBUG parsing command part part=echoDEBUG final command part part=echoDEBUG parsing command part part="{{ .Node }}"DEBUG final command part part=n12DEBUG running command command="[echo n12]"DEBUG attempting to connect to node node=n12DEBUG running mock RunScriptDEBUG attempting to connect to node node=n13DEBUG running mock RunScriptDEBUG attempting to connect to node node=n14DEBUG running mock RunScriptDEBUG parsing command part part=echoDEBUG final command part part=echoDEBUG parsing command part part="{{ .Node }}"DEBUG final command part part=n13DEBUG running command command="[echo n13]"DEBUG attempting to connect to node node=n15DEBUG running mock RunScriptDEBUG post availableNodes nodes="[{Name:n11 ConnectionOptions:0xc0000c8190} {Name:n12 ConnectionOptions:0xc0000c81e0} {Name:n13 ConnectionOptions:0xc0000c8230} {Name:n14 ConnectionOptions:0xc0000c8280} {Name:n15 ConnectionOptions:0xc0000c82d0}]"DEBUG availableNodes nodes="[{Name:n11 ConnectionOptions:0xc000132460} {Name:n12 ConnectionOptions:0xc0001324b0} {Name:n13 ConnectionOptions:0xc000132500} {Name:n14 ConnectionOptions:0xc000132550} {Name:n15 ConnectionOptions:0xc0001325a0}]"--- PASS: TestRunRemoteScript (0.01s)
+DEBUG parsing command part part=echoDEBUG final command part part=echoDEBUG parsing command part part="{{ .Node }}"DEBUG final command part part=n14DEBUG running command command="[echo n14]"DEBUG parsing command part part=echoDEBUG final command part part=echoDEBUG parsing command part part="{{ .Node }}"DEBUG final command part part=n15DEBUG running command command="[echo n15]"DEBUG pre availableNodes nodes="[{Name:n11 ConnectionOptions:0xc000132000} {Name:n12 ConnectionOptions:0xc000132050} {Name:n13 ConnectionOptions:0xc0001320a0} {Name:n14 ConnectionOptions:0xc0001320f0} {Name:n15 ConnectionOptions:0xc000132140}]"DEBUG running post-deploy scripts scriptCount=1INFO test task pwdDEBUG running local command command="&{Description:test task pwd Command:[pwd] Node: RegexLog:[]}" nodeGlob=""DEBUG parsing command part part=pwdDEBUG final command part part=pwdDEBUG running command command=[pwd]--- PASS: TestRunLocalCommand (0.02s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/task_runner	1.041s
+?   	github.com/exasol/exasol-personal/internal/task_runner/task_runner_mocks	[no test files]
+=== RUN   TestPrepare_WritesVars
+=== PAUSE TestPrepare_WritesVars
+=== RUN   TestConfigure_WritesVarsWithoutBinary
+=== PAUSE TestConfigure_WritesVarsWithoutBinary
+=== RUN   TestPrepare_ErrorsWhenVariablesMissing
+=== PAUSE TestPrepare_ErrorsWhenVariablesMissing
+=== RUN   TestTofuRunnerInit_UsesReadonlyLockfileByDefault
+--- PASS: TestTofuRunnerInit_UsesReadonlyLockfileByDefault (0.00s)
+=== RUN   TestTofuRunnerInit_UsesUpdateLockfileWhenEnabled
+--- PASS: TestTofuRunnerInit_UsesUpdateLockfileWhenEnabled (0.00s)
+=== CONT  TestPrepare_ErrorsWhenVariablesMissing
+=== CONT  TestPrepare_WritesVars
+2026/07/02 09:49:53 INFO tofu: prepare workspace
+2026/07/02 09:49:53 INFO tofu: configure workspace
+2026/07/02 09:49:53 INFO tofu: prepare workspace
+2026/07/02 09:49:53 INFO tofu: configure workspace
+--- PASS: TestPrepare_ErrorsWhenVariablesMissing (0.00s)
+=== CONT  TestConfigure_WritesVarsWithoutBinary
+2026/07/02 09:49:53 INFO tofu: configure workspace
+2026/07/02 09:49:53 INFO tofu: writing TF vars path=/tmp/TestPrepare_WritesVars1479346886/001/infrastructure/vars.tfvars
+2026/07/02 09:49:53 INFO tofu: writing TF vars path=/tmp/TestConfigure_WritesVarsWithoutBinary3215630265/001/infrastructure/vars.tfvars
+--- PASS: TestPrepare_WritesVars (0.00s)
+--- PASS: TestConfigure_WritesVarsWithoutBinary (0.00s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/tofu	1.020s
+=== RUN   TestGetTotalMemoryMB
+=== PAUSE TestGetTotalMemoryMB
+=== RUN   TestRegisterSignalHandlerPanicsWhenNotInitialized
+--- PASS: TestRegisterSignalHandlerPanicsWhenNotInitialized (0.00s)
+=== RUN   TestEnsureOnInterruptRunsCleanupOnceWithSignal
+--- PASS: TestEnsureOnInterruptRunsCleanupOnceWithSignal (0.00s)
+=== RUN   TestEnsureSignalHandlersCanReregister
+--- PASS: TestEnsureSignalHandlersCanReregister (0.00s)
+=== RUN   TestEnsureResetPreservesSignalHandlers
+--- PASS: TestEnsureResetPreservesSignalHandlers (0.00s)
+=== CONT  TestGetTotalMemoryMB
+--- PASS: TestGetTotalMemoryMB (0.00s)
+PASS
+ok  	github.com/exasol/exasol-personal/internal/util	1.012s
+=== RUN   TestRunStage_StagesExplicitRunnerPath
+=== PAUSE TestRunStage_StagesExplicitRunnerPath
+=== RUN   TestRunStage_IsIdempotentForExistingTarget
+=== PAUSE TestRunStage_IsIdempotentForExistingTarget
+=== RUN   TestRunStage_SkipsNonDarwinArm64Target
+=== PAUSE TestRunStage_SkipsNonDarwinArm64Target
+=== RUN   TestRunPlaceholder_DoesNotOverwriteExistingTarget
+=== PAUSE TestRunPlaceholder_DoesNotOverwriteExistingTarget
+=== RUN   TestParseRunnerFlags_UsesTargetEnvironment
+--- PASS: TestParseRunnerFlags_UsesTargetEnvironment (0.00s)
+=== CONT  TestRunPlaceholder_DoesNotOverwriteExistingTarget
+=== CONT  TestRunStage_IsIdempotentForExistingTarget
+=== CONT  TestRunStage_SkipsNonDarwinArm64Target
+=== CONT  TestRunStage_StagesExplicitRunnerPath
+Staged Exasol Local runner: /tmp/TestRunStage_StagesExplicitRunnerPath1402315518/001/launcher -> /tmp/TestRunStage_StagesExplicitRunnerPath1402315518/002/mac-runner-aarch64
+Skipping Exasol Local runner staging for linux/amd64
+--- PASS: TestRunStage_SkipsNonDarwinArm64Target (0.00s)
+Exasol Local runner placeholder already exists: /tmp/TestRunPlaceholder_DoesNotOverwriteExistingTarget105508647/001/mac-runner-aarch64
+--- PASS: TestRunStage_StagesExplicitRunnerPath (0.00s)
+--- PASS: TestRunPlaceholder_DoesNotOverwriteExistingTarget (0.00s)
+Exasol Local runner already staged: /tmp/TestRunStage_IsIdempotentForExistingTarget1483430745/002/mac-runner-aarch64
+--- PASS: TestRunStage_IsIdempotentForExistingTarget (0.00s)
+PASS
+ok  	github.com/exasol/exasol-personal/tools/localrunner	1.015s
+?   	github.com/exasol/exasol-personal/tools/lockfileupdate	[no test files]
+?   	github.com/exasol/exasol-personal/tools/tofu	[no test files]
+FAIL
+task: Failed to run task "tests-unit": exit status 1

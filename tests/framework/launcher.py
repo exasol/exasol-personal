@@ -173,8 +173,9 @@ class Launcher:
         self,
         deployment_dir: str,
         *args: str,
+        **kwargs: Unpack[SubprocessRunKwargs],
     ) -> CompletedProcess[str]:
-        return self.run_command("start", deployment_dir, *args)
+        return self.run_command("start", deployment_dir, *args, **kwargs)
 
     def stop(
         self,

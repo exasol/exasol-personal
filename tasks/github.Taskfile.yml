@@ -3,12 +3,13 @@ version: '3'
 
 tasks:
   trigger-deployment-tests:
-    desc: Trigger the deployment tests workflow on the current pushed commit (`task run-deployment-tests SUITE=local`, `task run-deployment-tests OS=macos-latest`)
+    desc: Trigger the deployment tests workflow on the current pushed commit (`task run-deployment-tests SUITE=local`, `task run-deployment-tests OS=macos-latest`, `task run-deployment-tests DEBUG_ARTIFACTS=true`)
     vars:
       OS: '{{default "all" .OS}}'
       SUITE: '{{default "all" .SUITE}}'
+      DEBUG_ARTIFACTS: '{{default "false" .DEBUG_ARTIFACTS}}'
     cmds:
-      - .github/scripts/run-deployment-tests.sh "{{.OS}}" "{{.SUITE}}"
+      - .github/scripts/run-deployment-tests.sh "{{.OS}}" "{{.SUITE}}" "{{.DEBUG_ARTIFACTS}}"
 
   trigger-integration-tests:
     desc: Trigger the integration tests workflow on the current pushed commit (`task github:trigger-integration-tests OS=ubuntu-latest`)
@@ -16,3 +17,8 @@ tasks:
       OS: '{{default "all" .OS}}'
     cmds:
       - .github/scripts/run-integration-tests.sh "{{.OS}}"
+
+  trigger-build:
+    desc: Trigger a new CI workflow run on the current pushed commit and download the produced binaries for all supported platforms into ci-downloads/
+    cmds:
+      - .github/scripts/build-binaries.sh
