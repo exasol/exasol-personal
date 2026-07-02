@@ -5,9 +5,12 @@ package runtimeartifacts
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,8 +35,6 @@ import (
 // - integrity primitives (`checkIntegrity`) validate the cached downloaded
 //   artifact against the expected checksum and do not inspect extracted
 //   contents.
-// - filesystem primitives (`directorySize`) provide size inspection without
-//   mutating the cache.
 
 // This timeout should be long enough for another launcher to download and
 // extract whatever resource it is going to use.
@@ -46,6 +47,7 @@ type cacheIndex struct {
 }
 
 type cacheIndexEntry struct {
+	Key          string    `json:"-"`
 	ResourceID   string    `json:"resourceId"`
 	Platform     string    `json:"platform"`
 	URL          string    `json:"url"`
@@ -56,6 +58,7 @@ type cacheIndexEntry struct {
 	EntryPath    string    `json:"entryPath"`
 	ArtifactPath string    `json:"artifactPath"`
 	ResolvedPath string    `json:"resolvedPath"`
+	RedirectPath string    `json:"redirectPath,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 	LastUsedAt   time.Time `json:"lastUsedAt"`
 	SizeBytes    int64     `json:"sizeBytes"`
@@ -297,13 +300,19 @@ func (c *Cache) checkIntegrity(entry cacheIndexEntry) integrityCheck {
 	if err != nil {
 		return integrityCheck{Status: integrityStatusReadError, Error: err.Error()}
 	}
-	if _, err := os.Stat(artifactPath); err != nil {
+	info, err := os.Stat(artifactPath)
+	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return integrityCheck{Status: integrityStatusMissing, Error: err.Error()}
 		}
 
 		return integrityCheck{Status: integrityStatusReadError, Error: err.Error()}
 	}
+
+	if info.IsDir() {
+		return integrityCheck{Status: integrityStatusOK, Actual: entry.Sha256}
+	}
+
 	actual, err := sha256OfFile(artifactPath)
 	if err != nil {
 		return integrityCheck{Status: integrityStatusReadError, Error: err.Error()}
@@ -353,15 +362,11 @@ func pathWithinRoot(root, value, field string) (string, error) {
 	return candidate, nil
 }
 
-func cleanOptionalRelativePath(value, field string) (string, error) {
+func cleanRelativePath(value, field string) (string, error) {
 	if strings.TrimSpace(value) == "" {
 		return "", nil
 	}
 
-	return cleanRelativePath(value, field)
-}
-
-func cleanRelativePath(value, field string) (string, error) {
 	cleanValue := filepath.Clean(filepath.FromSlash(value))
 	if cleanValue == "." || cleanValue == ".." || filepath.IsAbs(cleanValue) ||
 		strings.HasPrefix(cleanValue, ".."+string(filepath.Separator)) {
@@ -371,43 +376,19 @@ func cleanRelativePath(value, field string) (string, error) {
 	return filepath.ToSlash(cleanValue), nil
 }
 
-func safePathSegment(value string) string {
-	var builder strings.Builder
-	for _, char := range value {
-		switch {
-		case char >= 'a' && char <= 'z',
-			char >= 'A' && char <= 'Z',
-			char >= '0' && char <= '9',
-			char == '-', char == '_', char == '.':
-			_, _ = builder.WriteRune(char)
-		default:
-			_ = builder.WriteByte('_')
-		}
+func sha256OfFile(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
 	}
-	if builder.Len() == 0 {
-		return "_"
+	defer func() {
+		_ = file.Close()
+	}()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, file); err != nil {
+		return "", err
 	}
 
-	return builder.String()
-}
-
-func directorySize(path string) (int64, error) {
-	var size int64
-	err := filepath.WalkDir(path, func(_ string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		size += info.Size()
-
-		return nil
-	})
-
-	return size, err
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

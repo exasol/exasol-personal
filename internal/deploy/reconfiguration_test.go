@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 	"github.com/exasol/exasol-personal/internal/tofu"
 )
 
@@ -70,7 +72,11 @@ func TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles(t *te
 	if err := os.WriteFile(statePath, []byte("state"), 0o600); err != nil {
 		t.Fatalf("write state file failed: %v", err)
 	}
-	tofuBinaryPath, err := tofu.ResolveBinaryPath(context.Background())
+	mgr, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
+	if err != nil {
+		t.Fatalf("create artifact manager: %v", err)
+	}
+	tofuBinaryPath, err := mgr.Request(context.Background(), "tofu")
 	if err != nil {
 		t.Fatalf("resolve tofu binary path failed: %v", err)
 	}
@@ -264,10 +270,10 @@ backend: unknown
 	}
 
 	// When
-	err := Destroy(context.Background(), deployment, false)
+	destroyErr := Destroy(context.Background(), deployment, false)
 
 	// Then
-	if err == nil {
+	if destroyErr == nil {
 		t.Fatal("expected destroy to fail, got nil")
 	}
 	if _, statErr := os.Stat(localPath); statErr != nil {

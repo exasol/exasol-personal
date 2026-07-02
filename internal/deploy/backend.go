@@ -9,8 +9,10 @@ import (
 	"io"
 	"strings"
 
+	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
 const (
@@ -101,7 +103,12 @@ func newDeploymentBackend(
 
 	switch kind {
 	case backendTypeTofu:
-		return newTofuBackend(deployment, manifest), nil
+		manager, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
+		if err != nil {
+			return nil, err
+		}
+
+		return newTofuBackend(deployment, manifest, manager), nil
 	case backendTypeLocal:
 		return newLocalBackend(deployment, manifest), nil
 	default:

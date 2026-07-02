@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/spf13/cobra"
 )
 
@@ -230,9 +232,11 @@ func scanInfrastructurePresetSelection(args []string) (*deploy.PresetRef, error)
 		return nil, errors.New("infra preset not provided")
 	}
 
-	ref := presetRefFromArg(positionals[0])
-	if strings.TrimSpace(ref.Name) == "" && strings.TrimSpace(ref.Path) == "" {
-		return nil, errors.New("no valid preset value")
+	ref, err := resolvePresetRef(
+		context.Background(), positionals[0], presets.PresetTypeInfrastructure,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	return &ref, nil

@@ -30,22 +30,27 @@ type ArtifactSpec struct {
 	ResourcePath string `yaml:"resource_path,omitempty"`
 }
 
+const anyPlatformKey = "any"
+
 // Resolve returns the artifact for the requested platform.
 func (d ResourceDefinition) Resolve(goos, goarch string) (ArtifactSpec, error) {
 	key := platformKey(goos, goarch)
 	artifact, ok := d.Artifact[key]
 	if !ok {
-		keys := make([]string, 0, len(d.Artifact))
-		for candidate := range d.Artifact {
-			keys = append(keys, candidate)
-		}
-		sort.Strings(keys)
+		artifact, ok = d.Artifact[anyPlatformKey]
+		if !ok {
+			keys := make([]string, 0, len(d.Artifact))
+			for candidate := range d.Artifact {
+				keys = append(keys, candidate)
+			}
+			sort.Strings(keys)
 
-		return ArtifactSpec{}, fmt.Errorf(
-			"no artifact for platform %s in resource; available variants: %s",
-			key,
-			strings.Join(keys, ", "),
-		)
+			return ArtifactSpec{}, fmt.Errorf(
+				"no artifact for platform %s in resource; available variants: %s",
+				key,
+				strings.Join(keys, ", "),
+			)
+		}
 	}
 
 	return artifact, nil
@@ -93,11 +98,12 @@ func (d ResourceDefinition) validate(resourceID string) error {
 		}); err != nil {
 			return err
 		}
-		if !strings.Contains(key, "/") {
+		if key != anyPlatformKey && !strings.Contains(key, "/") {
 			return fmt.Errorf(
-				"resource %q uses invalid platform key %q; expected GOOS/GOARCH",
+				"resource %q uses invalid platform key %q; expected GOOS/GOARCH or %q",
 				resourceID,
 				key,
+				anyPlatformKey,
 			)
 		}
 	}
@@ -115,8 +121,23 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 	if strings.TrimSpace(a.URL) == "" {
 		return fmt.Errorf("resource %q artifact %q must define url", ctx.resourceID, ctx.variant)
 	}
-	if strings.TrimSpace(a.Sha256) == "" {
-		return fmt.Errorf("resource %q artifact %q must define sha256", ctx.resourceID, ctx.variant)
+	if IsGitSourceURL(a.URL) {
+		if strings.TrimSpace(a.Sha256) != "" {
+			return fmt.Errorf(
+				"resource %q artifact %q must not define sha256 for a git source"+
+					" (commit hash is used instead)",
+				ctx.resourceID,
+				ctx.variant,
+			)
+		}
+	} else {
+		if strings.TrimSpace(a.Sha256) == "" {
+			return fmt.Errorf(
+				"resource %q artifact %q must define sha256",
+				ctx.resourceID,
+				ctx.variant,
+			)
+		}
 	}
 	if !ctx.extract && strings.TrimSpace(a.ResourcePath) != "" {
 		return fmt.Errorf(

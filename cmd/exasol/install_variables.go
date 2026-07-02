@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -210,15 +211,22 @@ func scanInstallationPresetSelection(args []string) (*deploy.PresetRef, error) {
 	}
 
 	if len(positionals) > 1 {
-		ref := presetRefFromArg(positionals[1])
-		if strings.TrimSpace(ref.Name) == "" && strings.TrimSpace(ref.Path) == "" {
-			return nil, errors.New("no valid preset value")
+		ref, err := resolvePresetRef(
+			context.Background(), positionals[1], presets.PresetTypeInstallation,
+		)
+		if err != nil {
+			return nil, err
 		}
 
 		return &ref, nil
 	}
 
-	infraRef := presetRefFromArg(positionals[0])
+	infraRef, err := resolvePresetRef(
+		context.Background(), positionals[0], presets.PresetTypeInfrastructure,
+	)
+	if err != nil {
+		return nil, err
+	}
 	ref, err := deploy.ResolveDefaultInstallationPreset(infraRef)
 	if err != nil {
 		return nil, err

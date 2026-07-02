@@ -11,17 +11,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 )
 
 const (
-	dirPerm  = 0o700
-	filePerm = 0o600
+	dirPerm        = 0o700
+	filePerm       = 0o600
+	extractRelPath = "unpack"
 )
 
 type Platform struct {
@@ -35,60 +34,36 @@ type Manager struct {
 	platform Platform
 }
 
-type artifactRequest struct {
-	cacheKey        string
-	platform        string
-	entryRelPath    string
-	artifactRelPath string
-	resolvedRelPath string
-	downloadPath    string
-	resourcePath    string
-	extract         bool
+type Source interface {
+	CanFetch(url string) bool
+	// Fetch downloads or copies the resource at url to dstPath. It returns a
+	// non-empty redirectPath when the resource already resides locally and
+	// dstPath should be ignored; the caller uses redirectPath directly. For all
+	// other sources redirectPath is empty.
+	Fetch(ctx context.Context, url, dstPath string) (redirectPath string, err error)
 }
 
-func (r artifactRequest) entryPath(cache *Cache) string {
-	return cache.absolutePath(r.entryRelPath)
+// Identifier is an optional interface for Source types that can resolve their
+// content identity before fetching. The returned string is used as a synthetic
+// Sha256 so the standard cache machinery handles deduplication.
+type Identifier interface {
+	Identify(ctx context.Context, url string) (string, error)
 }
 
-func (r artifactRequest) artifactPath(cache *Cache) string {
-	return cache.absolutePath(r.artifactRelPath)
+type Extractor interface {
+	CanExtract(filename string) bool
+	Extract(srcPath, dstPath string) error
 }
 
-func (r artifactRequest) resolvedPath(cache *Cache) string {
-	return cache.absolutePath(r.resolvedRelPath)
+var sources = []Source{
+	&GitSource{},
+	&FileSource{},
+	&HttpSource{},
 }
 
-func (r artifactRequest) withEntryPath(cache *Cache, entryPath string) (artifactRequest, error) {
-	var err error
-	r.entryRelPath, err = cache.relativePath(entryPath)
-	if err != nil {
-		return artifactRequest{}, err
-	}
-	artifactPath, err := pathWithinRoot(entryPath, r.downloadPath, "download_path")
-	if err != nil {
-		return artifactRequest{}, err
-	}
-	r.artifactRelPath, err = cache.relativePath(artifactPath)
-	if err != nil {
-		return artifactRequest{}, err
-	}
-	r.resolvedRelPath = r.artifactRelPath
-	if r.extract {
-		extractedRoot, err := archiveExtractionRoot(r.artifactPath(cache))
-		if err != nil {
-			return artifactRequest{}, err
-		}
-		resolvedPath, err := extractedResourcePath(extractedRoot, r.resourcePath)
-		if err != nil {
-			return artifactRequest{}, err
-		}
-		r.resolvedRelPath, err = cache.relativePath(resolvedPath)
-		if err != nil {
-			return artifactRequest{}, err
-		}
-	}
-
-	return r, nil
+var extractors = []Extractor{
+	&TarGzExtractor{},
+	&ZipExtractor{},
 }
 
 type artifactIdentityPayload struct {
@@ -96,9 +71,21 @@ type artifactIdentityPayload struct {
 	Platform     string `json:"platform"`
 	URL          string `json:"url"`
 	Sha256       string `json:"sha256"`
+	CommitHash   string `json:"commitHash,omitempty"`
 	Extract      bool   `json:"extract"`
 	DownloadPath string `json:"downloadPath"`
 	ResourcePath string `json:"resourcePath"`
+}
+
+// NewManager creates a Manager backed by the default cache.
+// It has no resource spec, so only Get (ad-hoc definitions) is available.
+func NewManager() (*Manager, error) {
+	cache, err := NewDefaultCache()
+	if err != nil {
+		return nil, err
+	}
+
+	return NewResourceManagerWithCache(ResourceSpec{}, cache), nil
 }
 
 func NewResourceManager(spec ResourceSpec) (*Manager, error) {
@@ -108,6 +95,17 @@ func NewResourceManager(spec ResourceSpec) (*Manager, error) {
 	}
 
 	return NewResourceManagerWithCache(spec, cache), nil
+}
+
+// NewResourceManagerWithSpec parses rawSpec as a resource specification and
+// returns a Manager backed by the default cache.
+func NewResourceManagerWithSpec(rawSpec []byte) (*Manager, error) {
+	spec, err := ParseSpec(rawSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewResourceManager(spec)
 }
 
 func NewResourceManagerWithCache(spec ResourceSpec, cache *Cache) *Manager {
@@ -138,20 +136,29 @@ func NewResourceManagerForPlatform(spec ResourceSpec, cacheRoot, goos, goarch st
 	)
 }
 
-func (m *Manager) Request(ctx context.Context, resourceID string) (string, error) {
-	def, ok := m.spec[resourceID]
-	if !ok {
-		return "", fmt.Errorf("unknown runtime artifact %q", resourceID)
-	}
-
+// Get resolves an artifact from a runtime-constructed definition.
+func (m *Manager) Get(
+	ctx context.Context,
+	def ResourceDefinition,
+	resourceID string,
+) (string, error) {
 	artifact, err := def.Resolve(m.platform.GOOS, m.platform.GOARCH)
 	if err != nil {
 		return "", err
 	}
-	target, err := m.resolveArtifactRequest(resourceID, def, artifact)
+
+	// If the source can identify its content before fetching, use that identity
+	// as a synthetic Sha256 so the standard cache machinery handles the rest.
+	if strings.TrimSpace(artifact.Sha256) == "" {
+		artifact.Sha256 = m.identify(ctx, artifact)
+	}
+
+	entry, err := m.resolveEntry(resourceID, def, artifact)
 	if err != nil {
 		return "", err
 	}
+
+	noChecksum := strings.TrimSpace(artifact.Sha256) == ""
 
 	var resolvedPath string
 	err = m.cache.withExclusiveLock(ctx, func() error {
@@ -160,26 +167,33 @@ func (m *Manager) Request(ctx context.Context, resourceID string) (string, error
 			return err
 		}
 
-		path, reused, err := m.reuseCacheEntry(&index, artifact, target)
+		if noChecksum {
+			slog.Info(
+				"re-fetching resource without checksum, result may not be stable",
+				"id",
+				resourceID,
+				"url",
+				artifact.URL,
+			)
+		} else {
+			cachedPath, err := m.getCacheEntry(&index, artifact, entry)
+			if err != nil {
+				return err
+			}
+			if cachedPath != "" {
+				resolvedPath = cachedPath
+				slog.Info("found resource in cache", "id", resourceID, "path", resolvedPath)
+
+				return nil
+			}
+		}
+
+		resolvedPath, err = m.refresh(ctx, resourceID, artifact, &entry, &index)
 		if err != nil {
 			return err
 		}
-		if reused {
-			resolvedPath = path
-			slog.Debug("found resource in cache", "id", resourceID, "path", resolvedPath)
 
-			return nil
-		}
-
-		path, err = m.refresh(ctx, resourceID, artifact, target, &index)
-		if err != nil {
-			return err
-		}
-		if err := m.writeIndexAfterCleanup(&index); err != nil {
-			return err
-		}
-		resolvedPath = path
-		slog.Debug("downloaded resource", "id", resourceID, "path", resolvedPath)
+		slog.Info("fetched resource", "id", resourceID, "path", resolvedPath)
 
 		return nil
 	})
@@ -190,233 +204,214 @@ func (m *Manager) Request(ctx context.Context, resourceID string) (string, error
 	return resolvedPath, nil
 }
 
-func (m *Manager) reuseCacheEntry(
+// Request looks up a definition from the static spec by ID and resolves it.
+func (m *Manager) Request(ctx context.Context, resourceID string) (string, error) {
+	def, ok := m.spec[resourceID]
+	if !ok {
+		return "", fmt.Errorf("unknown runtime artifact %q", resourceID)
+	}
+
+	return m.Get(ctx, def, resourceID)
+}
+
+func (*Manager) identify(ctx context.Context, artifact ArtifactSpec) string {
+	for _, src := range sources {
+		if !src.CanFetch(artifact.URL) {
+			continue
+		}
+		if id, ok := src.(Identifier); ok {
+			hash, err := id.Identify(ctx, artifact.URL)
+			if err != nil {
+				return hash
+			}
+		}
+
+		break
+	}
+
+	return ""
+}
+
+func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, entry *cacheIndexEntry) error {
+	for _, source := range sources {
+		if !source.CanFetch(artifact.URL) {
+			continue
+		}
+
+		fetchPath := m.cache.absolutePath(entry.ArtifactPath)
+
+		_ = os.MkdirAll(filepath.Dir(fetchPath), dirPerm)
+		redirectPath, err := source.Fetch(ctx, artifact.URL, fetchPath)
+		if err != nil {
+			return err
+		}
+		if redirectPath != "" {
+			entry.RedirectPath = redirectPath
+
+			return nil
+		}
+
+		info, err := os.Stat(fetchPath)
+		if err != nil {
+			return err
+		}
+
+		// Only check the checksum for files with a specified sha256.
+		if !info.IsDir() && strings.TrimSpace(artifact.Sha256) != "" {
+			actual, err := sha256OfFile(fetchPath)
+			if err != nil {
+				return err
+			}
+			if actual != artifact.Sha256 {
+				return checksumMismatchError(artifact.Sha256, actual)
+			}
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("unsupported resource scheme in %q", artifact.URL)
+}
+
+func (m *Manager) extract(entry cacheIndexEntry) error {
+	filename := m.cache.absolutePath(entry.ArtifactPath)
+	if entry.RedirectPath != "" {
+		filename = entry.RedirectPath
+	}
+
+	for _, extractor := range extractors {
+		if extractor.CanExtract(filename) {
+			extractPath := filepath.Join(m.cache.absolutePath(entry.EntryPath), extractRelPath)
+
+			_ = os.MkdirAll(extractPath, dirPerm)
+
+			return extractor.Extract(filename, extractPath)
+		}
+	}
+
+	return fmt.Errorf("unsupported resource archive format in %q", filename)
+}
+
+func (m *Manager) getCacheEntry(
 	index *cacheIndex,
 	artifact ArtifactSpec,
-	target artifactRequest,
-) (string, bool, error) {
-	entry, ok := index.Entries[target.cacheKey]
+	target cacheIndexEntry,
+) (string, error) {
+	entry, ok := index.Entries[target.Key]
 	if !ok {
-		return "", false, nil
+		return "", nil
 	}
-	resolvedPath, reusable, err := cacheEntryPathIfReusable(entry, artifact, target, m.cache)
-	if err != nil {
-		return "", false, err
+
+	if entry.URL != artifact.URL {
+		return "", nil
 	}
-	if !reusable {
-		return "", false, nil
+	if entry.Sha256 != normalizeSha256(artifact.Sha256) {
+		return "", nil
+	}
+	if entry.EntryPath != target.EntryPath ||
+		entry.ArtifactPath != target.ArtifactPath ||
+		entry.ResolvedPath != target.ResolvedPath {
+		return "", nil
+	}
+
+	pathToStat := m.cache.absolutePath(entry.ResolvedPath)
+	if entry.RedirectPath != "" && !entry.Extract {
+		pathToStat = entry.RedirectPath
+	}
+	if _, err := os.Stat(pathToStat); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+
+		return "", err
 	}
 
 	entry.LastUsedAt = m.cache.clock.Now().UTC()
-	if size, statErr := directorySize(target.entryPath(m.cache)); statErr == nil {
+	if size, statErr := directorySize(m.cache.absolutePath(target.EntryPath)); statErr == nil {
 		entry.SizeBytes = size
 	}
-	index.Entries[target.cacheKey] = entry
+	index.Entries[target.Key] = entry
 	if err := m.writeIndexAfterCleanup(index); err != nil {
-		return "", false, err
+		return "", err
 	}
 
-	return resolvedPath, true, nil
-}
-
-func (m *Manager) cleanupStaleBestEffort(index *cacheIndex) {
-	if err := m.cache.cleanupStaleIfDue(index); err != nil {
-		slog.Warn("failed to clean runtime artifact cache; continuing", "error", err)
+	if entry.RedirectPath != "" && !entry.Extract {
+		return entry.RedirectPath, nil
 	}
+
+	return m.cache.absolutePath(entry.ResolvedPath), nil
 }
 
 func (m *Manager) writeIndexAfterCleanup(index *cacheIndex) error {
-	m.cleanupStaleBestEffort(index)
+	if err := m.cache.cleanupStaleIfDue(index); err != nil {
+		slog.Warn("failed to clean runtime artifact cache; continuing", "error", err)
+	}
 
 	return m.cache.writeIndex(*index)
-}
-
-func cacheEntryPathIfReusable(
-	entry cacheIndexEntry,
-	artifact ArtifactSpec,
-	target artifactRequest,
-	cache *Cache,
-) (string, bool, error) {
-	expected := normalizeSha256(artifact.Sha256)
-	if entry.URL != artifact.URL {
-		return "", false, nil
-	}
-	if entry.Sha256 != expected {
-		return "", false, nil
-	}
-	if entry.EntryPath != target.entryRelPath ||
-		entry.ArtifactPath != target.artifactRelPath ||
-		entry.ResolvedPath != target.resolvedRelPath {
-		return "", false, nil
-	}
-
-	artifactPath := target.artifactPath(cache)
-	if _, err := os.Stat(artifactPath); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", false, nil
-		}
-
-		return "", false, err
-	}
-
-	if !target.extract {
-		return artifactPath, true, nil
-	}
-
-	resolvedPath := target.resolvedPath(cache)
-	if _, err := os.Stat(resolvedPath); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", false, nil
-		}
-
-		return "", false, err
-	}
-
-	return resolvedPath, true, nil
 }
 
 func (m *Manager) refresh(
 	ctx context.Context,
 	resourceID string,
 	artifact ArtifactSpec,
-	target artifactRequest,
+	entry *cacheIndexEntry,
 	index *cacheIndex,
 ) (string, error) {
-	stage, cleanup, err := m.stageArtifactRequest(target)
-	if err != nil {
-		return "", err
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			cleanup()
-		}
-	}()
-
-	if err := downloadArtifact(
-		ctx,
-		resourceID,
-		artifact.URL,
-		stage.artifactPath(m.cache),
-		artifact.Sha256,
-	); err != nil {
-		slog.Error("failed to download resource", "id", resourceID, "error", err)
-		return "", err
+	if err := m.fetch(ctx, artifact, entry); err != nil {
+		return "", errors.Join(fmt.Errorf("failed to fetch resource %q", resourceID), err)
 	}
 
-	if stage.extract {
-		_, err := extractArtifact(stage.artifactPath(m.cache), artifact.ResourcePath)
-		if err != nil {
-			return "", err
+	if entry.Extract {
+		if err := m.extract(*entry); err != nil {
+			return "", errors.Join(fmt.Errorf("failed to extract resource %q", resourceID), err)
 		}
 	}
 
-	size, err := directorySize(stage.entryPath(m.cache))
+	size, err := directorySize(m.cache.absolutePath(entry.EntryPath))
 	if err != nil {
-		return "", err
+		size = 0
 	}
-	if err := os.RemoveAll(target.entryPath(m.cache)); err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(filepath.Dir(target.entryPath(m.cache)), dirPerm); err != nil {
-		return "", err
-	}
-	if err := os.Rename(stage.entryPath(m.cache), target.entryPath(m.cache)); err != nil {
-		return "", err
-	}
-	committed = true
 
 	now := m.cache.clock.Now().UTC()
-	index.Entries[target.cacheKey] = cacheIndexEntry{
-		ResourceID:   resourceID,
-		Platform:     target.platform,
-		URL:          artifact.URL,
-		Sha256:       normalizeSha256(artifact.Sha256),
-		Extract:      target.extract,
-		DownloadPath: target.downloadPath,
-		ResourcePath: target.resourcePath,
-		EntryPath:    target.entryRelPath,
-		ArtifactPath: target.artifactRelPath,
-		ResolvedPath: target.resolvedRelPath,
-		CreatedAt:    now,
-		LastUsedAt:   now,
-		SizeBytes:    size,
-	}
+	entry.ResourceID = resourceID
+	entry.URL = artifact.URL
+	entry.Sha256 = normalizeSha256(artifact.Sha256)
+	entry.CreatedAt = now
+	entry.LastUsedAt = now
+	entry.SizeBytes = size
+	index.Entries[entry.Key] = *entry
 
-	if target.extract {
-		return target.resolvedPath(m.cache), nil
-	}
-
-	return target.artifactPath(m.cache), nil
-}
-
-func (m *Manager) stageArtifactRequest(target artifactRequest) (artifactRequest, func(), error) {
-	parent := m.cache.downloadsRoot()
-	if err := os.MkdirAll(parent, dirPerm); err != nil {
-		return artifactRequest{}, nil, err
-	}
-	stageEntryPath, err := os.MkdirTemp(parent, ".tmp-"+target.cacheKey+"-")
-	if err != nil {
-		return artifactRequest{}, nil, err
-	}
-	staged := false
-	defer func() {
-		if !staged {
-			_ = os.RemoveAll(stageEntryPath)
-		}
-	}()
-
-	stage, err := target.withEntryPath(m.cache, stageEntryPath)
-	if err != nil {
-		return artifactRequest{}, nil, err
-	}
-
-	staged = true
-
-	return stage, func() { _ = os.RemoveAll(stageEntryPath) }, nil
-}
-
-func (a ArtifactSpec) downloadPath() (string, error) {
-	if name := strings.TrimSpace(a.DownloadPath); name != "" {
-		return name, nil
-	}
-
-	parsed, err := url.Parse(a.URL)
-	if err != nil {
+	if err := m.writeIndexAfterCleanup(index); err != nil {
 		return "", err
 	}
 
-	name := path.Base(parsed.Path)
-	if name == "." || name == "/" || name == "" {
-		return "", fmt.Errorf(
-			"resource URL %q must end with a filename or provide download_path",
-			a.URL,
-		)
+	if entry.RedirectPath != "" && !entry.Extract {
+		return entry.RedirectPath, nil
 	}
 
-	return name, nil
+	return m.cache.absolutePath(entry.ResolvedPath), nil
 }
 
-func (m *Manager) resolveArtifactRequest(
+// resolveEntry computes the cache slot for a resource: the cache key, relative
+// paths for the entry directory, downloaded artifact, and resolved artifact.
+// Fields populated at later pipeline stages (ResourceID, URL, Sha256,
+// RedirectPath, timestamps) are left at their zero values.
+func (m *Manager) resolveEntry(
 	resourceID string,
 	def ResourceDefinition,
 	artifact ArtifactSpec,
-) (artifactRequest, error) {
-	downloadPath, err := artifact.downloadPath()
+) (cacheIndexEntry, error) {
+	downloadPath, err := cleanRelativePath(artifact.DownloadPath, "download_path")
 	if err != nil {
-		return artifactRequest{}, err
+		return cacheIndexEntry{}, err
 	}
-	downloadPath, err = cleanRelativePath(downloadPath, "download_path")
-	if err != nil {
-		return artifactRequest{}, err
+	if downloadPath == "" {
+		downloadPath = urlBasename(artifact.URL)
 	}
 
-	resourcePath := ""
-	if def.Extract {
-		resourcePath, err = cleanOptionalRelativePath(artifact.ResourcePath, "resource_path")
-		if err != nil {
-			return artifactRequest{}, err
-		}
+	resourcePath, err := cleanRelativePath(artifact.ResourcePath, "resource_path")
+	if err != nil {
+		return cacheIndexEntry{}, err
 	}
 
 	platform := platformKey(m.platform.GOOS, m.platform.GOARCH)
@@ -429,24 +424,51 @@ func (m *Manager) resolveArtifactRequest(
 		resourcePath,
 	)
 	if err != nil {
-		return artifactRequest{}, err
-	}
-	entryPath := filepath.Join(
-		m.cache.artifactsRoot(),
-		safePathSegment(resourceID),
-		safePathSegment(platform),
-		cacheKey,
-	)
-
-	target := artifactRequest{
-		cacheKey:     cacheKey,
-		platform:     platform,
-		downloadPath: downloadPath,
-		resourcePath: resourcePath,
-		extract:      def.Extract,
+		return cacheIndexEntry{}, err
 	}
 
-	return target.withEntryPath(m.cache, entryPath)
+	entryPath := filepath.Join(m.cache.artifactsRoot(), resourceID, platform, cacheKey)
+
+	entryRelPath, err := m.cache.relativePath(entryPath)
+	if err != nil {
+		return cacheIndexEntry{}, err
+	}
+
+	artifactAbsPath, err := pathWithinRoot(entryPath, downloadPath, "download_path")
+	if err != nil {
+		return cacheIndexEntry{}, err
+	}
+
+	artifactRelPath, err := m.cache.relativePath(artifactAbsPath)
+	if err != nil {
+		return cacheIndexEntry{}, err
+	}
+
+	resolvedRelPath := artifactRelPath
+	if def.Extract {
+		resolvedAbsPath, err := extractedResourcePath(
+			filepath.Join(entryPath, extractRelPath),
+			resourcePath,
+		)
+		if err != nil {
+			return cacheIndexEntry{}, err
+		}
+		resolvedRelPath, err = m.cache.relativePath(resolvedAbsPath)
+		if err != nil {
+			return cacheIndexEntry{}, err
+		}
+	}
+
+	return cacheIndexEntry{
+		Key:          cacheKey,
+		Platform:     platform,
+		EntryPath:    entryRelPath,
+		ArtifactPath: artifactRelPath,
+		ResolvedPath: resolvedRelPath,
+		DownloadPath: downloadPath,
+		ResourcePath: resourcePath,
+		Extract:      def.Extract,
+	}, nil
 }
 
 func artifactIdentity(
@@ -483,4 +505,27 @@ func extractedResourcePath(extractedRoot, resourcePath string) (string, error) {
 
 func normalizeSha256(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func checksumMismatchError(expected, actual string) error {
+	return fmt.Errorf(
+		"checksum mismatch: expected %s, got %s",
+		expected,
+		actual,
+	)
+}
+
+func urlBasename(rawURL string) string {
+	rawPath := rawURL
+	if strings.HasPrefix(rawPath, "file://") {
+		rawPath = strings.TrimPrefix(rawPath, "file://")
+	} else if idx := strings.Index(rawPath, "://"); idx >= 0 {
+		rawPath = rawPath[idx+3:]
+	}
+	base := filepath.Base(rawPath)
+	if base == "." || base == "/" {
+		return ""
+	}
+
+	return base
 }

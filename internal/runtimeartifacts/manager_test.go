@@ -5,7 +5,6 @@ package runtimeartifacts
 
 import (
 	"archive/tar"
-	"archive/zip"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -95,60 +94,16 @@ func TestManager_RequestUsesDownloadPathFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	assertPathInCache(t, deploymentDir, path, "artifact", "linux_amd64", "artifact.tar.gz")
+	assertPathInCache(
+		t,
+		deploymentDir,
+		path,
+		"artifact",
+		filepath.Join("linux", "amd64"),
+		"artifact.tar.gz",
+	)
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected artifact path to exist, got %v", err)
-	}
-}
-
-func TestManager_StagesArtifactRequestsUnderDownloadsRoot(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	cache := newCacheWithClock(
-		filepath.Join(t.TempDir(), "cache"),
-		filepath.Join(t.TempDir(), cacheConfigFileName),
-		systemClock{},
-	)
-	def := ResourceDefinition{
-		Extract: false,
-		Artifact: map[string]ArtifactSpec{
-			"linux/amd64": {
-				URL:          "https://example.com/artifact.bin",
-				Sha256:       strings.Repeat("a", 64),
-				DownloadPath: "artifact.bin",
-			},
-		},
-	}
-	artifact := def.Artifact["linux/amd64"]
-	manager := NewResourceManagerWithCacheForPlatform(
-		ResourceSpec{"artifact": def},
-		cache,
-		"linux",
-		"amd64",
-	)
-	target, err := manager.resolveArtifactRequest("artifact", def, artifact)
-	if err != nil {
-		t.Fatalf("failed to resolve artifact request: %v", err)
-	}
-
-	// When
-	stage, cleanup, err := manager.stageArtifactRequest(target)
-	if err != nil {
-		t.Fatalf("expected staging to succeed, got %v", err)
-	}
-	defer cleanup()
-
-	// Then
-	stageEntryPath := stage.entryPath(cache)
-	if !strings.HasPrefix(stageEntryPath, cache.downloadsRoot()+string(filepath.Separator)) {
-		t.Fatalf("expected stage entry under downloads root, got %q", stageEntryPath)
-	}
-	if strings.HasPrefix(stageEntryPath, cache.artifactsRoot()+string(filepath.Separator)) {
-		t.Fatalf("expected stage entry to not be under artifacts root, got %q", stageEntryPath)
-	}
-	if !strings.HasPrefix(stage.artifactPath(cache), stageEntryPath+string(filepath.Separator)) {
-		t.Fatalf("expected staged artifact under stage entry, got %q", stage.artifactPath(cache))
 	}
 }
 
@@ -247,8 +202,8 @@ func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 		deploymentDir,
 		path1,
 		"artifact",
-		"linux_amd64",
-		filepath.Join("artifact", "tool"),
+		filepath.Join("linux", "amd64"),
+		filepath.Join("unpack", "tool"),
 	)
 	if _, err := os.Stat(path1); err != nil {
 		t.Fatalf("expected resolved path to exist, got %v", err)
@@ -342,8 +297,8 @@ func TestManager_RequestExtractsZipResource(t *testing.T) {
 		deploymentDir,
 		path,
 		"artifact",
-		"darwin_arm64",
-		filepath.Join("artifact", "launcher"),
+		filepath.Join("darwin", "arm64"),
+		filepath.Join("unpack", "launcher"),
 	)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -758,41 +713,7 @@ func writeTarGzMultiFixture(
 
 func writeZipFixture(t *testing.T, dir, name string, entries map[string]string) string {
 	t.Helper()
-
-	path := filepath.Join(dir, name)
-	outputFile, err := os.Create(path)
-	if err != nil {
-		t.Fatalf("failed to create fixture: %v", err)
-	}
-	writer := zip.NewWriter(outputFile)
-
-	keys := make([]string, 0, len(entries))
-	for key := range entries {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, entryName := range keys {
-		header := &zip.FileHeader{
-			Name:   entryName,
-			Method: zip.Deflate,
-		}
-		header.SetMode(0o755)
-		entry, err := writer.CreateHeader(header)
-		if err != nil {
-			t.Fatalf("failed to create zip entry: %v", err)
-		}
-		if _, err := entry.Write([]byte(entries[entryName])); err != nil {
-			t.Fatalf("failed to write zip entry: %v", err)
-		}
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("failed to close zip writer: %v", err)
-	}
-	if err := outputFile.Close(); err != nil {
-		t.Fatalf("failed to close fixture file: %v", err)
-	}
-
-	return path
+	return writeZipFixtureEntries(t, dir, name, entries)
 }
 
 func sha256OfTestFile(t *testing.T, path string) string {
@@ -895,4 +816,362 @@ func onlyCacheEntry(t *testing.T, index cacheIndex) cacheIndexEntry {
 	t.Fatal("expected one cache entry")
 
 	return cacheIndexEntry{}
+}
+
+func TestManager_GetWithRuntimeDefinition(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deploymentDir := t.TempDir()
+	data := []byte("tool-binary")
+	server := newArtifactServer(t, "tool.bin", data)
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {
+				URL:          server.URL + "/tool.bin",
+				Sha256:       checksumString(string(data)),
+				DownloadPath: "tool.bin",
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, deploymentDir, "linux", "amd64")
+
+	// When
+	path, err := manager.Get(context.Background(), def, "tool-binary")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected resolved path to exist, got %v", err)
+	}
+}
+
+func TestParseSpec_RejectsArchiveWithMissingChecksum(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`
+myresource:
+  extract: false
+  artifact:
+    linux/amd64:
+      url: https://example.com/tool.tar.gz
+      sha256: ""
+`)
+
+	_, err := ParseSpec(raw)
+	if err == nil || !strings.Contains(err.Error(), "must define sha256") {
+		t.Fatalf("expected missing sha256 error, got %v", err)
+	}
+}
+
+func TestManager_GetNoChecksumAlwaysRefetches(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deploymentDir := t.TempDir()
+	data := []byte("artifact-content")
+	server, requests := newCountingArtifactServer(t, "tool.bin", data)
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {
+				URL:          server.URL + "/tool.bin",
+				Sha256:       "",
+				DownloadPath: "tool.bin",
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, deploymentDir, "linux", "amd64")
+
+	// When
+	_, err := manager.Get(context.Background(), def, "tool-binary")
+	if err != nil {
+		t.Fatalf("expected first Get to succeed, got %v", err)
+	}
+	_, err = manager.Get(context.Background(), def, "tool-binary")
+	if err != nil {
+		t.Fatalf("expected second Get to succeed, got %v", err)
+	}
+	// Then
+	if requests.Load() != 2 {
+		t.Fatalf("expected 2 requests for no-checksum archive, got %d", requests.Load())
+	}
+}
+
+func TestManager_GetGitSourceCachedOnSameCommit(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	repoDir, _ := createTestGitRepo(t, map[string]string{"preset.txt": "content"})
+	cacheDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: repoDir},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+
+	// When — first fetch clones the repo
+	path, err := manager.Get(context.Background(), def, "preset")
+	if err != nil {
+		t.Fatalf("first Get failed: %v", err)
+	}
+
+	// Corrupt a file in the cache to detect whether Fetch is called again.
+	corruptedFile := filepath.Join(path, "preset.txt")
+	if err := os.WriteFile(corruptedFile, []byte("corrupted"), filePerm); err != nil {
+		t.Fatalf("corrupt failed: %v", err)
+	}
+
+	// When — second Get with same commit; Identify returns same hash → cache hit
+	path2, err := manager.Get(context.Background(), def, "preset")
+	if err != nil {
+		t.Fatalf("second Get failed: %v", err)
+	}
+
+	// Then — same path returned, Fetch was not called (corrupted content preserved)
+	if path != path2 {
+		t.Fatalf("expected same cache path, got %q vs %q", path, path2)
+	}
+	got, err := os.ReadFile(corruptedFile)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	if string(got) != "corrupted" {
+		t.Fatalf("expected cache hit (corrupted content preserved), got %q", string(got))
+	}
+}
+
+func TestManager_GetGitSourceRefetchesOnNewCommit(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	repoDir, _ := createTestGitRepo(t, map[string]string{"v1.txt": "v1"})
+	cacheDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: repoDir},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+
+	_, err := manager.Get(context.Background(), def, "preset")
+	if err != nil {
+		t.Fatalf("first Get failed: %v", err)
+	}
+
+	// Advance the remote
+	addCommitToTestRepo(t, repoDir, "v2.txt", "v2")
+
+	// When — second Get with new commit
+	path, err := manager.Get(context.Background(), def, "preset")
+	if err != nil {
+		t.Fatalf("second Get failed: %v", err)
+	}
+
+	// Then — new content is present
+	if _, err := os.Stat(filepath.Join(path, "v2.txt")); err != nil {
+		t.Fatalf("expected v2.txt after re-fetch, got %v", err)
+	}
+}
+
+func TestManager_GetFileDirectoryReturnedDirectly(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	presetDir := t.TempDir()
+	cacheDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: "file://" + presetDir},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+
+	// When
+	path, err := manager.Get(context.Background(), def, "preset-dir")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	// Fetch returns a redirect path for local directories; the Manager records it
+	// in the cache index but does not write an artifact to the cache directory.
+	if strings.HasPrefix(path, cacheDir) {
+		t.Fatalf("expected original path, not a cache path; got %q", path)
+	}
+	if path != presetDir {
+		t.Fatalf("expected path %q, got %q", presetDir, path)
+	}
+}
+
+func TestManager_GetFileDirectoryMissingReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: "file:///nonexistent/path/to/preset"},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+
+	// When
+	_, err := manager.Get(context.Background(), def, "preset-missing")
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("expected does-not-exist error, got %v", err)
+	}
+}
+
+func TestManager_GetFileArchiveExtractedIntoCache(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	srcDir := t.TempDir()
+	archivePath := writeTarGzFixture(t, srcDir, "preset.tar.gz", "tool")
+	cacheDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: true,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: "file://" + archivePath, ResourcePath: "tool"},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+
+	// When
+	path, err := manager.Get(context.Background(), def, "preset")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if strings.HasPrefix(path, srcDir) {
+		t.Fatalf("expected path inside cache, got %q", path)
+	}
+	if !strings.HasPrefix(path, cacheDir) {
+		t.Fatalf("expected path under cache root %q, got %q", cacheDir, path)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected extracted tool to exist, got %v", err)
+	}
+}
+
+func TestManager_GetAnyPlatformFallback(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deploymentDir := t.TempDir()
+	data := []byte("cross-platform-tool")
+	server := newArtifactServer(t, "tool.bin", data)
+	spec := ResourceSpec{
+		"tool": {
+			Extract: false,
+			Artifact: map[string]ArtifactSpec{
+				anyPlatformKey: {
+					URL:          server.URL + "/tool.bin",
+					Sha256:       checksumString(string(data)),
+					DownloadPath: "tool.bin",
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, deploymentDir, "darwin", "arm64")
+
+	// When
+	path, err := manager.Request(context.Background(), "tool")
+	// Then
+	if err != nil {
+		t.Fatalf("expected any-platform fallback to succeed, got %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected resolved path to exist, got %v", err)
+	}
+}
+
+func TestManager_GetPlatformSpecificTakesPriorityOverAny(t *testing.T) {
+	t.Parallel()
+
+	// Given: a definition with both a platform-specific key and "any"
+	deploymentDir := t.TempDir()
+	platformData := []byte("platform-specific-tool")
+	anyData := []byte("any-platform-tool")
+	server := newArtifactServer(t, "tool.bin", platformData)
+	anyServer := newArtifactServer(t, "tool.bin", anyData)
+	spec := ResourceSpec{
+		"tool": {
+			Extract: false,
+			Artifact: map[string]ArtifactSpec{
+				"linux/amd64": {
+					URL:          server.URL + "/tool.bin",
+					Sha256:       checksumString(string(platformData)),
+					DownloadPath: "tool.bin",
+				},
+				anyPlatformKey: {
+					URL:          anyServer.URL + "/tool.bin",
+					Sha256:       checksumString(string(anyData)),
+					DownloadPath: "tool.bin",
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, deploymentDir, "linux", "amd64")
+
+	// When
+	path, err := manager.Request(context.Background(), "tool")
+	// Then
+	if err != nil {
+		t.Fatalf("expected platform-specific resolution to succeed, got %v", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected resolved path to be readable, got %v", err)
+	}
+	if string(content) != string(platformData) {
+		t.Fatalf("expected platform-specific artifact, got %q", string(content))
+	}
+}
+
+func TestManager_GetZipExtraction(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	srcDir := t.TempDir()
+	archivePath := writeZipArchiveFixture(t, srcDir, "preset.zip", "tool", "tool-content")
+	cacheDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: true,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {
+				URL:          "file://" + archivePath,
+				ResourcePath: "tool",
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+
+	// When
+	path, err := manager.Get(context.Background(), def, "preset")
+	// Then
+	if err != nil {
+		t.Fatalf("expected zip extraction to succeed, got %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected extracted file to be readable, got %v", err)
+	}
+	if string(data) != "tool-content" {
+		t.Fatalf("expected %q, got %q", "tool-content", string(data))
+	}
+}
+
+func writeZipArchiveFixture(t *testing.T, dir, archiveName, entryName, content string) string {
+	t.Helper()
+	return writeZipFixtureEntries(t, dir, archiveName, map[string]string{
+		entryName: content,
+	})
 }
