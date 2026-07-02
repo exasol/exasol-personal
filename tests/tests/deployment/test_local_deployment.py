@@ -4,9 +4,11 @@
 """Tests specific to local VM deployments."""
 
 import json
+import logging
 import os
 import signal
 import sys
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Final
@@ -113,6 +115,21 @@ def test_ports_override_stable_across_restarts(
     assert "DUMMY" in proc.stdout
 
 
+def _wait_for_process_exit(
+    pid: int, timeout: float = 30, interval: float = 0.2
+) -> None:
+    """Block until `pid` no longer exists, or raise on timeout."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(interval)
+    msg = f"process {pid} still alive after {timeout}s"
+    raise TimeoutError(msg)
+
+
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
@@ -129,11 +146,23 @@ def test_status_after_forceful_vm_kill(
     deployment_dir = Path(local_deployment.deployment_dir.name)
     vm_pid_file = deployment_dir / "local" / "runtime" / "vm.pid"
     pid = int(vm_pid_file.read_text().strip())
+    logging.info("Sending SIGKILL to VM daemon (pid=%d)", pid)
     os.kill(pid, signal.SIGKILL)
+    _wait_for_process_exit(pid)
+    logging.info("VM daemon (pid=%d) confirmed stopped", pid)
 
+    logging.info("Waiting for status to report stopped after forceful kill")
     assert local_deployment.has_status(StatusStopped)
 
+    logging.info("Starting deployment to recover from unclean shutdown")
     start_result = local_deployment.start()
+    logging.info(
+        "start returned rc=%d, stdout=%s, stderr=%s",
+        start_result.returncode,
+        start_result.stdout,
+        start_result.stderr,
+    )
     assert start_result.returncode == 0
 
+    logging.info("Waiting for status to report database ready after recovery")
     assert local_deployment.has_status(StatusDatabaseReady)
