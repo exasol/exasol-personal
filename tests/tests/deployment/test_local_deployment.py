@@ -167,7 +167,60 @@ def _save_failure_artifacts(local_deployment: Deployment, test_name: str) -> Non
         logging.info("Test failed. Copying %s to %s for debugging", source, dest)
         shutil.copy2(source, dest / filename)
 
+    logs_dirs = [p for p in deployment_dir.rglob("logs") if p.is_dir()]
+    for index, logs_dir in enumerate(logs_dirs):
+        logs_dest = dest / "logs" if index == 0 else dest / f"logs-{index}"
+        logging.info("Test failed. Copying %s to %s for debugging", logs_dir, logs_dest)
+        shutil.copytree(logs_dir, logs_dest, dirs_exist_ok=True)
+
+    _capture_runner_process_list(dest)
+    _clear_stale_start_lock(local_deployment)
     _capture_podman_logs(local_deployment, dest)
+
+
+def _clear_stale_start_lock(local_deployment: Deployment) -> None:
+    """Remove the deployment-directory lock left behind by our own SIGKILL.
+
+    `local_deployment.start(timeout=...)` kills the launcher process on
+    timeout, which skips its lock-release cleanup (SIGKILL can't be caught)
+    and leaves a stale `.dirmutex.exclusive` marker. That correctly blocks
+    every subsequent command, including our own diagnostic `shell host`
+    call, until it's cleared with the CLI's own escape hatch.
+    """
+    try:
+        local_deployment.launcher.run_command(
+            "diag",
+            local_deployment.deployment_dir.name,
+            "unlock",
+            capture_output=True,
+            timeout=10,
+        )
+        logging.info("Cleared stale deployment lock left by the killed start command")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        logging.info("Could not clear stale deployment lock: %s", exc)
+
+
+def _capture_runner_process_list(dest: Path) -> None:
+    """Capture the full process list on the CI runner host (not inside the VM).
+
+    Useful for spotting orphaned mac-runner/VM processes left over from a
+    prior forceful kill that might interfere with a freshly started VM.
+    """
+    try:
+        result = subprocess.run(
+            ["ps", "aux"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logging.info("Could not capture runner process list for debugging: %s", exc)
+        return
+
+    output_path = dest / "runner-ps-aux.txt"
+    output_path.write_text(result.stdout + result.stderr)
+    logging.info("Captured runner process list to %s", output_path)
 
 
 def _capture_podman_logs(local_deployment: Deployment, dest: Path) -> None:
