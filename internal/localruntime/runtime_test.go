@@ -5,7 +5,11 @@ package localruntime
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"os"
 	"path/filepath"
@@ -207,7 +211,7 @@ func TestEnsureSSHKey_PreservesExistingPrivateKey(t *testing.T) {
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	localRuntime := newRuntime(deployment, Config{})
-	existingKey := []byte("existing private key")
+	existingKey := generateOpenSSHPrivateKey(t)
 	if err := os.MkdirAll(filepath.Dir(localRuntime.paths.PrivateKeyPath), 0o750); err != nil {
 		t.Fatalf("failed to create local key directory: %v", err)
 	}
@@ -257,12 +261,82 @@ func TestEnsureSSHKey_GeneratesEd25519Key(t *testing.T) {
 	if signer.PublicKey().Type() != ssh.KeyAlgoED25519 {
 		t.Fatalf("expected ED25519 SSH key, got %q", signer.PublicKey().Type())
 	}
+	block, _ := pem.Decode(privateKey)
+	if block == nil || block.Type != openSSHKeyPEMType {
+		t.Fatalf("expected OpenSSH private key PEM, got %#v", block)
+	}
 
 	if _, err := os.Stat(filepath.Join(localRuntime.paths.WorkDir, "vm-shared")); err == nil {
 		t.Fatal("expected SSH key setup not to create managed share")
 	} else if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("failed to inspect managed share: %v", err)
 	}
+}
+
+func TestEnsureSSHKey_ReplacesLegacyPKCS8PrivateKey(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	localRuntime := newRuntime(deployment, Config{})
+	legacyKey := generatePKCS8PrivateKey(t)
+	if err := os.MkdirAll(filepath.Dir(localRuntime.paths.PrivateKeyPath), 0o750); err != nil {
+		t.Fatalf("failed to create local key directory: %v", err)
+	}
+	if err := os.WriteFile(localRuntime.paths.PrivateKeyPath, legacyKey, 0o600); err != nil {
+		t.Fatalf("failed to write legacy private key: %v", err)
+	}
+
+	// When
+	if err := localRuntime.ensureSSHKey(); err != nil {
+		t.Fatalf("expected SSH key setup to succeed, got %v", err)
+	}
+
+	// Then
+	privateKey, err := os.ReadFile(localRuntime.paths.PrivateKeyPath)
+	if err != nil {
+		t.Fatalf("expected generated SSH private key to be readable, got %v", err)
+	}
+	if string(privateKey) == string(legacyKey) {
+		t.Fatal("expected legacy private key to be replaced")
+	}
+	block, _ := pem.Decode(privateKey)
+	if block == nil || block.Type != openSSHKeyPEMType {
+		t.Fatalf("expected replacement key in OpenSSH format, got %#v", block)
+	}
+	if _, err := ssh.ParsePrivateKey(privateKey); err != nil {
+		t.Fatalf("expected replacement key to parse, got %v", err)
+	}
+}
+
+func generateOpenSSHPrivateKey(t *testing.T) []byte {
+	t.Helper()
+
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("failed to generate test SSH key: %v", err)
+	}
+	block, err := ssh.MarshalPrivateKey(privateKey, "")
+	if err != nil {
+		t.Fatalf("failed to marshal test SSH key: %v", err)
+	}
+
+	return pem.EncodeToMemory(block)
+}
+
+func generatePKCS8PrivateKey(t *testing.T) []byte {
+	t.Helper()
+
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("failed to generate test SSH key: %v", err)
+	}
+	data, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("failed to marshal test PKCS8 key: %v", err)
+	}
+
+	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: data})
 }
 
 func TestStop_InvokesOriginalRunnerStop(t *testing.T) {
