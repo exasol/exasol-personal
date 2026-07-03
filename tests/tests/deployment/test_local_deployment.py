@@ -261,6 +261,15 @@ def _capture_podman_logs(local_deployment: Deployment, dest: Path) -> None:
     logging.info("Captured podman logs for exasol-local-db to %s", output_path)
 
 
+@pytest.mark.skip(
+    reason=(
+        "Known-broken: after an unclean VM shutdown, the DB container's own init "
+        "script finds pre-existing TLS certs and blocks on an unanswerable "
+        "interactive prompt ('Accept existing, overwrite, or abort?'), so the DB "
+        "engine never starts. Root cause is in the exasol-local-db container "
+        "image, not this repo. Re-enable once that's fixed upstream."
+    )
+)
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
