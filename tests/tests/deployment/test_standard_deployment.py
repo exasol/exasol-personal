@@ -476,9 +476,6 @@ def test_license_session_limit(reusable_deployment: Deployment) -> None:
     assert alive == license_session_limit
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.infrastructure_e2e
 def test_stop_and_start(reusable_deployment: Deployment) -> None:
     # Using resuable_deployment fixture
@@ -518,12 +515,14 @@ def test_stop_and_start(reusable_deployment: Deployment) -> None:
     # Immediately verify DB is connectable after start completes
     assert reusable_deployment.db_connectable()
 
+    # The interactive `connect()` spawns a shell that reads from stdin. On Windows
+    # that path depends on the piped-stdin fix tracked separately (SPOT-31454), so
+    # here we only assert the non-interactive stop/start/info lifecycle. Exercise
+    # the interactive check on POSIX, where it is supported today.
     if not sys.platform.startswith("win"):
         connect_result = reusable_deployment.connect()
         assert hasattr(connect_result, "returncode")
         assert connect_result.returncode == 0
-    else:
-        pytest.skip("Skipping DB connection for Windows OS")
 
 
 @pytest.mark.skipif(
@@ -585,9 +584,6 @@ def test_start_interrupt_sets_interrupted_state(
     assert reusable_deployment.has_status(StatusDatabaseReady)
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.infrastructure_e2e
 @pytest.mark.provider_aws
 @pytest.mark.provider_azure
