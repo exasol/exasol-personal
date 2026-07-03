@@ -130,7 +130,9 @@ resource "azurerm_storage_account" "remote_archive" {
   shared_access_key_enabled = true
 
   # Keep the standard blob endpoint reachable and rely on network_rules below
-  # to restrict access to the deployment subnet.
+  # to restrict access to the deployment subnet. This account holds backup data
+  # and receives no client-side uploads, so (unlike bootstrap_assets) the strict
+  # subnet firewall is kept.
   public_network_access_enabled = true
 
   network_rules {
@@ -164,11 +166,23 @@ resource "azurerm_storage_account" "bootstrap_assets" {
   public_network_access_enabled   = true
   shared_access_key_enabled       = true
 
-  network_rules {
-    default_action             = "Deny"
-    bypass                     = ["AzureServices"]
-    virtual_network_subnet_ids = [azurerm_subnet.subnet.id]
-  }
+  # NOTE: no `network_rules`/`default_action` firewall here — intentionally, and
+  # unlike the `remote_archive` account above.
+  #
+  # The bootstrap blobs below are uploaded by the deploying client (the launcher
+  # running `tofu apply`), which runs OUTSIDE the deployment VNet — a CI runner or
+  # an end user's machine. A subnet-scoped `default_action = "Deny"` firewall
+  # blocks that data-plane upload with HTTP 403 and breaks `deploy` entirely
+  # (SPOT-31457). Terraform cannot know the deploying client's public IP to allow
+  # it without an external IP-lookup service or a launcher change, both of which
+  # we deliberately avoid.
+  #
+  # Confidentiality does not depend on this firewall: the container is private,
+  # `allow_nested_items_to_be_public = false` forbids anonymous access, transport
+  # is HTTPS/TLS1.2, and the VMs read blobs with a read-only, object-scoped SAS
+  # (see `azurerm_storage_account_sas.bootstrap_assets`). The blobs themselves are
+  # non-secret bootstrap scripts. The sensitive `remote_archive` account keeps its
+  # strict `network_rules` because nothing uploads to it from outside the VNet.
 
   tags = local.common_tags
 }
