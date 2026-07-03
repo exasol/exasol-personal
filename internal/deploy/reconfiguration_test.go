@@ -272,6 +272,16 @@ func assertBlockedStateError(
 	}
 }
 
+func assertContainsAll(t *testing.T, message string, wantSubstrings ...string) {
+	t.Helper()
+
+	for _, substring := range wantSubstrings {
+		if !strings.Contains(message, substring) {
+			t.Fatalf("expected message to contain %q, got %q", substring, message)
+		}
+	}
+}
+
 func TestWorkflowStatePermitsDeploy_BlockedStatesSurfaceRecoveryGuidance(t *testing.T) {
 	t.Parallel()
 
@@ -404,28 +414,22 @@ func TestWorkflowStatePermitsConnect_PermitsRunning(t *testing.T) {
 	}
 }
 
-func TestWorkflowStatePermitsStart_BlockedStatesSurfaceRecoveryGuidance(t *testing.T) {
+func TestWorkflowStatePermitsStart_SkippedStatesSurfaceRecoveryGuidance(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
 		name         string
 		state        any
-		sentinel     error
-		wantStatus   string
 		wantGuidance []string
 	}{
 		{
 			name:         "initialized",
 			state:        &config.WorkflowStateInitialized{},
-			sentinel:     ErrUnexpectedDeploymentStatus,
-			wantStatus:   StatusInitialized,
 			wantGuidance: []string{"deploy"},
 		},
 		{
 			name:         "deployment_failed",
 			state:        &config.WorkflowStateDeploymentFailed{Error: "boom"},
-			sentinel:     ErrUnexpectedDeploymentStatus,
-			wantStatus:   StatusDeploymentFailed,
 			wantGuidance: []string{"deploy"},
 		},
 		{
@@ -433,8 +437,6 @@ func TestWorkflowStatePermitsStart_BlockedStatesSurfaceRecoveryGuidance(t *testi
 			state: &config.WorkflowStateInterrupted{
 				InterruptedDuringOperation: config.DeployOperation,
 			},
-			sentinel:     ErrUnspportedOperation,
-			wantStatus:   StatusInterrupted,
 			wantGuidance: []string{"deploy"},
 		},
 	} {
@@ -442,55 +444,59 @@ func TestWorkflowStatePermitsStart_BlockedStatesSurfaceRecoveryGuidance(t *testi
 			t.Parallel()
 
 			deployment, state := deploymentInState(t, test.state)
-			err := WorkflowStatePermitsStart(state, deployment)
-			assertBlockedStateError(
-				t, deployment, err, test.sentinel, test.wantStatus, test.wantGuidance...,
+			decision, err := workflowStatePermitsStart(context.Background(), state, deployment)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if decision.shouldRun {
+				t.Fatal("expected start to be skipped")
+			}
+			assertContainsAll(
+				t, decision.guidance, test.wantGuidance...,
 			)
 		})
 	}
 }
 
-func TestWorkflowStatePermitsStop_BlockedStatesSurfaceRecoveryGuidance(t *testing.T) {
+func TestWorkflowStatePermitsStop_SkippedStatesSurfaceRecoveryGuidance(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
 		name         string
 		state        any
-		sentinel     error
-		wantStatus   string
 		wantGuidance []string
 	}{
 		{
 			name:         "initialized",
 			state:        &config.WorkflowStateInitialized{},
-			sentinel:     ErrUnexpectedDeploymentStatus,
-			wantStatus:   StatusInitialized,
 			wantGuidance: []string{"deploy"},
 		},
 		{
 			name:         "stopped",
 			state:        &config.WorkflowStateStopped{},
-			sentinel:     ErrUnexpectedDeploymentStatus,
-			wantStatus:   StatusStopped,
-			wantGuidance: []string{"start"},
+			wantGuidance: []string{"already stopped"},
 		},
 		{
 			name: "interrupted_during_deploy",
 			state: &config.WorkflowStateInterrupted{
 				InterruptedDuringOperation: config.DeployOperation,
 			},
-			sentinel:     ErrUnspportedOperation,
-			wantStatus:   StatusInterrupted,
 			wantGuidance: []string{"deploy"},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			deployment, state := deploymentInState(t, test.state)
-			err := WorkflowStatePermitsStop(state, deployment)
-			assertBlockedStateError(
-				t, deployment, err, test.sentinel, test.wantStatus, test.wantGuidance...,
+			_, state := deploymentInState(t, test.state)
+			decision, err := workflowStatePermitsStop(state)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if decision.shouldRun {
+				t.Fatal("expected stop to be skipped")
+			}
+			assertContainsAll(
+				t, decision.guidance, test.wantGuidance...,
 			)
 		})
 	}

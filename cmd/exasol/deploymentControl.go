@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"time"
@@ -61,6 +62,10 @@ var startCmd = &cobra.Command{
 			commonFlags.DeployVerbose,
 			waitTimeoutSeconds,
 		); err != nil {
+			if errors.Is(err, deploy.ErrLifecycleActionSkipped) {
+				return nil
+			}
+
 			return err
 		}
 

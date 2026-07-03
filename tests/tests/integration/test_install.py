@@ -25,6 +25,109 @@ def assert_lifecycle_json_signal(
     }
 
 
+def _assert_running_start_guidance(
+    exasol_path: str,
+    deployment_dir: Path,
+    env: dict[str, str],
+) -> None:
+    start_result = run_command(
+        [
+            exasol_path,
+            "start",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+    assert start_result.returncode == 0
+    assert "deployment state is running, but the database is not ready" in (
+        start_result.stderr
+    )
+    assert "exasol status" in start_result.stderr
+    assert "exasol stop" in start_result.stderr
+    assert "exasol start" in start_result.stderr
+
+
+def _assert_already_stopped_guidance(
+    exasol_path: str,
+    deployment_dir: Path,
+    env: dict[str, str],
+) -> None:
+    second_stop_result = run_command(
+        [
+            exasol_path,
+            "stop",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+    assert second_stop_result.returncode == 0
+    assert "deployment is already stopped" in second_stop_result.stderr
+
+
+def _assert_local_deployment_artifacts(deployment_dir: Path) -> None:
+    version_check_marker = (
+        deployment_dir / "local" / "runtime" / "start-version-check-enabled"
+    )
+    assert version_check_marker.read_text() == "false"
+
+    deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
+    assert deployment_data["backend"] == "local"
+    assert "nodes" not in deployment_data
+    assert deployment_data["connection"]["host"] == "127.0.0.1"
+    assert deployment_data["connection"]["dbPort"] == LOCAL_TEST_DB_PORT
+    assert "adminUi" not in deployment_data["connection"]
+    assert "uiPort" not in deployment_data["connection"]
+    assert deployment_data["connection"]["insecureSkipCertValidation"] is True
+
+    secrets_data = json.loads((deployment_dir / "secrets.json").read_text())
+    assert secrets_data["dbPassword"] == "exasol"
+    assert "adminUiPassword" not in secrets_data
+
+
+def _assert_local_info(
+    exasol_path: str,
+    deployment_dir: Path,
+    env: dict[str, str],
+) -> None:
+    info_result = run_command(
+        [
+            exasol_path,
+            "info",
+            "--json",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+    info_data = json.loads(info_result.stdout)
+    assert info_data["deploymentState"] == "running"
+    assert info_data["connection"]["backend"] == "local"
+    assert info_data["connection"]["dbPort"] == LOCAL_TEST_DB_PORT
+    assert "adminUi" not in info_data["connection"]
+    assert "uiPort" not in info_data["connection"]
+
+
+def _assert_database_connection_failed_status(
+    exasol_path: str,
+    deployment_dir: Path,
+    env: dict[str, str],
+) -> None:
+    status_result = run_command(
+        [
+            exasol_path,
+            "status",
+            "--json",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+    status_data = json.loads(status_result.stdout)
+    assert status_data["status"] == "database_connection_failed"
+
+
 def test_install_requires_infra_preset_arg(exasol_path: str) -> None:
     # Given the install command
 
@@ -324,54 +427,16 @@ esac
 
     # Then the deployment is initialized and local connection artifacts are written
     assert result.returncode == 0
-    version_check_marker = (
-        deployment_dir / "local" / "runtime" / "start-version-check-enabled"
-    )
-    assert version_check_marker.read_text() == "false"
-    deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
-    assert deployment_data["backend"] == "local"
-    assert "nodes" not in deployment_data
-    assert deployment_data["connection"]["host"] == "127.0.0.1"
-    assert deployment_data["connection"]["dbPort"] == LOCAL_TEST_DB_PORT
-    assert "adminUi" not in deployment_data["connection"]
-    assert "uiPort" not in deployment_data["connection"]
-    assert deployment_data["connection"]["insecureSkipCertValidation"] is True
-
-    secrets_data = json.loads((deployment_dir / "secrets.json").read_text())
-    assert secrets_data["dbPassword"] == "exasol"
-    assert "adminUiPassword" not in secrets_data
+    _assert_local_deployment_artifacts(deployment_dir)
 
     # Then info can consume the local artifacts without cloud-specific assumptions
-    info_result = run_command(
-        [
-            exasol_path,
-            "info",
-            "--json",
-            "--deployment-dir",
-            str(deployment_dir),
-        ],
-        env=env,
-    )
-    info_data = json.loads(info_result.stdout)
-    assert info_data["deploymentState"] == "running"
-    assert info_data["connection"]["backend"] == "local"
-    assert info_data["connection"]["dbPort"] == LOCAL_TEST_DB_PORT
-    assert "adminUi" not in info_data["connection"]
-    assert "uiPort" not in info_data["connection"]
+    _assert_local_info(exasol_path, deployment_dir, env)
 
     # Then status also handles the local artifacts even though the fake DB is absent
-    status_result = run_command(
-        [
-            exasol_path,
-            "status",
-            "--json",
-            "--deployment-dir",
-            str(deployment_dir),
-        ],
-        env=env,
-    )
-    status_data = json.loads(status_result.stdout)
-    assert status_data["status"] == "database_connection_failed"
+    _assert_database_connection_failed_status(exasol_path, deployment_dir, env)
+
+    # Then start on a running deployment gives recovery guidance instead of failing
+    _assert_running_start_guidance(exasol_path, deployment_dir, env)
 
     # Then stop updates persisted state and emits a JSON ready signal
     stop_result = run_command(
@@ -389,6 +454,9 @@ esac
     deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
     assert deployment_data["deploymentState"] == "stopped"
     assert deployment_data["clusterState"] == "stopped"
+
+    # Then stopping an already stopped deployment is an idempotent no-op
+    _assert_already_stopped_guidance(exasol_path, deployment_dir, env)
 
     # Then start emits only the JSON ready signal on stdout
     start_result = run_command(

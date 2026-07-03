@@ -5,6 +5,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -13,39 +14,136 @@ import (
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
-func WorkflowStatePermitsStart(
+type lifecycleActionDecision struct {
+	shouldRun                  bool
+	guidance                   string
+	showConnectionInstructions bool
+}
+
+func workflowStatePermitsStart(
+	ctx context.Context,
 	exasolState *config.ExasolPersonalState,
 	deployment config.DeploymentDir,
-) error {
+) (lifecycleActionDecision, error) {
 	workflowState, err := exasolState.GetWorkflowState()
 	if err != nil {
 		slog.Error("failed to read workflow state")
-		return err
+		return noLifecycleAction(), err
 	}
 
 	switch state := workflowState.(type) {
+	case *config.WorkflowStateInitialized:
+		return guidanceOnly(
+			"deployment is initialized but not deployed yet; run `exasol deploy` " +
+				"or the same `exasol install <infra preset>` command to create and start it",
+		), nil
+
 	case *config.WorkflowStateStopped:
-		return nil
+		return runLifecycleAction(), nil
+
+	case *config.WorkflowStateRunning:
+		status, err := getStatusForStart(ctx, deployment, true)
+		if err != nil {
+			return noLifecycleAction(), err
+		}
+		if status.Status == StatusDatabaseReady {
+			return skipLifecycleActionWithConnectionInstructions(
+				"database is already ready to accept connections",
+			), nil
+		}
+
+		return guidanceOnly(
+			"deployment state is running, but the database is not ready; run `exasol status` " +
+				"for details, then run `exasol stop` and `exasol start` to restart it or " +
+				"`exasol destroy` to clean up resources",
+		), nil
+
+	case *config.WorkflowStateDeploymentFailed:
+		return guidanceOnly(
+			"deployment is in a failed state; fix the reported problem and run `exasol deploy` " +
+				"or the same `exasol install <infra preset>` command again, or run " +
+				"`exasol destroy` to clean up resources",
+		), nil
 
 	case *config.WorkflowStateOperationInProgress:
 		switch state.Operation {
 		case config.StartOperation:
-			return nil
+			return runLifecycleAction(), nil
 		default:
-			return newBlockedStateError(deployment, ErrUnspportedOperation)
+			return skipLifecycleAction(
+				operationInProgressGuidance(state.Operation, "start"),
+			), nil
 		}
 
 	case *config.WorkflowStateInterrupted:
 		switch state.InterruptedDuringOperation {
 		case config.StartOperation,
 			config.StopOperation:
-			return nil
+			return runLifecycleAction(), nil
 		default:
-			return newBlockedStateError(deployment, ErrUnspportedOperation)
+			return skipLifecycleAction(
+				interruptedOperationGuidance(state.InterruptedDuringOperation, "start"),
+			), nil
 		}
 	}
 
-	return newBlockedStateError(deployment, ErrUnexpectedDeploymentStatus)
+	return guidanceOnly(
+		"deployment is in an unexpected state; run `exasol status` for details",
+	), nil
+}
+
+var getStatusForStart = GetStatus
+
+func noLifecycleAction() lifecycleActionDecision {
+	return lifecycleActionDecision{
+		shouldRun:                  false,
+		guidance:                   "",
+		showConnectionInstructions: false,
+	}
+}
+
+func runLifecycleAction() lifecycleActionDecision {
+	return lifecycleActionDecision{
+		shouldRun:                  true,
+		guidance:                   "",
+		showConnectionInstructions: false,
+	}
+}
+
+func guidanceOnly(message string) lifecycleActionDecision {
+	return skipLifecycleAction(message)
+}
+
+func skipLifecycleAction(message string) lifecycleActionDecision {
+	return lifecycleActionDecision{
+		shouldRun:                  false,
+		guidance:                   message,
+		showConnectionInstructions: false,
+	}
+}
+
+func skipLifecycleActionWithConnectionInstructions(message string) lifecycleActionDecision {
+	return lifecycleActionDecision{
+		shouldRun:                  false,
+		guidance:                   message,
+		showConnectionInstructions: true,
+	}
+}
+
+func operationInProgressGuidance(operation, requestedAction string) string {
+	return "operation `" + operation + "` is in progress or did not finish cleanly; " +
+		"run `exasol status` for recovery guidance before running `exasol " + requestedAction + "`"
+}
+
+func interruptedOperationGuidance(operation, requestedAction string) string {
+	return "a previous `" + operation + "` operation was interrupted; run `exasol status` " +
+		"for recovery guidance before running `exasol " + requestedAction + "`"
+}
+
+func logLifecycleGuidance(message string) {
+	if message != "" {
+		slog.Warn(message)
+	}
 }
 
 //
@@ -56,10 +154,8 @@ func Start(
 	verbose bool,
 	waitTimeoutSeconds int,
 ) error {
-	return withDeploymentExclusiveLock(ctx, deployment,
+	err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			slog.Info("starting deployment. this may take a few minutes")
-
 			exasolState, err := config.ReadExasolPersonalState(deployment)
 			if err != nil {
 				return err
@@ -69,9 +165,20 @@ func Start(
 				return err
 			}
 
-			if err := WorkflowStatePermitsStart(exasolState, deployment); err != nil {
-				return err
+			decision, err := workflowStatePermitsStart(ctx, exasolState, deployment)
+			if err != nil {
+				return util.LoggedError(err, "run `status` for more information")
 			}
+			if !decision.shouldRun {
+				logLifecycleGuidance(decision.guidance)
+				if decision.showConnectionInstructions {
+					return nil
+				}
+
+				return ErrLifecycleActionSkipped
+			}
+
+			slog.Info("starting deployment. this may take a few minutes")
 
 			// Set the workflowstate to start operation in-progress
 			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
@@ -141,28 +248,51 @@ func Start(
 
 			return writeConnectionInstructionsFile(deployment, connectionInstructions)
 		})
+	if errors.Is(err, ErrDeploymentDirectoryLocked) {
+		slog.Warn(err.Error())
+		return ErrLifecycleActionSkipped
+	}
+
+	return err
 }
 
-func WorkflowStatePermitsStop(
+func workflowStatePermitsStop(
 	exasolState *config.ExasolPersonalState,
-	deployment config.DeploymentDir,
-) error {
+) (lifecycleActionDecision, error) {
 	workflowState, err := exasolState.GetWorkflowState()
 	if err != nil {
 		slog.Error("failed to read workflow state")
-		return err
+		return noLifecycleAction(), err
 	}
 
 	switch state := workflowState.(type) {
+	case *config.WorkflowStateInitialized:
+		return guidanceOnly(
+			"deployment is initialized but not deployed yet; there is nothing to stop; " +
+				"run `exasol deploy` or the same `exasol install <infra preset>` command " +
+				"to create and start it",
+		), nil
+
 	case *config.WorkflowStateRunning:
-		return nil
+		return runLifecycleAction(), nil
+
+	case *config.WorkflowStateStopped:
+		return guidanceOnly("deployment is already stopped"), nil
+
+	case *config.WorkflowStateDeploymentFailed:
+		return guidanceOnly(
+			"deployment is in a failed state; run `exasol status` for details, then retry " +
+				"`exasol deploy` or run `exasol destroy` to clean up resources",
+		), nil
 
 	case *config.WorkflowStateOperationInProgress:
 		switch state.Operation {
 		case config.StopOperation:
-			return nil
+			return runLifecycleAction(), nil
 		default:
-			return newBlockedStateError(deployment, ErrUnspportedOperation)
+			return skipLifecycleAction(
+				operationInProgressGuidance(state.Operation, "stop"),
+			), nil
 		}
 
 	case *config.WorkflowStateInterrupted:
@@ -170,21 +300,23 @@ func WorkflowStatePermitsStop(
 		case config.StartOperation,
 			config.StopOperation,
 			config.DestroyOperation:
-			return nil
+			return runLifecycleAction(), nil
 		default:
-			return newBlockedStateError(deployment, ErrUnspportedOperation)
+			return skipLifecycleAction(
+				interruptedOperationGuidance(state.InterruptedDuringOperation, "stop"),
+			), nil
 		}
 	}
 
-	return newBlockedStateError(deployment, ErrUnexpectedDeploymentStatus)
+	return guidanceOnly(
+		"deployment is in an unexpected state; run `exasol status` for details",
+	), nil
 }
 
 //nolint:revive
 func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) error {
-	return withDeploymentExclusiveLock(ctx, deployment,
+	err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			slog.Info("stopping deployment. this may take a few minutes")
-
 			exasolState, err := config.ReadExasolPersonalState(deployment)
 			if err != nil {
 				return err
@@ -194,9 +326,17 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 				return err
 			}
 
-			if err = WorkflowStatePermitsStop(exasolState, deployment); err != nil {
-				return err
+			decision, err := workflowStatePermitsStop(exasolState)
+			if err != nil {
+				return util.LoggedError(err, "run `status` for more information")
 			}
+			if !decision.shouldRun {
+				logLifecycleGuidance(decision.guidance)
+
+				return nil
+			}
+
+			slog.Info("stopping deployment. this may take a few minutes")
 
 			// Set the workflowstate to stop in-progress
 			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
@@ -253,4 +393,10 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 
 			return nil
 		})
+	if errors.Is(err, ErrDeploymentDirectoryLocked) {
+		slog.Warn(err.Error())
+		return nil
+	}
+
+	return err
 }

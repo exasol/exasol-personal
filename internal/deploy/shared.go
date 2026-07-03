@@ -71,6 +71,7 @@ type BackoffCondition func(context.Context) (bool, error)
 var (
 	ErrUnknownDeploymentType      = errors.New("unknown deployment type")
 	ErrNotImplemented             = errors.New("not implemented")
+	ErrLifecycleActionSkipped     = errors.New("lifecycle action skipped")
 	ErrUnexpectedDeploymentStatus = errors.New("unexpected deployment status")
 	ErrUnspportedOperation        = errors.New("unsupported operation")
 )
