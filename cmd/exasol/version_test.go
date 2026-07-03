@@ -132,9 +132,13 @@ func TestFormatLatestVersionText_RejectsInvalidVersionData(t *testing.T) {
 	}
 }
 
+// TestVersionCmdQueuesPrimaryOutputForTerminalFlush must not run in parallel: it
+// mutates the shared package-level terminal message queues (resetTerminalMessages),
+// which races with other tests that touch the same globals (see
+// TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout).
+//
+//nolint:paralleltest // mutates shared package globals; must run serially
 func TestVersionCmdQueuesPrimaryOutputForTerminalFlush(t *testing.T) {
-	t.Parallel()
-
 	resetTerminalMessages()
 	defer resetTerminalMessages()
 

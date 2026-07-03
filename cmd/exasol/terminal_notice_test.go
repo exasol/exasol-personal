@@ -8,9 +8,14 @@ import (
 	"testing"
 )
 
+// TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout must not run in
+// parallel: it mutates the package-level terminal message queues
+// (resetTerminalMessages/addTerminal*/writeTerminalMessages), which are shared
+// global state. Running alongside other tests that touch them (e.g.
+// TestVersionCmdQueuesPrimaryOutputForTerminalFlush) trips the race detector.
+//
+//nolint:paralleltest // mutates shared package globals; must run serially
 func TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout(t *testing.T) {
-	t.Parallel()
-
 	resetTerminalMessages()
 	defer resetTerminalMessages()
 
