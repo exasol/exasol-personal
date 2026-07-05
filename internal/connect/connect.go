@@ -107,6 +107,7 @@ func NewExasolConnection(
 	username string,
 	password string,
 	insecureSkipCertValidation bool,
+	optFns ...exasol.OptFn,
 ) (generaltypes.Databaser, error) {
 	if password == "" {
 		secrets, err := config.ReadSecrets(deployment)
@@ -119,9 +120,9 @@ func NewExasolConnection(
 		return nil, errors.New("reading deployment connection info: missing connection info")
 	}
 
-	optsFns := []exasol.OptFn{}
+	databaseOptFns := append([]exasol.OptFn{}, optFns...)
 	if insecureSkipCertValidation || connectionInfo.InsecureSkipCertValidation {
-		optsFns = append(optsFns, exasol.WithoutValidateServerCertificate)
+		databaseOptFns = append(databaseOptFns, exasol.WithoutValidateServerCertificate)
 	}
 
 	database, err := exasol.New(
@@ -130,7 +131,7 @@ func NewExasolConnection(
 		connectionInfo.Host,
 		connectionInfo.CertFingerprint,
 		connectionInfo.DBPort,
-		optsFns...,
+		databaseOptFns...,
 	)
 	if err != nil {
 		return nil, err
@@ -162,12 +163,21 @@ func Connect(
 		return err
 	}
 
+	// The database version banner is a shell affordance. Non-interactive
+	// executions keep stdout reserved for result data and do not need it.
+	interactiveShell := !nonInteractive && util.IsInteractiveStdin()
+	databaseOptFns := []exasol.OptFn{}
+	if interactiveShell {
+		databaseOptFns = append(databaseOptFns, exasol.WithVersionOutput(os.Stderr))
+	}
+
 	database, err := NewExasolConnection(
 		deployment,
 		connectionInfo,
 		opts.Username,
 		opts.Password,
 		opts.InsecureSkipCertValidation,
+		databaseOptFns...,
 	)
 	if err != nil {
 		return err
@@ -196,8 +206,6 @@ func Connect(
 	// actually started. --command/--file and non-interactive JSON execution
 	// return everything by default, so they behave as non-interactive
 	// (unlimited) unless --max-rows is set explicitly.
-	interactiveShell := !nonInteractive && util.IsInteractiveStdin()
-
 	modeDefault := 0
 	if interactiveShell {
 		modeDefault = interactivePreviewMaxRows

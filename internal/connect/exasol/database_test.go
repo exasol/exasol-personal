@@ -4,6 +4,7 @@
 package exasol
 
 import (
+	"bytes"
 	"context"
 	"database/sql/driver"
 	"errors"
@@ -65,16 +66,21 @@ func (f fakeResult) RowsAffected() (int64, error) {
 	return f.rowsAffected, nil
 }
 
-func testDatabaseFactory(t *testing.T, connect types.ConnectFunc) generaltypes.Databaser {
+func testDatabaseFactory(
+	t *testing.T,
+	connect types.ConnectFunc,
+	optFns ...OptFn,
+) generaltypes.Databaser {
 	t.Helper()
 
+	allOptFns := append([]OptFn{WithConnectFunc(connect)}, optFns...)
 	database, err := New(
 		"foo",
 		"bar",
 		"192.168.0.1",
 		"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		8563,
-		WithConnectFunc(connect))
+		allOptFns...)
 	require.NoError(t, err)
 
 	return database
@@ -165,6 +171,35 @@ func TestConnect(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestConnectPrintsVersionToConfiguredOutput(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	fakeConnector := &typesfakes.FakeExasolConnector{}
+	fakeConnector.QueryContextStub = func(
+		_ context.Context, query string, _ []driver.NamedValue,
+	) (driver.Rows, error) {
+		if strings.Contains(query, "exa_metadata") {
+			return &fakeRows{
+				columns: []string{"v"},
+				data:    [][]driver.Value{{"2026.1.0"}},
+			}, nil
+		}
+
+		return nil, errTest
+	}
+	connect := func(string) (types.ExasolConnector, error) {
+		return fakeConnector, nil
+	}
+	database := testDatabaseFactory(t, connect, WithVersionOutput(&output))
+
+	err := database.Connect(t.Context())
+
+	require.NoError(t, err)
+	require.Equal(t, "Exasol 2026.1.0\n", output.String())
+	require.NoError(t, database.Close())
 }
 
 func TestClose(t *testing.T) {
