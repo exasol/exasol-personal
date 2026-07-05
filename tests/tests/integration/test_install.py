@@ -16,6 +16,15 @@ LOCAL_TEST_DB_PORT = 28563
 LOCAL_MINIMUM_MEMORY_MB = 4096
 
 
+def assert_lifecycle_json_signal(
+    stdout: str, deployment_state: str, *, database_ready: bool
+) -> None:
+    assert json.loads(stdout) == {
+        "deploymentState": deployment_state,
+        "databaseReady": database_ready,
+    }
+
+
 def test_install_requires_infra_preset_arg(exasol_path: str) -> None:
     # Given the install command
 
@@ -364,17 +373,34 @@ esac
     status_data = json.loads(status_result.stdout)
     assert status_data["status"] == "database_connection_failed"
 
-    # Then stop updates the persisted local deployment state
+    # Then stop updates persisted state and emits a JSON ready signal
     stop_result = run_command(
         [
             exasol_path,
             "stop",
+            "--json",
             "--deployment-dir",
             str(deployment_dir),
         ],
         env=env,
     )
     assert stop_result.returncode == 0
+    assert_lifecycle_json_signal(stop_result.stdout, "stopped", database_ready=False)
     deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
     assert deployment_data["deploymentState"] == "stopped"
     assert deployment_data["clusterState"] == "stopped"
+
+    # Then start emits only the JSON ready signal on stdout
+    start_result = run_command(
+        [
+            exasol_path,
+            "start",
+            "--json",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+    )
+    assert start_result.returncode == 0
+    assert_lifecycle_json_signal(start_result.stdout, "running", database_ready=True)
+    assert "Connection Instructions" not in start_result.stdout
