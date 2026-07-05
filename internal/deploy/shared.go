@@ -6,11 +6,56 @@ package deploy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
 )
+
+// blockedStateError carries an actionable, user-facing message for a deployment state that
+// does not permit the attempted lifecycle command (deploy, connect, start, stop), while
+// still unwrapping to the underlying sentinel so errors.Is checks keep working. Its message
+// deliberately does not surface the sentinel's terse text, so a known, recoverable state
+// (e.g. interrupted, stopped) is not labelled "unexpected".
+type blockedStateError struct {
+	sentinel error
+	message  string
+}
+
+func (e *blockedStateError) Error() string { return e.message }
+func (e *blockedStateError) Unwrap() error { return e.sentinel }
+
+// newBlockedStateError builds an actionable error for a deployment state that does not
+// permit the attempted command. It reuses the same per-state recovery guidance
+// `exasol status` reports (see GetStatus), so the user is told the current state and how to
+// recover without having to run a second command.
+//
+//nolint:contextcheck // these guards have no context; a background read is side-effect free
+func newBlockedStateError(deployment config.DeploymentDir, sentinel error) error {
+	status, err := GetStatus(context.Background(), deployment, false)
+	if err != nil || status == nil {
+		slog.Error("failed to get deployment status for recovery guidance", "error", err)
+
+		return sentinel
+	}
+
+	guidance := status.Message
+	if guidance == "" {
+		guidance = "Run `exasol status` for details."
+	}
+
+	slog.Warn("command cannot proceed in the current deployment state",
+		"status", status.Status, "deployment_dir", deployment.Root())
+
+	return &blockedStateError{
+		sentinel: sentinel,
+		message: fmt.Sprintf(
+			"deployment in %s is in state %q. %s",
+			deployment.Root(), status.Status, guidance,
+		),
+	}
+}
 
 // waitParams holds configuration for the generic waitForDatabaseState helper.
 type WaitParams struct {

@@ -32,7 +32,7 @@ func WorkflowStatePermitsStart(
 		case config.StartOperation:
 			return nil
 		default:
-			return ErrUnspportedOperation
+			return newBlockedStateError(deployment, ErrUnspportedOperation)
 		}
 
 	case *config.WorkflowStateInterrupted:
@@ -41,13 +41,11 @@ func WorkflowStatePermitsStart(
 			config.StopOperation:
 			return nil
 		default:
-			return ErrUnspportedOperation
+			return newBlockedStateError(deployment, ErrUnspportedOperation)
 		}
 	}
 
-	LogDeploymentStatus(deployment)
-
-	return ErrUnexpectedDeploymentStatus
+	return newBlockedStateError(deployment, ErrUnexpectedDeploymentStatus)
 }
 
 //
@@ -72,7 +70,7 @@ func Start(
 			}
 
 			if err := WorkflowStatePermitsStart(exasolState, deployment); err != nil {
-				return util.LoggedError(err, "run `status` for more information")
+				return err
 			}
 
 			// Set the workflowstate to start operation in-progress
@@ -164,7 +162,7 @@ func WorkflowStatePermitsStop(
 		case config.StopOperation:
 			return nil
 		default:
-			return ErrUnspportedOperation
+			return newBlockedStateError(deployment, ErrUnspportedOperation)
 		}
 
 	case *config.WorkflowStateInterrupted:
@@ -174,13 +172,11 @@ func WorkflowStatePermitsStop(
 			config.DestroyOperation:
 			return nil
 		default:
-			return ErrUnspportedOperation
+			return newBlockedStateError(deployment, ErrUnspportedOperation)
 		}
 	}
 
-	LogDeploymentStatus(deployment)
-
-	return ErrUnexpectedDeploymentStatus
+	return newBlockedStateError(deployment, ErrUnexpectedDeploymentStatus)
 }
 
 //nolint:revive
@@ -199,7 +195,7 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 			}
 
 			if err = WorkflowStatePermitsStop(exasolState, deployment); err != nil {
-				return util.LoggedError(err, "run `status` for more information")
+				return err
 			}
 
 			// Set the workflowstate to stop in-progress

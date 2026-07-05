@@ -9,7 +9,6 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/connect"
-	"github.com/exasol/exasol-personal/internal/util"
 )
 
 type Output struct {
@@ -39,9 +38,7 @@ func WorkflowStatePermitsConnect(deployment config.DeploymentDir) error {
 		return nil
 	}
 
-	LogDeploymentStatus(deployment)
-
-	return ErrUnexpectedDeploymentStatus
+	return newBlockedStateError(deployment, ErrUnexpectedDeploymentStatus)
 }
 
 func Connect(ctx context.Context, opts *connect.Opts, deployment config.DeploymentDir) error {
@@ -50,7 +47,7 @@ func Connect(ctx context.Context, opts *connect.Opts, deployment config.Deployme
 			slog.Debug("establishing connection to Exaol DB")
 
 			if err := WorkflowStatePermitsConnect(deployment); err != nil {
-				return util.LoggedError(err, "run `status` for more information")
+				return err
 			}
 
 			connectionInfo, err := config.ResolveConnectionInfo(deployment)
