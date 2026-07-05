@@ -106,18 +106,52 @@ func prepareConfigSetInfrastructureVariableFlags(args []string) error {
 		return nil
 	}
 
-	if deployment, err := deploymentDirFromRawArgs(args); err == nil {
-		resolution, resolveErr := resolveInfrastructureVariablesFromDeployment(deployment)
-		if resolveErr == nil {
-			return registerInfrastructureVariableFlags(
-				[]*cobra.Command{configSetCmd},
-				resolution.Variables,
-				resolution.PresetLabel,
-			)
+	deployment, err := deploymentDirFromRawArgs(args)
+	if err != nil {
+		if rawArgsRequestHelp(args) {
+			return nil
+		}
+
+		return fmt.Errorf("cannot determine deployment directory for `config set`: %w", err)
+	}
+
+	resolution, resolveErr := resolveInfrastructureVariablesFromDeployment(deployment)
+	if resolveErr != nil {
+		// Keep `config set --help` working even when options cannot be loaded:
+		// render the base help instead of failing.
+		if rawArgsRequestHelp(args) {
+			return nil
+		}
+
+		// Surface the failure instead of silently registering no flags. Otherwise the
+		// supplied options fail Cobra's flag parsing later as misleading "unknown flag"
+		// errors before the initialized-deployment pre-run gate can explain the problem.
+		return fmt.Errorf(
+			"cannot load configuration options for deployment directory %q: %w\n"+
+				"Run `exasol init` or `exasol install` in that directory, "+
+				"or pass --deployment-dir pointing to an existing deployment directory",
+			deployment.Root(),
+			resolveErr,
+		)
+	}
+
+	return registerInfrastructureVariableFlags(
+		[]*cobra.Command{configSetCmd},
+		resolution.Variables,
+		resolution.PresetLabel,
+	)
+}
+
+// rawArgsRequestHelp reports whether the raw command-line args request help, in which
+// case flag pre-registration must stay non-fatal so help can render.
+func rawArgsRequestHelp(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			return true
 		}
 	}
 
-	return nil
+	return len(args) > 0 && args[0] == helpCommandName
 }
 
 func registerInfrastructureVariableFlags(
