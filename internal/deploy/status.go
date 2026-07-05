@@ -99,15 +99,6 @@ func statusWithFormatter(
 	return format(*status)
 }
 
-//nolint:contextcheck
-func LogDeploymentStatus(deployment config.DeploymentDir) {
-	status, err := GetStatus(context.Background(), deployment, true)
-	if err != nil {
-		slog.Error("failed to get status", "error", err.Error())
-	}
-	slog.Info("deployment status", "status", status.Status)
-}
-
 func GetStatusWithLock(
 	ctx context.Context,
 	deployment config.DeploymentDir,

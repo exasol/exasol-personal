@@ -215,6 +215,63 @@ func TestWorkflowStatePermitsConfigure_RejectsAllNonInitializedStates(t *testing
 	}
 }
 
+// deploymentInState returns an initialized deployment whose persisted workflow state has
+// been set to workflowState, plus the state handle for guards that take one.
+func deploymentInState(
+	t *testing.T,
+	workflowState any,
+) (config.DeploymentDir, *config.ExasolPersonalState) {
+	t.Helper()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	writeMinimalInitializedDeployment(t, deployment)
+	state, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		t.Fatalf("read state failed: %v", err)
+	}
+	if err := state.SetWorkflowStateAndWrite(workflowState, deployment); err != nil {
+		t.Fatalf("write workflow state failed: %v", err)
+	}
+
+	return deployment, state
+}
+
+// assertBlockedStateError asserts that a blocked lifecycle guard returned an actionable
+// error: it unwraps to the sentinel, names the current state and deployment directory,
+// includes the expected recovery guidance, and never labels the state "unexpected".
+func assertBlockedStateError(
+	t *testing.T,
+	deployment config.DeploymentDir,
+	err error,
+	sentinel error,
+	wantStatus string,
+	wantGuidance ...string,
+) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatal("expected command to be blocked, got nil")
+	}
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("expected sentinel %v, got %v", sentinel, err)
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, wantStatus) {
+		t.Fatalf("expected message to name state %q, got %q", wantStatus, msg)
+	}
+	if !strings.Contains(msg, deployment.Root()) {
+		t.Fatalf("expected message to name dir %q, got %q", deployment.Root(), msg)
+	}
+	if strings.Contains(msg, "unexpected") {
+		t.Fatalf("recoverable state must not be labelled \"unexpected\", got %q", msg)
+	}
+	for _, guidance := range wantGuidance {
+		if !strings.Contains(msg, guidance) {
+			t.Fatalf("expected recovery guidance %q, got %q", guidance, msg)
+		}
+	}
+}
+
 func TestWorkflowStatePermitsDeploy_BlockedStatesSurfaceRecoveryGuidance(t *testing.T) {
 	t.Parallel()
 
@@ -254,46 +311,11 @@ func TestWorkflowStatePermitsDeploy_BlockedStatesSurfaceRecoveryGuidance(t *test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Given
-			deployment := config.NewDeploymentDir(t.TempDir())
-			writeMinimalInitializedDeployment(t, deployment)
-			state, err := config.ReadExasolPersonalState(deployment)
-			if err != nil {
-				t.Fatalf("read state failed: %v", err)
-			}
-			if err := state.SetWorkflowStateAndWrite(test.state, deployment); err != nil {
-				t.Fatalf("write blocked state failed: %v", err)
-			}
-
-			// When
-			err = WorkflowStatePermitsDeploy(state, deployment)
-
-			// Then
-			if err == nil {
-				t.Fatal("expected deploy to be blocked, got nil")
-			}
-			if !errors.Is(err, test.sentinel) {
-				t.Fatalf("expected sentinel %v, got %v", test.sentinel, err)
-			}
-			msg := err.Error()
-			if !strings.Contains(msg, test.wantStatus) {
-				t.Fatalf("expected message to name state %q, got %q", test.wantStatus, msg)
-			}
-			if !strings.Contains(msg, deployment.Root()) {
-				t.Fatalf(
-					"expected message to name deployment dir %q, got %q",
-					deployment.Root(),
-					msg,
-				)
-			}
-			for _, guidance := range test.wantGuidance {
-				if !strings.Contains(msg, guidance) {
-					t.Fatalf("expected recovery guidance %q, got %q", guidance, msg)
-				}
-			}
-			if strings.Contains(msg, "unexpected") {
-				t.Fatalf("recoverable state must not be labelled \"unexpected\", got %q", msg)
-			}
+			deployment, state := deploymentInState(t, test.state)
+			err := WorkflowStatePermitsDeploy(state, deployment)
+			assertBlockedStateError(
+				t, deployment, err, test.sentinel, test.wantStatus, test.wantGuidance...,
+			)
 		})
 	}
 }
@@ -322,19 +344,154 @@ func TestWorkflowStatePermitsDeploy_PermittedStates(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			deployment := config.NewDeploymentDir(t.TempDir())
-			writeMinimalInitializedDeployment(t, deployment)
-			state, err := config.ReadExasolPersonalState(deployment)
-			if err != nil {
-				t.Fatalf("read state failed: %v", err)
-			}
-			if err := state.SetWorkflowStateAndWrite(test.state, deployment); err != nil {
-				t.Fatalf("write state failed: %v", err)
-			}
-
+			deployment, state := deploymentInState(t, test.state)
 			if err := WorkflowStatePermitsDeploy(state, deployment); err != nil {
 				t.Fatalf("expected deploy to be permitted, got %v", err)
 			}
+		})
+	}
+}
+
+func TestWorkflowStatePermitsConnect_BlockedStatesSurfaceRecoveryGuidance(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name         string
+		state        any
+		wantStatus   string
+		wantGuidance []string
+	}{
+		{
+			name:         "initialized",
+			state:        &config.WorkflowStateInitialized{},
+			wantStatus:   StatusInitialized,
+			wantGuidance: []string{"deploy"},
+		},
+		{
+			name:         "stopped",
+			state:        &config.WorkflowStateStopped{},
+			wantStatus:   StatusStopped,
+			wantGuidance: []string{"start"},
+		},
+		{
+			name: "interrupted_during_destroy",
+			state: &config.WorkflowStateInterrupted{
+				InterruptedDuringOperation: config.DestroyOperation,
+			},
+			wantStatus:   StatusInterrupted,
+			wantGuidance: []string{"destroy"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			deployment, _ := deploymentInState(t, test.state)
+			err := WorkflowStatePermitsConnect(deployment)
+			assertBlockedStateError(
+				t, deployment, err, ErrUnexpectedDeploymentStatus, test.wantStatus,
+				test.wantGuidance...,
+			)
+		})
+	}
+}
+
+func TestWorkflowStatePermitsConnect_PermitsRunning(t *testing.T) {
+	t.Parallel()
+
+	deployment, _ := deploymentInState(t, &config.WorkflowStateRunning{})
+	if err := WorkflowStatePermitsConnect(deployment); err != nil {
+		t.Fatalf("expected connect to be permitted while running, got %v", err)
+	}
+}
+
+func TestWorkflowStatePermitsStart_BlockedStatesSurfaceRecoveryGuidance(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name         string
+		state        any
+		sentinel     error
+		wantStatus   string
+		wantGuidance []string
+	}{
+		{
+			name:         "initialized",
+			state:        &config.WorkflowStateInitialized{},
+			sentinel:     ErrUnexpectedDeploymentStatus,
+			wantStatus:   StatusInitialized,
+			wantGuidance: []string{"deploy"},
+		},
+		{
+			name:         "deployment_failed",
+			state:        &config.WorkflowStateDeploymentFailed{Error: "boom"},
+			sentinel:     ErrUnexpectedDeploymentStatus,
+			wantStatus:   StatusDeploymentFailed,
+			wantGuidance: []string{"deploy"},
+		},
+		{
+			name: "interrupted_during_deploy",
+			state: &config.WorkflowStateInterrupted{
+				InterruptedDuringOperation: config.DeployOperation,
+			},
+			sentinel:     ErrUnspportedOperation,
+			wantStatus:   StatusInterrupted,
+			wantGuidance: []string{"deploy"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			deployment, state := deploymentInState(t, test.state)
+			err := WorkflowStatePermitsStart(state, deployment)
+			assertBlockedStateError(
+				t, deployment, err, test.sentinel, test.wantStatus, test.wantGuidance...,
+			)
+		})
+	}
+}
+
+func TestWorkflowStatePermitsStop_BlockedStatesSurfaceRecoveryGuidance(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name         string
+		state        any
+		sentinel     error
+		wantStatus   string
+		wantGuidance []string
+	}{
+		{
+			name:         "initialized",
+			state:        &config.WorkflowStateInitialized{},
+			sentinel:     ErrUnexpectedDeploymentStatus,
+			wantStatus:   StatusInitialized,
+			wantGuidance: []string{"deploy"},
+		},
+		{
+			name:         "stopped",
+			state:        &config.WorkflowStateStopped{},
+			sentinel:     ErrUnexpectedDeploymentStatus,
+			wantStatus:   StatusStopped,
+			wantGuidance: []string{"start"},
+		},
+		{
+			name: "interrupted_during_deploy",
+			state: &config.WorkflowStateInterrupted{
+				InterruptedDuringOperation: config.DeployOperation,
+			},
+			sentinel:     ErrUnspportedOperation,
+			wantStatus:   StatusInterrupted,
+			wantGuidance: []string{"deploy"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			deployment, state := deploymentInState(t, test.state)
+			err := WorkflowStatePermitsStop(state, deployment)
+			assertBlockedStateError(
+				t, deployment, err, test.sentinel, test.wantStatus, test.wantGuidance...,
+			)
 		})
 	}
 }
