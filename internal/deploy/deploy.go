@@ -108,7 +108,7 @@ func WorkflowStatePermitsDeploy(
 			return nil
 		}
 
-		return ErrUnspportedOperation
+		return newBlockedDeployError(deployment, ErrUnspportedOperation)
 
 	case *config.WorkflowStateInterrupted:
 		if state.InterruptedDuringOperation == config.DeployOperation {
@@ -117,9 +117,50 @@ func WorkflowStatePermitsDeploy(
 		}
 	}
 
-	LogDeploymentStatus(deployment)
+	return newBlockedDeployError(deployment, ErrUnexpectedDeploymentStatus)
+}
 
-	return ErrUnexpectedDeploymentStatus
+// blockedDeployError carries an actionable, user-facing message for a deployment state that
+// does not permit deploy, while still unwrapping to the underlying sentinel so errors.Is
+// checks keep working. Its message deliberately does not surface the sentinel's terse text,
+// so a known, recoverable state (e.g. interrupted, stopped) is not labelled "unexpected".
+type blockedDeployError struct {
+	sentinel error
+	message  string
+}
+
+func (e *blockedDeployError) Error() string { return e.message }
+func (e *blockedDeployError) Unwrap() error { return e.sentinel }
+
+// newBlockedDeployError builds an actionable error for a deployment state that does not
+// permit deploy. It reuses the same recovery guidance `exasol status` reports (see
+// GetStatus), so the user is told the current state and how to recover without having to
+// run a second command.
+//
+//nolint:contextcheck // guard has no context; a background read matches LogDeploymentStatus
+func newBlockedDeployError(deployment config.DeploymentDir, sentinel error) error {
+	status, err := GetStatus(context.Background(), deployment, false)
+	if err != nil || status == nil {
+		slog.Error("failed to get deployment status for recovery guidance", "error", err)
+
+		return sentinel
+	}
+
+	guidance := status.Message
+	if guidance == "" {
+		guidance = "Run `exasol status` for details."
+	}
+
+	slog.Warn("deployment cannot be deployed in its current state",
+		"status", status.Status, "deployment_dir", deployment.Root())
+
+	return &blockedDeployError{
+		sentinel: sentinel,
+		message: fmt.Sprintf(
+			"deployment in %s is in state %q and cannot be deployed right now. %s",
+			deployment.Root(), status.Status, guidance,
+		),
+	}
 }
 
 //
@@ -139,7 +180,7 @@ func deployFromManifests(
 			}
 
 			if err := WorkflowStatePermitsDeploy(exasolState, deployment); err != nil {
-				return util.LoggedError(err, "run `status` for more information")
+				return err
 			}
 
 			// Set the workflowstate to deployment in-progress
