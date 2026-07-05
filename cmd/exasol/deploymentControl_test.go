@@ -1,0 +1,88 @@
+// Copyright 2026 Exasol AG
+// SPDX-License-Identifier: MIT
+
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"testing"
+
+	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/spf13/cobra"
+)
+
+func TestRenderLifecycleCompletionJSON(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name            string
+		output          lifecycleCompletionOutput
+		deploymentState string
+		databaseReady   bool
+	}{
+		{
+			name: "start completion",
+			output: lifecycleCompletionOutput{
+				DeploymentState: deploy.StatusRunning,
+				DatabaseReady:   true,
+			},
+			deploymentState: deploy.StatusRunning,
+			databaseReady:   true,
+		},
+		{
+			name: "stop completion",
+			output: lifecycleCompletionOutput{
+				DeploymentState: deploy.StatusStopped,
+				DatabaseReady:   false,
+			},
+			deploymentState: deploy.StatusStopped,
+			databaseReady:   false,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given
+			var buf bytes.Buffer
+
+			// When
+			err := renderLifecycleCompletionJSON(&buf, test.output)
+			// Then
+			if err != nil {
+				t.Fatalf("expected lifecycle completion JSON to render: %v", err)
+			}
+			var decoded lifecycleCompletionOutput
+			if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+				t.Fatalf("expected valid JSON, got %q: %v", buf.String(), err)
+			}
+			if decoded.DeploymentState != test.deploymentState {
+				t.Fatalf(
+					"expected deployment state %q, got %q",
+					test.deploymentState,
+					decoded.DeploymentState,
+				)
+			}
+			if decoded.DatabaseReady != test.databaseReady {
+				t.Fatalf(
+					"expected databaseReady %t, got %t",
+					test.databaseReady,
+					decoded.DatabaseReady,
+				)
+			}
+		})
+	}
+}
+
+func TestLifecycleCommandsRegisterJSONFlag(t *testing.T) {
+	t.Parallel()
+
+	for name, cmd := range map[string]*cobra.Command{
+		"start": startCmd,
+		"stop":  stopCmd,
+	} {
+		if cmd.Flags().Lookup("json") == nil {
+			t.Fatalf("expected %s to register json output flag", name)
+		}
+	}
+}

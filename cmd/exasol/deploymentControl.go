@@ -4,6 +4,9 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
+	"os"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -23,6 +26,15 @@ If the database does not become ready within the timeout, the command fails.`
 var startOpts = struct {
 	WaitTimeoutMin int
 }{}
+
+type lifecycleCompletionOutput struct {
+	DeploymentState string `json:"deploymentState"`
+	DatabaseReady   bool   `json:"databaseReady"`
+}
+
+func renderLifecycleCompletionJSON(writer io.Writer, output lifecycleCompletionOutput) error {
+	return json.NewEncoder(writer).Encode(output)
+}
 
 const stopCmdShortDesc = `Stop a deployment`
 
@@ -52,6 +64,13 @@ var startCmd = &cobra.Command{
 			return err
 		}
 
+		if commonFlags.OutputJson {
+			return renderLifecycleCompletionJSON(os.Stdout, lifecycleCompletionOutput{
+				DeploymentState: deploy.StatusRunning,
+				DatabaseReady:   true,
+			})
+		}
+
 		return addConnectionInstructionsTerminalOutput(deployment)
 	},
 }
@@ -66,11 +85,22 @@ var stopCmd = &cobra.Command{
 		cmd.SilenceUsage = true
 		deployment := commonFlags.Deployment()
 
-		return deploy.Stop(
+		if err := deploy.Stop(
 			cmd.Context(),
 			deployment,
 			commonFlags.DeployVerbose,
-		)
+		); err != nil {
+			return err
+		}
+
+		if commonFlags.OutputJson {
+			return renderLifecycleCompletionJSON(os.Stdout, lifecycleCompletionOutput{
+				DeploymentState: deploy.StatusStopped,
+				DatabaseReady:   false,
+			})
+		}
+
+		return nil
 	},
 }
 
@@ -91,6 +121,7 @@ func init() {
 	registerStartFlags()
 	registerVerboseFlag(startCmd, commonFlags)
 	registerDeploymentDirFlag(startCmd, commonFlags)
+	registerOutputFlags(startCmd, commonFlags)
 	rootCmd.AddCommand(startCmd)
 
 	requireMinorVersionCompatibility(stopCmd, CurrentLauncherVersion)
@@ -98,5 +129,6 @@ func init() {
 	requireDeploymentFileLogging(stopCmd)
 	registerVerboseFlag(stopCmd, commonFlags)
 	registerDeploymentDirFlag(stopCmd, commonFlags)
+	registerOutputFlags(stopCmd, commonFlags)
 	rootCmd.AddCommand(stopCmd)
 }
