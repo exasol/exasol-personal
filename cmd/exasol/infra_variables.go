@@ -123,15 +123,15 @@ func prepareConfigSetInfrastructureVariableFlags(args []string) error {
 			return nil
 		}
 
-		// Surface the failure instead of silently registering no flags. Otherwise the
-		// supplied options fail Cobra's flag parsing later as misleading "unknown flag"
-		// errors before the initialized-deployment pre-run gate can explain the problem.
+		// Fail with a clear message instead of silently registering no flags. Otherwise the
+		// supplied options fail Cobra's flag parsing later as a misleading "unknown flag"
+		// error before the initialized-deployment pre-run gate can explain the problem.
 		return fmt.Errorf(
-			"cannot load configuration options for deployment directory %q: %w\n"+
-				"Run `exasol init` or `exasol install` in that directory, "+
+			"%w: %q\n"+
+				"Run `exasol init` or `exasol install` there, "+
 				"or pass --deployment-dir pointing to an existing deployment directory",
+			deploy.ErrNotExasolPersonalDeploymentDirectory,
 			deployment.Root(),
-			resolveErr,
 		)
 	}
 
