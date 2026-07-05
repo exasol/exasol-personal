@@ -10,13 +10,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/exasol/exasol-driver-go"
 	"github.com/exasol/exasol-personal/internal/connect/exasol/types"
 	generaltypes "github.com/exasol/exasol-personal/internal/connect/types"
-	"github.com/exasol/exasol-personal/internal/util"
 )
 
 var (
@@ -33,11 +31,13 @@ type Database struct {
 	conn              types.ExasolConnector
 	sessionID         *string
 	sessionIDResolved bool
+	versionOutput     io.Writer
 }
 
 type opts struct {
 	validateServerCertificate bool
 	connect                   types.ConnectFunc
+	versionOutput             io.Writer
 }
 
 type OptFn func(*opts)
@@ -51,6 +51,12 @@ func WithoutValidateServerCertificate(opts *opts) {
 func WithConnectFunc(connect types.ConnectFunc) func(*opts) {
 	return func(opts *opts) {
 		opts.connect = connect
+	}
+}
+
+func WithVersionOutput(output io.Writer) func(*opts) {
+	return func(opts *opts) {
+		opts.versionOutput = output
 	}
 }
 
@@ -77,6 +83,7 @@ func New(
 	return &Database{
 		connectionString: dsnConfigBuilder.String(),
 		connect:          opts.connect,
+		versionOutput:    opts.versionOutput,
 	}, nil
 }
 
@@ -108,8 +115,8 @@ func (db *Database) Connect(ctx context.Context) error {
 		return nil
 	}
 
-	if util.IsInteractiveStdin() {
-		return printVersion(os.Stderr, version)
+	if db.versionOutput != nil {
+		return printVersion(db.versionOutput, version)
 	}
 
 	return nil
