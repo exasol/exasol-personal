@@ -66,13 +66,19 @@ func TestConfigSetClearErrorWhenDeploymentNotInitialized(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a clear error, got nil")
 	}
-	if !strings.Contains(err.Error(), dir) {
-		t.Errorf("error should name the deployment directory %q, got: %v", dir, err)
-	}
-	for _, want := range []string{"exasol init", "--deployment-dir"} {
+	for _, want := range []string{
+		dir, // names the offending directory
+		"not an Exasol Personal deployment directory", // reuses the standard phrasing
+		"exasol init",
+		"--deployment-dir",
+	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error should mention %q, got: %v", want, err)
 		}
+	}
+	// It must not leak internal implementation detail such as manifest file names.
+	if strings.Contains(err.Error(), "infrastructure.yaml") {
+		t.Errorf("error should not expose internal manifest details, got: %v", err)
 	}
 }
 
