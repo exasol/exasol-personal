@@ -25,6 +25,6 @@ exasol-local-runner:
   extract: true
   artifact:
     darwin/arm64:
-      url: https://github.com/exasol/exasol-local-vm/releases/download/v1.0.0-rc6/mac-runner-aarch64.zip
-      sha256: 56f5308be3f5526dc1e32afcceebf5b33eff3959bdd8f7ad2337930817ee18de
+      url: https://github.com/exasol/exasol-local-vm/releases/download/v1.0.0/mac-runner-aarch64.zip
+      sha256: 5d3470c2ab68873aeb0c2e83a28e047e4d4ccd8bb81948ea7442e812b6920c1c
       resource_path: launcher
