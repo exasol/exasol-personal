@@ -24,6 +24,31 @@ def test_help_flag(exasol_path: str) -> None:
         assert text in output
 
 
+def test_help_flag_surfaces_local_preset_and_quick_start(exasol_path: str) -> None:
+    # When `exasol --help` is called
+    result = run_command([exasol_path, "--help"])
+
+    # Then the local preset is listed first among the built-in presets
+    output = result.stdout.strip()
+    assert "Built-in presets are: local, aws, azure, exoscale, and stackit." in output
+
+    # And a local quick-start pointer and deployment lifecycle are documented
+    assert "exasol install local" in output
+    assert (
+        "Deployment lifecycle: install -> status -> connect -> stop -> start" in output
+    )
+
+
+def test_help_output_never_has_more_than_one_blank_line(exasol_path: str) -> None:
+    # When --help is requested for a command with grouped subcommands and a leaf command
+    root_help = run_command([exasol_path, "--help"]).stdout
+    leaf_help = run_command([exasol_path, "status", "--help"]).stdout
+
+    # Then no section is ever separated by more than a single blank line
+    assert "\n\n\n" not in root_help
+    assert "\n\n\n" not in leaf_help
+
+
 def test_version(exasol_path: str) -> None:
     # Given the current version of the program based on the the latest git version tag
     git_describe_command_result = run_command(
