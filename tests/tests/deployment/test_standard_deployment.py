@@ -125,14 +125,6 @@ def test_connectable(reusable_deployment: Deployment) -> None:
     assert reusable_deployment.db_connectable()
 
 
-# All DB-related tests are skipped on Windows, because the SQL shell
-# does not output query results, only displaying an empty prompt.
-# On Linux, the expected result is shown.
-
-
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_single_query(reusable_deployment: Deployment) -> None:
@@ -153,9 +145,6 @@ def test_single_query(reusable_deployment: Deployment) -> None:
     assert stdout.strip("\n") == expected.strip("\n")
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_exit_command(reusable_deployment: Deployment) -> None:
@@ -172,9 +161,6 @@ def test_exit_command(reusable_deployment: Deployment) -> None:
     assert len(stdout) == 0
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_multiple_queries(reusable_deployment: Deployment) -> None:
@@ -212,9 +198,6 @@ def test_multiple_queries(reusable_deployment: Deployment) -> None:
     assert stdout.strip("\n") == expected.strip("\n")
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_file_import(reusable_deployment: Deployment) -> None:

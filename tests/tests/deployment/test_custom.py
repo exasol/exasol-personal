@@ -5,7 +5,6 @@
 
 import logging
 import subprocess
-import sys
 import textwrap
 from collections.abc import Iterator
 from typing import Final
@@ -130,9 +129,6 @@ def test_custom_deployment_rejects_small_instance_types(
         pytest.fail(f"Unexpected exception type: {type(unexpected).__name__}")
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 def test_custom_deployment_success(
     custom_deployment: tuple[Deployment, DeploymentConfig],
     infra: str,

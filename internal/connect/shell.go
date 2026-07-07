@@ -14,6 +14,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/connect/readline"
 	"github.com/exasol/exasol-personal/internal/connect/types"
+	"github.com/exasol/exasol-personal/internal/util"
 )
 
 const exitCommand = "exit"
@@ -246,15 +247,28 @@ func RunShell(processInput ProcessInputFunc) error {
 }
 
 func RunShellWithOpts(processInput ProcessInputFunc, opts ShellOpts) error {
-	historyFilePath, err := getHistoryFilePath()
-	if err != nil {
-		return fmt.Errorf("couldn't get the history file path: %w", err)
+	if !util.IsInteractiveStdin() {
+		return runShellImpl(readline.NewBuffered(os.Stdin), processInput, opts)
 	}
 
-	lineReader, err := readline.New(historyFilePath)
+	lineReader, err := newInteractiveLineReader()
 	if err != nil {
 		return err
 	}
 
 	return runShellImpl(lineReader, processInput, opts)
+}
+
+func newInteractiveLineReader() (types.LineReader, error) {
+	historyFilePath, err := getHistoryFilePath()
+	if err != nil {
+		return nil, fmt.Errorf("couldn't get the history file path: %w", err)
+	}
+
+	lineReader, err := readline.New(historyFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return lineReader, nil
 }

@@ -15,6 +15,7 @@ Thank you for your interest in contributing! We welcome contributions from the c
 
 - **Keep PRs focused** - one feature or fix per PR
 - **Write clear descriptions** - explain what and why, not just how
+- **Fold cleanup into the related commit** - do not create separate commits for lint, formatting, or typo fixes
 - **Explain CLI changes with examples** - when changing CLI commands or behavior, describe the user-visible behavior in the PR description and include example invocations or output
 - **Use the [pull request template](.github/pull_request_template.md)** when submitting a pull request
 - **Use semantic commit messages** - follow [Conventional Commits](https://www.conventionalcommits.org/) format:
