@@ -247,12 +247,12 @@ const customUsageTemplate = `Usage:
 {{ if .HasAvailableSubCommands}}  {{.CommandPath}} [command] [flags]{{ else }}  {{.UseLine}}
 {{ end }}
 {{ if .HasAvailableSubCommands }}
+
 {{- $cmd := . }}
 {{- $np := .NamePadding }}
 {{- range $g := $cmd.Groups }}
 {{- $cmds := commandsInGroup $cmd $g.ID }}
-{{- if gt (len $cmds) 0 }}
-{{$g.Title}}
+{{- if gt (len $cmds) 0 }}{{$g.Title}}
 {{- range $cmds }}
 	{{rpad .Name $np }} {{.Short}}
 {{- end }}
@@ -262,8 +262,7 @@ const customUsageTemplate = `Usage:
 {{- end }}
 
 {{- $other := ungroupedCommands $cmd }}
-{{- if gt (len $other) 0 }}
-Additional Commands:
+{{- if gt (len $other) 0 }}Additional Commands:
 {{- range $other }}
 	{{rpad .Name $np }} {{.Short}}
 {{- end }}
