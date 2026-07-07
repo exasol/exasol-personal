@@ -508,9 +508,6 @@ def test_stop_and_start(reusable_deployment: Deployment) -> None:
         assert connect_result.returncode == 0
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.infrastructure_e2e
 def test_start_interrupt_sets_interrupted_state(
     reusable_deployment: Deployment,
@@ -528,7 +525,9 @@ def test_start_interrupt_sets_interrupted_state(
     if platform.system() != "Windows":
         os.kill(stop_proc.pid, signal.SIGINT)
     else:
-        stop_proc.terminate()
+        # stop_proc runs in its own process group (see Launcher.start_command),
+        # so CTRL_BREAK_EVENT reaches only it, not the test runner too.
+        os.kill(stop_proc.pid, signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
 
     stop_proc.wait(timeout=30)
 
@@ -552,7 +551,7 @@ def test_start_interrupt_sets_interrupted_state(
     if platform.system() != "Windows":
         os.kill(start_proc.pid, signal.SIGINT)
     else:
-        start_proc.terminate()
+        os.kill(start_proc.pid, signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
 
     start_proc.wait(timeout=30)
 

@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from subprocess import CompletedProcess, Popen
@@ -68,6 +69,12 @@ class Launcher:
     ) -> Popen[str]:
         logging.info("Running launcher command: %s", command)
 
+        platform_kwargs: dict[str, object] = {}
+        if sys.platform.startswith("win"):
+            # Own process group so a CTRL_BREAK_EVENT can target this process
+            # without also hitting the test runner.
+            platform_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+
         return subprocess.Popen(  # type: ignore[call-overload,no-any-return]
             [
                 self.launcher_path,
@@ -79,6 +86,7 @@ class Launcher:
             **{
                 "text": True,
                 "encoding": "utf-8",
+                **platform_kwargs,
                 **kwargs,
             },
         )
