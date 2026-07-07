@@ -6,8 +6,10 @@ package connect
 import (
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
+	"github.com/exasol/exasol-personal/internal/connect/readline"
 	"github.com/exasol/exasol-personal/internal/connect/types"
 	"github.com/exasol/exasol-personal/internal/connect/types/typesfakes"
 	"github.com/stretchr/testify/require"
@@ -209,6 +211,24 @@ func TestRunShell(t *testing.T) {
 			test.then(t, mocks, err)
 		})
 	}
+}
+
+func TestNonInteractiveLineReader(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	processor := &mockInputsProcessor{}
+
+	// When
+	err := runShellImpl(readline.NewBuffered(
+		strings.NewReader("SELECT * FROM Dual;\nexit\n"),
+	), processor.processInput, ShellOpts{
+		ExecuteOnSemicolon: true,
+	})
+
+	// Then
+	require.NoError(t, err)
+	require.Equal(t, []string{"SELECT * FROM Dual"}, processor.inputs)
 }
 
 func TestRunStatements(t *testing.T) {

@@ -54,6 +54,7 @@ class Launcher:
                 deployment_dir,
             ],
             text=True,
+            encoding="utf-8",
             check=True,
             **kwargs,
         )
@@ -77,6 +78,7 @@ class Launcher:
             ],
             **{
                 "text": True,
+                "encoding": "utf-8",
                 **kwargs,
             },
         )
