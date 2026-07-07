@@ -26,7 +26,10 @@ Getting Started:
   To create and run an Exasol deployment, run "exasol install <infra preset name-or-path>".
 	This single command initializes your deployment directory, prepares the selected infrastructure,
 	and installs the database. It uses either a built-in infrastructure preset or a custom preset
-	at a path you provide. Built-in presets are: aws, azure, exoscale, and stackit.
+	at a path you provide. Built-in presets are: local, aws, azure, exoscale, and stackit.
+
+	Quick start: run "exasol install local" for a local deployment, then use "exasol status",
+	"exasol connect", "exasol stop", and "exasol start" to manage its lifecycle.
 
 	If you do not pass --deployment-dir and are not already inside a deployment directory,
 	Exasol Personal uses ~/.exasol/personal/deployments/default. Pass --deployment-dir
@@ -38,7 +41,7 @@ Getting Started:
 
   AI agent skills: https://github.com/exasol-labs/exasol-agent-skills`
 
-	rootCmdExample = `  exasol install aws`
+	rootCmdExample = `  exasol install local`
 
 	rootCmdGroupEssential = "essential"
 	rootCmdGroupLifecycle = "lifecycle"
