@@ -45,7 +45,7 @@ A cloud account on one of the supported platforms with permission to provision c
 
 1. Download the launcher
 ```bash
-curl https://downloads.exasol.com/exasol-personal/installer.sh | sh
+curl https://www.exasol.com/install/ | sh
 ```
 
 2. Install on a cloud provider or your local system
@@ -79,7 +79,7 @@ Read on for Windows instructions and full details.
 
    On Linux and macOS, run:
    ```bash
-   curl https://downloads.exasol.com/exasol-personal/installer.sh | sh
+   curl https://www.exasol.com/install/ | sh
    ```
 
    This installs the `exasol` binary to `~/.local/bin`. On most Linux distributions this directory is already in your `PATH`. On macOS, or if the installer reports that `~/.local/bin` is not in your `PATH`, follow its instructions.
