@@ -62,7 +62,7 @@ func init() {
 	// Init creates the deployment directory state; if a deployment directory already
 	// exists, the compatibility check protects against operating on an incompatible
 	// deployment.
-	requireMinorVersionCompatibility(initCmd, minSupportedDeploymentVersionBaseline)
+	requireDefaultDeploymentCompatibility(initCmd)
 	requireDeploymentFileLogging(initCmd)
 
 	// Augment long help with embedded preset names so users know what they can pass.

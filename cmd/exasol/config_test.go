@@ -15,9 +15,9 @@ import (
 func TestConfigCommandsDeclareDeploymentPreRunRequirements(t *testing.T) {
 	t.Parallel()
 
-	expectedVersion, err := normalizeVersionToMinor(CurrentLauncherVersion)
+	expectedVersion, err := normalizeVersionToMinor(minSupportedDeploymentVersionBaseline)
 	if err != nil {
-		expectedVersion = CurrentLauncherVersion
+		expectedVersion = minSupportedDeploymentVersionBaseline
 	}
 
 	for _, cmd := range []*cobra.Command{configCmd, configGetCmd, configSetCmd, configResetCmd} {

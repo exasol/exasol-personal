@@ -29,7 +29,7 @@ var shellContainerCmd = &cobra.Command{
 
 // nolint: gochecknoinits
 func init() {
-	requireMinorVersionCompatibility(shellContainerCmd, CurrentLauncherVersion)
+	requireDefaultDeploymentCompatibility(shellContainerCmd)
 	requireInitializedDeploymentDir(shellContainerCmd)
 	registerDeploymentDirFlag(shellContainerCmd, commonFlags)
 	shellRootCmd.AddCommand(shellContainerCmd)

@@ -120,7 +120,7 @@ func registerStartFlags() {
 
 // nolint: gochecknoinits
 func init() {
-	requireMinorVersionCompatibility(startCmd, CurrentLauncherVersion)
+	requireDefaultDeploymentCompatibility(startCmd)
 	requireInitializedDeploymentDir(startCmd)
 	requireDeploymentFileLogging(startCmd)
 	registerStartFlags()
@@ -129,7 +129,7 @@ func init() {
 	registerOutputFlags(startCmd, commonFlags)
 	rootCmd.AddCommand(startCmd)
 
-	requireMinorVersionCompatibility(stopCmd, CurrentLauncherVersion)
+	requireDefaultDeploymentCompatibility(stopCmd)
 	requireInitializedDeploymentDir(stopCmd)
 	requireDeploymentFileLogging(stopCmd)
 	registerVerboseFlag(stopCmd, commonFlags)

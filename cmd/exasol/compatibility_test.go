@@ -22,7 +22,7 @@ func TestEnforceDeploymentDirectoryCompatibility_FailsEarlyWhenNotInitialized(t 
 	// requires an initialized deployment directory.
 	tmp := t.TempDir()
 	cmd := &cobra.Command{Use: "deploy"}
-	requireVersionCompatibility(cmd, minSupportedDeploymentVersionBaseline)
+	requireDeploymentCompatibility(cmd, minSupportedDeploymentVersionBaseline)
 	requireInitializedDeploymentDir(cmd)
 
 	// When: compatibility enforcement runs.
@@ -57,7 +57,7 @@ func TestEnforceDeploymentDirectoryCompatibility_HintsLegacyWorkflowStateLayout(
 	// Given: an init-like command that may operate on uninitialized directories
 	// (so it must not require an initialized deployment dir).
 	cmd := &cobra.Command{Use: "some_init_like_command"}
-	requireVersionCompatibility(cmd, minSupportedDeploymentVersionBaseline)
+	requireDeploymentCompatibility(cmd, minSupportedDeploymentVersionBaseline)
 
 	// When: compatibility enforcement runs.
 	err = enforceDeploymentDirectoryCompatibility(cmd, config.NewDeploymentDir(tmp))
@@ -79,14 +79,14 @@ func TestEnforceDeploymentDirectoryCompatibility_HintsLegacyWorkflowStateLayout(
 	}
 }
 
-func TestRequireMinorVersionDeploymentCompatibility_NormalizesPatchToZero(t *testing.T) {
+func TestRequireMinorBaselineDeploymentCompatibility_NormalizesPatchToZero(t *testing.T) {
 	t.Parallel()
 
 	// Given: a command and a semver string that includes patch, prerelease and build metadata.
 	cmd := &cobra.Command{Use: "deploy"}
 
 	// When: the command declares a minor-level minimum.
-	requireMinorVersionCompatibility(cmd, "1.2.3-rc1+build.7")
+	requireMinorBaselineDeploymentCompatibility(cmd, "1.2.3-rc1+build.7")
 
 	// Then: the stored minimum is normalized to major.minor.0 and compatibility is required.
 	if !deploymentCompatibilityIsRequired(cmd) {
@@ -98,13 +98,70 @@ func TestRequireMinorVersionDeploymentCompatibility_NormalizesPatchToZero(t *tes
 	}
 }
 
-func TestDeploymentCompatibilityRules_MinorMinimumAndNeverNewerThanLauncher(t *testing.T) {
+func TestRequireDefaultDeploymentCompatibilityUsesStableBaseline(t *testing.T) {
+	t.Parallel()
+
+	// Given: a command uses the default deployment compatibility declaration.
+	cmd := &cobra.Command{Use: "status"}
+
+	// When: the command declares compatibility requirements.
+	requireDefaultDeploymentCompatibility(cmd)
+
+	// Then: it uses the stable baseline instead of the current launcher version.
+	if !deploymentCompatibilityIsRequired(cmd) {
+		t.Fatal("expected deployment compatibility to be required")
+	}
+	if got := minSupportedDeploymentVersionFromAnnotations(cmd); got != "0.0.0" {
+		t.Fatalf("expected min supported deployment version to be 0.0.0, got %q", got)
+	}
+}
+
+func TestDeploymentCompatibilityRules_DefaultRequirementAllowsOlderCompatibleDeployment(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	// Given: a default-compatible command running in a newer launcher minor.
+	cmd := &cobra.Command{Use: "destroy"}
+	requireDefaultDeploymentCompatibility(cmd)
+	req := deploymentcompatibility.Requirement{
+		CommandName:                   cmd.Name(),
+		MinSupportedDeploymentVersion: minSupportedDeploymentVersionFromAnnotations(cmd),
+	}
+
+	// When: a 2.1 launcher checks a deployment created by a 1.4 launcher.
+	res := deploymentcompatibility.Check("1.4.1", "2.1.0", req)
+	// Then: the deployment is allowed because the command has no higher minimum.
+	if !res.Allowed {
+		t.Fatalf("expected older compatible deployment to be allowed, got: %v", res.Err)
+	}
+
+	// When: the deployment was created by a newer launcher than the current one.
+	res = deploymentcompatibility.Check("2.2.0", "2.1.0", req)
+	// Then: the forward-compatibility guard still rejects it.
+	if res.Allowed {
+		t.Fatal("expected newer deployment to be rejected")
+	}
+	var inc *deploymentcompatibility.IncompatibleError
+	if !errors.As(res.Err, &inc) {
+		t.Fatalf("expected IncompatibleError, got %T: %v", res.Err, res.Err)
+	}
+	if inc.Reason != deploymentcompatibility.ReasonDeploymentNewerThanLauncher {
+		t.Fatalf(
+			"expected reason %q, got %q",
+			deploymentcompatibility.ReasonDeploymentNewerThanLauncher,
+			inc.Reason,
+		)
+	}
+}
+
+func TestDeploymentCompatibilityRules_MinorBaselineAndNeverNewerThanLauncher(t *testing.T) {
 	t.Parallel()
 
 	// Given: a command declares a minor-level minimum (patch is ignored) and we build
 	// the compatibility requirement from the command annotations.
 	cmd := &cobra.Command{Use: "deploy"}
-	requireMinorVersionCompatibility(cmd, "1.2.5")
+	requireMinorBaselineDeploymentCompatibility(cmd, "1.2.5")
 
 	req := deploymentcompatibility.Requirement{
 		CommandName:                   cmd.Name(),
@@ -197,7 +254,7 @@ func TestDeploymentCompatibilityRules_StrictRevisionRequirement(t *testing.T) {
 
 	// Given: a command declares a strict (patch-accurate) minimum.
 	cmd := &cobra.Command{Use: "deploy"}
-	requireVersionCompatibility(cmd, "1.2.5")
+	requireDeploymentCompatibility(cmd, "1.2.5")
 
 	req := deploymentcompatibility.Requirement{
 		CommandName:                   cmd.Name(),
@@ -230,7 +287,7 @@ func TestDeploymentCompatibilityRules_StrictRevisionRequirement(t *testing.T) {
 	}
 }
 
-func TestDeploymentCompatibilityRules_OlderMinorMinimumAllowsNewerDeploymentsUpToLauncher(
+func TestDeploymentCompatibilityRules_OlderMinorBaselineAllowsNewerDeploymentsUpToLauncher(
 	t *testing.T,
 ) {
 	t.Parallel()
@@ -238,7 +295,7 @@ func TestDeploymentCompatibilityRules_OlderMinorMinimumAllowsNewerDeploymentsUpT
 	// Given: a command declares that it still supports deployments as old as 1.1.*,
 	// while the launcher is already in 1.3.*.
 	cmd := &cobra.Command{Use: "status"}
-	requireMinorVersionCompatibility(cmd, "1.1.9")
+	requireMinorBaselineDeploymentCompatibility(cmd, "1.1.9")
 
 	req := deploymentcompatibility.Requirement{
 		CommandName:                   cmd.Name(),
@@ -275,12 +332,12 @@ func TestDeploymentCompatibilityRules_OlderMinorMinimumAllowsNewerDeploymentsUpT
 	}
 }
 
-func TestRequireMinorVersionDeploymentCompatibility_DoesNotPanicOnInvalidVersion(t *testing.T) {
+func TestRequireMinorBaselineDeploymentCompatibility_DoesNotPanicOnInvalidVersion(t *testing.T) {
 	t.Parallel()
 
 	// Given: an invalid version string is used while defining command compatibility.
 	cmd := &cobra.Command{Use: "deploy"}
-	requireMinorVersionCompatibility(cmd, "not-a-version")
+	requireMinorBaselineDeploymentCompatibility(cmd, "not-a-version")
 
 	// When: the runtime compatibility checker runs using the requirement stored in the command.
 	req := deploymentcompatibility.Requirement{

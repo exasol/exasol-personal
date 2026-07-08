@@ -133,7 +133,7 @@ func init() {
 	// init runs in PreRunE, deploy runs in PersistentPostRunE
 	installCmd.RunE = func(_ *cobra.Command, _ []string) error { return nil }
 
-	requireMinorVersionCompatibility(installCmd, CurrentLauncherVersion)
+	requireDefaultDeploymentCompatibility(installCmd)
 	registerInitFlags(installCmd, commonFlags)
 	registerDeploymentDirFlag(installCmd, commonFlags)
 	registerVerboseFlag(installCmd, commonFlags)

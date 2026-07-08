@@ -90,7 +90,7 @@ func destroyConfirmationPrompt(localRemovalTarget string) string {
 
 // nolint: gochecknoinits
 func init() {
-	requireMinorVersionCompatibility(destroyCmd, CurrentLauncherVersion)
+	requireDefaultDeploymentCompatibility(destroyCmd)
 	requireInitializedDeploymentDir(destroyCmd)
 	requireDeploymentFileLogging(destroyCmd)
 	registerDeploymentDirFlag(destroyCmd, commonFlags)
