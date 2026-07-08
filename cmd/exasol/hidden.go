@@ -38,10 +38,7 @@ var printConnectionInstructions = &cobra.Command{
 
 // nolint: gochecknoinits
 func init() {
-	requireMinorVersionCompatibility(
-		printConnectionInstructions,
-		minSupportedDeploymentVersionBaseline,
-	)
+	requireDefaultDeploymentCompatibility(printConnectionInstructions)
 	requireInitializedDeploymentDir(printConnectionInstructions)
 	registerDeploymentDirFlag(printConnectionInstructions, commonFlags)
 	rootCmd.AddCommand(printConnectionInstructions)

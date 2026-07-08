@@ -23,20 +23,30 @@ const (
 		"compatibility but is missing annotation %q"
 )
 
-func requireMinorVersionCompatibility(
+// requireMinorBaselineDeploymentCompatibility declares a minimum deployment
+// version at minor-release granularity, for example "2.1.7" becomes "2.1.0".
+func requireMinorBaselineDeploymentCompatibility(
 	cmd *cobra.Command,
-	minSupportedDeploymentMinorVersion string,
+	minSupportedDeploymentVersion string,
 ) {
-	minSupported, err := normalizeVersionToMinor(minSupportedDeploymentMinorVersion)
+	minSupported, err := normalizeVersionToMinor(minSupportedDeploymentVersion)
 	if err != nil {
 		// Do not panic here: this helper is used when defining commands.
 		// If the version is invalid, keep it as-is so the compatibility enforcement
 		// returns a structured InvalidVersionError at runtime.
-		requireVersionCompatibility(cmd, minSupportedDeploymentMinorVersion)
+		requireDeploymentCompatibility(cmd, minSupportedDeploymentVersion)
 		return
 	}
 
-	requireVersionCompatibility(cmd, minSupported)
+	requireDeploymentCompatibility(cmd, minSupported)
+}
+
+// requireDefaultDeploymentCompatibility declares the normal command contract:
+// commands are compatible with any deployment version unless they opt into a
+// higher, named minimum because older deployment directories are unsafe for
+// that command.
+func requireDefaultDeploymentCompatibility(cmd *cobra.Command) {
+	requireDeploymentCompatibility(cmd, minSupportedDeploymentVersionBaseline)
 }
 
 func normalizeVersionToMinor(raw string) (string, error) {
@@ -45,8 +55,7 @@ func normalizeVersionToMinor(raw string) (string, error) {
 		return "", err
 	}
 
-	// Compatibility requirements are expressed at minor granularity:
-	// keep major/minor and normalize patch to 0.
+	// Minor-baseline requirements keep major/minor and normalize patch to 0.
 	ver.Patch = 0
 
 	// Keep normalization consistent with internal compatibility logic:
@@ -57,7 +66,7 @@ func normalizeVersionToMinor(raw string) (string, error) {
 	return ver.String(), nil
 }
 
-func requireVersionCompatibility(cmd *cobra.Command, minSupportedDeploymentVersion string) {
+func requireDeploymentCompatibility(cmd *cobra.Command, minSupportedDeploymentVersion string) {
 	if cmd.Annotations == nil {
 		cmd.Annotations = map[string]string{}
 	}

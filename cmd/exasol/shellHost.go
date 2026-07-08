@@ -42,7 +42,7 @@ func registerShellHostFlags() {
 
 // nolint: gochecknoinits
 func init() {
-	requireMinorVersionCompatibility(shellHostCmd, CurrentLauncherVersion)
+	requireDefaultDeploymentCompatibility(shellHostCmd)
 	requireInitializedDeploymentDir(shellHostCmd)
 	registerShellHostFlags()
 	registerDeploymentDirFlag(shellHostCmd, commonFlags)

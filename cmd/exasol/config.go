@@ -109,7 +109,7 @@ var configResetCmd = &cobra.Command{
 // nolint: gochecknoinits
 func init() {
 	for _, cmd := range []*cobra.Command{configCmd, configGetCmd, configSetCmd, configResetCmd} {
-		requireMinorVersionCompatibility(cmd, CurrentLauncherVersion)
+		requireDefaultDeploymentCompatibility(cmd)
 		requireInitializedDeploymentDir(cmd)
 		requireDeploymentFileLogging(cmd)
 	}

@@ -48,7 +48,7 @@ func registerDiagShellFlags() {
 
 // nolint: gochecknoinits
 func init() {
-	requireMinorVersionCompatibility(diagShellCmd, CurrentLauncherVersion)
+	requireDefaultDeploymentCompatibility(diagShellCmd)
 	requireInitializedDeploymentDir(diagShellCmd)
 	registerDiagShellFlags()
 	registerDeploymentDirFlag(diagShellCmd, commonFlags)
