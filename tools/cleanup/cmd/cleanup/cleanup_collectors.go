@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/azure"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/stackit"
@@ -39,6 +40,10 @@ var exoscaleCollectorFactory = func(zone, ownerFilter string, legacy bool) share
 
 var stackitCollectorFactory = func(projectID, region, ownerFilter string) shared.ProviderCollector {
 	return stackit.NewCollector(projectID, region, ownerFilter)
+}
+
+var azureCollectorFactory = func(subscriptionID, location, ownerFilter string, legacy bool) shared.ProviderCollector {
+	return azure.NewCollector(subscriptionID, location, ownerFilter, legacy)
 }
 
 var awsCallerIdentityARNLookup = func(ctx context.Context, region string) (string, bool) {
@@ -284,6 +289,14 @@ func cleanupProviderSpecs() []cleanupProviderSpec {
 				return stackitCollectorFactory(cleanupOpts.StackitProjectID, location, ownerFilter)
 			},
 		},
+		{
+			Name:         azure.ProviderName,
+			Locations:    resolvedAzureLocations,
+			ResolveOwner: resolveAzureOwner,
+			BuildCollector: func(location, ownerFilter string, legacy bool) shared.ProviderCollector {
+				return azureCollectorFactory(cleanupOpts.AzureSubscriptionID, location, ownerFilter, legacy)
+			},
+		},
 	}
 }
 
@@ -328,6 +341,22 @@ func resolveStackitOwner(_ context.Context, _ string) cleanupOwnerResolution {
 	return cleanupOwnerResolution{Display: "*", Source: "default"}
 }
 
+func resolveAzureOwner(_ context.Context, _ string) cleanupOwnerResolution {
+	if cleanupOpts.AzureSubscriptionID == "" {
+		return cleanupOwnerResolution{
+			Display: "*",
+			Source:  "default",
+			Err:     fmt.Errorf("Azure subscription id is required; pass --azure-subscription-id"),
+		}
+	}
+
+	if cleanupOpts.OwnerFilter != "" {
+		return cleanupOwnerResolution{Filter: cleanupOpts.OwnerFilter, Display: cleanupOpts.OwnerFilter, Source: "explicit"}
+	}
+
+	return cleanupOwnerResolution{Display: "*", Source: "default"}
+}
+
 func resolvedAWSRegions() []string {
 	return resolvedLocations(cleanupOpts.AWSRegions, []string{"us-east-1"})
 }
@@ -338,6 +367,10 @@ func resolvedExoscaleZones() []string {
 
 func resolvedStackitRegions() []string {
 	return resolvedLocations(cleanupOpts.StackitRegions, []string{"eu01"})
+}
+
+func resolvedAzureLocations() []string {
+	return resolvedLocations(cleanupOpts.AzureLocations, []string{azure.DefaultLocation})
 }
 
 func resolvedLocations(explicit []string, defaults []string) []string {
