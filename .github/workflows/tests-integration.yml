@@ -56,6 +56,4 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/build
-        with:
-          local-runner-token: ${{ secrets.EXASOL_NANO_VM_TOKEN }}
       - uses: ./.github/actions/tests-integration

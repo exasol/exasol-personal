@@ -51,8 +51,6 @@ jobs:
           # this is need because we use "git describe" to get the latest version from git
           fetch-depth: 0
       - uses: ./.github/actions/build
-        with:
-          local-runner-token: ${{ secrets.EXASOL_NANO_VM_TOKEN }}
       # Upload the correct file depending on OS with a unique name
       - name: Upload file (Windows)
         if: startsWith(matrix.os, 'windows')

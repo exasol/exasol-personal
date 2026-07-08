@@ -140,8 +140,6 @@ jobs:
       # and fetch it here. However, for now the build run time
       # is short and we can afford building it a second time.
       - uses: ./.github/actions/build
-        with:
-          local-runner-token: ${{ secrets.EXASOL_NANO_VM_TOKEN }}
       - uses: ./.github/actions/tests-deployment
         env:
           ARM_USE_OIDC: ${{ matrix.infra == 'azure' && 'true' || '' }}
