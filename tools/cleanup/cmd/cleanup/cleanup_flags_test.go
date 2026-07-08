@@ -54,14 +54,15 @@ func TestCleanupHelpGroupsProviderFlags(t *testing.T) {
 	options := sectionBetween(t, rendered, cleanupFlagGroupGeneric+":", cleanupFlagGroupAWS+":")
 	awsOptions := sectionBetween(t, rendered, cleanupFlagGroupAWS+":", cleanupFlagGroupExoscale+":")
 	exoscaleOptions := sectionBetween(t, rendered, cleanupFlagGroupExoscale+":", cleanupFlagGroupStackit+":")
-	stackitOptions := sectionAfter(t, rendered, cleanupFlagGroupStackit+":")
+	stackitOptions := sectionBetween(t, rendered, cleanupFlagGroupStackit+":", cleanupFlagGroupAzure+":")
+	azureOptions := sectionAfter(t, rendered, cleanupFlagGroupAzure+":")
 
 	for _, expected := range []string{"--help", "--json", "--owner", "--provider", "--verbose"} {
 		if !strings.Contains(options, expected) {
 			t.Fatalf("generic options missing %q:\n%s", expected, rendered)
 		}
 	}
-	for _, unexpected := range []string{"--aws-region", "--exoscale-zone", "--stackit-project-id", "--stackit-region"} {
+	for _, unexpected := range []string{"--aws-region", "--exoscale-zone", "--stackit-project-id", "--stackit-region", "--azure-subscription-id", "--azure-location"} {
 		if strings.Contains(options, unexpected) {
 			t.Fatalf("generic options unexpectedly contain provider flag %q:\n%s", unexpected, rendered)
 		}
@@ -75,6 +76,11 @@ func TestCleanupHelpGroupsProviderFlags(t *testing.T) {
 	for _, expected := range []string{"--stackit-project-id", "--stackit-region"} {
 		if !strings.Contains(stackitOptions, expected) {
 			t.Fatalf("STACKIT options missing %q:\n%s", expected, rendered)
+		}
+	}
+	for _, expected := range []string{"--azure-subscription-id", "--azure-location"} {
+		if !strings.Contains(azureOptions, expected) {
+			t.Fatalf("Azure options missing %q:\n%s", expected, rendered)
 		}
 	}
 }
@@ -113,11 +119,11 @@ func TestGetSelectedProvidersDefaultsToAll(t *testing.T) {
 	cleanupOpts.Providers = nil
 
 	selected := getSelectedProviders()
-	if len(selected) != 3 {
-		t.Fatalf("selected = %v, want 3 providers", selected)
+	if len(selected) != 4 {
+		t.Fatalf("selected = %v, want 4 providers", selected)
 	}
-	if selected[0] != "aws" || selected[1] != "exoscale" || selected[2] != "stackit" {
-		t.Fatalf("selected = %v, want [aws exoscale stackit]", selected)
+	if selected[0] != "aws" || selected[1] != "exoscale" || selected[2] != "stackit" || selected[3] != "azure" {
+		t.Fatalf("selected = %v, want [aws exoscale stackit azure]", selected)
 	}
 }
 
@@ -159,5 +165,9 @@ func TestResolvedLocationsDefaultsAndDeduplicates(t *testing.T) {
 
 	if got := resolvedStackitRegions(); len(got) != 1 || got[0] != "eu01" {
 		t.Fatalf("resolvedStackitRegions = %v, want [eu01]", got)
+	}
+
+	if got := resolvedAzureLocations(); len(got) != 1 || got[0] != "all" {
+		t.Fatalf("resolvedAzureLocations = %v, want [all]", got)
 	}
 }

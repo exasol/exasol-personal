@@ -64,5 +64,11 @@ Default or protected constructs (main route tables, default security groups) are
 - Migrating or backing up data.
 - Cross-account or organization-wide cost analysis.
 
+## Multi-provider support
+The tool discovers and cleans up deployments across every cloud the launcher targets (AWS, Exoscale, STACKIT, and Azure). Each provider plugs into a shared collector interface behind common commands, so discovery, inspection, and ordered deletion behave the same regardless of platform, and global safeguards (dry-run default, explicit execution flag, owner filtering, JSON output) apply uniformly.
+
+### Azure
+The launcher confines every Azure deployment to a dedicated resource group tagged with the shared `Project`/`Deployment`/`Owner` metadata. Discovery is therefore subscription-wide: resource groups carrying that metadata identify deployments, and a location is an optional filter rather than a separate search target. Cleanup is resource-group scoped — deleting the group cascades to every resource it contains, so Azure resolves inter-resource dependency ordering itself. A `run` lists the contained resources for transparency and executes the single group deletion, honoring the same dry-run-by-default and `--execute` safety model as the other providers. Authentication uses the standard Azure default credential chain.
+
 ## Summary
 The cleanup feature adds a recoverability layer focused on cost control and operational hygiene. It provides deterministic, safe, and transparent deletion of orphaned deployments with minimal user input.

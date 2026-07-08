@@ -200,8 +200,8 @@ func TestBuildCleanupPlanIncludesUnselectedProviders(t *testing.T) {
 	plan := buildCleanupPlan(context.Background(), false)
 
 	// Then selected and unselected providers are both present in scope
-	if len(plan.Scope.Providers) != 3 {
-		t.Fatalf("providers = %d, want 3", len(plan.Scope.Providers))
+	if len(plan.Scope.Providers) != 4 {
+		t.Fatalf("providers = %d, want 4", len(plan.Scope.Providers))
 	}
 	if exoscaleOwnerFilter != "owner-*" {
 		t.Fatalf("exoscale owner filter = %q, want owner-*", exoscaleOwnerFilter)
@@ -264,8 +264,8 @@ func TestBuildCleanupPlanCreatesRowPerLocationTarget(t *testing.T) {
 	if len(plan.Collectors) != 2 {
 		t.Fatalf("collectors = %d, want 2", len(plan.Collectors))
 	}
-	if len(plan.Scope.Providers) != 4 {
-		t.Fatalf("scope rows = %d, want 4", len(plan.Scope.Providers))
+	if len(plan.Scope.Providers) != 5 {
+		t.Fatalf("scope rows = %d, want 5", len(plan.Scope.Providers))
 	}
 	if locations[0] != "us-east-1" || locations[1] != "eu-central-1" {
 		t.Fatalf("locations = %v, want [us-east-1 eu-central-1]", locations)
@@ -334,8 +334,8 @@ func TestBuildCleanupPlanIncludesStackitTarget(t *testing.T) {
 	if len(stackitCalls) != 2 || stackitCalls[0] != "eu01" || stackitCalls[1] != "eu02" {
 		t.Fatalf("stackit calls = %v, want [eu01 eu02]", stackitCalls)
 	}
-	if len(plan.Scope.Providers) != 4 {
-		t.Fatalf("scope rows = %d, want 4", len(plan.Scope.Providers))
+	if len(plan.Scope.Providers) != 5 {
+		t.Fatalf("scope rows = %d, want 5", len(plan.Scope.Providers))
 	}
 	if plan.Scope.Providers[2].Provider != "stackit" || plan.Scope.Providers[2].Status != providerStatusSearched {
 		t.Fatalf("first stackit scope row = %#v, want searched", plan.Scope.Providers[2])

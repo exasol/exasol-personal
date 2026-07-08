@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
+	"github.com/exasol/exasol-personal/tools/cleanup/internal/azure"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
 	"github.com/exasol/exasol-personal/tools/cleanup/internal/stackit"
 	"github.com/spf13/cobra"
@@ -22,6 +23,7 @@ const (
 	cleanupFlagGroupAWS        = "AWS options"
 	cleanupFlagGroupExoscale   = "Exoscale options"
 	cleanupFlagGroupStackit    = "STACKIT options"
+	cleanupFlagGroupAzure      = "Azure options"
 )
 
 var cleanupFlagGroupOrder = []string{
@@ -29,6 +31,7 @@ var cleanupFlagGroupOrder = []string{
 	cleanupFlagGroupAWS,
 	cleanupFlagGroupExoscale,
 	cleanupFlagGroupStackit,
+	cleanupFlagGroupAzure,
 }
 
 type cleanupFlagOptions struct {
@@ -37,18 +40,20 @@ type cleanupFlagOptions struct {
 }
 
 var cleanupOpts = struct {
-	AWSRegions       []string
-	ExoscaleZones    []string
-	StackitRegions   []string
-	StackitProjectID string
-	Providers        []string
-	OwnerFilter      string
-	JSON             bool
-	Verbose          bool
+	AWSRegions          []string
+	ExoscaleZones       []string
+	StackitRegions      []string
+	StackitProjectID    string
+	AzureLocations      []string
+	AzureSubscriptionID string
+	Providers           []string
+	OwnerFilter         string
+	JSON                bool
+	Verbose             bool
 }{}
 
 func allProviders() []string {
-	return []string{aws.ProviderName, exoscale.ProviderName, stackit.ProviderName}
+	return []string{aws.ProviderName, exoscale.ProviderName, stackit.ProviderName, azure.ProviderName}
 }
 
 // getSelectedProviders returns a list of provider names that should be used.
@@ -97,6 +102,14 @@ func registerCommonFlags(cmd *cobra.Command, options cleanupFlagOptions) {
 		StringVar(&cleanupOpts.StackitProjectID, "stackit-project-id", "",
 			"STACKIT project containing deployment resources")
 	setFlagGroup(cmd, "stackit-project-id", cleanupFlagGroupStackit)
+	cmd.Flags().
+		StringVar(&cleanupOpts.AzureSubscriptionID, "azure-subscription-id", "",
+			"Azure subscription containing deployment resources")
+	setFlagGroup(cmd, "azure-subscription-id", cleanupFlagGroupAzure)
+	cmd.Flags().
+		StringSliceVar(&cleanupOpts.AzureLocations, "azure-location", nil,
+			"Azure locations to filter deployment resources (repeat flag or use comma-separated values; default: all locations)")
+	setFlagGroup(cmd, "azure-location", cleanupFlagGroupAzure)
 	cmd.Flags().
 		BoolVar(&cleanupOpts.Verbose, "verbose", false,
 			"Enable verbose (debug) logging")
