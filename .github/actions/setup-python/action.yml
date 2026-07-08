@@ -11,15 +11,25 @@ runs:
       with:
         python-version: '3.13'
 
+    - name: Configure cache directories
+      shell: bash
+      run: |
+        poetry_cache="${RUNNER_TEMP}/pypoetry-cache"
+        pip_cache="${RUNNER_TEMP}/pip-cache"
+
+        mkdir -p "${poetry_cache}" "${pip_cache}"
+
+        {
+          echo "POETRY_CACHE_DIR=${poetry_cache}"
+          echo "PIP_CACHE_DIR=${pip_cache}"
+        } >> "${GITHUB_ENV}"
+
     - name: Cache Poetry dependencies
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
-          # List all platform cache paths; only existing ones will be cached.
-          ~/.cache/pypoetry
-          ~/.cache/pip
-          ${{ env.USERPROFILE }}\.cache\pypoetry
-          ${{ env.USERPROFILE }}\.cache\pip
+          ${{ env.POETRY_CACHE_DIR }}
+          ${{ env.PIP_CACHE_DIR }}
         key: poetry-venv-${{ runner.os }}-${{ hashFiles('tests/poetry.lock') }}
         restore-keys: |
           poetry-venv-${{ runner.os }}-
