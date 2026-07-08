@@ -81,7 +81,7 @@ jobs:
       contents: read # Required for actions/checkout
       statuses: write # Required for status updates
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           # this is need because we use "git describe" to get the latest version from git
           fetch-depth: 0
@@ -171,7 +171,7 @@ jobs:
       contents: read
       statuses: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
       - uses: ./.github/actions/status-set
