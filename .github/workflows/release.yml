@@ -1,14 +1,11 @@
 # .github/workflows/release.yml
-name: Create GH release (tag + GoReleaser)
+name: Create GH release (from existing tag)
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to create (e.g. v2.1.0 or v2.1.0-rc1). A hyphen marks it as a pre-release."
-        required: true
-      source_ref:
-        description: "Ref/commit to tag and release from (e.g. main, a SHA, or v2.1.0-rc1 when promoting an rc to final)."
+        description: "Existing release tag to publish (e.g. v2.1.0 or v2.1.0-rc1). Create and push it first (admins only). A hyphen marks it as a pre-release."
         required: true
       previous_tag:
         description: "Previous tag for the changelog base (e.g. v2.0.0). Leave blank to auto-detect the last stable release."
@@ -24,24 +21,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout
+      - name: Checkout release tag
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-          ref: ${{ inputs.source_ref }}
-
-      - name: Create and push tag
-        run: |
-          set -euo pipefail
-          TAG='${{ inputs.tag }}'
-          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-            echo "::error::Tag ${TAG} already exists. Choose a new tag or delete the existing one first."
-            exit 1
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${TAG}" -m "Release ${TAG}"
-          git push origin "refs/tags/${TAG}"
+          ref: refs/tags/${{ inputs.tag }}
 
       - name: Determine previous tag for changelog
         id: prev
