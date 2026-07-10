@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 S3_URL="x-up.s3.eu-west-1.amazonaws.com"
 BASE_URL="https://$S3_URL/releases/exasol-personal"
