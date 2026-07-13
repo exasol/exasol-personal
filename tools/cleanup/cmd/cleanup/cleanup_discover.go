@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 	"github.com/spf13/cobra"
 )
 
@@ -218,7 +218,7 @@ var cleanupDiscoverCmd = &cobra.Command{
 					},
 				)
 			}
-			shared.RenderTable(
+			renderTable(
 				cmd.OutOrStdout(),
 				[]string{"deployment", "provider", "region", "owner", "created", "state", "resources"},
 				[]int{20, 10, 14, 40, 22, 10, 9},

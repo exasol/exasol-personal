@@ -1,14 +1,14 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package exoscale
+package stackit
 
 import (
 	"context"
 	"errors"
 	"log/slog"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 // Constants from shared package
@@ -21,13 +21,15 @@ var ErrNoResourcesPlanned = errors.New("no resources found to plan cleanup")
 // BuildPlan constructs the static ordered cleanup plan.
 func BuildPlan() CleanupPlan {
 	return CleanupPlan{Phases: []Phase{
-		{Name: "instances", Types: []ResourceType{ResourceComputeInstance}},
-		{Name: "block-storage", Types: []ResourceType{ResourceBlockVolume}},
-		{Name: "iam-api-keys", Types: []ResourceType{ResourceIAMAPIKey}},
-		{Name: "iam-roles", Types: []ResourceType{ResourceIAMRole}},
-		{Name: "networking", Types: []ResourceType{ResourcePrivateNetwork, ResourceSecurityGroup}},
-		{Name: "ssh-keys", Types: []ResourceType{ResourceSSHKey}},
-		{Name: "s3", Types: []ResourceType{ResourceSOSBucket}},
+		{Name: "servers", Types: []ResourceType{ResourceServer}},
+		{Name: "volumes", Types: []ResourceType{ResourceVolume}},
+		{Name: "public-ips", Types: []ResourceType{ResourcePublicIP}},
+		{Name: "network-interfaces", Types: []ResourceType{ResourceNetworkInterface}},
+		{Name: "networks", Types: []ResourceType{ResourceNetwork}},
+		{Name: "security-groups", Types: []ResourceType{ResourceSecurityGroup}},
+		{Name: "objectstorage-buckets", Types: []ResourceType{ResourceObjectStorageBucket}},
+		{Name: "objectstorage-credentials", Types: []ResourceType{ResourceObjectStorageCredential}},
+		{Name: "objectstorage-credentials-groups", Types: []ResourceType{ResourceObjectStorageCredentialsGroup}},
 	}}
 }
 
@@ -44,15 +46,11 @@ func PlanActions(details *DeploymentDetails, typeFilter []ResourceType) ([]Actio
 	var actions []Action
 	for _, phase := range plan.Phases {
 		for _, resource := range details.Resources {
-			name, _ := resource.Attr["name"].(string)
-			state, _ := resource.Attr["state"].(string)
 			if !containsType(phase.Types, resource.Ref.Type) {
-				slog.Debug("PlanActions: skipping resource (type not in phase)", "type", resource.Ref.Type, "name", name, "state", state)
 				continue
 			}
 			if len(filter) > 0 {
 				if _, ok := filter[resource.Ref.Type]; !ok {
-					slog.Debug("PlanActions: skipping resource (type filtered)", "type", resource.Ref.Type, "name", name, "state", state)
 					continue
 				}
 			}
@@ -60,9 +58,7 @@ func PlanActions(details *DeploymentDetails, typeFilter []ResourceType) ([]Actio
 			if resource.Protected {
 				act.Op = OpSkip
 				act.Reason = "protected"
-				slog.Debug("PlanActions: skipping resource (protected)", "type", resource.Ref.Type, "name", name, "state", state)
 			}
-			slog.Debug("PlanActions: adding action", "type", resource.Ref.Type, "name", name, "state", state, "op", act.Op)
 			actions = append(actions, act)
 		}
 	}
@@ -91,12 +87,12 @@ func opForResource(_ ResourceMeta) string {
 // ExecuteActions runs the actions. Executes deletion if execute=true.
 //
 //nolint:revive // 'execute' is an intentional flag to control dry-run vs execute behavior.
-func ExecuteActions(ctx context.Context, zone string, actions []Action, execute bool) ([]Result, error) {
+func ExecuteActions(ctx context.Context, projectId, region string, actions []Action, execute bool) ([]Result, error) {
 	results := make([]Result, 0, len(actions))
 	for _, action := range actions {
 		res := Result{Action: action, Status: "planned"}
 		if execute && action.Op != OpSkip {
-			if err := deleteResource(ctx, zone, action.Ref); err != nil {
+			if err := deleteResource(ctx, projectId, region, action.Ref); err != nil {
 				res.Status = "failed"
 				res.Error = err.Error()
 				slog.Error(
@@ -110,7 +106,7 @@ func ExecuteActions(ctx context.Context, zone string, actions []Action, execute 
 				)
 			} else {
 				res.Status = "success"
-				slog.Debug("cleanup success", "op", action.Op, "id",
+				slog.Info("cleanup success", "op", action.Op, "id",
 					action.Ref.ID, "type", action.Ref.Type)
 			}
 		} else if action.Op == OpSkip {

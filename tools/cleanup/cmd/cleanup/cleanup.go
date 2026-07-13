@@ -9,10 +9,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/azure"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/stackit"
+	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/aws"
+	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/azure"
+	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/exoscale"
+	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/stackit"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

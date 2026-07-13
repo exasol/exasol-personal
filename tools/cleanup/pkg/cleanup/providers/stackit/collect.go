@@ -17,7 +17,7 @@ import (
 	objectstorage "github.com/stackitcloud/stackit-sdk-go/services/objectstorage/v2api"
 	resourcemanager "github.com/stackitcloud/stackit-sdk-go/services/resourcemanager/v0api"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 // Constants from shared package

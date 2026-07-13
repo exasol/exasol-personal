@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 // ProviderName is the identifier for the Exoscale provider

@@ -6,7 +6,7 @@ package azure
 import (
 	"context"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 // Collector implements shared.ProviderCollector for Azure.

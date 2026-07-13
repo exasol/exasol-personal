@@ -32,7 +32,7 @@ type apiClient struct {
 func newAPIClient(zone string) (*apiClient, error) {
 	apiKey := os.Getenv("EXOSCALE_API_KEY")
 	apiSecret := os.Getenv("EXOSCALE_API_SECRET")
-	
+
 	if apiKey == "" || apiSecret == "" {
 		return nil, fmt.Errorf("EXOSCALE_API_KEY and EXOSCALE_API_SECRET environment variables are required")
 	}
@@ -49,20 +49,20 @@ func newAPIClient(zone string) (*apiClient, error) {
 // Based on github.com/exoscale/egoscale/v2/api/security.go
 func (c *apiClient) signRequest(method, path string, body []byte, queryParams url.Values) (string, int64, string) {
 	expires := time.Now().UTC().Add(10 * time.Minute).Unix()
-	
+
 	// Build message to sign
 	var sigParts []string
-	
+
 	// Request method and URL path
 	sigParts = append(sigParts, method+" "+path)
-	
+
 	// Request body (always include, even if empty)
 	if len(body) > 0 {
 		sigParts = append(sigParts, string(body))
 	} else {
 		sigParts = append(sigParts, "")
 	}
-	
+
 	// Query parameters (sorted keys, concatenated values)
 	// Only include parameters with exactly 1 value
 	var paramNames []string
@@ -72,32 +72,32 @@ func (c *apiClient) signRequest(method, path string, body []byte, queryParams ur
 		}
 	}
 	sort.Strings(paramNames)
-	
+
 	var paramValues string
 	for _, param := range paramNames {
 		paramValues += queryParams.Get(param)
 	}
 	sigParts = append(sigParts, paramValues)
-	
+
 	// Request headers (none currently)
 	sigParts = append(sigParts, "")
-	
+
 	// Expiration timestamp
 	sigParts = append(sigParts, strconv.FormatInt(expires, 10))
-	
+
 	message := strings.Join(sigParts, "\n")
-	
+
 	// Compute HMAC-SHA256
 	mac := hmac.New(sha256.New, []byte(c.apiSecret))
 	mac.Write([]byte(message))
 	signature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
-	
+
 	// Build signed-query-args pragma
 	signedQueryArgs := ""
 	if len(paramNames) > 0 {
 		signedQueryArgs = strings.Join(paramNames, ";")
 	}
-	
+
 	return signature, expires, signedQueryArgs
 }
 
@@ -109,22 +109,22 @@ func (c *apiClient) doRequest(ctx context.Context, method, path string, body []b
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
-	
+
 	// Add query parameters
 	if len(queryParams) > 0 {
 		parsedURL.RawQuery = queryParams.Encode()
 	}
-	
+
 	// Use the escaped path for signing (including leading slash)
 	escapedPath := parsedURL.EscapedPath()
-	
+
 	signature, expires, signedQueryArgs := c.signRequest(method, escapedPath, body, queryParams)
-	
+
 	req, err := http.NewRequestWithContext(ctx, method, parsedURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	// Set authorization header with optional signed-query-args
 	authHeader := fmt.Sprintf("EXO2-HMAC-SHA256 credential=%s,expires=%d,signature=%s",
 		c.apiKey, expires, signature)
@@ -134,22 +134,22 @@ func (c *apiClient) doRequest(ctx context.Context, method, path string, body []b
 	req.Header.Set("Authorization", authHeader)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
-	
+
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
-	
+
 	return respBody, nil
 }
 

@@ -31,12 +31,12 @@ func initHandlers(ctx context.Context, zone string) error {
 	if len(registry) > 0 {
 		return nil
 	}
-	
+
 	client, err := createExoscaleClient(ctx, zone)
 	if err != nil {
 		return fmt.Errorf("failed to create Exoscale client: %w", err)
 	}
-	
+
 	// Initialize handlers
 	registry[ResourceComputeInstance] = &computeInstanceHandler{client: client, zone: zone}
 	registry[ResourceBlockVolume] = &blockStorageVolumeHandler{client: client, zone: zone}
@@ -74,7 +74,7 @@ func (h *computeInstanceHandler) Delete(ctx context.Context, ref ResourceRef) er
 	if err != nil {
 		return fmt.Errorf("invalid instance ID: %w", err)
 	}
-	
+
 	op, err := h.client.DeleteInstance(ctx, uuid)
 	if err != nil {
 		// Treat not found as success for idempotent cleanup
@@ -83,13 +83,13 @@ func (h *computeInstanceHandler) Delete(ctx context.Context, ref ResourceRef) er
 		}
 		return fmt.Errorf("failed to delete instance: %w", err)
 	}
-	
+
 	// Wait for operation to complete
 	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
 	if err != nil {
 		return fmt.Errorf("failed to wait for instance deletion: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -105,7 +105,7 @@ func (h *blockStorageVolumeHandler) Delete(ctx context.Context, ref ResourceRef)
 	if err != nil {
 		return fmt.Errorf("invalid volume ID: %w", err)
 	}
-	
+
 	// Wait for volume to be detached before deleting
 	maxWaits := 60 // 60 seconds max
 	for i := 0; i < maxWaits; i++ {
@@ -117,15 +117,15 @@ func (h *blockStorageVolumeHandler) Delete(ctx context.Context, ref ResourceRef)
 			}
 			return fmt.Errorf("failed to check volume status: %w", err)
 		}
-		
-		if vol.State == v3.BlockStorageVolumeStateDetached || 
+
+		if vol.State == v3.BlockStorageVolumeStateDetached ||
 			vol.State == "available" {
 			goto readyToDelete
 		}
-		
+
 		time.Sleep(1 * time.Second)
 	}
-	
+
 readyToDelete:
 	op, err := h.client.DeleteBlockStorageVolume(ctx, uuid)
 	if err != nil {
@@ -134,13 +134,13 @@ readyToDelete:
 		}
 		return fmt.Errorf("failed to delete volume: %w", err)
 	}
-	
+
 	// Wait for operation to complete
 	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
 	if err != nil {
 		return fmt.Errorf("failed to wait for volume deletion: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -155,7 +155,7 @@ func (h *privateNetworkHandler) Delete(ctx context.Context, ref ResourceRef) err
 	if err != nil {
 		return fmt.Errorf("invalid network ID: %w", err)
 	}
-	
+
 	op, err := h.client.DeletePrivateNetwork(ctx, uuid)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
@@ -163,12 +163,12 @@ func (h *privateNetworkHandler) Delete(ctx context.Context, ref ResourceRef) err
 		}
 		return fmt.Errorf("failed to delete private network: %w", err)
 	}
-	
+
 	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
 	if err != nil {
 		return fmt.Errorf("failed to wait for network deletion: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -183,7 +183,7 @@ func (h *securityGroupHandler) Delete(ctx context.Context, ref ResourceRef) erro
 	if err != nil {
 		return fmt.Errorf("invalid security group ID: %w", err)
 	}
-	
+
 	op, err := h.client.DeleteSecurityGroup(ctx, uuid)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
@@ -191,12 +191,12 @@ func (h *securityGroupHandler) Delete(ctx context.Context, ref ResourceRef) erro
 		}
 		return fmt.Errorf("failed to delete security group: %w", err)
 	}
-	
+
 	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
 	if err != nil {
 		return fmt.Errorf("failed to wait for security group deletion: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -215,12 +215,12 @@ func (h *sshKeyHandler) Delete(ctx context.Context, ref ResourceRef) error {
 		}
 		return fmt.Errorf("failed to delete SSH key: %w", err)
 	}
-	
+
 	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
 	if err != nil {
 		return fmt.Errorf("failed to wait for SSH key deletion: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -234,7 +234,7 @@ func (h *iamRoleHandler) Delete(ctx context.Context, ref ResourceRef) error {
 	if err != nil {
 		return fmt.Errorf("invalid IAM role ID: %w", err)
 	}
-	
+
 	op, err := h.client.DeleteIAMRole(ctx, uuid)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
@@ -242,12 +242,12 @@ func (h *iamRoleHandler) Delete(ctx context.Context, ref ResourceRef) error {
 		}
 		return fmt.Errorf("failed to delete IAM role: %w", err)
 	}
-	
+
 	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
 	if err != nil {
 		return fmt.Errorf("failed to wait for IAM role deletion: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -265,12 +265,12 @@ func (h *iamAPIKeyHandler) Delete(ctx context.Context, ref ResourceRef) error {
 		}
 		return fmt.Errorf("failed to delete API key: %w", err)
 	}
-	
+
 	_, err = h.client.Wait(ctx, op, v3.OperationStateSuccess)
 	if err != nil {
 		return fmt.Errorf("failed to wait for API key deletion: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -281,7 +281,7 @@ type sosBucketHandler struct {
 
 func (h *sosBucketHandler) Delete(ctx context.Context, ref ResourceRef) error {
 	sosEndpoint := fmt.Sprintf("https://sos-%s.exo.io", h.zone)
-	
+
 	cfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithRegion(h.zone),
 		awsconfig.WithEndpointResolverWithOptions(awssdk.EndpointResolverWithOptionsFunc(
@@ -299,7 +299,7 @@ func (h *sosBucketHandler) Delete(ctx context.Context, ref ResourceRef) error {
 	}
 
 	s3Client := s3.NewFromConfig(cfg)
-	
+
 	// List and delete all objects in the bucket first
 	listResp, err := s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket: awssdk.String(ref.ID),
@@ -310,7 +310,7 @@ func (h *sosBucketHandler) Delete(ctx context.Context, ref ResourceRef) error {
 		}
 		return fmt.Errorf("failed to list bucket objects: %w", err)
 	}
-	
+
 	// Delete all objects
 	for _, obj := range listResp.Contents {
 		_, err := s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
@@ -321,7 +321,7 @@ func (h *sosBucketHandler) Delete(ctx context.Context, ref ResourceRef) error {
 			return fmt.Errorf("failed to delete object %s: %w", *obj.Key, err)
 		}
 	}
-	
+
 	// Delete the bucket
 	_, err = s3Client.DeleteBucket(ctx, &s3.DeleteBucketInput{
 		Bucket: awssdk.String(ref.ID),
@@ -332,6 +332,6 @@ func (h *sosBucketHandler) Delete(ctx context.Context, ref ResourceRef) error {
 		}
 		return fmt.Errorf("failed to delete bucket: %w", err)
 	}
-	
+
 	return nil
 }

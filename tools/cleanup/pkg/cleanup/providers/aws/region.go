@@ -6,7 +6,7 @@ package aws
 import (
 	"os"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 // ResolveRegion returns the explicit region if provided, otherwise falls back to

@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 type stubProviderCollector struct {
