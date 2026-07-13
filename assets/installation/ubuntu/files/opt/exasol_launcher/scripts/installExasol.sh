@@ -52,6 +52,7 @@ else
 fi
 
 exasol_working_copy="@exasol-${exasol_version}"
+license_package="@license:personal"
 
 cat << CONFEOF | tee ./config > /dev/null
 CCC_HOST_ADDRS="${host_addrs}"
@@ -65,7 +66,7 @@ CCC_PLAY_DB_PASSWORD=$(quote_b64 "${db_password_b64}")
 CCC_ADMINUI_START_SERVER=true
 CCC_ADMINUI_ADMIN_PASSWORD=$(quote_b64 "${adminui_password_b64}")
 CCC_AWS_PROFILE=none
-CCC_PLAY_LICENSE=@license:personal
+CCC_PLAY_LICENSE=${license_package}
 CCC_PLAY_VERSION_UPDATE_CHECK=${db_version_check_enabled}
 CONFEOF
 
@@ -80,6 +81,12 @@ fi
 
 log_substep_info "Starting Exasol installation using c4"
 
+# Older c4 versions bundled by some DB packages still sign public x-up S3
+# requests even with CCC_AWS_PROFILE=none. The fetch command does not consume
+# the host-play config file, so pass the AWS profile explicitly and fetch with
+# launcher c4 first. Host play can then reuse the cached package after
+# switching to the bundled c4 version.
+CCC_AWS_PROFILE=none ./c4 fetch "${license_package}"
 ./c4 host play -i ./config
 
 log_step_info "Exasol installation completed"
