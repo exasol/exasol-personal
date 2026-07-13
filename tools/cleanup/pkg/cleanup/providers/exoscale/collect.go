@@ -18,7 +18,7 @@ import (
 	v3 "github.com/exoscale/egoscale/v3"
 	"github.com/exoscale/egoscale/v3/credentials"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 // Constants from shared package
@@ -34,19 +34,19 @@ const (
 func createExoscaleClient(ctx context.Context, zone string) (*v3.Client, error) {
 	apiKey := os.Getenv("EXOSCALE_API_KEY")
 	apiSecret := os.Getenv("EXOSCALE_API_SECRET")
-	
+
 	if apiKey == "" || apiSecret == "" {
 		return nil, fmt.Errorf("EXOSCALE_API_KEY and EXOSCALE_API_SECRET environment variables are required")
 	}
 
 	creds := credentials.NewStaticCredentials(apiKey, apiSecret)
-	
+
 	// Get the zone endpoint
 	endpoint, err := getZoneEndpoint(zone)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	client, err := v3.NewClient(creds, v3.ClientOptWithEndpoint(endpoint))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Exoscale client: %w", err)
@@ -115,33 +115,33 @@ func CollectDeploymentDetails(
 				continue
 			}
 			instID := inst.ID
-			
+
 			// Get full instance to access all fields
 			fullInst, err := client.GetInstance(ctx, instID)
 			if err != nil {
 				slog.Debug("failed to get instance details", "error", err)
 				continue
 			}
-			
+
 			nameStr := fullInst.Name
 			labels := fullInst.Labels
 			slog.Info("discovered instance", "id", instID, "name", nameStr, "labels", labels, "deploymentID", deploymentID)
-			
+
 			if !matchesDeployment(&nameStr, labels, deploymentID) {
 				continue
 			}
-			
+
 			hasInstances = true
 			stateStr := string(fullInst.State)
 			state := instanceStateToSimple(&stateStr)
-			
+
 			typeID := ""
 			if fullInst.InstanceType != nil {
 				typeID = string(fullInst.InstanceType.ID)
 			}
-			
+
 			instIDStr := string(instID)
-			
+
 			meta := ResourceMeta{
 				Ref: ResourceRef{
 					ARN:    instanceARN(zone, instIDStr),
@@ -156,23 +156,23 @@ func CollectDeploymentDetails(
 					"type":  typeID,
 				},
 			}
-			
+
 			if !fullInst.CreatedAT.IsZero() {
 				meta.Attr["createdAt"] = fullInst.CreatedAT
 				earliest = preferEarlier(earliest, &fullInst.CreatedAT)
 			}
-			
+
 			if owner, ok := labels["owner"]; ok && owner != "" {
 				details.Summary.Owner = owner
 			}
-			
+
 			switch state {
 			case StateActive:
 				hasActive = true
 			case StateStopped:
 				hasStopped = true
 			}
-			
+
 			details.Resources = append(details.Resources, meta)
 		}
 	}
@@ -184,16 +184,16 @@ func CollectDeploymentDetails(
 	} else if volumesResp != nil && volumesResp.BlockStorageVolumes != nil {
 		for _, vol := range volumesResp.BlockStorageVolumes {
 			labels := vol.Labels
-			
+
 			if !matchesDeploymentLabels(labels, deploymentID) {
 				continue
 			}
-			
+
 			volID := string(vol.ID)
 			volName := vol.Name
 			stateStr := string(vol.State)
 			state := blockStorageStateToSimple(stateStr)
-			
+
 			meta := ResourceMeta{
 				Ref: ResourceRef{
 					ARN:    volumeARN(zone, volID),
@@ -208,12 +208,12 @@ func CollectDeploymentDetails(
 					"size":  vol.Size,
 				},
 			}
-			
+
 			if !vol.CreatedAT.IsZero() {
 				meta.Attr["createdAt"] = vol.CreatedAT
 				earliest = preferEarlier(earliest, &vol.CreatedAT)
 			}
-			
+
 			details.Resources = append(details.Resources, meta)
 		}
 	}
@@ -226,13 +226,13 @@ func CollectDeploymentDetails(
 		for _, net := range networksResp.PrivateNetworks {
 			nameStr := net.Name
 			labels := net.Labels
-			
+
 			if !matchesDeployment(&nameStr, labels, deploymentID) {
 				continue
 			}
-			
+
 			netID := string(net.ID)
-			
+
 			meta := ResourceMeta{
 				Ref: ResourceRef{
 					ARN:    networkARN(zone, netID),
@@ -245,7 +245,7 @@ func CollectDeploymentDetails(
 					"name": nameStr,
 				},
 			}
-			
+
 			details.Resources = append(details.Resources, meta)
 		}
 	}
@@ -257,13 +257,13 @@ func CollectDeploymentDetails(
 	} else if securityGroupsResp != nil && securityGroupsResp.SecurityGroups != nil {
 		for _, sg := range securityGroupsResp.SecurityGroups {
 			nameStr := sg.Name
-			
+
 			if !matchesDeploymentName(&nameStr, deploymentID) {
 				continue
 			}
-			
+
 			sgID := string(sg.ID)
-			
+
 			meta := ResourceMeta{
 				Ref: ResourceRef{
 					ARN:    securityGroupARN(zone, sgID),
@@ -276,7 +276,7 @@ func CollectDeploymentDetails(
 					"name": nameStr,
 				},
 			}
-			
+
 			details.Resources = append(details.Resources, meta)
 		}
 	}
@@ -288,11 +288,11 @@ func CollectDeploymentDetails(
 	} else if sshKeysResp != nil && sshKeysResp.SSHKeys != nil {
 		for _, key := range sshKeysResp.SSHKeys {
 			nameStr := key.Name
-			
+
 			if !matchesDeploymentName(&nameStr, deploymentID) {
 				continue
 			}
-			
+
 			meta := ResourceMeta{
 				Ref: ResourceRef{
 					ARN:    sshKeyARN(zone, nameStr),
@@ -305,7 +305,7 @@ func CollectDeploymentDetails(
 					"name": nameStr,
 				},
 			}
-			
+
 			details.Resources = append(details.Resources, meta)
 		}
 	}
@@ -318,13 +318,13 @@ func CollectDeploymentDetails(
 		for _, role := range iamRolesResp.IAMRoles {
 			nameStr := role.Name
 			labels := role.Labels
-			
+
 			if !matchesDeployment(&nameStr, labels, deploymentID) {
 				continue
 			}
-			
+
 			roleID := string(role.ID)
-			
+
 			meta := ResourceMeta{
 				Ref: ResourceRef{
 					ARN:    iamRoleARN(roleID),
@@ -337,7 +337,7 @@ func CollectDeploymentDetails(
 					"name": nameStr,
 				},
 			}
-			
+
 			details.Resources = append(details.Resources, meta)
 		}
 	}
@@ -349,13 +349,13 @@ func CollectDeploymentDetails(
 	} else if apiKeysResp != nil && apiKeysResp.APIKeys != nil {
 		for _, key := range apiKeysResp.APIKeys {
 			nameStr := key.Name
-			
+
 			if !matchesDeploymentName(&nameStr, deploymentID) {
 				continue
 			}
-			
+
 			keyStr := key.Key
-			
+
 			meta := ResourceMeta{
 				Ref: ResourceRef{
 					ARN:    iamAPIKeyARN(keyStr),
@@ -368,7 +368,7 @@ func CollectDeploymentDetails(
 					"name": nameStr,
 				},
 			}
-			
+
 			details.Resources = append(details.Resources, meta)
 		}
 	}
@@ -391,7 +391,7 @@ func CollectDeploymentDetails(
 					"name": bucket,
 				},
 			}
-			
+
 			details.Resources = append(details.Resources, meta)
 		}
 	}
@@ -456,7 +456,7 @@ func CollectDeploymentSummaries(
 
 	// Phase 1: Discover deployments from resources with deployment_id labels
 	// These are the authoritative sources for deployment existence
-	
+
 	// Discover from compute instances
 	instancesResp, err := client.ListInstances(ctx)
 	if err != nil {
@@ -519,7 +519,7 @@ func CollectDeploymentSummaries(
 			}
 		}
 	}
-	
+
 	// Discover from private networks
 	networksResp, _ := client.ListPrivateNetworks(ctx)
 	if networksResp != nil && networksResp.PrivateNetworks != nil {
@@ -541,7 +541,7 @@ func CollectDeploymentSummaries(
 
 	// Phase 2: Count other resources only if their deployment already exists
 	// These resources don't have deployment_id labels, so we only count them
-	
+
 	securityGroupsResp, _ := client.ListSecurityGroups(ctx)
 	if securityGroupsResp != nil && securityGroupsResp.SecurityGroups != nil {
 		for _, sg := range securityGroupsResp.SecurityGroups {
@@ -593,7 +593,7 @@ func CollectDeploymentSummaries(
 			}
 		}
 	}
-	
+
 	// SOS buckets
 	for depID := range summaries {
 		buckets, _ := listSOSBuckets(ctx, zone, depID)
@@ -623,7 +623,7 @@ func matchesDeployment(name *string, labels map[string]string, deploymentID stri
 			return true
 		}
 	}
-	
+
 	// Check name pattern
 	return matchesDeploymentName(name, deploymentID)
 }
@@ -642,7 +642,7 @@ func extractDeploymentID(name *string, labels map[string]string, regex *regexp.R
 			return depID
 		}
 	}
-	
+
 	// Check name pattern
 	return extractDeploymentIDFromName(name, regex)
 }
@@ -651,7 +651,7 @@ func extractDeploymentIDFromName(name *string, regex *regexp.Regexp) string {
 	if name == nil {
 		return ""
 	}
-	
+
 	// Pattern: exasol-{deployment_id}-suffix or exasol-{deployment_id}
 	parts := strings.Split(*name, "-")
 	if len(parts) >= 2 {
@@ -661,7 +661,7 @@ func extractDeploymentIDFromName(name *string, regex *regexp.Regexp) string {
 			return candidate
 		}
 	}
-	
+
 	return ""
 }
 
@@ -689,7 +689,7 @@ func instanceStateToSimple(state *string) string {
 	if state == nil {
 		return StateUnknown
 	}
-	
+
 	// Exoscale instance states are strings
 	switch *state {
 	case "running":
@@ -796,13 +796,13 @@ func sosBucketARN(zone, bucket string) string {
 func listSOSBuckets(ctx context.Context, zone, deploymentID string) ([]string, error) {
 	// SOS uses S3-compatible API
 	sosEndpoint := fmt.Sprintf("https://sos-%s.exo.io", zone)
-	
+
 	// Check if we have SOS credentials
 	if os.Getenv("EXOSCALE_API_KEY") == "" {
 		slog.Debug("SOS bucket discovery skipped: no credentials")
 		return []string{}, nil
 	}
-	
+
 	cfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithRegion(zone),
 		awsconfig.WithEndpointResolverWithOptions(awssdk.EndpointResolverWithOptionsFunc(
@@ -820,7 +820,7 @@ func listSOSBuckets(ctx context.Context, zone, deploymentID string) ([]string, e
 	}
 
 	s3Client := s3.NewFromConfig(cfg)
-	
+
 	output, err := s3Client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list SOS buckets: %w", err)

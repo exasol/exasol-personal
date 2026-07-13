@@ -9,7 +9,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 // CollectDeploymentSummaries discovers Exasol Personal deployments in the

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
 	"github.com/spf13/cobra"
 )
 
@@ -70,7 +69,7 @@ var cleanupProvidersCmd = &cobra.Command{
 			rows = append(rows, []string{status.Provider, status.Location, connected, account})
 		}
 		if len(rows) > 0 {
-			shared.RenderTable(
+			renderTable(
 				cmd.OutOrStdout(),
 				[]string{"provider", "location", "status", "account"},
 				[]int{12, 14, 12, 24},

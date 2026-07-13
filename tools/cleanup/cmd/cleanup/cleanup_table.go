@@ -1,7 +1,7 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package shared
+package main
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 // RenderTable prints a fixed-width table given headers, widths and row data.
 // Values longer than width are truncated with an ellipsis (last 1 char becomes '…').
 // nolint: revive
-func RenderTable(writer io.Writer, headers []string, widths []int, rows [][]string) {
+func renderTable(writer io.Writer, headers []string, widths []int, rows [][]string) {
 	// Header
 	for i, h := range headers {
 		fmt.Fprint(writer, formatCell(strings.ToUpper(h), widths[i]))

@@ -22,7 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 // Constants from shared package

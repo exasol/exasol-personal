@@ -4,7 +4,7 @@
 package aws
 
 import (
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 // Type aliases for shared types used throughout the aws package

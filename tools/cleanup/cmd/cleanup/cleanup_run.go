@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 	"github.com/spf13/cobra"
 )
 
@@ -223,7 +223,7 @@ func renderCleanupRunResult(
 			result.Action.Reason,
 		})
 	}
-	shared.RenderTable(
+	renderTable(
 		cmd.OutOrStdout(),
 		[]string{"type", "id", "op", "status", "reason"},
 		[]int{20, 25, 8, 10, 20},

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 	"github.com/spf13/cobra"
 )
 
@@ -188,7 +188,7 @@ func renderCleanupShowResult(cmd *cobra.Command, resolved cleanupResolved, detai
 		})
 	}
 	if len(rows) > 0 {
-		shared.RenderTable(
+		renderTable(
 			cmd.OutOrStdout(),
 			[]string{"type", "id", "owner", "created", "state", "arn"},
 			[]int{15, 25, 50, 22, 10, 90},

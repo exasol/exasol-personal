@@ -1,14 +1,14 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package stackit
+package aws
 
 import (
 	"context"
 	"errors"
 	"log/slog"
 
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 // Constants from shared package
@@ -21,15 +21,19 @@ var ErrNoResourcesPlanned = errors.New("no resources found to plan cleanup")
 // BuildPlan constructs the static ordered cleanup plan.
 func BuildPlan() CleanupPlan {
 	return CleanupPlan{Phases: []Phase{
-		{Name: "servers", Types: []ResourceType{ResourceServer}},
-		{Name: "volumes", Types: []ResourceType{ResourceVolume}},
-		{Name: "public-ips", Types: []ResourceType{ResourcePublicIP}},
-		{Name: "network-interfaces", Types: []ResourceType{ResourceNetworkInterface}},
-		{Name: "networks", Types: []ResourceType{ResourceNetwork}},
-		{Name: "security-groups", Types: []ResourceType{ResourceSecurityGroup}},
-		{Name: "objectstorage-buckets", Types: []ResourceType{ResourceObjectStorageBucket}},
-		{Name: "objectstorage-credentials", Types: []ResourceType{ResourceObjectStorageCredential}},
-		{Name: "objectstorage-credentials-groups", Types: []ResourceType{ResourceObjectStorageCredentialsGroup}},
+		{Name: "ec2", Types: []ResourceType{ResourceEC2Instance}},
+		{Name: "keys", Types: []ResourceType{ResourceEC2KeyPair}},
+		{Name: "iam-profiles", Types: []ResourceType{ResourceIAMInstProf}},
+		{Name: "iam-roles", Types: []ResourceType{ResourceIAMRole}},
+		{Name: "ebs", Types: []ResourceType{ResourceEBSVolume}},
+		{
+			Name:  "networking",
+			Types: []ResourceType{ResourceVPCEndpoint, ResourceInternetGW, ResourceRouteTable, ResourceSecurityGrp},
+		},
+		{Name: "subnets", Types: []ResourceType{ResourceSubnet}},
+		{Name: "vpc", Types: []ResourceType{ResourceVPC}},
+		{Name: "ssm", Types: []ResourceType{ResourceSSMParam}},
+		{Name: "s3", Types: []ResourceType{ResourceS3Bucket}},
 	}}
 }
 
@@ -84,15 +88,15 @@ func opForResource(_ ResourceMeta) string {
 	return "delete"
 }
 
-// ExecuteActions runs the actions. Executes deletion if execute=true.
+// ExecuteActions runs the actions. Skeleton: logs and returns planned results.
 //
 //nolint:revive // 'execute' is an intentional flag to control dry-run vs execute behavior.
-func ExecuteActions(ctx context.Context, projectId, region string, actions []Action, execute bool) ([]Result, error) {
+func ExecuteActions(ctx context.Context, actions []Action, execute bool) ([]Result, error) {
 	results := make([]Result, 0, len(actions))
 	for _, action := range actions {
 		res := Result{Action: action, Status: "planned"}
 		if execute && action.Op != OpSkip {
-			if err := deleteResource(ctx, projectId, region, action.Ref); err != nil {
+			if err := deleteResource(ctx, action.Ref.Region, action.Ref); err != nil {
 				res.Status = "failed"
 				res.Error = err.Error()
 				slog.Error(

@@ -8,23 +8,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"slices"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/aws"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/azure"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/exoscale"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/stackit"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
+	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/aws"
+	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/azure"
+	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/exoscale"
+	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/stackit"
 )
 
 const (
-	providerStatusSearched    = "searched"
-	providerStatusSkipped     = "skipped"
-	providerStatusUnavailable = "unavailable"
-	providerStatusError       = "error"
+	providerStatusSearched    = shared.ProviderStatusSearched
+	providerStatusSkipped     = shared.ProviderStatusSkipped
+	providerStatusUnavailable = shared.ProviderStatusUnavailable
+	providerStatusError       = shared.ProviderStatusError
 
 	providerReasonNotSelected     = "not selected"
 	providerReasonCallerLookupErr = "failed to resolve caller identity"
@@ -79,11 +78,7 @@ type cleanupExecutionInfo struct {
 	Types []string `json:"types,omitempty"`
 }
 
-type cleanupResolved struct {
-	Deployment string `json:"deployment"`
-	Provider   string `json:"provider"`
-	Location   string `json:"location"`
-}
+type cleanupResolved = shared.ResolvedDeployment
 
 type cleanupDiscoverJSONOutput struct {
 	Scope   cleanupScope               `json:"scope"`
@@ -120,97 +115,17 @@ type cleanupRunDeploymentJSONOutput struct {
 	Error     *cleanupCommandError     `json:"error,omitempty"`
 }
 
-type cleanupScope struct {
-	Providers []cleanupScopeProvider `json:"providers"`
-}
-
-type cleanupScopeProvider struct {
-	Provider    string `json:"provider"`
-	Location    string `json:"location"`
-	Owner       string `json:"owner"`
-	OwnerSource string `json:"ownerSource,omitempty"`
-	Status      string `json:"status"`
-	Reason      string `json:"reason,omitempty"`
-}
-
-type cleanupOwnerResolution struct {
-	Filter  string
-	Display string
-	Source  string
-	Err     error
-}
-
-type cleanupProviderSpec struct {
-	Name           string
-	Locations      func() []string
-	ResolveOwner   func(context.Context, string) cleanupOwnerResolution
-	BuildCollector func(string, string, bool) shared.ProviderCollector
-}
-
-type cleanupScopedCollector struct {
-	Collector shared.ProviderCollector
-	Scope     *cleanupScopeProvider
-}
-
-type cleanupPlan struct {
-	Scope      cleanupScope
-	Collectors []cleanupScopedCollector
-}
-
-type cleanupLookupMatch struct {
-	Collector shared.ProviderCollector
-	Resolved  cleanupResolved
-}
-
-type cleanupLookupIndex struct {
-	Matches      map[string][]cleanupLookupMatch
-	SuccessCount int
-}
+type cleanupScope = shared.Scope
+type cleanupScopeProvider = shared.ScopeProvider
+type cleanupOwnerResolution = shared.OwnerResolution
+type cleanupProviderSpec = shared.ProviderSpec
+type cleanupScopedCollector = shared.ScopedCollector
+type cleanupPlan = shared.Plan
+type cleanupLookupMatch = shared.LookupMatch
+type cleanupLookupIndex = shared.LookupIndex
 
 func buildCleanupPlan(ctx context.Context, legacy bool) cleanupPlan {
-	plan := cleanupPlan{}
-	for _, spec := range cleanupProviderSpecs() {
-		selected := shouldUseProvider(spec.Name)
-		for _, location := range spec.Locations() {
-			owner := spec.ResolveOwner(ctx, location)
-			entry := cleanupScopeProvider{
-				Provider:    spec.Name,
-				Location:    location,
-				Owner:       owner.Display,
-				OwnerSource: owner.Source,
-				Status:      providerStatusSkipped,
-				Reason:      providerReasonNotSelected,
-			}
-
-			plan.Scope.Providers = append(plan.Scope.Providers, entry)
-			entryRef := &plan.Scope.Providers[len(plan.Scope.Providers)-1]
-			if !selected {
-				continue
-			}
-
-			if owner.Err != nil {
-				entryRef.Status = providerStatusUnavailable
-				entryRef.Reason = owner.Err.Error()
-				continue
-			}
-
-			collector := spec.BuildCollector(location, owner.Filter, legacy)
-			if _, err := collector.GetAccountInfo(ctx); err != nil {
-				entryRef.Status = providerStatusUnavailable
-				entryRef.Reason = err.Error()
-				continue
-			}
-
-			entryRef.Status = providerStatusSearched
-			entryRef.Reason = ""
-			plan.Collectors = append(plan.Collectors, cleanupScopedCollector{
-				Collector: collector,
-				Scope:     entryRef,
-			})
-		}
-	}
-
-	return plan
+	return shared.BuildPlan(ctx, cleanupProviderSpecs(), getSelectedProviders(), legacy)
 }
 
 func lookupDeploymentInPlan(
@@ -218,49 +133,15 @@ func lookupDeploymentInPlan(
 	plan *cleanupPlan,
 	deploymentID string,
 ) ([]cleanupLookupMatch, int) {
-	lookupIndex := collectLookupIndex(ctx, plan)
-
-	return lookupIndex.Matches[deploymentID], lookupIndex.SuccessCount
+	return shared.LookupDeploymentInPlan(ctx, plan, deploymentID)
 }
 
 func collectLookupIndex(ctx context.Context, plan *cleanupPlan) cleanupLookupIndex {
-	lookupIndex := cleanupLookupIndex{
-		Matches: make(map[string][]cleanupLookupMatch),
-	}
-
-	for _, scopedCollector := range plan.Collectors {
-		summaries, err := scopedCollector.Collector.CollectDeploymentSummaries(ctx)
-		if err != nil {
-			scopedCollector.Scope.Status = providerStatusError
-			scopedCollector.Scope.Reason = err.Error()
-			continue
-		}
-
-		lookupIndex.SuccessCount++
-		scopedCollector.Scope.Status = providerStatusSearched
-		scopedCollector.Scope.Reason = ""
-		for _, summary := range summaries {
-			lookupIndex.Matches[summary.ID] = append(lookupIndex.Matches[summary.ID], cleanupLookupMatch{
-				Collector: scopedCollector.Collector,
-				Resolved: cleanupResolved{
-					Deployment: summary.ID,
-					Provider:   summary.Provider,
-					Location:   summary.Region,
-				},
-			})
-		}
-	}
-
-	return lookupIndex
+	return shared.CollectLookupIndex(ctx, plan)
 }
 
 func lookupMatchSummary(matches []cleanupLookupMatch) string {
-	parts := make([]string, 0, len(matches))
-	for _, match := range matches {
-		parts = append(parts, fmt.Sprintf("%s/%s", match.Resolved.Provider, match.Resolved.Location))
-	}
-
-	return strings.Join(parts, ", ")
+	return shared.LookupMatchSummary(matches)
 }
 
 func cleanupProviderSpecs() []cleanupProviderSpec {
@@ -358,39 +239,19 @@ func resolveAzureOwner(_ context.Context, _ string) cleanupOwnerResolution {
 }
 
 func resolvedAWSRegions() []string {
-	return resolvedLocations(cleanupOpts.AWSRegions, []string{"us-east-1"})
+	return shared.ResolvedLocations(cleanupOpts.AWSRegions, []string{"us-east-1"})
 }
 
 func resolvedExoscaleZones() []string {
-	return resolvedLocations(cleanupOpts.ExoscaleZones, []string{"ch-gva-2"})
+	return shared.ResolvedLocations(cleanupOpts.ExoscaleZones, []string{"ch-gva-2"})
 }
 
 func resolvedStackitRegions() []string {
-	return resolvedLocations(cleanupOpts.StackitRegions, []string{"eu01"})
+	return shared.ResolvedLocations(cleanupOpts.StackitRegions, []string{"eu01"})
 }
 
 func resolvedAzureLocations() []string {
-	return resolvedLocations(cleanupOpts.AzureLocations, []string{azure.DefaultLocation})
-}
-
-func resolvedLocations(explicit []string, defaults []string) []string {
-	if len(explicit) == 0 {
-		return append([]string(nil), defaults...)
-	}
-
-	locations := make([]string, 0, len(explicit))
-	for _, location := range explicit {
-		if location == "" || slices.Contains(locations, location) {
-			continue
-		}
-		locations = append(locations, location)
-	}
-
-	if len(locations) == 0 {
-		return append([]string(nil), defaults...)
-	}
-
-	return locations
+	return shared.ResolvedLocations(cleanupOpts.AzureLocations, []string{azure.DefaultLocation})
 }
 
 func renderCleanupScope(writer io.Writer, scope cleanupScope) {
@@ -417,7 +278,7 @@ func renderCleanupScope(writer io.Writer, scope cleanupScope) {
 		})
 	}
 
-	shared.RenderTable(
+	renderTable(
 		writer,
 		[]string{"provider", "location", "owner", "status", "reason"},
 		[]int{12, 14, 28, 12, 40},

@@ -3,7 +3,7 @@
 
 package azure
 
-import "github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+import shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 
 // Type aliases for shared types used throughout the azure package.
 type (

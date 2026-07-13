@@ -4,7 +4,7 @@
 package exoscale
 
 import (
-	"github.com/exasol/exasol-personal/tools/cleanup/internal/shared"
+	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 )
 
 // Type aliases for shared types used throughout the exoscale package
@@ -24,14 +24,14 @@ type ResourceType = shared.ResourceType
 
 // Exoscale-specific resource type constants
 const (
-	ResourceComputeInstance  ResourceType = "exoscale-compute-instance"
-	ResourceBlockVolume      ResourceType = "exoscale-block-storage-volume"
-	ResourcePrivateNetwork   ResourceType = "exoscale-private-network"
-	ResourceSecurityGroup    ResourceType = "exoscale-security-group"
-	ResourceSSHKey           ResourceType = "exoscale-ssh-key"
-	ResourceIAMRole          ResourceType = "exoscale-iam-role"
-	ResourceIAMAPIKey        ResourceType = "exoscale-iam-api-key"
-	ResourceSOSBucket        ResourceType = "sos-bucket"
+	ResourceComputeInstance ResourceType = "exoscale-compute-instance"
+	ResourceBlockVolume     ResourceType = "exoscale-block-storage-volume"
+	ResourcePrivateNetwork  ResourceType = "exoscale-private-network"
+	ResourceSecurityGroup   ResourceType = "exoscale-security-group"
+	ResourceSSHKey          ResourceType = "exoscale-ssh-key"
+	ResourceIAMRole         ResourceType = "exoscale-iam-role"
+	ResourceIAMAPIKey       ResourceType = "exoscale-iam-api-key"
+	ResourceSOSBucket       ResourceType = "sos-bucket"
 )
 
 // Organization represents an Exoscale organization from the API

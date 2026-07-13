@@ -5,6 +5,8 @@ A small, standalone utility to discover and clean up Exasol Personal deployments
 This internal tool is written and maintained almost exclusively using agentic AI. It's not part of any official release, not officially supported and purely internal.
 Feel free to use if you find it useful though.
 
+The cleanup core is also available as an internal Go library under `pkg/cleanup`. The library returns typed deployment, resource, action, and result data and intentionally does not write to stdout or stderr; command-line parsing and terminal output stay in the standalone CLI.
+
 ## Usage
 
 Build:
