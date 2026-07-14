@@ -6,6 +6,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -80,6 +81,128 @@ func TestResolveDeploymentDir_DefaultWinsWhenFlagOmittedOutsideDeploymentDir(t *
 	if deployment.Root() != expected {
 		t.Fatalf("expected %q, got %q", expected, deployment.Root())
 	}
+}
+
+//nolint:paralleltest // t.Chdir changes process state.
+func TestResolveDeploymentDir_NamedFlagWins(t *testing.T) {
+	// Given: the current working directory is not recognized as a deployment directory.
+	home := t.TempDir()
+	cwd := t.TempDir()
+	setTestHome(t, home)
+	t.Chdir(cwd)
+	cmd, state := commandWithDeploymentSelection(t, "", "staging")
+
+	// When: deployment directory resolution runs.
+	deployment, source, err := resolveDeploymentDir(cmd, state)
+	// Then: the named deployment directory is used.
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if source != deploymentDirSourceNamed {
+		t.Fatalf("expected named source, got %v", source)
+	}
+	expected := filepath.Join(config.LauncherDirPath(home), "deployments", "staging")
+	if deployment.Root() != expected {
+		t.Fatalf("expected %q, got %q", expected, deployment.Root())
+	}
+}
+
+//nolint:paralleltest // t.Chdir changes process state.
+func TestResolveDeploymentDir_NamedFlagWinsOverCurrentDeploymentDir(t *testing.T) {
+	// Given: the current working directory is itself a different recognized deployment directory.
+	home := t.TempDir()
+	cwd := t.TempDir()
+	setTestHome(t, home)
+	t.Chdir(cwd)
+	writeTestMarker(t, filepath.Join(cwd, config.ExasolPersonalStateFileName))
+	cmd, state := commandWithDeploymentSelection(t, "", "staging")
+
+	// When: deployment directory resolution runs.
+	deployment, source, err := resolveDeploymentDir(cmd, state)
+	// Then: the explicit --deployment flag wins over the current directory.
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if source != deploymentDirSourceNamed {
+		t.Fatalf("expected named source, got %v", source)
+	}
+	expected := filepath.Join(config.LauncherDirPath(home), "deployments", "staging")
+	if deployment.Root() != expected {
+		t.Fatalf("expected %q, got %q", expected, deployment.Root())
+	}
+}
+
+func TestResolveDeploymentDirFromValues_DeploymentDirWinsOverNameWhenBothChanged(t *testing.T) {
+	t.Parallel()
+
+	// Given: both --deployment-dir and --deployment are marked as explicitly set.
+	explicit := filepath.Join(t.TempDir(), "explicit")
+	values := deploymentDirFlagValues{
+		deploymentDir:        explicit,
+		deploymentDirChanged: true,
+		name:                 "staging",
+		nameChanged:          true,
+	}
+
+	// When: the shared precedence resolver runs.
+	deployment, source, err := resolveDeploymentDirFromValues(values)
+	// Then: --deployment-dir wins.
+	//
+	// Real command execution never reaches this combination: Cobra's
+	// MarkFlagsMutuallyExclusive plus the early ValidateFlagGroups call in root's
+	// PersistentPreRunE reject it first. This deterministic precedence only
+	// matters for the harmless pre-Cobra raw-args pre-scan.
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if source != deploymentDirSourceExplicit {
+		t.Fatalf("expected explicit source, got %v", source)
+	}
+	if deployment.Root() != explicit {
+		t.Fatalf("expected %q, got %q", explicit, deployment.Root())
+	}
+}
+
+func TestRegisterDeploymentDirFlag_DeploymentDirAndNameAreMutuallyExclusive(t *testing.T) {
+	t.Parallel()
+
+	// Given: a command with both flags set.
+	cmd, _ := commandWithDeploymentSelection(t, "/tmp/explicit", "staging")
+
+	// When: flag groups are validated.
+	err := cmd.ValidateFlagGroups()
+	// Then: it fails, naming both flags.
+	if err == nil {
+		t.Fatal("expected an error for setting both --deployment-dir and --deployment")
+	}
+	if !strings.Contains(err.Error(), deploymentDirFlagName) ||
+		!strings.Contains(err.Error(), deploymentNameFlagName) {
+		t.Fatalf("expected error to mention both flags, got: %v", err)
+	}
+}
+
+func commandWithDeploymentSelection(
+	t *testing.T,
+	deploymentDirValue string,
+	nameValue string,
+) (*cobra.Command, *CommonFlags) {
+	t.Helper()
+
+	state := &CommonFlags{}
+	cmd := &cobra.Command{Use: "test"}
+	registerDeploymentDirFlag(cmd, state)
+	if deploymentDirValue != "" {
+		if err := cmd.Flags().Set(deploymentDirFlagName, deploymentDirValue); err != nil {
+			t.Fatalf("failed to set deployment-dir flag: %v", err)
+		}
+	}
+	if nameValue != "" {
+		if err := cmd.Flags().Set(deploymentNameFlagName, nameValue); err != nil {
+			t.Fatalf("failed to set name flag: %v", err)
+		}
+	}
+
+	return cmd, state
 }
 
 func setTestHome(t *testing.T, home string) {

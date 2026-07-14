@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
@@ -159,5 +160,92 @@ func TestDeploymentDirFromRawArgs_EqualsFlagValue(t *testing.T) {
 	}
 	if deployment.Root() != deploymentDir {
 		t.Fatalf("expected deployment dir %q, got %q", deploymentDir, deployment.Root())
+	}
+}
+
+func TestDeploymentDirFromRawArgs_DeploymentFlag(t *testing.T) {
+	home := t.TempDir()
+	setTestHome(t, home)
+
+	deployment, err := deploymentDirFromRawArgs([]string{
+		"config",
+		"set",
+		"--deployment",
+		"staging",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := filepath.Join(config.LauncherDirPath(home), "deployments", "staging")
+	if deployment.Root() != expected {
+		t.Fatalf("expected deployment dir %q, got %q", expected, deployment.Root())
+	}
+}
+
+func TestDeploymentDirFromRawArgs_DeploymentShorthandFlag(t *testing.T) {
+	home := t.TempDir()
+	setTestHome(t, home)
+
+	deployment, err := deploymentDirFromRawArgs([]string{
+		"config",
+		"set",
+		"-d",
+		"staging",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := filepath.Join(config.LauncherDirPath(home), "deployments", "staging")
+	if deployment.Root() != expected {
+		t.Fatalf("expected deployment dir %q, got %q", expected, deployment.Root())
+	}
+}
+
+//nolint:paralleltest // t.Chdir and t.Setenv change process state.
+func TestResolveDeploymentDirAndDeploymentDirFromRawArgs_AgreeOnSameInputs(t *testing.T) {
+	home := t.TempDir()
+	cwd := t.TempDir()
+	setTestHome(t, home)
+	t.Chdir(cwd)
+
+	testCases := []struct {
+		name           string
+		deploymentDir  string
+		deploymentName string
+	}{
+		{name: "explicit deployment-dir", deploymentDir: filepath.Join(t.TempDir(), "explicit")},
+		{name: "explicit name", deploymentName: "staging"},
+		{name: "neither flag falls back to default", deploymentDir: "", deploymentName: ""},
+	}
+
+	for _, testCase := range testCases {
+		args := []string{"config", "set"}
+		if testCase.deploymentDir != "" {
+			args = append(args, "--deployment-dir", testCase.deploymentDir)
+		}
+		if testCase.deploymentName != "" {
+			args = append(args, "--deployment", testCase.deploymentName)
+		}
+
+		cmd, state := commandWithDeploymentSelection(
+			t, testCase.deploymentDir, testCase.deploymentName,
+		)
+
+		fromCommand, _, err := resolveDeploymentDir(cmd, state)
+		if err != nil {
+			t.Fatalf("[%s] resolveDeploymentDir failed: %v", testCase.name, err)
+		}
+
+		fromRawArgs, err := deploymentDirFromRawArgs(args)
+		if err != nil {
+			t.Fatalf("[%s] deploymentDirFromRawArgs failed: %v", testCase.name, err)
+		}
+
+		if fromCommand.Root() != fromRawArgs.Root() {
+			t.Fatalf(
+				"[%s] resolveDeploymentDir and deploymentDirFromRawArgs disagree: %q vs %q",
+				testCase.name, fromCommand.Root(), fromRawArgs.Root(),
+			)
+		}
 	}
 }
