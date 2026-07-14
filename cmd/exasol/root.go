@@ -67,6 +67,16 @@ var rootCmd = &cobra.Command{
 		// Root-level pre-run is the single place where we enforce cross-cutting concerns.
 		// Design decision: keep this centralized so individual commands don't have to
 		// remember to repeat it (and so user-visible behavior stays consistent).
+		//
+		// Cobra only validates flag groups (e.g. MarkFlagsMutuallyExclusive) after
+		// PersistentPreRunE returns, so an invalid combination would otherwise reach
+		// resolution, compatibility enforcement, deployment logging, and the
+		// version-update check before being rejected. Validate here first so a
+		// rejected command has no side effects. Cobra's own later call becomes a
+		// harmless no-op on the success path.
+		if err := cmd.ValidateFlagGroups(); err != nil {
+			return err
+		}
 		if err := setupLogging(); err != nil {
 			return err
 		}

@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/spf13/cobra"
@@ -53,29 +51,20 @@ func deploymentDirFromRawArgs(args []string) (config.DeploymentDir, error) {
 	flagset.ParseErrorsAllowlist.UnknownFlags = true
 
 	var deploymentDir string
+	var name string
 	flagset.StringVar(&deploymentDir, deploymentDirFlagName, "", "")
+	flagset.StringVarP(&name, deploymentNameFlagName, "d", "", "")
 
 	if err := flagset.Parse(args); err != nil && !errors.Is(err, pflag.ErrHelp) {
 		return config.DeploymentDir{}, fmt.Errorf("cannot parse deployment directory: %w", err)
 	}
-	if flagset.Changed(deploymentDirFlagName) {
-		return config.NewDeploymentDir(deploymentDir), nil
-	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return config.DeploymentDir{}, err
-	}
-	if recognized, err := isRecognizedDeploymentDir(cwd); err != nil {
-		return config.DeploymentDir{}, err
-	} else if recognized {
-		return config.NewDeploymentDir(cwd), nil
-	}
+	deployment, _, err := resolveDeploymentDirFromValues(deploymentDirFlagValues{
+		deploymentDir:        deploymentDir,
+		deploymentDirChanged: flagset.Changed(deploymentDirFlagName),
+		name:                 name,
+		nameChanged:          flagset.Changed(deploymentNameFlagName),
+	})
 
-	defaultDir, err := defaultDeploymentDir()
-	if err != nil {
-		return config.DeploymentDir{}, err
-	}
-
-	return config.NewDeploymentDir(filepath.Clean(defaultDir)), nil
+	return deployment, err
 }

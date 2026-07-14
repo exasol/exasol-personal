@@ -4,6 +4,9 @@
 package main
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -18,7 +21,8 @@ type CommonFlags struct {
 	LogLevel string
 
 	// Common flags for commands that interact with a deployment directory
-	DeploymentDir string
+	DeploymentDir  string
+	DeploymentName string
 
 	// Common flags for initialization (init and install)
 	NoLauncherVersionCheck bool
@@ -65,6 +69,17 @@ func registerDeploymentDirFlag(cmd *cobra.Command, state *CommonFlags) {
 		"",
 		"Override the deployment directory selected automatically",
 	)
+	DeploymentNameVar(
+		cmd.Flags(),
+		&state.DeploymentName,
+		deploymentNameFlagName,
+		"d",
+		fmt.Sprintf(
+			"Select %s%c<name> as the deployment directory",
+			deploymentsRootDisplayPath(), os.PathSeparator,
+		),
+	)
+	cmd.MarkFlagsMutuallyExclusive(deploymentDirFlagName, deploymentNameFlagName)
 }
 
 func registerDeployFlags(cmd *cobra.Command, state *CommonFlags) {
