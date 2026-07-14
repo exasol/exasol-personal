@@ -376,6 +376,64 @@ func TestStop_InvokesOriginalRunnerStop(t *testing.T) {
 	}
 }
 
+func TestHealthCheck_ParsesPortStates(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("fake local runner script is POSIX-only")
+	}
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	localRuntime := newRuntime(deployment, Config{})
+	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
+		t.Fatalf("failed to create local runtime directory: %v", err)
+	}
+
+	runnerScript := `#!/bin/sh
+echo '{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}'
+`
+	writeExecutableTestFile(t, localRuntime.paths.RunnerPath, []byte(runnerScript))
+
+	// When
+	result, err := HealthCheck(context.Background(), deployment)
+	// Then
+	if err != nil {
+		t.Fatalf("expected health-check to succeed, got %v", err)
+	}
+	if result.Ports["ssh"].State != PortStateReachable {
+		t.Fatalf("ssh state = %q, want %q", result.Ports["ssh"].State, PortStateReachable)
+	}
+	if result.Ports["db"].State != PortStateBlocked {
+		t.Fatalf("db state = %q, want %q", result.Ports["db"].State, PortStateBlocked)
+	}
+}
+
+func TestHealthCheck_ReturnsErrorOnRunnerFailure(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("fake local runner script is POSIX-only")
+	}
+
+	// Given: an old runner that does not understand "health-check" yet.
+	deployment := config.NewDeploymentDir(t.TempDir())
+	localRuntime := newRuntime(deployment, Config{})
+	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
+		t.Fatalf("failed to create local runtime directory: %v", err)
+	}
+
+	runnerScript := "#!/bin/sh\necho 'Unknown command: health-check' >&2\nexit 1\n"
+	writeExecutableTestFile(t, localRuntime.paths.RunnerPath, []byte(runnerScript))
+
+	// When
+	_, err := HealthCheck(context.Background(), deployment)
+	// Then
+	if err == nil {
+		t.Fatal("expected health-check against an unsupporting runner to fail")
+	}
+}
+
 func TestWaitForDaemonExit_IgnoresMissingPIDFile(t *testing.T) {
 	t.Parallel()
 

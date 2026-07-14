@@ -55,7 +55,11 @@ func Connect(ctx context.Context, opts *connect.Opts, deployment config.Deployme
 				return err
 			}
 
-			return connect.Connect(ctx, opts, deployment, connectionInfo)
+			if err := connect.Connect(ctx, opts, deployment, connectionInfo); err != nil {
+				return diagnoseLocalFailure(ctx, deployment, err)
+			}
+
+			return nil
 		})
 
 	return err

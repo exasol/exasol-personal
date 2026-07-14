@@ -100,7 +100,7 @@ func defaultConnectFunc(input string) (types.ExasolConnector, error) {
 func (db *Database) Connect(ctx context.Context) error {
 	slog.Debug("connecting to the database", "connection_string", db.connectionString)
 
-	conn, err := db.connect(db.connectionString)
+	conn, err := db.connectWithContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -167,6 +167,40 @@ func (db *Database) Exec(
 	}
 
 	return result, nil
+}
+
+// connectWithContext runs db.connect in a goroutine so ctx's cancellation/
+// deadline is honored even though the underlying database/sql/driver.Open
+// signature has no context parameter of its own. The dial goroutine is not
+// forcibly stopped when ctx is done; it runs to completion in the background
+// and its (now-unused) result is discarded.
+func (db *Database) connectWithContext(ctx context.Context) (types.ExasolConnector, error) {
+	type dialResult struct {
+		conn types.ExasolConnector
+		err  error
+	}
+	resultCh := make(chan dialResult, 1)
+
+	go func() {
+		conn, err := db.connect(db.connectionString)
+		resultCh <- dialResult{conn, err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		return result.conn, result.err
+	case <-ctx.Done():
+		// Avoid leaking a successful connection if the dial returns after ctx
+		// is done.
+		go func() {
+			result := <-resultCh
+			if result.conn != nil {
+				_ = result.conn.Close()
+			}
+		}()
+
+		return nil, ctx.Err()
+	}
 }
 
 // collectRows materializes up to maxRows rows from rows (maxRows == 0 means

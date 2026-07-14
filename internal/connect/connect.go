@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/connect/exasol"
@@ -82,6 +83,11 @@ const MaxRowsUnset = -1
 
 // interactivePreviewMaxRows is the default row cap for interactive sessions.
 const interactivePreviewMaxRows = 100
+
+// connectDialTimeout bounds the initial connection dial, which otherwise has
+// no timeout of its own: the underlying database/sql/driver.Open call takes
+// no context, so without this an unreachable endpoint hangs indefinitely.
+const connectDialTimeout = 30 * time.Second
 
 // effectiveMaxRows returns the explicit row limit when one was set, otherwise
 // the mode default. A negative requested value means "unset".
@@ -183,7 +189,9 @@ func Connect(
 		return err
 	}
 
-	if err := database.Connect(ctx); err != nil {
+	dialCtx, cancel := context.WithTimeout(ctx, connectDialTimeout)
+	defer cancel()
+	if err := database.Connect(dialCtx); err != nil {
 		return err
 	}
 

@@ -326,7 +326,11 @@ func (b *localBackend) OpenHostShell(
 		return err
 	}
 
-	return sshRemote.Shell(ctx, os.Stdout, os.Stderr)
+	if err := sshRemote.Shell(ctx, os.Stdout, os.Stderr); err != nil {
+		return diagnoseLocalFailure(ctx, b.deployment, err)
+	}
+
+	return nil
 }
 
 func (b *localBackend) OpenCOSShell(ctx context.Context) error {
@@ -340,7 +344,11 @@ func (b *localBackend) OpenCOSShell(ctx context.Context) error {
 		return err
 	}
 
-	return sshRemote.RunInteractiveCommand(ctx, command, os.Stdout, os.Stderr)
+	if err := sshRemote.RunInteractiveCommand(ctx, command, os.Stdout, os.Stderr); err != nil {
+		return diagnoseLocalFailure(ctx, b.deployment, err)
+	}
+
+	return nil
 }
 
 func localContainerShellCommand() (string, error) {
@@ -422,7 +430,10 @@ func detectLocalHostMemoryMB(ctx context.Context) int {
 	// Host memory detection is only implemented for macOS today; other platforms
 	// return an error here and fall back to the fixed default, which keeps local
 	// sizing deterministic where local deployments are not yet supported.
+	//nolint:staticcheck // SA4023: See comment below.
 	memoryMB, err := util.GetTotalMemoryMB(ctx)
+	//nolint:staticcheck // SA4023: only true for the unsupported-platform build of
+	// util.GetTotalMemoryMB; on darwin it can succeed.
 	if err != nil {
 		return 0
 	}
@@ -495,13 +506,15 @@ func (b *localBackend) Deploy(
 		return err
 	}
 
-	return deployLocalRuntime(ctx, b.deployment, runtimeConfig, out, outErr)
+	// Deploy has no caller-supplied timeout in the backend interface, unlike
+	// Start; 0 falls back to LocalDatabaseStartedDefaultTimeoutSeconds.
+	return deployLocalRuntime(ctx, b.deployment, runtimeConfig, 0, out, outErr)
 }
 
 func (b *localBackend) Start(
 	ctx context.Context,
 	out, outErr io.Writer,
-	_ int,
+	waitTimeoutSeconds int,
 ) error {
 	if err := b.ValidateEnvironment(); err != nil {
 		return err
@@ -511,7 +524,7 @@ func (b *localBackend) Start(
 		return err
 	}
 
-	return startLocalRuntime(ctx, b.deployment, runtimeConfig, out, outErr)
+	return startLocalRuntime(ctx, b.deployment, runtimeConfig, waitTimeoutSeconds, out, outErr)
 }
 
 func (b *localBackend) Stop(
