@@ -86,6 +86,9 @@ const (
 	LocalDatabaseStartedMaxBackoff     = 8
 	StartedInitialBackoff              = 10
 	StartedMaxBackoff                  = 60
+	// LocalDatabaseStartedDefaultTimeoutSeconds is shorter than the cloud
+	// default since a local VM boots in seconds, not minutes.
+	LocalDatabaseStartedDefaultTimeoutSeconds = 5 * 60
 )
 
 func Getn11Details(deployment config.DeploymentDir) (*config.SSHDetails, error) {

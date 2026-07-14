@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
@@ -24,15 +25,17 @@ func deployLocalRuntime(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	runtimeConfig localRuntimeConfig,
+	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
-	return startLocalRuntime(ctx, deployment, runtimeConfig, out, outErr)
+	return startLocalRuntime(ctx, deployment, runtimeConfig, waitTimeoutSeconds, out, outErr)
 }
 
 func startLocalRuntime(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	runtimeConfig localRuntimeConfig,
+	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
 	if err := localruntime.Prepare(
@@ -45,13 +48,16 @@ func startLocalRuntime(
 		return err
 	}
 
-	return startPreparedLocalRuntime(ctx, deployment, runtimeConfig, out, outErr)
+	return startPreparedLocalRuntime(
+		ctx, deployment, runtimeConfig, waitTimeoutSeconds, out, outErr,
+	)
 }
 
 func startPreparedLocalRuntime(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	runtimeConfig localRuntimeConfig,
+	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
 	paths := localruntime.NewPaths(deployment)
@@ -81,7 +87,7 @@ func startPreparedLocalRuntime(
 		out,
 		outErr,
 	); err != nil {
-		return err
+		return diagnoseLocalFailure(ctx, deployment, err)
 	}
 
 	state, err := localruntime.ReadState(deployment)
@@ -89,7 +95,7 @@ func startPreparedLocalRuntime(
 		return err
 	}
 
-	return writeLocalRuntimeArtifactsAndWait(ctx, deployment, state)
+	return writeLocalRuntimeArtifactsAndWait(ctx, deployment, state, waitTimeoutSeconds)
 }
 
 func localRunnerVersionCheckArgs(deployment config.DeploymentDir) ([]string, error) {
@@ -224,6 +230,7 @@ func writeLocalRuntimeArtifactsAndWait(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	state *localruntime.State,
+	waitTimeoutSeconds int,
 ) error {
 	if err := writeLocalDeploymentArtifacts(deployment, state); err != nil {
 		return err
@@ -232,7 +239,13 @@ func writeLocalRuntimeArtifactsAndWait(
 		return nil
 	}
 
-	return WaitForLocalDatabaseStarted(ctx, deployment)
+	if waitTimeoutSeconds <= 0 {
+		waitTimeoutSeconds = LocalDatabaseStartedDefaultTimeoutSeconds
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, time.Duration(waitTimeoutSeconds)*time.Second)
+	defer cancel()
+
+	return WaitForLocalDatabaseStarted(waitCtx, deployment)
 }
 
 func writeLocalDeploymentArtifacts(

@@ -144,22 +144,60 @@ type VMStatus struct {
 }
 
 func Status(ctx context.Context, deployment config.DeploymentDir) (*VMStatus, error) {
+	return runnerCommandJSON[VMStatus](ctx, deployment, "status")
+}
+
+// PortState is one of the runner's classified per-port reachability states,
+// treated as an opaque external contract: this package does not interpret
+// how the runner arrived at it, only which value it reported.
+type PortState string
+
+const (
+	PortStateReachable PortState = "reachable"
+	PortStateRefused   PortState = "refused"
+	PortStateBlocked   PortState = "blocked"
+	PortStateTimeout   PortState = "timeout"
+)
+
+type PortHealth struct {
+	State PortState `json:"state"`
+}
+
+type HealthCheckResult struct {
+	Ports map[string]PortHealth `json:"ports"`
+}
+
+// HealthCheck asks the runner to freshly probe every forwarded port's guest
+// reachability. Unlike Status, this can trigger real network dials on the
+// runner side, so callers should only invoke it when they actually need a
+// reachability diagnosis, not from routine/frequent code paths.
+func HealthCheck(ctx context.Context, deployment config.DeploymentDir) (*HealthCheckResult, error) {
+	return runnerCommandJSON[HealthCheckResult](ctx, deployment, "health-check")
+}
+
+// runnerCommandJSON is shared by Status and HealthCheck, which differ only
+// in the subcommand name and result shape.
+func runnerCommandJSON[T any](
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	command string,
+) (*T, error) {
 	runtime := newRuntime(deployment, Config{})
 	if err := runtime.ensureRunnerExecutable(); err != nil {
 		return nil, err
 	}
 
-	stdout, err := runtime.runnerCommandWithOutput(ctx, []string{"status"})
+	stdout, err := runtime.runnerCommandWithOutput(ctx, []string{command})
 	if err != nil {
 		return nil, err
 	}
 
-	var status VMStatus
-	if err := json.Unmarshal([]byte(stdout), &status); err != nil {
-		return nil, fmt.Errorf("failed to parse local runner status output: %w", err)
+	var result T
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		return nil, fmt.Errorf("failed to parse local runner %s output: %w", command, err)
 	}
 
-	return &status, nil
+	return &result, nil
 }
 
 func Stop(ctx context.Context, deployment config.DeploymentDir, out, outErr io.Writer) error {

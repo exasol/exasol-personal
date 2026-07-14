@@ -88,6 +88,12 @@ func WaitForLocalDatabaseStarted(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 ) error {
+	// Fail fast on an already-blocked network path instead of waiting out the
+	// whole backoff window on a problem that will never resolve on its own.
+	if err := classifyLocalReachability(ctx, deployment); err != nil {
+		return err
+	}
+
 	return waitForDatabaseStartedWithBackoff(
 		ctx,
 		deployment,
