@@ -101,13 +101,5 @@ func markDestroyInterrupted(
 	deployment config.DeploymentDir,
 	destroyErr error,
 ) error {
-	stateErr := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
-		Error:                      destroyErr.Error(),
-		InterruptedDuringOperation: config.DestroyOperation,
-	}, deployment)
-	if stateErr != nil {
-		slog.Warn("failed to persist destroy failure state", "error", stateErr)
-	}
-
-	return destroyErr
+	return markOperationInterrupted(exasolState, deployment, config.DestroyOperation, destroyErr)
 }
