@@ -10,7 +10,12 @@ The system SHALL provide a local deployment option for macOS Apple Silicon that 
 #### Scenario: Install local deployment
 
 - **WHEN** a user runs `exasol install local` in an empty deployment directory on supported macOS Apple Silicon
-- **THEN** the launcher initializes the deployment directory, starts the Exasol Local VM, and records the deployment as running
+- **THEN** the launcher initializes the deployment directory, starts the Exasol Local VM, waits up to a bounded timeout until the database accepts connections, and records the deployment as running
+
+#### Scenario: Install local deployment times out
+
+- **WHEN** a user runs `exasol install local` and the database does not become ready within the bounded timeout
+- **THEN** the launcher fails the command rather than waiting indefinitely
 
 #### Scenario: Reject unsupported local platform
 
@@ -67,7 +72,7 @@ The system SHALL allow `exasol connect` to connect to the Exasol Local database 
 #### Scenario: Connect to local database
 
 - **WHEN** a local deployment is running and the user runs `exasol connect`
-- **THEN** the launcher connects to the Exasol Local database through the loopback database endpoint using the stored local credentials
+- **THEN** the launcher connects to the Exasol Local database through the loopback database endpoint using the stored local credentials, within a bounded timeout
 
 #### Scenario: Local certificate validation mode
 
@@ -86,7 +91,12 @@ The system SHALL support standard lifecycle commands for local deployments.
 #### Scenario: Start local deployment
 
 - **WHEN** a local deployment is stopped and the user runs `exasol start`
-- **THEN** the launcher starts the Exasol Local VM, waits until the database accepts connections, refreshes connection artifacts, and records the deployment as running
+- **THEN** the launcher starts the Exasol Local VM, waits up to a bounded timeout until the database accepts connections, refreshes connection artifacts, and records the deployment as running
+
+#### Scenario: Start local deployment times out
+
+- **WHEN** a local deployment is stopped, the user runs `exasol start`, and the database does not become ready within the bounded timeout
+- **THEN** the launcher fails the command rather than waiting indefinitely
 
 #### Scenario: Destroy local deployment
 
