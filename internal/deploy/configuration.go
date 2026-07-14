@@ -201,9 +201,14 @@ func readDeploymentConfiguration(
 	if err != nil {
 		return DeploymentConfiguration{}, err
 	}
-	presetIdentities, err := loadOrBackfillPresetIdentity(exasolState, deployment)
+	presetIdentities, backfilled, err := resolvePresetIdentity(exasolState, deployment)
 	if err != nil {
 		return DeploymentConfiguration{}, err
+	}
+	if backfilled {
+		if err := config.WriteExasolPersonalState(exasolState, deployment); err != nil {
+			return DeploymentConfiguration{}, err
+		}
 	}
 	sortConfigurationValues(infraValues)
 	sortConfigurationValues(installValues)

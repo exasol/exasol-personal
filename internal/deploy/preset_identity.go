@@ -55,9 +55,14 @@ func EnsureDeploymentPresetIdentityMatches(
 	if err != nil {
 		return err
 	}
-	existing, err := loadOrBackfillPresetIdentity(state, deployment)
+	existing, backfilled, err := resolvePresetIdentity(state, deployment)
 	if err != nil {
 		return err
+	}
+	if backfilled {
+		if err := config.WriteExasolPersonalState(state, deployment); err != nil {
+			return err
+		}
 	}
 
 	requested := presetIdentityPair{
@@ -90,27 +95,61 @@ type presetIdentityPair struct {
 	installation   string
 }
 
-// loadOrBackfillPresetIdentity returns the persisted preset identity pair.
-// For deployments initialized by older launcher versions that lack the
-// identity fields, it backfills from extracted manifests and persists.
-func loadOrBackfillPresetIdentity(
+// PresetIdentityDisplay holds display-ready preset names for a deployment.
+type PresetIdentityDisplay struct {
+	Infrastructure string
+	Installation   string
+}
+
+// ResolveDeploymentPresetIdentity returns the display-ready infrastructure and
+// installation preset names for an initialized deployment, deriving them from
+// extracted manifests when the persisted state predates preset-identity
+// tracking. Unlike EnsureDeploymentPresetIdentityMatches, it never writes to
+// the deployment's state file: callers that only need to display the preset
+// identity (such as `exasol deployments list`) must not carry a hidden write
+// side effect.
+func ResolveDeploymentPresetIdentity(
+	deployment config.DeploymentDir,
+) (PresetIdentityDisplay, error) {
+	state, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return PresetIdentityDisplay{}, err
+	}
+
+	pair, _, err := resolvePresetIdentity(state, deployment)
+	if err != nil {
+		return PresetIdentityDisplay{}, err
+	}
+
+	return PresetIdentityDisplay{
+		Infrastructure: presetIdentityDisplay(pair.infrastructure),
+		Installation:   presetIdentityDisplay(pair.installation),
+	}, nil
+}
+
+// resolvePresetIdentity returns the persisted preset identity pair. For
+// deployments initialized by older launcher versions that lack the identity
+// fields, it derives one from extracted manifests instead, and reports that
+// via the second return value so the caller can decide whether to persist it.
+// resolvePresetIdentity itself never writes to the deployment's state file.
+func resolvePresetIdentity(
 	state *config.ExasolPersonalState,
 	deployment config.DeploymentDir,
-) (presetIdentityPair, error) {
+) (presetIdentityPair, bool, error) {
 	if state.InfrastructurePresetIdentity != "" && state.InstallationPresetIdentity != "" {
 		return presetIdentityPair{
 			infrastructure: state.InfrastructurePresetIdentity,
 			installation:   state.InstallationPresetIdentity,
-		}, nil
+		}, false, nil
 	}
 
 	infraManifest, err := config.ReadInfrastructureManifest(deployment)
 	if err != nil {
-		return presetIdentityPair{}, fmt.Errorf("backfill preset identity: %w", err)
+		return presetIdentityPair{}, false, fmt.Errorf("backfill preset identity: %w", err)
 	}
 	installManifest, err := config.ReadInstallManifest(deployment)
 	if err != nil {
-		return presetIdentityPair{}, fmt.Errorf("backfill preset identity: %w", err)
+		return presetIdentityPair{}, false, fmt.Errorf("backfill preset identity: %w", err)
 	}
 
 	pair := presetIdentityPair{
@@ -142,11 +181,8 @@ func loadOrBackfillPresetIdentity(
 
 	state.InfrastructurePresetIdentity = pair.infrastructure
 	state.InstallationPresetIdentity = pair.installation
-	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
-		return presetIdentityPair{}, err
-	}
 
-	return pair, nil
+	return pair, true, nil
 }
 
 // backfilledEmbeddedIdentity matches a manifest's display name to an embedded
