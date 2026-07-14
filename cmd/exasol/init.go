@@ -4,6 +4,8 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -19,11 +21,16 @@ const (
 
 var initCmdShortDesc = `Initialize a new deployment directory`
 
-const (
-	deploymentDirectoryResolutionHelp = `
+// deploymentDirectoryResolutionHelp is built at startup (not a const) because
+// it interpolates the launcher's default and named deployment directory
+// paths using the current platform's real path conventions.
+var deploymentDirectoryResolutionHelp = fmt.Sprintf(`
 	If --deployment-dir is not provided and the current directory is not a deployment directory,
-	uses ~/.exasol/personal/deployments/default.
-`
+	uses %s. Pass --deployment <name> (-d <name>) to use
+	%s%c<name> instead.
+`, defaultDeploymentDirDisplayPath(), deploymentsRootDisplayPath(), os.PathSeparator)
+
+const (
 	presetSelectionHelp = `
 	Preset arguments:
 	  - The first argument selects the infrastructure preset (required).

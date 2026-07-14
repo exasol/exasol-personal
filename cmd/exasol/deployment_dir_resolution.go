@@ -187,11 +187,21 @@ func defaultDeploymentDir() (string, error) {
 	return config.DefaultDeploymentDirPath()
 }
 
-// deploymentsRootDisplayPath resolves the launcher-managed deployments root
-// path using the current platform's real path conventions, for use in
-// --help text generated at startup. It falls back to a platform-neutral
-// description in the rare case the home directory cannot be resolved (e.g.
-// HOME/USERPROFILE unset), rather than failing --help entirely.
+// defaultDeploymentDirDisplayPath and deploymentsRootDisplayPath resolve the
+// launcher-managed deployment paths using the current platform's real path
+// conventions, for use in --help text generated at startup. They fall back
+// to a platform-neutral description in the rare case the home directory
+// cannot be resolved (e.g. HOME/USERPROFILE unset), rather than failing
+// --help entirely.
+func defaultDeploymentDirDisplayPath() string {
+	path, err := defaultDeploymentDir()
+	if err != nil {
+		return "the launcher's default deployment directory in your home directory"
+	}
+
+	return path
+}
+
 func deploymentsRootDisplayPath() string {
 	root, err := config.DeploymentsRootPath()
 	if err != nil {

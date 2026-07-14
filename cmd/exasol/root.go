@@ -17,10 +17,12 @@ import (
 	"golang.org/x/term"
 )
 
-const (
-	rootCmdShortDesc = `Exasol Personal: https://github.com/exasol/exasol-personal`
+const rootCmdShortDesc = `Exasol Personal: https://github.com/exasol/exasol-personal`
 
-	rootCmdLongDesc = rootCmdShortDesc + `
+// rootCmdLongDesc is built at startup (not a const) because it interpolates
+// the launcher's default and named deployment directory paths using the
+// current platform's real path conventions.
+var rootCmdLongDesc = rootCmdShortDesc + fmt.Sprintf(`
 
 Getting Started:
 	To create and run an Exasol deployment, run "exasol install <infra preset name-or-path>".
@@ -32,15 +34,19 @@ Getting Started:
 	Deployment lifecycle: install -> status -> connect -> stop -> start
 
 	If you do not pass --deployment-dir and are not already inside a deployment directory,
-	Exasol Personal uses ~/.exasol/personal/deployments/default. Pass --deployment-dir
-	to override the active deployment directory.
+	Exasol Personal uses %s. Pass --deployment-dir
+	to override the active deployment directory, or pass --deployment <name> (-d <name>) to use
+	%s%c<name> instead, for running more than one deployment
+	side by side. --deployment-dir and --deployment cannot be used together.
 
 	Note: Cloud presets require provider credentials in your environment.
 	Use "exasol init --help", "exasol install --help", or "exasol presets list" to see the preset
 	compatibility matrix.
 
-	AI agent skills: https://github.com/exasol-labs/exasol-agent-skills`
+	AI agent skills: https://github.com/exasol-labs/exasol-agent-skills`,
+	defaultDeploymentDirDisplayPath(), deploymentsRootDisplayPath(), os.PathSeparator)
 
+const (
 	rootCmdExample = `  exasol install local`
 
 	rootCmdGroupEssential = "essential"
