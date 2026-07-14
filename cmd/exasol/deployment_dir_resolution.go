@@ -56,8 +56,32 @@ func resolveDeploymentDirForCommand(cmd *cobra.Command, state *CommonFlags) erro
 		"path", deployment.Root(),
 		"source", source.String(),
 	)
+	addResolvedDeploymentDirNotice(deployment, source, state.DeploymentName)
 
 	return nil
+}
+
+// addResolvedDeploymentDirNotice makes an implicit deployment-directory
+// selection visible to the user. Explicit (--deployment-dir) and current
+// (cwd auto-detected) selections are already visible to the user without a
+// notice: they either typed the flag or are sitting in the directory.
+// Notices go through addTerminalNotice, which is stderr-only, so JSON stdout
+// output is never affected.
+func addResolvedDeploymentDirNotice(
+	deployment config.DeploymentDir,
+	source deploymentDirSource,
+	name string,
+) {
+	switch source {
+	case deploymentDirSourceDefault:
+		addTerminalNotice("Using default deployment directory: " + deployment.Root())
+	case deploymentDirSourceNamed:
+		addTerminalNotice(fmt.Sprintf(
+			"Using named deployment directory %q: %s", name, deployment.Root(),
+		))
+	case deploymentDirSourceNone, deploymentDirSourceExplicit, deploymentDirSourceCurrent:
+	default:
+	}
 }
 
 func (source deploymentDirSource) String() string {
