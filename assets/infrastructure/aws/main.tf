@@ -271,6 +271,26 @@ resource "aws_iam_role_policy" "exasol_instance_role_s3" {
           "arn:aws:s3:::${local.archive_bucket_id}",
           "arn:aws:s3:::${local.archive_bucket_id}/*"
         ]
+      },
+      {
+        # Some older Exasol DB packages fetch the personal license from the
+        # Exasol x-up distribution bucket with c4 versions that sign even
+        # public S3 requests with the EC2 instance role. AWS then evaluates
+        # access as this role, so the role needs narrowly scoped read access
+        # for that compatibility path.
+        Sid    = "ExasolPackageBucketReadMetadata",
+        Effect = "Allow",
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ],
+        Resource = ["arn:aws:s3:::x-up"]
+      },
+      {
+        Sid      = "ExasolPackageBucketRead",
+        Effect   = "Allow",
+        Action   = ["s3:GetObject"],
+        Resource = ["arn:aws:s3:::x-up/*"]
       }
     ]
   })
