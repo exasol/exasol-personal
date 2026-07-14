@@ -34,6 +34,31 @@ func TestDeploymentDir_LayoutPaths(t *testing.T) {
 	)
 }
 
+func TestNamedDeploymentDirPath_SameParentAsDefault(t *testing.T) {
+	t.Parallel()
+
+	defaultPath, err := DefaultDeploymentDirPath()
+	require.NoError(t, err)
+
+	namedPath, err := NamedDeploymentDirPath("staging")
+	require.NoError(t, err)
+
+	require.Equal(t, filepath.Dir(defaultPath), filepath.Dir(namedPath))
+	require.Equal(t, "staging", filepath.Base(namedPath))
+}
+
+func TestNamedDeploymentDirPath_DefaultNameMatchesDefaultPath(t *testing.T) {
+	t.Parallel()
+
+	defaultPath, err := DefaultDeploymentDirPath()
+	require.NoError(t, err)
+
+	namedPath, err := NamedDeploymentDirPath(defaultDeploymentDirName)
+	require.NoError(t, err)
+
+	require.Equal(t, defaultPath, namedPath)
+}
+
 func TestDeploymentDir_Resolve(t *testing.T) {
 	t.Parallel()
 

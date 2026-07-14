@@ -6,7 +6,9 @@ import os
 import subprocess
 from pathlib import Path
 
-from .helpers import first_infrastructure_preset_id_or_skip
+import pytest
+
+from .helpers import first_infrastructure_preset_id_or_skip, run_command
 
 
 def _env_with_home(home: Path) -> dict[str, str]:
@@ -47,6 +49,23 @@ def _assert_deployment_dir_logged(
     )
 
 
+def _infrastructure_presets_or_skip(exasol_path: str, count: int) -> list[str]:
+    result = run_command([exasol_path, "presets", "list", "--json"])
+    data = json.loads(result.stdout)
+    infra_presets = data.get("infrastructures")
+    if not isinstance(infra_presets, list) or len(infra_presets) < count:
+        pytest.skip(f"need at least {count} infrastructure presets")
+
+    ids: list[str] = []
+    for preset in infra_presets[:count]:
+        preset_id = preset.get("id")
+        if not isinstance(preset_id, str):
+            pytest.skip("infrastructure preset list contains invalid IDs")
+        ids.append(preset_id)
+
+    return ids
+
+
 def test_status_uses_default_deployment_dir_without_corrupting_json(
     exasol_path: str, tmp_path: Path
 ) -> None:
@@ -73,6 +92,197 @@ def test_status_uses_default_deployment_dir_without_corrupting_json(
     assert data["status"] == "not_initialized"
     assert data["deploymentDir"] == str(default_dir)
     _assert_deployment_dir_logged(result.stderr, default_dir, "default")
+    assert f"Using default deployment directory: {default_dir}" in result.stderr
+
+
+def test_status_uses_named_deployment_dir_without_corrupting_json(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a home directory without a named deployment directory
+    home = tmp_path / "home"
+    cwd = tmp_path / "work"
+    home.mkdir()
+    cwd.mkdir()
+    named_dir = home / ".exasol" / "personal" / "deployments" / "staging"
+    launcher = str(Path(exasol_path).resolve())
+
+    # When status is invoked with --deployment and no --deployment-dir
+    result = subprocess.run(
+        [
+            launcher,
+            "--log-level",
+            "debug",
+            "status",
+            "--json",
+            "--deployment",
+            "staging",
+        ],
+        cwd=cwd,
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Then stdout stays parseable JSON and status reports the named directory
+    data = json.loads(result.stdout)
+    assert data["status"] == "not_initialized"
+    assert data["deploymentDir"] == str(named_dir)
+    _assert_deployment_dir_logged(result.stderr, named_dir, "named")
+    assert f'Using named deployment directory "staging": {named_dir}' in result.stderr
+
+
+def test_status_reports_uninitialized_named_deployment_dir(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a home directory without a named deployment directory
+    home = tmp_path / "home"
+    home.mkdir()
+    named_dir = home / ".exasol" / "personal" / "deployments" / "staging"
+    launcher = str(Path(exasol_path).resolve())
+
+    # When status is invoked with --deployment
+    result = subprocess.run(
+        [launcher, "status", "--json", "--deployment", "staging"],
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Then it succeeds and reports not_initialized for the resolved named directory
+    data = json.loads(result.stdout)
+    assert data["status"] == "not_initialized"
+    assert data["deploymentDir"] == str(named_dir)
+
+
+def test_named_deployment_dir_wins_over_current_directory(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given the current working directory is itself a different recognized deployment
+    home = tmp_path / "home"
+    home.mkdir()
+    current_dir = tmp_path / "current"
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+    launcher = str(Path(exasol_path).resolve())
+    run_command(
+        [
+            launcher,
+            "init",
+            infra_id,
+            "--deployment-dir",
+            str(current_dir),
+            "--no-launcher-version-check",
+        ],
+        env=_env_with_home(home),
+    )
+    named_dir = home / ".exasol" / "personal" / "deployments" / "staging"
+
+    # When status is invoked with --deployment from inside the current deployment
+    result = subprocess.run(
+        [launcher, "status", "--json", "--deployment", "staging"],
+        cwd=current_dir,
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Then the named deployment directory wins, not the current directory
+    data = json.loads(result.stdout)
+    assert data["deploymentDir"] == str(named_dir)
+
+
+def test_deployment_dir_and_deployment_are_mutually_exclusive_before_any_side_effect(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a fresh home directory with no deployments yet
+    home = tmp_path / "home"
+    home.mkdir()
+    launcher = str(Path(exasol_path).resolve())
+
+    # When both --deployment-dir and --deployment are passed
+    result = subprocess.run(
+        [
+            launcher,
+            "status",
+            "--deployment-dir",
+            str(tmp_path / "explicit"),
+            "--deployment",
+            "staging",
+        ],
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    # Then the command fails naming both flags, and no side effect (deployment
+    # directory creation, log file, resolution) ever happened
+    assert result.returncode != 0
+    assert "deployment-dir" in result.stderr
+    assert "were all set" in result.stderr
+    assert not (home / ".exasol").exists()
+
+
+def test_deployment_shorthand_wins_over_current_directory(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given the current working directory is itself a different recognized deployment
+    home = tmp_path / "home"
+    home.mkdir()
+    current_dir = tmp_path / "current"
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+    launcher = str(Path(exasol_path).resolve())
+    run_command(
+        [
+            launcher,
+            "init",
+            infra_id,
+            "--deployment-dir",
+            str(current_dir),
+            "--no-launcher-version-check",
+        ],
+        env=_env_with_home(home),
+    )
+    named_dir = home / ".exasol" / "personal" / "deployments" / "staging"
+
+    # When status is invoked with -d from inside the current deployment directory
+    result = subprocess.run(
+        [launcher, "status", "--json", "-d", "staging"],
+        cwd=current_dir,
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Then the named deployment directory wins, not the current directory
+    data = json.loads(result.stdout)
+    assert data["deploymentDir"] == str(named_dir)
+
+
+def test_deployment_flag_rejects_invalid_characters(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a home directory
+    home = tmp_path / "home"
+    home.mkdir()
+    launcher = str(Path(exasol_path).resolve())
+
+    # When --deployment is passed a value with unsafe characters
+    result = subprocess.run(
+        [launcher, "status", "--deployment", "bad/name"],
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    # Then the command fails and does not create anything under the deployments tree
+    assert result.returncode != 0
+    assert "invalid deployment name" in result.stderr
+    assert not (home / ".exasol").exists()
 
 
 def test_status_reports_uninitialized_explicit_deployment_dir(
@@ -163,6 +373,82 @@ def test_init_creates_default_deployment_dir(exasol_path: str, tmp_path: Path) -
     # Then init creates and initializes the default deployment directory
     assert (default_dir / ".exasolLauncherState.json").exists()
     _assert_deployment_dir_logged(result.stderr, default_dir, "default")
+
+
+def test_init_creates_named_deployment_dir(exasol_path: str, tmp_path: Path) -> None:
+    # Given a --deployment flag and no recognized current deployment directory
+    home = tmp_path / "home"
+    home.mkdir()
+    named_dir = home / ".exasol" / "personal" / "deployments" / "staging"
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+    launcher = str(Path(exasol_path).resolve())
+
+    # When init is invoked with --deployment
+    result = subprocess.run(
+        [
+            launcher,
+            "--log-level",
+            "debug",
+            "init",
+            infra_id,
+            "--deployment",
+            "staging",
+            "--no-launcher-version-check",
+        ],
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Then init creates and initializes the named deployment directory
+    assert (named_dir / ".exasolLauncherState.json").exists()
+    _assert_deployment_dir_logged(result.stderr, named_dir, "named")
+
+
+def test_init_refuses_different_preset_in_named_deployment_dir(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a named deployment initialized with one preset
+    home = tmp_path / "home"
+    home.mkdir()
+    named_dir = home / ".exasol" / "personal" / "deployments" / "staging"
+    first_preset, second_preset = _infrastructure_presets_or_skip(exasol_path, 2)
+    launcher = str(Path(exasol_path).resolve())
+    run_command(
+        [
+            launcher,
+            "init",
+            first_preset,
+            "--deployment",
+            "staging",
+            "--no-launcher-version-check",
+        ],
+        env=_env_with_home(home),
+    )
+
+    # When init is requested again with a different preset for the same name
+    result = subprocess.run(
+        [
+            launcher,
+            "init",
+            second_preset,
+            "--deployment",
+            "staging",
+            "--no-launcher-version-check",
+        ],
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    # Then it fails before replacing local state
+    assert result.returncode != 0
+    stderr = result.stderr.lower()
+    assert "different presets" in stderr
+    assert "exasol remove" in stderr
+    assert (named_dir / ".exasolLauncherState.json").exists()
 
 
 def test_info_reports_uninitialized_resolved_default_dir(
