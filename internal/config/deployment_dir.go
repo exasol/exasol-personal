@@ -48,6 +48,30 @@ func DefaultDeploymentDirPath() (string, error) {
 	return filepath.Join(rootDir, deploymentsDirName, defaultDeploymentDirName), nil
 }
 
+// NamedDeploymentDirPath returns the launcher-managed deployment directory
+// path for name, in the same parent directory as the default deployment
+// directory. Callers are responsible for validating name is safe to use as a
+// literal directory name (see DeploymentNameVar in cmd/exasol).
+func NamedDeploymentDirPath(name string) (string, error) {
+	rootDir, err := LauncherRootDirPath()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(rootDir, deploymentsDirName, name), nil
+}
+
+// DeploymentsRootPath returns the launcher-managed directory that contains
+// the default deployment directory and every named deployment directory.
+func DeploymentsRootPath() (string, error) {
+	rootDir, err := LauncherRootDirPath()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(rootDir, deploymentsDirName), nil
+}
+
 func LauncherRootDirPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 
 const (
 	deploymentDirFlagName     = "deployment-dir"
+	deploymentNameFlagName    = "deployment"
 	legacyWorkflowStateMarker = ".workflowState.json"
 )
 
@@ -24,9 +25,21 @@ type deploymentDirSource int
 const (
 	deploymentDirSourceNone deploymentDirSource = iota
 	deploymentDirSourceExplicit
+	deploymentDirSourceNamed
 	deploymentDirSourceCurrent
 	deploymentDirSourceDefault
 )
+
+// deploymentDirFlagValues carries the already-read state of the
+// --deployment-dir and --deployment/-d flags into the shared precedence resolver,
+// independent of whether they were read from a parsed *cobra.Command or a
+// pre-Cobra raw-args pflag.FlagSet.
+type deploymentDirFlagValues struct {
+	deploymentDir        string
+	deploymentDirChanged bool
+	name                 string
+	nameChanged          bool
+}
 
 func resolveDeploymentDirForCommand(cmd *cobra.Command, state *CommonFlags) error {
 	deployment, source, err := resolveDeploymentDir(cmd, state)
@@ -51,6 +64,8 @@ func (source deploymentDirSource) String() string {
 	switch source {
 	case deploymentDirSourceExplicit:
 		return "explicit"
+	case deploymentDirSourceNamed:
+		return "named"
 	case deploymentDirSourceCurrent:
 		return "current"
 	case deploymentDirSourceDefault:
@@ -66,12 +81,45 @@ func resolveDeploymentDir(
 	cmd *cobra.Command,
 	state *CommonFlags,
 ) (config.DeploymentDir, deploymentDirSource, error) {
-	flag := deploymentDirFlag(cmd)
-	if flag == nil {
+	dirFlag := deploymentDirFlag(cmd)
+	nameFlag := deploymentNameFlag(cmd)
+	if dirFlag == nil && nameFlag == nil {
 		return state.Deployment(), deploymentDirSourceNone, nil
 	}
-	if flag.Changed {
-		return state.Deployment(), deploymentDirSourceExplicit, nil
+
+	return resolveDeploymentDirFromValues(deploymentDirFlagValues{
+		deploymentDir:        state.DeploymentDir,
+		deploymentDirChanged: dirFlag != nil && dirFlag.Changed,
+		name:                 state.DeploymentName,
+		nameChanged:          nameFlag != nil && nameFlag.Changed,
+	})
+}
+
+// resolveDeploymentDirFromValues is the single precedence implementation
+// shared by resolveDeploymentDir (parsed *cobra.Command, real command
+// execution) and deploymentDirFromRawArgs (pre-Cobra raw-args pre-scan).
+//
+// It does not itself reject values.deploymentDirChanged &&
+// values.nameChanged: for real command execution, Cobra's
+// MarkFlagsMutuallyExclusive combined with an early ValidateFlagGroups call
+// in root's PersistentPreRunE already rejects that combination before this
+// function ever runs. For the raw-args pre-scan (used only to decide which
+// dynamic flags to register), the explicit --deployment-dir value simply
+// takes precedence, which is harmless since the real Cobra parse still
+// rejects the command afterward.
+func resolveDeploymentDirFromValues(
+	values deploymentDirFlagValues,
+) (config.DeploymentDir, deploymentDirSource, error) {
+	if values.deploymentDirChanged {
+		return config.NewDeploymentDir(values.deploymentDir), deploymentDirSourceExplicit, nil
+	}
+	if values.nameChanged {
+		namedDir, err := config.NamedDeploymentDirPath(values.name)
+		if err != nil {
+			return config.DeploymentDir{}, deploymentDirSourceNone, err
+		}
+
+		return config.NewDeploymentDir(namedDir), deploymentDirSourceNamed, nil
 	}
 
 	cwd, err := os.Getwd()
@@ -103,8 +151,30 @@ func deploymentDirFlag(cmd *cobra.Command) *pflag.Flag {
 	return cmd.InheritedFlags().Lookup(deploymentDirFlagName)
 }
 
+func deploymentNameFlag(cmd *cobra.Command) *pflag.Flag {
+	if flag := cmd.Flags().Lookup(deploymentNameFlagName); flag != nil {
+		return flag
+	}
+
+	return cmd.InheritedFlags().Lookup(deploymentNameFlagName)
+}
+
 func defaultDeploymentDir() (string, error) {
 	return config.DefaultDeploymentDirPath()
+}
+
+// deploymentsRootDisplayPath resolves the launcher-managed deployments root
+// path using the current platform's real path conventions, for use in
+// --help text generated at startup. It falls back to a platform-neutral
+// description in the rare case the home directory cannot be resolved (e.g.
+// HOME/USERPROFILE unset), rather than failing --help entirely.
+func deploymentsRootDisplayPath() string {
+	root, err := config.DeploymentsRootPath()
+	if err != nil {
+		return "the launcher's deployment directories folder in your home directory"
+	}
+
+	return root
 }
 
 func isRecognizedDeploymentDir(path string) (bool, error) {
