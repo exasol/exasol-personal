@@ -1,8 +1,5 @@
-# deployment-directory-resolution Specification
+## MODIFIED Requirements
 
-## Purpose
-Define how Exasol Personal resolves the active deployment directory so users can run deployment commands without first creating or changing into a directory, while preserving explicit overrides and existing deployment-directory workflows.
-## Requirements
 ### Requirement: CLI SHALL resolve an active deployment directory
 Commands that operate on a deployment directory SHALL resolve exactly one active deployment directory before command-specific execution.
 
