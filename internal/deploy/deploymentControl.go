@@ -146,6 +146,28 @@ func logLifecycleGuidance(message string) {
 	}
 }
 
+// markOperationInterrupted records that operation failed (for any reason, not
+// only a signal) so the deployment leaves WorkflowStateOperationInProgress
+// rather than getting stuck there permanently. It mirrors the signal handlers
+// already registered alongside each lifecycle operation, and Destroy's
+// pre-existing markDestroyInterrupted.
+func markOperationInterrupted(
+	exasolState *config.ExasolPersonalState,
+	deployment config.DeploymentDir,
+	operation string,
+	operationErr error,
+) error {
+	if stateErr := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
+		Error:                      operationErr.Error(),
+		InterruptedDuringOperation: operation,
+	}, deployment); stateErr != nil {
+		slog.Warn("failed to persist operation failure state",
+			"error", stateErr, "operation", operation)
+	}
+
+	return operationErr
+}
+
 //
 //nolint:revive
 func Start(
@@ -221,7 +243,9 @@ func Start(
 				externalCommandOutput,
 				waitTimeoutSeconds,
 			); err != nil {
-				return err
+				unregister()
+
+				return markOperationInterrupted(exasolState, deployment, config.StartOperation, err)
 			}
 
 			// Stop handling interrupts before committing final running state
@@ -378,7 +402,9 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 				externalCommandOutput,
 				externalCommandOutput,
 			); err != nil {
-				return err
+				unregister()
+
+				return markOperationInterrupted(exasolState, deployment, config.StopOperation, err)
 			}
 
 			// Stop handling interrupts before committing final stopped state
