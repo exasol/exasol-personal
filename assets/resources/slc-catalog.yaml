@@ -1,0 +1,29 @@
+# Official SLC catalog — official SLCs + local deployment -> Podman image mount into /exa/slc.
+#
+# Image ref = {registry}:{tag_template}. {hash} is the SLC content hash (same as the release
+# tarball name), so new content -> new tag: we pin by tag and refresh hashes on a version bump.
+# aliases mirror each flavor's build_info/language_definitions.json (the DB's source of truth).
+
+registry: docker.io/exasol/script-language-container
+tag_template: "standard-EXASOL-all-{flavor}-release_{arch}_{hash}"
+
+# arm64 only for now — local is darwin/arm64-only (internal/deploy/local_backend.go). Add an
+# amd64 block when local reaches Windows/Linux x86; the x86 tag arch token is `x64`, not `amd64`.
+architectures:
+  arm64:
+    default_version: "11.2.0"
+    versions:
+      "11.2.0":
+        languages:
+          python:
+            flavor: python-3.12
+            hash: GM7DI5JDDTJRRDVV2QPRSNDRDT5CCYHPPEZO7HPJSIX4B5ICISZQ
+            aliases: [PYTHON3, PYTHON312]
+          java:
+            flavor: java-17
+            hash: U5E3P6CRW2FH2HICAVKNSZYS6AU5O2AXTXFZNWIDMA5IYCGGCVHQ
+            aliases: [JAVA, JAVA17]
+          r:
+            flavor: r-4.4
+            hash: 3CS3CMHC3WE2K4GQLA6YPMTB3ECQLILLYEDRG7JAZEQBBZMR7H4A
+            aliases: [R, R44]
