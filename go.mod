@@ -8,7 +8,7 @@ require (
 	github.com/exasol/exasol-driver-go v1.0.17
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/hashicorp/hcl/v2 v2.24.0
-	github.com/lmittmann/tint v1.1.3
+	github.com/lmittmann/tint v1.2.0
 	github.com/zclconf/go-cty v1.19.0
 	go.yaml.in/yaml/v3 v3.0.4
 )
