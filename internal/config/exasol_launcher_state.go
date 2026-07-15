@@ -79,6 +79,29 @@ type ExasolPersonalState struct {
 	// backend one). Backends may still receive CreatedAt via DeploymentMetadata
 	// and persist it for their own purposes (e.g. resource tagging).
 	CreatedAt time.Time `json:"createdAt,omitempty"`
+	// InstalledSLCs is the set of official script language containers installed into
+	// this (local) deployment. Image mounts are container-run arguments and do not
+	// persist across container recreation, so this set is the source of truth that the
+	// launcher re-applies on every start.
+	//nolint:tagliatelle // JSON key mirrors the "SLC" domain abbreviation.
+	InstalledSLCs []InstalledSLC `json:"installedSlcs,omitempty"`
+}
+
+// InstalledSLC records one installed script language container so the launcher can
+// re-apply its image mount on every start and enforce alias uniqueness across the set.
+type InstalledSLC struct {
+	// Language is the catalog key (e.g. "python").
+	Language string `json:"language"`
+	// Flavor is the image flavor token (e.g. "python-3.12").
+	Flavor string `json:"flavor"`
+	// Version is the catalog version this SLC was resolved from.
+	Version string `json:"version"`
+	// Image is the full container image reference to mount.
+	Image string `json:"image"`
+	// Target is the mount destination inside the database container.
+	Target string `json:"target"`
+	// Aliases are all aliases the SLC declares (used for collision detection).
+	Aliases []string `json:"aliases"`
 }
 
 // DirectoryExasolPersonalStatefile.

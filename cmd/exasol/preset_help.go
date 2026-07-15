@@ -46,11 +46,12 @@ func embeddedPresetCompatibilityMatrix() string {
 		}
 	}
 
+	const compatibleCell = "yes"
 	columnWidths := map[string]int{}
 	for installID := range installManifests {
 		width := len(installID)
-		if width < len("yes") {
-			width = len("yes")
+		if width < len(compatibleCell) {
+			width = len(compatibleCell)
 		}
 		columnWidths[installID] = width
 	}
@@ -79,7 +80,7 @@ func embeddedPresetCompatibilityMatrix() string {
 			}
 			cell := "no"
 			if embeddedPresetPairCompatible(infraManifest, installManifest) {
-				cell = "yes"
+				cell = compatibleCell
 			}
 			_, _ = builder.WriteString(fmt.Sprintf("  %-*s", columnWidths[installID], cell))
 		}

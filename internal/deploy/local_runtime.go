@@ -72,6 +72,11 @@ func startPreparedLocalRuntime(
 		return err
 	}
 	startArgs = append(startArgs, versionCheckArgs...)
+	slcArgs, err := localRunnerSlcArgs(deployment)
+	if err != nil {
+		return err
+	}
+	startArgs = append(startArgs, slcArgs...)
 	if localConfig.Ports != "" {
 		startArgs = append(startArgs, "--ports", localConfig.Ports)
 	}
