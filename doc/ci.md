@@ -15,8 +15,22 @@ Runs automatically on every push to `main` and on pull requests targeting `main`
 - **Unit Tests** - Runs Go unit tests with coverage
 - **Integration Tests** - Runs Python integration tests
 
-This is the only workflow that runs in pull request context. It is intentionally non-privileged and does not use deployment/release credentials.
+This is the only workflow that runs contributor code in pull request context. It is intentionally non-privileged and does not use deployment/release credentials.
 All CI jobs declare explicit minimal permissions.
+
+### Dependabot Auto-Merge (`dependabot-auto-merge.yml`)
+
+Runs for Dependabot pull requests and enables auto-merge for Go and Python patch and minor version updates after required branch protection checks pass.
+Security updates are eligible for the same fast path because Dependabot cooldown does not delay security updates; security updates outside the normal Go and Python patch/minor policy require the optional `DEPENDABOT_ALERTS_TOKEN` secret so the workflow can identify the linked Dependabot alert.
+GitHub Actions updates and major version updates that are not identified as security updates remain manual review items.
+Repository auto-merge must be enabled for this workflow to queue eligible pull requests.
+The workflow uses `pull_request_target` only for trusted Dependabot metadata and GitHub pull request operations; it does not check out or execute pull request code.
+
+Dependabot version updates use built-in cooldown periods before PR creation:
+
+- GitHub Actions updates wait 7 days and remain manual.
+- Go and Python patch updates wait 2 days.
+- Go and Python minor updates wait 7 days.
 
 ### Release Pipeline (`release.yml`)
 

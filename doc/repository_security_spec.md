@@ -20,6 +20,7 @@ General guidance is in [CI Security Best Practices](ci_security_best_practices.m
 - PR jobs are non-privileged and must not use secrets or OIDC cloud credentials.
 - PR jobs use explicit minimal permissions (`contents: read`).
 - `pull_request_target` is not used for contributor code execution.
+- [`dependabot-auto-merge.yml`](../.github/workflows/dependabot-auto-merge.yml) may use `pull_request_target` only for Dependabot-authored pull requests, only without checking out or executing pull request code, and only to inspect Dependabot metadata, approve eligible pull requests, and enable auto-merge.
 
 ### Trusted Privileged Lane
 
@@ -37,6 +38,9 @@ General guidance is in [CI Security Best Practices](ci_security_best_practices.m
 - Downloaded signing tooling in release is version-pinned and checksum-verified.
 - Mutable installer patterns in privileged paths are not allowed.
 - GitHub Actions dependencies are maintained through Dependabot.
+- Dependabot version updates use built-in cooldown before pull request creation so routine updates have an ecosystem observation period; Dependabot security updates are not delayed by cooldown.
+- Dependabot auto-merge is limited to eligible Go and Python patch/minor updates plus identified security updates after required branch protection checks pass. GitHub Actions updates and non-security major updates require manual review.
+- Repository auto-merge may be enabled to let the Dependabot workflow queue eligible pull requests behind branch protection checks.
 
 ### Workflow Change Governance
 
@@ -54,13 +58,13 @@ These controls are configured in repository/org settings and are mandatory for t
   - an explicit allowlist of required external actions.
 - Enable the policy that requires full-length commit SHA pinning for external actions.
 - Set default `GITHUB_TOKEN` permissions to restricted.
+- Enable `Allow GitHub Actions to create and approve pull requests` to support the documented Dependabot auto-merge workflow; no other workflow may rely on this capability without an explicit policy update.
 - Keep these settings disabled:
-  - `Allow GitHub Actions to create and approve pull requests`
   - `Send write tokens to workflows from pull requests`
   - `Send secrets to workflows from pull requests`
 - Set fork-run approval policy to require maintainer approval before first run.
 
-This enforces the trust boundary expected by the untrusted PR lane in [`ci.yml`](../.github/workflows/ci.yml).
+This enforces the trust boundary expected by the untrusted PR lane in [`ci.yml`](../.github/workflows/ci.yml) while allowing the narrowly scoped Dependabot automation exception.
 
 ### 2) Branch and Tag Rulesets
 
@@ -94,6 +98,7 @@ This ensures workflow and release-control changes cannot merge without maintaine
 
 - Prefer OIDC short-lived credentials over long-lived cloud secrets.
 - Move high-risk credentials behind protected environments only.
+- If `DEPENDABOT_ALERTS_TOKEN` is configured for security-update detection, use a least-privilege GitHub App or personal access token with read access to Dependabot alerts only.
 - Audit and reduce repository/org secret inventory on a regular cadence.
 
 This keeps privileged automation aligned with least-privilege and limits blast radius if workflow code changes.

@@ -4,6 +4,8 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 28
 
     groups:
       actions-versions-updates:
@@ -16,22 +18,40 @@ updates:
     directory: "/tests"
     schedule:
       interval: "weekly"
+    allow:
+      - dependency-type: "all"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+    cooldown:
+      semver-patch-days: 21
+      semver-minor-days: 28
     groups:
-      python-weekly-patch-updates:
+      python-weekly-updates:
         patterns:
           - "*"
         update-types:
           - "patch"
+          - "minor"
     open-pull-requests-limit: 10
 
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
       interval: "weekly"
+    allow:
+      - dependency-type: "all"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+    cooldown:
+      semver-patch-days: 21
+      semver-minor-days: 28
     groups:
-      go-weekly-patch-updates:
+      go-weekly-updates:
         patterns:
           - "*"
         update-types:
           - "patch"
+          - "minor"
     open-pull-requests-limit: 10
