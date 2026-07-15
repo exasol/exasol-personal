@@ -39,7 +39,7 @@ General guidance is in [CI Security Best Practices](ci_security_best_practices.m
 - Mutable installer patterns in privileged paths are not allowed.
 - GitHub Actions dependencies are maintained through Dependabot.
 - Dependabot version updates use built-in cooldown before pull request creation so routine updates have an ecosystem observation period; Dependabot security updates are not delayed by cooldown.
-- Dependabot auto-merge is limited to eligible Go and Python patch/minor updates plus identified security updates after required branch protection checks pass. GitHub Actions updates and non-security major updates require manual review.
+- Dependabot auto-merge is limited to eligible Go and Python patch/minor updates plus identified security updates after a 7-day merge delay and required branch protection checks pass. GitHub Actions updates and non-security major updates require manual review.
 - Repository auto-merge may be enabled to let the Dependabot workflow queue eligible pull requests behind branch protection checks.
 
 ### Workflow Change Governance

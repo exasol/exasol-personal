@@ -3,17 +3,23 @@ name: Dependabot auto-merge
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  auto-merge:
+  auto-merge-pr:
     if: >-
+      github.event_name == 'pull_request_target' &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    env:
+      MERGE_DELAY_DAYS: "7"
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
@@ -44,6 +50,25 @@ jobs:
               ;;
           esac
 
+      - name: Check merge delay
+        id: delay
+        env:
+          PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
+          MERGE_DELAY_DAYS: ${{ env.MERGE_DELAY_DAYS }}
+        run: |
+          created=$(date -d "${PR_CREATED_AT}" +%s)
+          now=$(date +%s)
+          required_age=$((MERGE_DELAY_DAYS * 24 * 60 * 60))
+          age=$((now - created))
+
+          if [[ "${age}" -ge "${required_age}" ]]; then
+            echo "passed=true" >> "${GITHUB_OUTPUT}"
+          else
+            remaining=$((required_age - age))
+            echo "passed=false" >> "${GITHUB_OUTPUT}"
+            echo "Dependabot PR is waiting for the ${MERGE_DELAY_DAYS}-day merge delay. Remaining seconds: ${remaining}"
+          fi
+
       - name: Report manual review requirement
         if: steps.policy.outputs.eligible != 'true'
         env:
@@ -51,8 +76,16 @@ jobs:
         run: |
           echo "Dependabot PR requires manual review: ${REASON}"
 
+      - name: Report merge delay
+        if: steps.policy.outputs.eligible == 'true' && steps.delay.outputs.passed != 'true'
+        env:
+          REASON: ${{ steps.policy.outputs.reason }}
+          MERGE_DELAY_DAYS: ${{ env.MERGE_DELAY_DAYS }}
+        run: |
+          echo "Dependabot PR is eligible for auto-merge after the ${MERGE_DELAY_DAYS}-day merge delay: ${REASON}"
+
       - name: Approve pull request
-        if: steps.policy.outputs.eligible == 'true'
+        if: steps.policy.outputs.eligible == 'true' && steps.delay.outputs.passed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -64,8 +97,66 @@ jobs:
           fi
 
       - name: Enable auto-merge
-        if: steps.policy.outputs.eligible == 'true'
+        if: steps.policy.outputs.eligible == 'true' && steps.delay.outputs.passed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: gh pr merge --auto --squash "${PR_URL}"
+
+  scheduled-recheck:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MERGE_DELAY_DAYS: "7"
+    steps:
+      - name: Recheck open Dependabot pull requests
+        run: |
+          prs=$(gh pr list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --state open \
+            --search "author:app/dependabot" \
+            --json number,url,createdAt,headRefName,reviewDecision \
+            --jq '.[] | @base64')
+
+          if [[ -z "${prs}" ]]; then
+            echo "No open Dependabot PRs found"
+            exit 0
+          fi
+
+          while IFS= read -r encoded_pr; do
+            pr=$(printf '%s' "${encoded_pr}" | base64 --decode)
+            number=$(jq -r '.number' <<< "${pr}")
+            url=$(jq -r '.url' <<< "${pr}")
+            created_at=$(jq -r '.createdAt' <<< "${pr}")
+            head_ref=$(jq -r '.headRefName' <<< "${pr}")
+            review_decision=$(jq -r '.reviewDecision' <<< "${pr}")
+
+            case "${head_ref}" in
+              dependabot/go_modules/*|dependabot/pip/*)
+                ;;
+              *)
+                echo "Skipping Dependabot PR #${number}: manual review lane (${head_ref})"
+                continue
+                ;;
+            esac
+
+            created=$(date -d "${created_at}" +%s)
+            now=$(date +%s)
+            required_age=$((MERGE_DELAY_DAYS * 24 * 60 * 60))
+            age=$((now - created))
+
+            if [[ "${age}" -lt "${required_age}" ]]; then
+              remaining=$((required_age - age))
+              echo "Skipping Dependabot PR #${number}: waiting for ${MERGE_DELAY_DAYS}-day merge delay. Remaining seconds: ${remaining}"
+              continue
+            fi
+
+            if [[ "${review_decision}" != "APPROVED" ]]; then
+              gh pr review --repo "${GITHUB_REPOSITORY}" --approve "${url}"
+            else
+              echo "Dependabot PR #${number} is already approved"
+            fi
+
+            gh pr merge --repo "${GITHUB_REPOSITORY}" --auto --squash "${url}"
+          done <<< "${prs}"
