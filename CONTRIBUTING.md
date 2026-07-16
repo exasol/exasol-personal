@@ -17,6 +17,7 @@ Thank you for your interest in contributing! We welcome contributions from the c
 - **Write clear descriptions** - explain what and why, not just how
 - **Fold cleanup into the related commit** - do not create separate commits for lint, formatting, or typo fixes
 - **Explain CLI changes with examples** - when changing CLI commands or behavior, describe the user-visible behavior in the PR description and include example invocations or output
+- **Update the changelog for user-facing changes** - add an entry to [CHANGELOG.md](CHANGELOG.md) under `Unreleased` when a change affects CLI behavior, deployment behavior, supported platforms/providers, user-visible errors, documentation that changes how users operate the tool, or compatibility/breaking behavior. Use the existing `Added`, `Changed`, `Fixed`, and `Breaking Changes` sections, and include a short command example for new or changed CLI behavior when useful.
 - **Use the [pull request template](.github/pull_request_template.md)** when submitting a pull request
 - **Use semantic commit messages** - follow [Conventional Commits](https://www.conventionalcommits.org/) format:
   - `feat:` new features
