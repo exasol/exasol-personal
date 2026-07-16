@@ -98,7 +98,7 @@ the change in effect.
 ### Requirement: A restart of a running database is confirmed or deferred
 
 `exasol slc install`, `exasol slc update`, and `exasol slc remove` SHALL require confirmation
-before restarting a running database, and SHALL offer `--yes` to skip the prompt and
+before restarting a running database, and SHALL offer `--auto-approve` to skip the prompt and
 `--no-restart` to record the change for the next start instead of restarting now.
 
 #### Scenario: Confirmation is required before restarting a running database
@@ -107,9 +107,9 @@ before restarting a running database, and SHALL offer `--yes` to skip the prompt
 - **THEN** the command warns that the database will be restarted and open connections dropped
 - **AND** it proceeds only after the user confirms; declining makes no changes
 
-#### Scenario: `--yes` skips the prompt
+#### Scenario: `--auto-approve` skips the prompt
 
-- **WHEN** `exasol slc install python3 --yes` is run on a running deployment
+- **WHEN** `exasol slc install python3 --auto-approve` is run on a running deployment
 - **THEN** the database is restarted to apply the SLC without prompting
 
 #### Scenario: `--no-restart` defers activation without restarting
@@ -120,8 +120,8 @@ before restarting a running database, and SHALL offer `--yes` to skip the prompt
 
 #### Scenario: Non-interactive use without confirmation is refused
 
-- **WHEN** `exasol slc install python3` is run without a TTY and without `--yes` or `--no-restart` on a running deployment
-- **THEN** the command fails asking for `--yes` or `--no-restart`
+- **WHEN** `exasol slc install python3` is run without a TTY and without `--auto-approve` or `--no-restart` on a running deployment
+- **THEN** the command fails asking for `--auto-approve` or `--no-restart`
 - **AND** the database is not restarted
 
 #### Scenario: No confirmation when the database is stopped
@@ -132,10 +132,10 @@ before restarting a running database, and SHALL offer `--yes` to skip the prompt
 ### Requirement: Unreferenced SLC images are reclaimed
 
 Replacing or removing an SLC SHALL NOT leave the replaced or removed image occupying
-storage indefinitely; the launcher SHALL remove SLC images that are no longer referenced by
-the installed set. Reclamation MUST be limited to official SLC images and MUST NOT remove
-the database image or any unrelated image, and a failure to remove an image MUST NOT fail
-the operation.
+storage indefinitely; SLC images that are no longer referenced by the installed set SHALL
+be reclaimed. Reclamation MUST be limited to official SLC images and MUST NOT remove the
+database image or any unrelated image, and a failure to remove an image MUST NOT fail the
+operation.
 
 #### Scenario: Replacing an SLC removes the old image
 

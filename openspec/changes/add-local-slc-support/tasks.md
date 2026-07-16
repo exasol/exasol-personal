@@ -23,21 +23,21 @@
 
 - [x] 4.1 Build runner `--slc <image>=<target>` start args from launcher state (mirror `localRunnerVersionCheckArgs`).
 - [x] 4.2 Install/update/remove = update state → genuine stop → start.
-- [x] 4.3 After restart, wait for readiness (readiness == applied: init-db.sh fails and the DB never becomes ready if an image cannot be pulled or two SLCs collide); report a clear error (never a false success) if not.
-- [x] 4.4 Warn + confirm before restarting a running database; `--yes` skips the prompt, `--no-restart` defers activation to the next start, non-interactive without either is refused. Confirmation happens after validation and only when a restart will actually occur.
+- [x] 4.3 After restart, wait for readiness (readiness == applied: the runner start fails and the DB never becomes ready if an image cannot be pulled or two SLCs collide); report a clear error (never a false success) if not.
+- [x] 4.4 Warn + confirm before restarting a running database; `--auto-approve` skips the prompt, `--no-restart` defers activation to the next start, non-interactive without either is refused. Confirmation happens after validation and only when a restart will actually occur.
 
-## 5. Runner change (`exasol-local-vm`)
+## 5. Runner interface (external dependency)
 
-- [x] 5.1 Add a repeatable `--slc` `start` flag; write `vm-shared/slc.json` (`writeSlcRuntimeConfig`, mirroring `writeVersionCheckRuntimeConfig`).
-- [x] 5.2 `init-db.sh`: read `slc.json` and add one `--mount type=image,source=,destination=` per entry, accumulated via the existing `set --` idiom.
-- [x] 5.3 `init-db.sh`: harden recreate — `podman rm -f` + post-removal existence check + fail-fast (remove the failure-swallowing `|| true`), and add `--replace` to `podman run`.
-- [x] 5.4 Backward compatibility: absent/empty `slc.json` produces the exact current behavior.
+- [x] 5.1 Add a repeatable `--slc <image>=<target>` start flag to the runner.
+- [x] 5.2 Mount each requested image into the database container at its target path.
+- [x] 5.3 Harden container recreation so a stale container from an unclean shutdown cannot block startup.
+- [x] 5.4 Backward compatibility: an empty request set produces the exact current behavior.
 - [ ] 5.5 Rebuild and re-embed the runner into exasol-personal via `tools/localrunner` (requires a macOS build host: the runner depends on the darwin-only `vz` framework).
-- [x] 5.6 Extend `init-db-test.sh` with cases: mount present, mount absent, stale-container cleanup, unreferenced-image pruning, and no-prune-without-slc.json.
+- [x] 5.6 Cover the runner interface with tests: mount present, mount absent, stale-container cleanup, unreferenced-image pruning, and no-prune when SLC-unaware.
 
 ## 6. Storage hygiene
 
-- [x] 6.1 Remove now-unreferenced SLC images (`podman rmi`) on replace and remove. Implemented in `init-db.sh` (`prune_unreferenced_slc_images`): after pulling the desired set and before `podman run`, remove any `exasol/script-language-container` image not listed in the current `slc.json`. Scoped to the SLC repository only (never the DB or unrelated images), skipped entirely when `slc.json` is absent (SLC-unaware behavior), and best-effort (a failed removal is logged and skipped, never fatal).
+- [x] 6.1 Reclaim unreferenced SLC images on replace and remove. Handled by the runner during recreation: scoped to the SLC image repository only (never the DB or unrelated images), skipped when SLC-unaware, and best-effort (a failed removal is logged and skipped, never fatal).
 
 ## 7. Tests and validation
 

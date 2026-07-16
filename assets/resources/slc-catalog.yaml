@@ -2,7 +2,7 @@
 #
 # Image ref = {registry}:{tag_template}. {hash} is the SLC content hash (same as the release
 # tarball name), so new content -> new tag: we pin by tag and refresh hashes on a version bump.
-# aliases mirror each flavor's build_info/language_definitions.json (the DB's source of truth).
+# aliases mirror the aliases each flavor declares (the DB's source of truth).
 
 registry: docker.io/exasol/script-language-container
 tag_template: "standard-EXASOL-all-{flavor}-release_{arch}_{hash}"

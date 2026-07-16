@@ -22,8 +22,8 @@ to install an official SLC into a local deployment.
   install is rejected.
 - Scope to local (darwin/arm64) deployments only; other backends report the operation as
   unsupported.
-- Depends on a companion change in the runner (`exasol-local-vm`) to accept SLC image
-  mounts on `start` and to harden database-container recreation. See `design.md`.
+- Depends on a companion change in the embedded runner to accept SLC image mounts on
+  `start` and to harden database-container recreation. See `design.md`.
 
 ## Capabilities
 
@@ -42,8 +42,8 @@ to install an official SLC into a local deployment.
 - `internal/deploy`, `internal/localruntime`: pass installed SLC mounts to the runner
   `start` command; persist installed-SLC state; restart and verify on install/update/remove.
 - `assets/resources`: embed and load `slc-catalog.yaml`.
-- `exasol-local-vm` (external dependency, re-embedded via `tools/localrunner`): new `--slc`
-  start flag written to `slc.json`; `init-db.sh` reads it and adds `--mount type=image`;
-  hardened container cleanup. Detailed in `design.md`.
+- the embedded runner (external dependency, re-embedded via `tools/localrunner`): new `--slc`
+  start flag that mounts each requested image into the database container, plus hardened
+  container cleanup. The interface the launcher depends on is described in `design.md`.
 - Tests: catalog resolution, alias and collision logic, command behavior, and
   local-runtime integration.

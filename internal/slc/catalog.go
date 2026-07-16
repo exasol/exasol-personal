@@ -43,7 +43,7 @@ type Version struct {
 }
 
 // Language describes a single flavor: its image flavor token, content hash, and the
-// aliases it declares in build_info/language_definitions.json.
+// aliases it declares.
 type Language struct {
 	Flavor  string   `yaml:"flavor"`
 	Hash    string   `yaml:"hash"`
@@ -52,18 +52,12 @@ type Language struct {
 
 // Entry is a fully resolved SLC ready to be mounted.
 type Entry struct {
-	// Language is the catalog key (e.g. "python").
 	Language string
-	// Flavor is the image flavor token (e.g. "python-3.12").
-	Flavor string
-	// Version is the catalog version the entry was resolved from.
-	Version string
-	// Image is the full container image reference (registry:tag).
-	Image string
-	// Target is the mount destination inside the database container.
-	Target string
-	// Aliases are all aliases the SLC declares.
-	Aliases []string
+	Flavor   string
+	Version  string
+	Image    string
+	Target   string
+	Aliases  []string
 }
 
 // ErrArchitectureUnsupported reports that the catalog has no SLCs for a given

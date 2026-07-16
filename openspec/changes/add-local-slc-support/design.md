@@ -2,13 +2,11 @@
 
 ## Context
 
-Local deployments run nano inside a QEMU VM managed by an embedded runner
-(`exasol-local-vm`). The launcher never runs Podman directly; the runner boots the VM and
-`init-db.sh` (from the runner's embedded assets) issues the single `podman run` that
-starts the nano database container. Script language aliases are read by the database from
-each SLC's `build_info/language_definitions.json`; the nano `admini` component scans
-`/exa/slc` on start and auto-registers builtin aliases (verified in code:
-`db/COSMock/src/admini`). No `ALTER SYSTEM` is required for official SLCs.
+Local deployments run the database inside a macOS Virtualization.framework VM managed by an
+embedded runner. The launcher never manages containers directly; it drives the runner, which
+boots the VM and starts the database container. The database auto-registers a script
+language container's aliases by scanning the `/exa/slc` mount directory on start, so no
+`ALTER SYSTEM` is required for official SLCs.
 
 This change adds official SLC installation for local deployments only. It is deliberately
 one lane of the broader SLC design (custom SLCs, cloud, and the tarball + `ALTER SYSTEM`
@@ -37,73 +35,31 @@ exasol slc install python3
   1. launcher resolves alias -> {image, target} from slc-catalog.yaml
   2. launcher collision-check: installed set must stay alias-disjoint
   3. launcher records the SLC in launcher state
-  4. launcher stops then starts the deployment (via the runner)
-  5. runner writes vm-shared/slc.json from --slc start flags
-  6. init-db.sh reads slc.json, force-recreates the container with --mount type=image
-     (podman pulls the image inside the VM), mounting it at /exa/slc/<target>
-  7. nano admini scans /exa/slc -> registers PYTHON3; launcher waits-for-ready and verifies
+  4. launcher stops then starts the deployment, passing the installed set as --slc flags
+  5. the runner mounts each requested image at /exa/slc/<target> in the database container
+  6. the database scans /exa/slc, registers the aliases; launcher waits-for-ready and verifies
 ```
 
-Image mounts are `podman run` arguments and are not persisted into `/exa`; the launcher
-therefore re-passes the full installed set on every start (step 4-5), reconstructed from
-launcher state — analogous to how version-check settings are re-passed today.
+Image mounts are container-run arguments and are not persisted; the launcher therefore
+re-passes the full installed set on every start (step 4), reconstructed from launcher state
+— analogous to how version-check settings are re-passed today.
 
-## Cross-repo contract (exasol-local-vm)
+## Runner interface
 
-The runner change is small and additive. Backward compatibility rule: when no SLCs are
-requested, behavior is byte-for-byte identical to today.
+The launcher depends on a small, additive runner interface. **Backward compatibility
+rule:** when no SLCs are requested, behavior is identical to today.
 
-**1. Runner `start` flag (mac runner, `launcher/mac/main.go`).**
-Add a repeatable `--slc` flag; each value encodes one mount as `<image>=<target>` (image
-references contain no `=`; targets are absolute paths with no `=`, so `=` is an
-unambiguous separator — split on the first `=`). The launcher passes one `--slc` per
-installed SLC. Mirror `writeVersionCheckRuntimeConfig`: add `writeSlcRuntimeConfig` that
-writes the shared file.
+**1. `start` flag.** The runner accepts a repeatable `--slc` flag; each value encodes one
+mount as `<image>=<target>`. Image references contain no `=` and targets are absolute paths
+with no `=`, so the first `=` is an unambiguous separator. The launcher passes one `--slc`
+per installed SLC.
 
-**2. `vm-shared/slc.json`** (written by the runner, read by `init-db.sh`):
-```json
-{ "slc": [ { "image": "docker.io/exasol/script-language-container:standard-EXASOL-all-python-3.12-release_arm64_GM7DI5...ISZQ",
-             "target": "/exa/slc/python312" } ] }
-```
-Absent or `{"slc":[]}` means "no SLCs" and must be treated identically to today.
+**2. Mount semantics.** The runner mounts each requested image into the database container
+at its target path. An empty request set is treated identically to today (no SLC mounts).
 
-**3. `init-db.sh` — read the list.** After the existing config parsing, add:
-```sh
-SLC_CONFIG_FILE="$EXASOL_VM_HOST_SHARED_DIR/slc.json"
-build_slc_mount_args() {   # prints repeated: --mount type=image,source=<img>,destination=<dst>
-  [ -f "$SLC_CONFIG_FILE" ] || return 0
-  count=$(jq -r '.slc // [] | length' "$SLC_CONFIG_FILE") || return 1
-  i=0
-  while [ "$i" -lt "$count" ]; do
-    img=$(jq -er ".slc[$i].image"  "$SLC_CONFIG_FILE") || return 1
-    dst=$(jq -er ".slc[$i].target" "$SLC_CONFIG_FILE") || return 1
-    printf '%s\n' "--mount" "type=image,source=$img,destination=$dst"
-    i=$((i + 1))
-  done
-}
-```
-Accumulate into positional parameters (the file already uses the `set --` idiom) so values
-are never re-split by the shell.
-
-**4. `init-db.sh` — harden the recreate.** Replace the current soft removal
-(`podman rm … || true`, lines ~350-353) with a forced, verified removal, and add
-`--replace` to `podman run`:
-```sh
-if podman container exists "$DB_CONTAINER_NAME"; then
-  log_msg "Removing existing container $DB_CONTAINER_NAME to recreate it fresh"
-  podman rm -f "$DB_CONTAINER_NAME" || { log_msg "Error: failed to remove $DB_CONTAINER_NAME"; log_diagnostics; exit 1; }
-fi
-if podman container exists "$DB_CONTAINER_NAME"; then
-  log_msg "Error: $DB_CONTAINER_NAME still present after removal; aborting"; exit 1
-fi
-# podman run -d --replace ... <existing args> $SLC_MOUNT_ARGS "$@"
-```
-Rationale: a stale container (from an unclean VM kill) otherwise makes `podman run --name`
-fail with a name conflict, so the new SLC-mounted container never starts. `rm -f` handles
-any container state; the post-removal check and `exit 1` replace the failure-swallowing
-`|| true`; `--replace` is defense-in-depth against a race.
-
-**5. Re-embed the runner** into exasol-personal via `tools/localrunner` after the change.
+**3. Runner version.** The embedded runner in `assets/resources/resources.yaml` must be
+bumped to a release that supports `--slc` before this feature is enabled; an older runner
+rejects the unknown flag and fails to start.
 
 ## exasol-personal design
 
@@ -115,17 +71,17 @@ any container state; the post-removal check and `exit 1` replace the failure-swa
 - **Target directory**: derived deterministically from the flavor (e.g.
   `/exa/slc/python312`); free-form as far as the DB is concerned (aliases come from the
   image), must be unique per installed SLC, and MUST NOT start with `current-` (that prefix
-  is reserved by the runner's managed `current-java` anchor and is skipped by the scan).
+  is reserved by the runner and is skipped by the scan).
 - **State**: the installed SLC set is persisted in launcher state in the deployment
   directory and is the source of truth re-applied on every start.
 - **Collision rule (full alias-disjointness)**: the set of mounted SLCs MUST be disjoint
   across *all* declared aliases — versioned and unversioned — because the DB throws at
-  engine init on *any* duplicate alias (`SlcConfig::createBuiltinNameMap`), not only on a
-  duplicated unversioned one. Before an install the launcher compares the candidate SLC's
-  full alias set against that of every already-installed SLC: a newer version of an
-  already-installed flavor **replaces** the incumbent; any other overlap is **rejected**
-  with a clear message naming the conflicting alias and the SLC that already owns it. Alias
-  sets are read per installed `(version, flavor)` from the catalog, because the owner of an
+  engine init on *any* duplicate alias, not only on a duplicated unversioned one. Before an
+  install the launcher compares the candidate SLC's full alias set against that of every
+  already-installed SLC: a newer version of an already-installed flavor **replaces** the
+  incumbent; any other overlap is **rejected** with a clear message naming the conflicting
+  alias and the SLC that already owns it. Alias sets are read per installed
+  `(version, flavor)` from the catalog, because the owner of an
   unversioned alias can shift between releases (e.g. `PYTHON3` moving from python-3.12 to a
   newer flavor), so a flavor's alias set is not release-invariant.
 - **Update semantics (digest diff, no version ordering)**: `update <alias>` re-resolves the
@@ -142,11 +98,11 @@ any container state; the post-removal check and `exit 1` replace the failure-swa
   readiness, and verifies the change took effect before reporting success.
 - **Restart confirmation**: because activation restarts a running database (dropping open
   connections and aborting running statements), install/update/remove warn and require
-  confirmation first. `--yes` skips the prompt (required for automation) and `--no-restart`
+  confirmation first. `--auto-approve` skips the prompt (required for automation) and `--no-restart`
   records the change to apply on the next start without restarting now. The prompt is shown
   only when a restart will actually occur (running database) and only after validation
   (unknown alias / collision fail before any prompt); a non-interactive session without
-  `--yes`/`--no-restart` is refused rather than silently restarting. A guard against
+  `--auto-approve`/`--no-restart` is refused rather than silently restarting. A guard against
   restarting during a backup/critical operation was considered but deferred: Personal-local
   has no reliable "operation in progress" signal to detect today, so confirmation is the v1
   safeguard.
@@ -158,7 +114,7 @@ any container state; the post-removal check and `exit 1` replace the failure-swa
 - Unknown alias → error with the list of valid aliases; no state change, no restart.
 - Non-local backend → unsupported error; no state change.
 - Alias collision → rejected with the conflicting alias/flavor named; no state change.
-- Image pull / container recreate fails on start → `init-db.sh` exits non-zero; the launcher
+- Image pull / container recreate fails on start → the runner start fails; the launcher
   reports the failure and that the SLC is configured-but-not-active (never a false success).
 - Re-install of an already-installed alias → no-op (same version) or replace (different
   version), idempotent either way.
@@ -166,27 +122,12 @@ any container state; the post-removal check and `exit 1` replace the failure-swa
 
 ## Storage hygiene
 
-On replace or removal, the recreated container drops the old mount but the old SLC image
-would otherwise remain in the VM's Podman store, growing it unboundedly across install
-cycles (a concern the broader SLC design explicitly called out). `init-db.sh`
-(`prune_unreferenced_slc_images`) reclaims it: after the desired images are pulled and
-before `podman run` — the point at which the outgoing DB container is already removed, so
-old images are unreferenced — it removes any `exasol/script-language-container` image whose
-reference is not listed in the current `slc.json`. The prune is deliberately narrow and
-safe:
-
-- **Scoped to the SLC repository.** Only images whose reference contains
-  `exasol/script-language-container` are eligible; the DB image and any unrelated images are
-  never considered.
-- **Authoritative-set only.** It runs only when `slc.json` exists. An absent file means
-  "SLC-unaware" (an older launcher, or today's default), so the store is left untouched
-  rather than pruned against an unknown desired set.
-- **Best-effort, never fatal.** A removal that fails (image still in use, or shared layers)
-  is logged and skipped; pruning can never abort database startup.
-
-Dangling (`<none>`) SLC layers left by an overwritten tag are out of scope — each SLC
-version carries a unique content-hash tag, so replaced/removed images retain their
-`repo:tag` and are matched by reference.
+On replace or removal the old SLC image would otherwise accumulate in the VM's image store,
+growing it unboundedly across install cycles. Reclaiming those unreferenced images is the
+runner's responsibility during recreation; the launcher's contribution is to pass the
+authoritative installed set on every start, so the runner always knows which SLC images are
+still wanted and which are safe to drop. Each SLC version carries a unique content-hash tag,
+so replaced or removed images are matched by their exact reference.
 
 ## Risks
 
