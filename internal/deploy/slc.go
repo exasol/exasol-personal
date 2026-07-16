@@ -56,7 +56,7 @@ func requireDeploymentPresent(deployment config.DeploymentDir) error {
 // ConfirmFunc asks the user to confirm a database restart. It is invoked only when an
 // operation would restart a *running* database, after validation and before any state is
 // written. Returning false aborts with ErrSLCOperationCancelled. A nil ConfirmFunc means
-// "already confirmed" (e.g. the caller passed --yes).
+// "already confirmed" (e.g. the caller passed --auto-approve).
 type ConfirmFunc func() (bool, error)
 
 func confirmOrCancel(confirm ConfirmFunc) error {
@@ -89,9 +89,7 @@ const (
 
 // SLCInstallResult reports the outcome of an install.
 type SLCInstallResult struct {
-	Entry config.InstalledSLC
-	// AlreadyInstalled is true when the exact resolved image is already installed, so the
-	// install was a no-op (no state change, no restart).
+	Entry            config.InstalledSLC
 	AlreadyInstalled bool
 	Replaced         bool
 	Outcome          SLCApplyOutcome
@@ -106,16 +104,12 @@ type SLCRemoveResult struct {
 
 // SLCUpdateResult reports the outcome of an update.
 type SLCUpdateResult struct {
-	// Found is false when no installed SLC matches the alias.
-	Found bool
-	// Unchanged is true when the resolved image already matches the installed one.
-	Unchanged bool
-	// FromFlavor/FromVersion describe the previously installed SLC (for reporting).
+	Found       bool
+	Unchanged   bool
 	FromFlavor  string
 	FromVersion string
-	// Entry is the newly installed SLC.
-	Entry   config.InstalledSLC
-	Outcome SLCApplyOutcome
+	Entry       config.InstalledSLC
+	Outcome     SLCApplyOutcome
 }
 
 // SLCStatus describes one catalog SLC and whether it is installed in this deployment.
@@ -162,8 +156,7 @@ func InstallSLC(
 		return nil, err
 	}
 
-	// No-op if the exact resolved image is already installed.
-	// no state change and, crucially, no needless database restart.
+	// An identical already-installed image is a no-op: no state change, no restart.
 	if idx := findInstalledByImage(state.InstalledSLCs, entry.Image); idx >= 0 {
 		return &SLCInstallResult{Entry: state.InstalledSLCs[idx], AlreadyInstalled: true}, nil
 	}
@@ -483,9 +476,9 @@ func localRunnerSlcArgs(deployment config.DeploymentDir) ([]string, error) {
 }
 
 // applySLCChange (re)starts the local database so a changed SLC set takes effect. Success
-// is verified through the readiness wait inside Start: init-db.sh fails - and the database
-// never becomes ready - if an image cannot be pulled or two SLCs collide, so a successful
-// start confirms the change applied.
+// is verified through the readiness wait inside Start: startup fails, and the database never
+// becomes ready, if an image cannot be pulled or two SLCs collide, so a successful start
+// confirms the change applied.
 //
 //nolint:revive // ensureRunning selects apply semantics (start vs. defer), not internal control coupling.
 func applySLCChange(

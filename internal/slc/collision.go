@@ -11,9 +11,8 @@ import (
 // CheckInstallable determines whether a candidate SLC can be installed given the set of
 // already-installed SLCs.
 //
-// The database refuses to start if two mounted SLCs declare the same alias
-// (SlcConfig::createBuiltinNameMap throws at engine init), so the installed set must stay
-// disjoint across all declared aliases.
+// The database refuses to start if two mounted SLCs declare the same alias (it throws at
+// engine init), so the installed set must stay disjoint across all declared aliases.
 //
 // It returns replacesFlavor=true when the candidate is a (new version of an)
 // already-installed flavor; the caller should then replace that entry rather than add a
