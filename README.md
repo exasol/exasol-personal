@@ -9,7 +9,7 @@
 
 **The Analytics Database for Agentic AI — Free for Personal Use**
 
-*Deploy a full-scale Exasol database on your own infrastructure in minutes*
+*Run a full Exasol database locally on your Mac or deploy to your own cloud*
 
 [![Documentation](https://img.shields.io/badge/docs-exasol.com-blue)](https://docs.exasol.com/db/latest/home.htm)
 [![Community](https://img.shields.io/badge/community-exasol-green)](https://community.exasol.com)
@@ -19,61 +19,55 @@
 
 ## 🔥 Key Features
 
+- 💻 **Runs Locally in Seconds** — Spin up a full Exasol database on your own Mac with one command (macOS today; Windows & Linux coming soon)
 - 🤖 **Built for Agentic AI** — Connect AI agents and LLM tools directly through a scriptable CLI
 - 🧠 **Built-in AI Functions** — Leverage native AI/ML capabilities with GPU acceleration, right where your data lives
 - 🏎️ **In-Memory Performance** — Run complex analytics at in-memory speed with Exasol's industry-leading analytics engine
 - 🏢 **Full Enterprise Features** — Access all enterprise-scale capabilities of the Exasol database, completely free for personal use
 - ♾️ **Unlimited Data** — Store and analyze unlimited amounts of data with no artificial limits
 - 📈 **Scalable Architecture** — Scale up to any number of nodes using Exasol's MPP (Massively Parallel Processing) architecture
-- ⚙️ **Simple Deployment** — Spin up Exasol on AWS, Azure, Exoscale, STACKIT, or your local system with just a few commands
-- 🖥️ **Cross-Platform CLI** — Install and manage your cluster using the Exasol Launcher on Linux, macOS, or Windows
+- ☁️ **Or Deploy to Your Cloud** — Provision to AWS, Azure, Exoscale, or STACKIT with just a few commands when you need scale or a shared instance
+- 🖥️ **Cross-Platform CLI** — Install and manage Exasol using the Exasol Launcher on macOS, Linux, or Windows
 
 
 ## ✅ Prerequisites
 
-A cloud account on one of the supported platforms with permission to provision compute instances, or a macOS system for local deployment:
+**Local deployment (recommended — fastest):** a Mac with at least 8 GB RAM.
+
+> Local deployment is currently **macOS only**. Windows and Linux support is coming soon — until then, use a cloud deployment on those platforms.
+
+**Cloud deployment:** an account on one of the supported providers, with permission to provision compute instances:
 
 - **AWS** — [Set up an AWS account for Exasol Personal](./HOWTO_SETUP_AWS_ACCOUNT.md)
 - **Azure** — [Set up an Azure account for Exasol Personal](./HOWTO_SETUP_AZURE_ACCOUNT.md)
 - **Exoscale** — [Set up an Exoscale account for Exasol Personal](./HOWTO_SETUP_EXOSCALE_ACCOUNT.md)
 - **STACKIT** — [Set up a STACKIT account for Exasol Personal](./HOWTO_SETUP_STACKIT_ACCOUNT.md)
-- **Local** — local deployment on macOS, with at least 8 GB RAM
 
 
-## 🏎️ Quick Start (macOS / Linux)
+## 🏎️ Quick Start — Run Exasol Locally
+
+The fastest way to try Exasol: a full database running on your own Mac.
+
+> **Currently macOS only.** Windows and Linux support is coming soon — to run Exasol on those platforms today, use a cloud deployment (see the **Deploy to the Cloud** section below).
+
+1. Download the launcher:
+   ```bash
+   curl https://www.exasol.com/install/ | sh
+   ```
+
+2. Start a local Exasol database:
+   ```bash
+   exasol install local
+   ```
+
+In a few seconds you'll have a local Exasol instance running. Run `exasol info` at any time to see how to connect, then head to the **Load Sample Data** section to start querying.
+
+Prefer to run in your own cloud? See the **Deploy to the Cloud** section below.
 
 
-1. Download the launcher
-```bash
-curl https://www.exasol.com/install/ | sh
-```
+## ☁️ Deploy to the Cloud
 
-2. Install on a cloud provider or your local system
-
-```bash
-exasol install aws        # Amazon Web Services
-```
-
-```bash
-exasol install azure      # Microsoft Azure
-```
-
-```bash
-exasol install exoscale   # Exoscale
-```
-
-```bash
-exasol install stackit    # STACKIT
-```
-
-```bash
-exasol install local      # local system, macOS
-```
-
-Read on for Windows instructions and full details.
-
-
-## 🚀 Deploy Exasol Personal
+Deploy Exasol Personal to your own cloud account when you need more scale or a shared instance. Supported providers: AWS, Azure, Exoscale, and STACKIT.
 
 1. Download and install the Exasol Launcher for your platform.
 
@@ -86,15 +80,14 @@ Read on for Windows instructions and full details.
 
    On Windows: download the Exasol Launcher from the [Exasol Download Portal](https://downloads.exasol.com/exasol-personal) and copy the `exasol` binary to a directory in your `PATH`.
 
-2. For cloud presets, configure authentication for your provider. See the relevant account setup guide in [Prerequisites](#-prerequisites) for the environment variables and credentials required.
+2. Configure authentication for your provider. See the relevant account setup guide in the **Prerequisites** section for the environment variables and credentials required.
 
-3. To install Exasol Personal, run the following command with the preset for your cloud provider or local system:
+3. To install Exasol Personal, run the following command with the preset for your cloud provider:
    ```bash
    exasol install aws        # Amazon Web Services
    exasol install azure      # Microsoft Azure
    exasol install exoscale   # Exoscale
    exasol install stackit    # STACKIT
-   exasol install local      # local system, macOS
    ```
    The `exasol install` command does the following:
    - Generates backend files in the deployment directory
@@ -302,14 +295,14 @@ See [doc/presets.md](doc/presets.md) for the full preset contract: manifest sche
 
 The Exasol Launcher runs on:
 
-- **macOS** — 12 (Monterey) or later, on Apple Silicon or Intel.
+- **macOS** — 12 (Monterey) or later.
 - **Linux** — amd64 or arm64.
 - **Windows** — 10 or later, amd64.
 
 Where the database runs depends on the deployment type:
 
 - **Cloud deployments** — the database runs on your provider's infrastructure, so any supported launcher platform above works. The launcher provisions **Ubuntu 22.04 LTS (x86-64)** compute instances on all cloud providers.
-- **Local deployments** — the database runs in a VM on your machine, which requires macOS 15 (Sequoia) or later on Apple Silicon, with at least 8 GB RAM.
+- **Local deployments** — the database runs in a VM on your machine, which requires macOS 15 (Sequoia) or later, with at least 8 GB RAM.
 
 ## 🚧 Limitations
 
