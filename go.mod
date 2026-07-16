@@ -186,7 +186,7 @@ require (
 	github.com/terraform-linters/tflint v0.61.0 // indirect
 	github.com/terraform-linters/tflint-plugin-sdk v0.23.1 // indirect
 	github.com/terraform-linters/tflint-ruleset-terraform v0.14.1 // indirect
-	github.com/theupdateframework/go-tuf/v2 v2.4.2-0.20260407074541-7e8f69f906ef // indirect
+	github.com/theupdateframework/go-tuf/v2 v2.4.2 // indirect
 	github.com/transparency-dev/formats v0.1.1 // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
