@@ -44,21 +44,31 @@
 - **STACKIT** — [Set up a STACKIT account for Exasol Personal](./HOWTO_SETUP_STACKIT_ACCOUNT.md)
 
 
+## ⬇️ Install the Launcher
+
+The **Exasol Launcher** (`exasol`) is the command-line tool that deploys and manages your Exasol database, locally or in the cloud. It runs on macOS, Linux, and Windows.
+
+On macOS and Linux, install it with:
+```bash
+curl https://www.exasol.com/install/ | sh
+```
+This places the `exasol` binary in `~/.local/bin`. On most Linux distributions this directory is already in your `PATH`; on macOS, or if the installer reports that `~/.local/bin` is not in your `PATH`, follow the instructions it prints.
+
+On Windows, download the launcher from the [Exasol Download Portal](https://downloads.exasol.com/exasol-personal) and copy the `exasol` binary to a directory in your `PATH`.
+
+Verify the installation with `exasol version`.
+
+
 ## 🏎️ Quick Start — Run Exasol Locally
 
 The fastest way to try Exasol: a full database running on your own Mac.
 
 > **Currently macOS only.** Windows and Linux support is coming soon — to run Exasol on those platforms today, use a cloud deployment (see the **Deploy to the Cloud** section below).
 
-1. Download the launcher:
-   ```bash
-   curl https://www.exasol.com/install/ | sh
-   ```
-
-2. Start a local Exasol database:
-   ```bash
-   exasol install local
-   ```
+With the launcher installed (see **Install the Launcher** above), start a local Exasol database:
+```bash
+exasol install local
+```
 
 In a few seconds you'll have a local Exasol instance running. Run `exasol info` at any time to see how to connect, then head to the **Load Sample Data** section to start querying.
 
@@ -69,20 +79,11 @@ Prefer to run in your own cloud? See the **Deploy to the Cloud** section below.
 
 Deploy Exasol Personal to your own cloud account when you need more scale or a shared instance. Supported providers: AWS, Azure, Exoscale, and STACKIT.
 
-1. Download and install the Exasol Launcher for your platform.
+With the launcher installed (see **Install the Launcher** above):
 
-   On Linux and macOS, run:
-   ```bash
-   curl https://www.exasol.com/install/ | sh
-   ```
+1. Configure authentication for your provider. See the relevant account setup guide in the **Prerequisites** section for the environment variables and credentials required.
 
-   This installs the `exasol` binary to `~/.local/bin`. On most Linux distributions this directory is already in your `PATH`. On macOS, or if the installer reports that `~/.local/bin` is not in your `PATH`, follow its instructions.
-
-   On Windows: download the Exasol Launcher from the [Exasol Download Portal](https://downloads.exasol.com/exasol-personal) and copy the `exasol` binary to a directory in your `PATH`.
-
-2. Configure authentication for your provider. See the relevant account setup guide in the **Prerequisites** section for the environment variables and credentials required.
-
-3. To install Exasol Personal, run the following command with the preset for your cloud provider:
+2. To install Exasol Personal, run the following command with the preset for your cloud provider:
    ```bash
    exasol install aws        # Amazon Web Services
    exasol install azure      # Microsoft Azure
