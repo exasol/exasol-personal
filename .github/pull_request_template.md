@@ -46,6 +46,7 @@ Fixes #
 - [ ] Code follows the project's [coding guidelines](doc/best_practices.md)
 - [ ] Ran `task fmt` and `task lint`
 - [ ] Updated documentation (if applicable)
+- [ ] Updated `CHANGELOG.md` for user-facing changes, including examples for new features when useful
 - [ ] Added/updated tests
 - [ ] All tests pass locally
 - [ ] Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) format

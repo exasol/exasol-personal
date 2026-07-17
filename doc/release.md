@@ -27,7 +27,24 @@ Before tagging a release, ensure deployment directory compatibility constraints 
 - If the release introduces a breaking change in deployment directory semantics (state layout, workflow invariants, marker files, etc.), add a new minimum supported deployment version constant in the cmd layer (see `cmd/exasol/compatibility_versions.go`) and apply it to the affected commands.
 - Release-candidate versions (for example `1.2.0-rc1`) must not appear in those constants. Compatibility comparisons treat prerelease/build suffixes as irrelevant and compare only the base version (so `1.2.0-rc1` behaves like `1.2.0`).
 
-### 1. Tag the Release
+Before tagging a stable release, finalize the user-facing [changelog](../CHANGELOG.md). The in-repo changelog is the durable release history for users; generated GitHub release notes are useful for publishing, but they are not a substitute for maintaining the curated changelog.
+
+Move all applicable entries from `Unreleased` into a new versioned section such as `2.2.0 - 2026-07-16`, grouped by `Added`, `Changed`, `Fixed`, and `Breaking Changes`. Commit that release-prep change first, then create the stable release tag on that commit. Automating this step is desirable, but the manual release-prep commit is the required fallback.
+
+Pre-release tags such as `v2.2.0-rc1` do not require this extra changelog-finalization commit. Their entries may remain under `Unreleased` until the stable release is prepared.
+
+### 1. Finalize the Changelog
+
+```bash
+# Edit CHANGELOG.md:
+# - create the version section for the release
+# - move all shipped entries from Unreleased into that section
+# - leave Unreleased ready for the next cycle
+git add CHANGELOG.md
+git commit -m "docs: finalize changelog for v1.2.3"
+```
+
+### 2. Tag the Release
 
 ```bash
 # Create an annotated tag with semantic versioning
@@ -37,7 +54,7 @@ git tag -a v1.2.3 -m "Release v1.2.3"
 git push origin v1.2.3
 ```
 
-### 2. Automated Build
+### 3. Automated Build
 
 GitHub Actions will automatically:
 1. Checkout the tagged commit
@@ -47,7 +64,7 @@ GitHub Actions will automatically:
 5. Generate release notes
 6. Publish the release on GitHub
 
-### 3. Monitor the Release
+### 4. Monitor the Release
 
 Watch the GitHub Actions workflow to ensure it completes successfully:
 - Navigate to the [Actions tab](https://github.com/exasol/exasol-personal/actions)
@@ -92,9 +109,10 @@ Follow [Semantic Versioning](https://semver.org/):
 
 ## Release Checklist
 
-Before creating a release:
+Before creating a stable release:
 
 - [ ] All tests pass locally (`task all`)
+- [ ] Changelog is finalized for this version and committed before the tag
 - [ ] Documentation is up to date
 - [ ] Version number follows semantic versioning
 - [ ] All changes merged to main branch

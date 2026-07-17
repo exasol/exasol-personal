@@ -15,6 +15,8 @@
 [![Community](https://img.shields.io/badge/community-exasol-green)](https://community.exasol.com)
 [![Downloads](https://img.shields.io/badge/downloads-exasol.com-orange)](https://downloads.exasol.com/exasol-personal)
 
+[Changelog](CHANGELOG.md)
+
 </div>
 
 ## 🔥 Key Features
