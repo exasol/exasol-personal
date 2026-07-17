@@ -285,7 +285,7 @@ func TestSplitSemicolonTerminatedStatements(t *testing.T) {
 	t.Run("keeps semicolons inside single quotes", func(t *testing.T) {
 		t.Parallel()
 
-		statements, remainder := splitSemicolonTerminatedStatements("SELECT 'a;b';")
+		statements, remainder := splitStatements("SELECT 'a;b';")
 		require.Equal(t, []string{"SELECT 'a;b'"}, statements)
 		require.Empty(t, remainder)
 	})
@@ -295,7 +295,7 @@ func TestSplitSemicolonTerminatedStatements(t *testing.T) {
 
 		sql := "OPEN SCHEMA foo;" +
 			"SELECT * FROM dual"
-		statements, remainder := splitSemicolonTerminatedStatements(sql)
+		statements, remainder := splitStatements(sql)
 		require.Equal(t, []string{"OPEN SCHEMA foo"}, statements)
 		require.Equal(t, "SELECT * FROM dual", remainder)
 	})
@@ -303,7 +303,7 @@ func TestSplitSemicolonTerminatedStatements(t *testing.T) {
 	t.Run("keeps semicolons inside double quotes", func(t *testing.T) {
 		t.Parallel()
 
-		statements, remainder := splitSemicolonTerminatedStatements(`SELECT "a;b";`)
+		statements, remainder := splitStatements(`SELECT "a;b";`)
 		require.Equal(t, []string{`SELECT "a;b"`}, statements)
 		require.Empty(t, remainder)
 	})
@@ -313,7 +313,7 @@ func TestSplitSemicolonTerminatedStatements(t *testing.T) {
 
 		sql := "SELECT 1 -- ; in comment\n" +
 			";SELECT 2;"
-		statements, remainder := splitSemicolonTerminatedStatements(sql)
+		statements, remainder := splitStatements(sql)
 		require.Equal(t, []string{"SELECT 1 -- ; in comment", "SELECT 2"}, statements)
 		require.Empty(t, remainder)
 	})
@@ -323,7 +323,7 @@ func TestSplitSemicolonTerminatedStatements(t *testing.T) {
 
 		sql := "SELECT 1 /* ; in comment */;" +
 			"SELECT 2;"
-		statements, remainder := splitSemicolonTerminatedStatements(sql)
+		statements, remainder := splitStatements(sql)
 		require.Equal(
 			t,
 			[]string{"SELECT 1 /* ; in comment */", "SELECT 2"},
@@ -331,4 +331,160 @@ func TestSplitSemicolonTerminatedStatements(t *testing.T) {
 		)
 		require.Empty(t, remainder)
 	})
+}
+
+func TestLooksLikeScriptDDL(t *testing.T) {
+	t.Parallel()
+
+	scripts := []string{
+		"CREATE SCRIPT foo AS",
+		"CREATE PYTHON3 SCALAR SCRIPT foo(x INT) RETURNS INT AS",
+		"CREATE OR REPLACE JAVA ADAPTER SCRIPT foo AS",
+		"CREATE FUNCTION bar (x INT) RETURN INT AS",
+		"create or replace python3 scalar script foo as",
+		"CREATE SOMEFUTURELANG SCALAR SCRIPT foo AS",
+		"-- comment\nCREATE JAVA SCALAR SCRIPT foo AS",
+		"CREATE /* lang */ JAVA SCALAR SCRIPT foo AS",
+		"CREATE/* lang */JAVA SCALAR SCRIPT foo AS",
+		"CREATE--x\nJAVA SCALAR SCRIPT foo AS",
+	}
+	for _, sql := range scripts {
+		require.Truef(t, looksLikeScriptDDL(sql), "expected script DDL: %q", sql)
+	}
+
+	notScripts := []string{
+		"SELECT 1",
+		"CREATE TABLE t (a INT)",
+		"CREATE TABLE script_log (a INT)",
+		"CREATE VIEW v AS SELECT 1",
+		"CREATE TABLE report AS SELECT id FROM script",
+		"CREATE SCHEMA s",
+		"ALTER TABLE t ADD COLUMN c INT",
+		"DROP SCRIPT foo",
+		"TRUNCATE TABLE t",
+		"CREATE /* a script */ TABLE t (id INT)",
+		"CREATE TABLE t -- function\nAS SELECT 1",
+		"CREATE CONNECTION c TO 'a script b'",
+		"CREATE USER u IDENTIFIED BY 'my function pw'",
+	}
+	for _, sql := range notScripts {
+		require.Falsef(t, looksLikeScriptDDL(sql), "expected not script DDL: %q", sql)
+	}
+}
+
+func TestSplitStatementsScriptDelimiter(t *testing.T) {
+	t.Parallel()
+
+	t.Run("java body with semicolons and slashes terminated by slash line", func(t *testing.T) {
+		t.Parallel()
+
+		sql := "CREATE JAVA SCALAR SCRIPT m() RETURNS INT AS\n" +
+			"class M { int run() { return 6 / 2; } }\n/\n"
+		statements, remainder := splitStatements(sql)
+		require.Equal(t, []string{
+			"CREATE JAVA SCALAR SCRIPT m() RETURNS INT AS\n" +
+				"class M { int run() { return 6 / 2; } }",
+		}, statements)
+		require.Empty(t, strings.TrimSpace(remainder))
+	})
+
+	t.Run("script word inside a string literal splits on semicolon", func(t *testing.T) {
+		t.Parallel()
+
+		sql := "CREATE CONNECTION c TO 'a script b';\nSELECT 1;"
+		statements, _ := splitStatements(sql)
+		require.Equal(t, []string{"CREATE CONNECTION c TO 'a script b'", "SELECT 1"}, statements)
+	})
+
+	t.Run("comment glued to CREATE still detects the script", func(t *testing.T) {
+		t.Parallel()
+
+		sql := "CREATE/* c */JAVA SCALAR SCRIPT m() RETURNS INT AS\n" +
+			"class M { int run() { return 1; } }\n/\n"
+		statements, _ := splitStatements(sql)
+		require.Len(t, statements, 1)
+		require.Contains(t, statements[0], "return 1;")
+	})
+
+	t.Run("create table with script word in a comment splits on semicolon", func(t *testing.T) {
+		t.Parallel()
+
+		sql := "CREATE /* a script */ TABLE t (id INT);\nSELECT 1;"
+		statements, _ := splitStatements(sql)
+		require.Equal(t, []string{"CREATE /* a script */ TABLE t (id INT)", "SELECT 1"}, statements)
+	})
+
+	t.Run("mixed normal and script statements", func(t *testing.T) {
+		t.Parallel()
+
+		sql := "OPEN SCHEMA s;\n" +
+			"CREATE PYTHON3 SCALAR SCRIPT add1(x INT) RETURNS INT AS\n" +
+			"def run(c):\n return c.x + 1\n/\n" +
+			"SELECT add1(41) FROM dual;\n"
+		statements, _ := splitStatements(sql)
+		require.Len(t, statements, 3)
+	})
+
+	t.Run("script without slash is buffered, not split on body semicolons", func(t *testing.T) {
+		t.Parallel()
+
+		sql := "CREATE JAVA SCALAR SCRIPT m(x DOUBLE) RETURNS DOUBLE AS\n" +
+			"class M { double run() { return x * 2.0; } }\n"
+		statements, remainder := splitStatements(sql)
+		require.Empty(t, statements)
+		require.Equal(t, sql, remainder)
+	})
+
+	t.Run("buffered script without slash flushes whole at end of input", func(t *testing.T) {
+		t.Parallel()
+
+		sql := "CREATE JAVA SCALAR SCRIPT m(x DOUBLE) RETURNS DOUBLE AS\n" +
+			"class M { double run() { return x * 2.0; } }\n"
+		statements := nonInteractiveStatements(sql)
+		require.Len(t, statements, 1)
+		require.Contains(t, statements[0], "return x * 2.0;")
+	})
+}
+
+func TestScriptBufferedAcrossLinesUntilSlash(t *testing.T) {
+	t.Parallel()
+
+	processor := &mockInputsProcessor{}
+	sql := "CREATE JAVA SCALAR SCRIPT m(x DOUBLE) RETURNS DOUBLE AS\n" +
+		"class M { double run() { return x * 2.0; } }\n" +
+		"/\n" +
+		"SELECT m(5) FROM dual;\n"
+	err := runShellImpl(
+		readline.NewBuffered(strings.NewReader(sql)),
+		processor.processInput,
+		ShellOpts{ExecuteOnSemicolon: true},
+	)
+
+	require.NoError(t, err)
+	require.Len(t, processor.inputs, 2)
+	require.Contains(t, processor.inputs[0], "return x * 2.0;")
+	require.Equal(t, "SELECT m(5) FROM dual", processor.inputs[1])
+}
+
+// An unterminated script is intentionally flushed whole at EOF (client flushes, DB validates).
+func TestScriptWithoutSlashFlushedWholeAtEOF(t *testing.T) {
+	t.Parallel()
+
+	processor := &mockInputsProcessor{}
+	sql := "CREATE JAVA SCALAR SCRIPT m(x DOUBLE) RETURNS DOUBLE AS\n" +
+		"class M { double run() { return x * 2.0; } }\n"
+	err := runShellImpl(
+		readline.NewBuffered(strings.NewReader(sql)),
+		processor.processInput,
+		ShellOpts{ExecuteOnSemicolon: true},
+	)
+
+	require.NoError(t, err)
+	require.Len(t, processor.inputs, 1)
+	require.Equal(
+		t,
+		"CREATE JAVA SCALAR SCRIPT m(x DOUBLE) RETURNS DOUBLE AS\n"+
+			"class M { double run() { return x * 2.0; } }",
+		processor.inputs[0],
+	)
 }
