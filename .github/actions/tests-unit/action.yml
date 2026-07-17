@@ -7,4 +7,4 @@ runs:
       uses: ./.github/actions/setup-go
     - name: Run Unit Tests
       shell: bash
-      run: task tests-unit
+      run: task tests-unit COVERAGE=true
