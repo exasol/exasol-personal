@@ -44,7 +44,7 @@ PACKAGE_DOWNLOAD_URL="$BASE_URL/$OS/$ARCH/latest/$DOWNLOAD_FILENAME"
 
 echo "Detected OS: $OS"
 echo "Detected Architecture: $ARCH"
-echo "Installing Exasol Personal binary to $INSTALL_DIR..."
+echo "Installing the Exasol Launcher (the 'exasol' command) to $INSTALL_DIR..."
 
 mkdir -p "$INSTALL_DIR"
 
@@ -58,35 +58,58 @@ chmod +x "$INSTALL_PATH"
 echo
 echo "Installation complete!"
 echo
+echo "The Exasol Launcher ('exasol') is the command-line tool that deploys and"
+echo "manages your Exasol databases. It was installed to:"
+echo "    $INSTALL_PATH"
+echo
 
+# Make sure the install dir is on PATH so 'exasol' can be run from anywhere.
 case ":$PATH:" in
     *":$INSTALL_DIR:"*)
+        echo "$INSTALL_DIR is on your PATH — you're ready to go."
         ;;
     *)
-        echo "  $INSTALL_DIR is not in your PATH. Add this to your shell config:"
+        echo "$INSTALL_DIR is NOT on your PATH yet. Add it so you can run 'exasol' from anywhere:"
         echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
         echo
         echo "  For zsh:  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
         echo "  For bash: echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
-        echo
+        echo "  Then restart your shell."
         ;;
 esac
+echo
 
+if [ "$OS" = "macos" ]; then
 cat <<EOF
-Next steps:
-  1. Create a new deployment directory:
-       mkdir -p deployment && cd deployment
+Getting started:
 
-  2. Setup AWS Profile - Refer https://docs.exasol.com/db/latest/get_started/exasol_personal_aws_setup.htm
+  Run Exasol locally on your Mac — ready in seconds:
+      exasol install local
 
-  3. Run the installer from the deployment directory:
-       exasol install <infra preset name-or-path> [install preset name-or-path]
+  Or deploy to your own cloud (AWS, Azure, Exoscale, STACKIT), e.g.:
+      exasol install aws
 
-Where:
-  <infra preset name-or-path>   Infrastructure preset to use (e.g., aws)
-  [install preset name-or-path] Optional installation preset (e.g., ubuntu)
+  Then see how to connect, and open a SQL shell:
+      exasol info
+      exasol connect
 
-Examples:
-  exasol install aws
-  exasol install aws ubuntu
+Full documentation and all options:
+  https://github.com/exasol/exasol-personal
 EOF
+else
+cat <<EOF
+Getting started:
+
+  Deploy Exasol to your own cloud (AWS, Azure, Exoscale, STACKIT), e.g.:
+      exasol install aws
+
+  Then see how to connect, and open a SQL shell:
+      exasol info
+      exasol connect
+
+  (Local deployment is currently macOS only; Windows and Linux support is coming soon.)
+
+Full documentation and all options:
+  https://github.com/exasol/exasol-personal
+EOF
+fi
