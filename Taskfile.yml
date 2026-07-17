@@ -141,18 +141,15 @@ tasks:
       - deps-install-poetry
 
   tests-unit:
-    desc: Run unit tests (`task tests-unit TEST=Ready` or `task tests-unit TEST=*Ready*`)
+    desc: 'Run unit tests. TEST is a regex for `go test -run` (substring match, e.g. TEST=Ready). COVERAGE=true collects a coverage profile.'
     deps:
       - local-runner-placeholders
     vars:
       TEST: '{{default "" .TEST}}'
+      COVERAGE: '{{default "false" .COVERAGE}}'
     cmds:
-      - '{{if .TEST}}go test -v -race -run "{{.TEST}}" ./...{{else}}go test -v -race ./...{{end}}'
-      # Disabling coverage until it works with different toolchains
-      # Error that you get when running tests with coverage and when local go is older then what defined in go.mod:
-      # compile: version "go1.25.5" does not match go tool version "go1.25.1"
-      #- go test -v -race -coverprofile=coverage.out ./...
-      #- go tool cover -func=coverage.out
+      - go test -v -race{{if eq .COVERAGE "true"}} -coverprofile=coverage.out -covermode=atomic{{end}}{{if .TEST}} -run "{{.TEST}}"{{end}} ./...
+      - '{{if eq .COVERAGE "true"}}go tool cover -func=coverage.out{{end}}'
 
   tests-unit-find:
     desc: Find Go unit test names by wildcard on Linux (`task tests-unit-find TEST=*Ready*`)
