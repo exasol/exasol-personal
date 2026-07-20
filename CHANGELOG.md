@@ -14,15 +14,35 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   The list helps users distinguish the default deployment from named deployments and spot missing or inactive deployment directories.
 
+- Added the `exasol slc` command group (`install`, `list`, `update`, `remove`) to manage official script language containers (SLCs) in local deployments. Local deployments ship without any SLC, so UDFs in a given language only run once its container is installed.
+
+  Example: `exasol slc install python3` installs the official Python 3 SLC so `PYTHON3` UDFs work; `exasol slc list` shows what is installed.
+
+- Added `exasol diag local` to report local deployment runtime and reachability state — VM status, guest IP, bound host ports, per-port reachability, database readiness, and platform support — as JSON. It is safe to run whether or not the deployment is currently running.
+
+  Example: `exasol diag local` prints a JSON diagnostics snapshot for troubleshooting a local deployment.
+
 - Added this changelog as the user-facing release history for Exasol Personal. Release candidates now have a single in-repo place where users can see which features, behavior changes, fixes, and breaking changes may affect them.
 
 ### Changed
 
 - Improved README guidance to emphasize local deployment as the fastest way to try Exasol Personal.
 
+- Improved local deployment error reporting: when the local database endpoint cannot be reached and every forwarded port is unreachable, connect/start/stop now report a clearer network-wide reachability error instead of a generic failure.
+
+- Improved the installer script output with clearer getting-started guidance, PATH setup instructions, and platform-specific next steps.
+
+- Clarified in the README where the launcher (`exasol`) is installed and that its directory must be on your `PATH`, via a dedicated "Install the Launcher" section.
+
 ### Fixed
 
 - Fixed the personal installer script so it remains compatible with POSIX shell environments.
+
+- Fixed `exasol connect` so `CREATE SCRIPT` / `CREATE FUNCTION` definitions terminate on a line containing only `/` (the EXAplus rule) instead of the first `;`. UDF bodies that contain semicolons (for example Java and R) now parse and run correctly through `-c`, `-f`, and interactive input.
+
+  Example: `exasol connect -f create_udf.sql` no longer fails with `syntax error, unexpected '}'` when the script body contains semicolons.
+
+- Fixed local deployments getting stuck in `operation_in_progress` when a Start or Stop operation failed; the interruption is now recorded so the deployment can be operated on again.
 
 ### Breaking Changes
 
