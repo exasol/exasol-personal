@@ -5,7 +5,7 @@
 
 package localruntimebin
 
-import _ "embed"
+import _ "embed" // required for the go:embed directive below
 
 //go:embed generated/darwin/arm64/mac-runner-aarch64
 var RunnerBinary []byte

@@ -4,7 +4,7 @@
 package main
 
 import (
-	_ "embed"
+	_ "embed" // required for the go:embed directive below
 	"encoding/json"
 	"strings"
 	"text/template"
