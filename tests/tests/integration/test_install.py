@@ -171,16 +171,15 @@ def test_install_executes_init_step(exasol_path: str, tmp_path: Path) -> None:
     infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
 
     # When the install command is invoked
+    args = [
+        exasol_path,
+        "install",
+        infra_id,
+        "--deployment-dir",
+        str(deployment_dir),
+    ]
     with pytest.raises(CalledProcessError) as excinfo:
-        run_command(
-            [
-                exasol_path,
-                "install",
-                infra_id,
-                "--deployment-dir",
-                str(deployment_dir),
-            ]
-        )
+        run_command(args)
 
     # Then it fails during initialization (proving init ran)
     assert excinfo.value.returncode != 0
@@ -201,17 +200,16 @@ def test_init_local_rejects_unsupported_platform_before_writing_files(
     deployment_dir.mkdir()
 
     # When init is invoked for the local preset
+    args = [
+        exasol_path,
+        "init",
+        "local",
+        "--deployment-dir",
+        str(deployment_dir),
+        "--no-launcher-version-check",
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "init",
-                "local",
-                "--deployment-dir",
-                str(deployment_dir),
-                "--no-launcher-version-check",
-            ]
-        )
+        run_command(args)
 
     # Then it fails before writing deployment state
     stderr = exc.value.stderr.lower()
@@ -283,19 +281,17 @@ def test_init_local_rejects_memory_below_minimum(
     }
 
     # When init is invoked below the supported minimum memory
+    args = [
+        exasol_path,
+        "init",
+        "local",
+        "--deployment-dir",
+        str(deployment_dir),
+        "--memory-mb",
+        "4095",
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "init",
-                "local",
-                "--deployment-dir",
-                str(deployment_dir),
-                "--memory-mb",
-                "4095",
-            ],
-            env=env,
-        )
+        run_command(args, env=env)
 
     # Then the user sees the minimum-memory validation message
     assert (

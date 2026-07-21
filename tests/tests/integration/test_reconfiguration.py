@@ -418,18 +418,17 @@ def test_config_set_refuses_running_deployment(
     _set_workflow_state(deployment_dir, {"running": {}})
 
     # When config set is requested
+    args = [
+        exasol_path,
+        "config",
+        "set",
+        "--cluster-size",
+        "3",
+        "--deployment-dir",
+        str(deployment_dir),
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "config",
-                "set",
-                "--cluster-size",
-                "3",
-                "--deployment-dir",
-                str(deployment_dir),
-            ]
-        )
+        run_command(args)
 
     # Then it tells the user to destroy before changing configuration
     stderr = exc.value.stderr.lower()
@@ -478,18 +477,17 @@ def test_config_set_refuses_state_with_possible_resources(
     _set_workflow_state(deployment_dir, workflow_state)
 
     # When config set is requested
+    args = [
+        exasol_path,
+        "config",
+        "set",
+        "--cluster-size",
+        "3",
+        "--deployment-dir",
+        str(deployment_dir),
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "config",
-                "set",
-                "--cluster-size",
-                "3",
-                "--deployment-dir",
-                str(deployment_dir),
-            ]
-        )
+        run_command(args)
 
     # Then it refuses the configuration change with destroy guidance
     stderr = exc.value.stderr.lower()
@@ -579,20 +577,19 @@ def test_install_refuses_same_preset_configuration_change_for_running_deployment
     _set_workflow_state(deployment_dir, {"running": {}})
 
     # When install is rerun with changed same-preset configuration
+    args = [
+        exasol_path,
+        "install",
+        str(infra_dir),
+        str(install_dir),
+        "--cluster-size",
+        "3",
+        "--deployment-dir",
+        str(deployment_dir),
+        "--no-launcher-version-check",
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "install",
-                str(infra_dir),
-                str(install_dir),
-                "--cluster-size",
-                "3",
-                "--deployment-dir",
-                str(deployment_dir),
-                "--no-launcher-version-check",
-            ]
-        )
+        run_command(args)
 
     # Then it refuses the configuration change without destroying or mutating state
     stderr = exc.value.stderr.lower()
@@ -631,17 +628,16 @@ def test_init_refuses_different_preset_without_remove(
     )
 
     # When init is requested with a different preset
+    args = [
+        exasol_path,
+        "init",
+        second_preset,
+        "--deployment-dir",
+        str(deployment_dir),
+        "--no-launcher-version-check",
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "init",
-                second_preset,
-                "--deployment-dir",
-                str(deployment_dir),
-                "--no-launcher-version-check",
-            ]
-        )
+        run_command(args)
 
     # Then it fails before replacing local state
     assert exc.value.returncode != 0
@@ -677,18 +673,17 @@ def test_install_refuses_different_preset_without_removing_local_state(
     old_local.write_text("old")
 
     # When install is requested with a different preset
+    args = [
+        exasol_path,
+        "install",
+        str(infra_dir),
+        str(install_dir),
+        "--deployment-dir",
+        str(deployment_dir),
+        "--no-launcher-version-check",
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "install",
-                str(infra_dir),
-                str(install_dir),
-                "--deployment-dir",
-                str(deployment_dir),
-                "--no-launcher-version-check",
-            ]
-        )
+        run_command(args)
 
     # Then it fails before removing or reconfiguring local state
     assert exc.value.returncode != 0
@@ -790,16 +785,15 @@ def test_remove_refuses_non_deployment_directory(
     local_file.write_text("leftover")
 
     # When the recovery command is run
+    args = [
+        exasol_path,
+        "remove",
+        "--auto-approve",
+        "--deployment-dir",
+        str(deployment_dir),
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "remove",
-                "--auto-approve",
-                "--deployment-dir",
-                str(deployment_dir),
-            ]
-        )
+        run_command(args)
 
     # Then it refuses to remove unrelated local files
     assert exc.value.returncode != 0
