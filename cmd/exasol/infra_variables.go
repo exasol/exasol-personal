@@ -61,8 +61,7 @@ func (*numberFlag) Type() string {
 }
 
 func resolveInfrastructureVariables(
-	infraPresetName string,
-	infraPresetPath string,
+	infraPresetName, infraPresetPath string,
 ) (deploy.ConfigVariableResolution, error) {
 	preset := deploy.PresetRef{Name: infraPresetName, Path: infraPresetPath}
 

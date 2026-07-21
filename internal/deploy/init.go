@@ -346,7 +346,7 @@ func validateInstallationPreset(installationPreset PresetRef) error {
 	)
 }
 
-func validatePresetDir(dir string, requiredFile string) error {
+func validatePresetDir(dir, requiredFile string) error {
 	info, err := os.Stat(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

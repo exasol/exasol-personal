@@ -120,7 +120,7 @@ func listDeploymentDirectories() ([]deploymentListEntry, error) {
 // entry is reported as not_initialized rather than aborting the whole
 // listing. A permission error on the deployments root itself, by contrast,
 // is surfaced by listDeploymentDirectories as a command failure.
-func deploymentListEntryFor(name string, path string, activePath string) deploymentListEntry {
+func deploymentListEntryFor(name, path, activePath string) deploymentListEntry {
 	entry := deploymentListEntry{
 		Name:   name,
 		Path:   path,
