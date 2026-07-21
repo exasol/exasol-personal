@@ -1,3 +1,5 @@
+#!/bin/sh
+
 container_name="exasol-local-db"
 if ! podman container exists "$container_name"; then
   echo "Exasol Local database container not found" >&2
