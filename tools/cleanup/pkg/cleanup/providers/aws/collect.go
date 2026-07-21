@@ -621,7 +621,7 @@ func CollectDeploymentSummaries(
 }
 
 // preferPtrEarlier returns the earlier non-nil pointer, else existing.
-func preferPtrEarlier(existing *time.Time, candidate *time.Time) *time.Time {
+func preferPtrEarlier(existing, candidate *time.Time) *time.Time {
 	if candidate == nil {
 		return existing
 	}

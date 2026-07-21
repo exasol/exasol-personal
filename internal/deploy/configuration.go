@@ -266,7 +266,7 @@ func installationManifestDescription(manifest *presets.InstallManifest) string {
 }
 
 func presetIdentityInfo(
-	selector string, displayName string, description string,
+	selector, displayName, description string,
 ) PresetIdentityInfo {
 	info := PresetIdentityInfo{
 		Selector:    strings.TrimSpace(selector),
@@ -405,8 +405,7 @@ func resetAllConfigurationValues(values []DeploymentConfigValue) {
 }
 
 func newDeploymentConfigurationFromRaw(
-	infraVars map[string]string,
-	installVars map[string]string,
+	infraVars, installVars map[string]string,
 ) DeploymentConfiguration {
 	return DeploymentConfiguration{
 		Infrastructure: DeploymentConfigurationSection{Options: rawConfigValues(infraVars)},

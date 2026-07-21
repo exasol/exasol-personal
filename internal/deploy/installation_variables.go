@@ -120,7 +120,7 @@ func isReservedInstallationVariableName(name string) bool {
 	}
 }
 
-func parseInstallVarValue(varType string, raw string) (any, error) {
+func parseInstallVarValue(varType, raw string) (any, error) {
 	varType = strings.TrimSpace(varType)
 	switch varType {
 	case "bool":

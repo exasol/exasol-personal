@@ -202,7 +202,7 @@ func FilterDeploymentDetailsByTypes(details *DeploymentDetails, typeFilter []Res
 	return &filteredDetails
 }
 
-func ResolvedLocations(explicit []string, defaults []string) []string {
+func ResolvedLocations(explicit, defaults []string) []string {
 	if len(explicit) == 0 {
 		return append([]string(nil), defaults...)
 	}

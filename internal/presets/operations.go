@@ -20,7 +20,7 @@ var (
 	ErrUnknownInstallation   = errors.New("the specified installation preset does not exist")
 )
 
-func WriteInfrastructureDir(infrastructureName string, outDir string) error {
+func WriteInfrastructureDir(infrastructureName, outDir string) error {
 	entries, err := assets.InfrastructureAssets.ReadDir(assets.InfrastructureAssetDir)
 	if err != nil {
 		return err
@@ -38,7 +38,7 @@ func WriteInfrastructureDir(infrastructureName string, outDir string) error {
 	return ErrUnknownInfrastructure
 }
 
-func WriteInstallDir(installName string, outDir string) error {
+func WriteInstallDir(installName, outDir string) error {
 	entries, err := assets.InstallationAssets.ReadDir(assets.InstallationAssetDir)
 	if err != nil {
 		return err

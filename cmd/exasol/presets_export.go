@@ -56,7 +56,7 @@ func embeddedPresetExists(ids []string, name string) bool {
 	return false
 }
 
-func resolveEmbeddedPresetHandler(presetName string, typeOpt string) (*presetTypeHandler, error) {
+func resolveEmbeddedPresetHandler(presetName, typeOpt string) (*presetTypeHandler, error) {
 	needle := strings.TrimSpace(presetName)
 	if needle == "" {
 		return nil, errors.New("missing preset name")

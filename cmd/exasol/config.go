@@ -276,8 +276,7 @@ func formatConfigurationScalar(value any) string {
 }
 
 func hasConfigurationVariableOverrides(
-	infraVars map[string]string,
-	installVars map[string]string,
+	infraVars, installVars map[string]string,
 ) bool {
 	return len(infraVars) > 0 || len(installVars) > 0
 }

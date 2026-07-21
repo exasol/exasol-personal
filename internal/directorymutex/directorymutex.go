@@ -355,7 +355,7 @@ func (m *DirectoryMutex) findMarker() (*markerInfo, error) {
 	return match, nil
 }
 
-func parseMarker(name string, directory string) (*markerInfo, error) {
+func parseMarker(name, directory string) (*markerInfo, error) {
 	if name == exclusiveMarkerName {
 		return &markerInfo{
 			name: name,

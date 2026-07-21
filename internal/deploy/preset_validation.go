@@ -11,8 +11,7 @@ import (
 )
 
 func ValidatePresetSelection(
-	infrastructurePreset PresetRef,
-	installationPreset PresetRef,
+	infrastructurePreset, installationPreset PresetRef,
 ) error {
 	if err := validateInfrastructurePreset(infrastructurePreset); err != nil {
 		return err

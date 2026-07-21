@@ -175,7 +175,7 @@ func (e *CopyDirError) Unwrap() error {
 	return e.Err
 }
 
-func CopyDir(src string, dst string) error {
+func CopyDir(src, dst string) error {
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return &CopyDirError{

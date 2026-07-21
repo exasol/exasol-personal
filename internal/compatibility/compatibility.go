@@ -88,7 +88,7 @@ func Check(deploymentVersion, launcherVersion string, req Requirement) Result {
 	return Result{Allowed: true, Err: nil}
 }
 
-func parseRequiredVersion(raw string, label string) (semver.Version, error) {
+func parseRequiredVersion(raw, label string) (semver.Version, error) {
 	if raw == "" {
 		return semver.Version{}, &InvalidVersionError{
 			Label: label,

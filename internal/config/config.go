@@ -20,7 +20,7 @@ var ErrNoFileMatchedGlobPattern = errors.New("no file matched the pattern")
 //
 // It returns (fullPath, true, nil) if the file exists, (fullPath, false, nil)
 // if it does not exist, and ("", false, err) for unexpected errors.
-func findExistingFile(dir string, filename string) (string, bool, error) {
+func findExistingFile(dir, filename string) (string, bool, error) {
 	fullPath := filepath.Join(dir, filename)
 	_, err := os.Stat(fullPath)
 	if err == nil {
@@ -94,7 +94,7 @@ func writeConfig(config any, path string, name string) error {
 	return nil
 }
 
-func readConfig[T any](path string, name string) (*T, error) {
+func readConfig[T any](path, name string) (*T, error) {
 	configFile, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

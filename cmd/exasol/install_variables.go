@@ -25,8 +25,7 @@ var installFlagToVarName = map[string]string{}
 const installPresetLabelAnnotationKey = "exasol.installationPresetLabel"
 
 func resolveInstallationVariables(
-	installPresetName string,
-	installPresetPath string,
+	installPresetName, installPresetPath string,
 ) (map[string]*presets.VariableDef, string, error) {
 	var (
 		manifest *presets.InstallManifest

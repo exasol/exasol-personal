@@ -39,7 +39,7 @@ func printTerminalMessages() {
 	writeTerminalMessages(os.Stdout, os.Stderr)
 }
 
-func writeTerminalMessages(stdout io.Writer, stderr io.Writer) {
+func writeTerminalMessages(stdout, stderr io.Writer) {
 	for _, message := range terminalNotices {
 		_, _ = fmt.Fprintln(stderr, message)
 	}

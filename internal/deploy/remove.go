@@ -122,7 +122,7 @@ func validateDeploymentDirectoryRemovalContext(
 	return nil
 }
 
-func pathIsInside(parent string, child string) bool {
+func pathIsInside(parent, child string) bool {
 	parent = filepath.Clean(parent)
 	child = filepath.Clean(child)
 

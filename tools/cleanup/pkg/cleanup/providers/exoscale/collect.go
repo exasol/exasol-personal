@@ -729,7 +729,7 @@ func derefLabels(labels *map[string]string) map[string]string {
 	return *labels
 }
 
-func preferEarlier(existing *time.Time, candidate *time.Time) *time.Time {
+func preferEarlier(existing, candidate *time.Time) *time.Time {
 	if candidate == nil {
 		return existing
 	}
