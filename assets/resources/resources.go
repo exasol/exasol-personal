@@ -3,7 +3,7 @@
 
 package resources
 
-import _ "embed"
+import _ "embed" // required for the go:embed directive below
 
 // ResourcesYAML contains the embedded runtime resource specification.
 //

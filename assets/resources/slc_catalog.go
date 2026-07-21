@@ -3,7 +3,7 @@
 
 package resources
 
-import _ "embed"
+import _ "embed" // required for the go:embed directive below
 
 // SLCCatalogYAML contains the embedded official script language container catalog
 // (official SLCs for exasol personal local deployments installed locally via Podman image mount).

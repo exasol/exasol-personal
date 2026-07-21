@@ -6,7 +6,7 @@ package deploy
 import (
 	"bytes"
 	"context"
-	_ "embed"
+	_ "embed" // required for the go:embed directive below
 	"fmt"
 	"os"
 	"text/template"

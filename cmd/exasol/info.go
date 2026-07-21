@@ -5,7 +5,7 @@ package main
 
 import (
 	"context"
-	_ "embed"
+	_ "embed" // required for the go:embed directive below
 	"encoding/json"
 	"io"
 	"os"
