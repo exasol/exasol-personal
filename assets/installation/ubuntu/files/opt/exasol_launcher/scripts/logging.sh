@@ -8,12 +8,15 @@ fi
 
 log_step_info() {
   printf 'EXASOL-INSTALL-STEP: %s\n' "$*"
+  return
 }
 
 log_substep_info() {
   printf 'EXASOL-INSTALL-SUBSTEP: %s\n' "$*"
+  return
 }
 
 log_error() {
   printf 'EXASOL-INSTALL-ERROR: %s\n' "$*" >&2
+  return
 }
