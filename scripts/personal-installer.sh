@@ -49,7 +49,7 @@ echo "Installing the Exasol Launcher (the 'exasol' command) to $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
 
 if ! curl -fSL --progress-bar "$PACKAGE_DOWNLOAD_URL" -o "$INSTALL_PATH"; then
-    echo "Error: Failed to download from $PACKAGE_DOWNLOAD_URL"
+    echo "Error: Failed to download from $PACKAGE_DOWNLOAD_URL" >&2
     exit 1
 fi
 
