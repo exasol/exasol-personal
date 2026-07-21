@@ -190,7 +190,7 @@ func (s *InstallSteps) UnmarshalYAML(unmarshal func(any) error) error {
 		data, err2 := yaml.Marshal(raw)
 		if err2 == nil {
 			var ss InstallStep
-			if err3 := yaml.Unmarshal(data, &ss); err3 == nil {
+			if yaml.Unmarshal(data, &ss) == nil {
 				*s = []InstallStep{ss}
 				return nil
 			}

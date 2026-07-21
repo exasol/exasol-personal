@@ -28,7 +28,7 @@ func TestWorkflowState(t *testing.T) {
 	t.Run("Invalid state panics", func(t *testing.T) {
 		t.Parallel()
 		defer func() {
-			if r := recover(); r == nil {
+			if recover() == nil {
 				t.Fatal("expected panic for invalid workflow state, got none")
 			}
 		}()
