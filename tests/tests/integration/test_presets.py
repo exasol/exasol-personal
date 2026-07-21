@@ -122,19 +122,18 @@ def test_presets_export_fails_on_non_empty_dir(
     (target / "somefile.txt").write_text("x")
 
     # When `exasol presets export` is called
+    args = [
+        exasol_path,
+        "presets",
+        "export",
+        preset_id,
+        "--type",
+        "infrastructure",
+        "--to",
+        str(target),
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "presets",
-                "export",
-                preset_id,
-                "--type",
-                "infrastructure",
-                "--to",
-                str(target),
-            ]
-        )
+        run_command(args)
 
     # Then it fails
     assert exc.value.returncode != 0

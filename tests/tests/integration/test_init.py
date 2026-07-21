@@ -155,16 +155,15 @@ def test_init_fails_on_non_empty_directory(exasol_path: str, tmp_path: Path) -> 
     infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
 
     # When `exasol init` is invoked
+    args = [
+        exasol_path,
+        "init",
+        infra_id,
+        "--deployment-dir",
+        str(deployment_dir),
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "init",
-                infra_id,
-                "--deployment-dir",
-                str(deployment_dir),
-            ]
-        )
+        run_command(args)
 
     # Then the command fails
     assert exc.value.returncode != 0

@@ -205,16 +205,15 @@ def test_file_uri_nonexistent_path_returns_error(
     deployment_dir.mkdir()
 
     # When init is invoked with a file:// URI pointing to a path that does not exist
+    args = [
+        exasol_path,
+        "init",
+        "file:///this/path/does/not/exist",
+        "--deployment-dir",
+        str(deployment_dir),
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "init",
-                "file:///this/path/does/not/exist",
-                "--deployment-dir",
-                str(deployment_dir),
-            ]
-        )
+        run_command(args)
 
     # Then it fails with an error that references the missing path
     assert exc.value.returncode != 0
@@ -233,16 +232,15 @@ def test_file_uri_unsupported_file_type_returns_error(
     deployment_dir.mkdir()
 
     # When init is invoked with a file:// URI pointing to that plain file
+    args = [
+        exasol_path,
+        "init",
+        f"file://{plain_file}",
+        "--deployment-dir",
+        str(deployment_dir),
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "init",
-                f"file://{plain_file}",
-                "--deployment-dir",
-                str(deployment_dir),
-            ]
-        )
+        run_command(args)
 
     # Then it fails with an error mentioning the directory/archive requirement
     assert exc.value.returncode != 0
@@ -255,16 +253,15 @@ def test_at_ref_on_non_git_url_returns_error(exasol_path: str, tmp_path: Path) -
     deployment_dir.mkdir()
 
     # When init is invoked with an @ref suffix on a non-git HTTPS URL
+    args = [
+        exasol_path,
+        "init",
+        "https://example.com/preset.tar.gz@v1.0.0",
+        "--deployment-dir",
+        str(deployment_dir),
+    ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(
-            [
-                exasol_path,
-                "init",
-                "https://example.com/preset.tar.gz@v1.0.0",
-                "--deployment-dir",
-                str(deployment_dir),
-            ]
-        )
+        run_command(args)
 
     # Then it fails with an error about the @ref syntax restriction
     assert exc.value.returncode != 0
