@@ -16,12 +16,15 @@ INSTALL_JSON='/etc/exasol_launcher/installation.json'
 
 infra_jq() {
   jq "$@" "${INFRA_JSON}"
+  return
 }
 
 node_jq() {
   jq "$@" "${NODE_JSON}"
+  return
 }
 
 install_jq() {
   jq "$@" "${INSTALL_JSON}"
+  return
 }
