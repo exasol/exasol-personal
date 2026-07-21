@@ -21,8 +21,8 @@ echo "Signing Windows binary: $BINARY_PATH"
 
 # Verify required environment variables
 if [[ -z "$SSLCOM_USERNAME" ]] || [[ -z "$SSLCOM_PASSWORD" ]] || [[ -z "$SSLCOM_TOTP_SECRET" ]]; then
-    echo "ERROR: SSL.com credentials not set in environment"
-    echo "Required: SSLCOM_USERNAME, SSLCOM_PASSWORD, SSLCOM_TOTP_SECRET"
+    echo "ERROR: SSL.com credentials not set in environment" >&2
+    echo "Required: SSLCOM_USERNAME, SSLCOM_PASSWORD, SSLCOM_TOTP_SECRET" >&2
     exit 1
 fi
 
