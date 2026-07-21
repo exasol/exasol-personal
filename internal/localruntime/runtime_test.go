@@ -4,6 +4,7 @@
 package localruntime
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -167,6 +168,9 @@ func TestPrepare_UsesExistingRunnerWithSSHKey(t *testing.T) {
 	existingRunner := `#!/bin/sh
 set -eu
 case "$1" in
+  version)
+    printf 'v1.0.0\n'
+    ;;
   init)
     if [ "$2" != "--ssh-key" ] || [ ! -f "$3" ]; then
       echo "expected init --ssh-key <private-key>, got: $*" >&2
@@ -181,6 +185,8 @@ case "$1" in
     ;;
 esac
 `
+	localRuntime.embeddedRunner = []byte(existingRunner)
+	localRuntime.embeddedRunnerExists = true
 	writeExecutableTestFile(t, localRuntime.paths.RunnerPath, []byte(existingRunner))
 
 	// When
@@ -516,8 +522,11 @@ func TestWriteEmbeddedRunner_WritesBundledRunner(t *testing.T) {
 	}
 }
 
-func TestWriteEmbeddedRunner_DoesNotOverwriteExistingRunner(t *testing.T) {
+func TestWriteEmbeddedRunner_OverwritesExistingRunner(t *testing.T) {
 	t.Parallel()
+	if !localruntimebin.RunnerBinaryAvailable {
+		t.Skip("embedded local runner is only available for macOS Apple Silicon builds")
+	}
 
 	// Given
 	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
@@ -528,14 +537,14 @@ func TestWriteEmbeddedRunner_DoesNotOverwriteExistingRunner(t *testing.T) {
 	err := writeEmbeddedRunner(targetPath)
 	// Then
 	if err != nil {
-		t.Fatalf("expected existing runner to be accepted, got %v", err)
+		t.Fatalf("expected embedded runner write to succeed, got %v", err)
 	}
 	data, err := os.ReadFile(targetPath)
 	if err != nil {
 		t.Fatalf("expected existing runner to be readable, got %v", err)
 	}
-	if string(data) != string(existingContent) {
-		t.Fatalf("expected embedded runner not to overwrite existing runner, got %q", string(data))
+	if !bytes.Equal(data, localruntimebin.RunnerBinary) {
+		t.Fatal("expected embedded runner to overwrite existing runner")
 	}
 }
 

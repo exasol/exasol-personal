@@ -315,6 +315,10 @@ def test_deploy_local_with_prestaged_fake_runner(
         """#!/usr/bin/env sh
 set -eu
 case "$1" in
+  version)
+    # Keep the pre-staged test runner across production runner reconciliation.
+    printf 'v999.0.0\n'
+    ;;
   init)
     mkdir -p vm vm-shared
     ;;
