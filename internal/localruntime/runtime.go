@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/blang/semver/v4"
 	"github.com/exasol/exasol-personal/assets/localruntimebin"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/util"
@@ -42,6 +44,8 @@ const (
 	privateFileMode    = 0o600
 	executableFileMode = 0o700
 	maxTCPPort         = 65535
+	// Internal escape hatch for development with embedded runners that predate version reporting.
+	forceRunnerReconciliationEnv = "EXASOL_LOCAL_FORCE_RUNNER_RECONCILIATION"
 )
 
 type Config struct {
@@ -233,16 +237,20 @@ func Destroy(ctx context.Context, deployment config.DeploymentDir, out, outErr i
 }
 
 type localRuntime struct {
-	deployment    config.DeploymentDir
-	paths         Paths
-	runtimeConfig Config
+	deployment           config.DeploymentDir
+	paths                Paths
+	runtimeConfig        Config
+	embeddedRunner       []byte
+	embeddedRunnerExists bool
 }
 
 func newRuntime(deployment config.DeploymentDir, runtimeConfig Config) *localRuntime {
 	return &localRuntime{
-		deployment:    deployment,
-		paths:         NewPaths(deployment),
-		runtimeConfig: runtimeConfig,
+		deployment:           deployment,
+		paths:                NewPaths(deployment),
+		runtimeConfig:        runtimeConfig,
+		embeddedRunner:       localruntimebin.RunnerBinary,
+		embeddedRunnerExists: localruntimebin.RunnerBinaryAvailable,
 	}
 }
 
@@ -253,7 +261,7 @@ func (runtime *localRuntime) prepare(
 	if err := os.MkdirAll(runtime.paths.WorkDir, dirMode); err != nil {
 		return fmt.Errorf("failed to create local runtime directory: %w", err)
 	}
-	if err := runtime.ensureRunnerExecutable(); err != nil {
+	if err := runtime.reconcileRunnerExecutable(ctx); err != nil {
 		return err
 	}
 	if err := runtime.ensureSSHKey(); err != nil {
@@ -298,10 +306,7 @@ func (runtime *localRuntime) toState(state *runnerState) (*State, error) {
 }
 
 func (runtime *localRuntime) ensureRunnerExecutable() error {
-	return writeEmbeddedRunner(runtime.paths.RunnerPath)
-}
-
-func writeEmbeddedRunner(targetPath string) error {
+	targetPath := runtime.paths.RunnerPath
 	if info, err := os.Stat(targetPath); err == nil {
 		if info.IsDir() {
 			return fmt.Errorf("local runner target is a directory: %s", targetPath)
@@ -312,6 +317,208 @@ func writeEmbeddedRunner(targetPath string) error {
 		return fmt.Errorf("failed to inspect local runner %s: %w", targetPath, err)
 	}
 
+	return writeEmbeddedRunner(targetPath)
+}
+
+func (runtime *localRuntime) reconcileRunnerExecutable(ctx context.Context) error {
+	if !runtime.embeddedRunnerExists || len(runtime.embeddedRunner) == 0 {
+		return runtime.ensureRunnerExecutable()
+	}
+
+	return reconcileRunner(ctx, runtime.paths.RunnerPath, runtime.embeddedRunner)
+}
+
+func reconcileRunner(ctx context.Context, targetPath string, embeddedRunner []byte) error {
+	if err := os.MkdirAll(filepath.Dir(targetPath), dirMode); err != nil {
+		return fmt.Errorf("failed to create local runner target directory: %w", err)
+	}
+
+	candidatePath, cleanup, err := writeRunnerCandidate(targetPath, embeddedRunner)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	candidateVersion, err := readRunnerVersion(ctx, candidatePath)
+	forceReconciliation := strings.TrimSpace(os.Getenv(forceRunnerReconciliationEnv)) == "1"
+	if err != nil && !forceReconciliation {
+		return fmt.Errorf("embedded local runner does not report a valid version: %w", err)
+	}
+	candidateVersionErr := err
+
+	installedData, err := os.ReadFile(targetPath)
+	if candidateVersionErr != nil && forceReconciliation {
+		if err == nil && bytes.Equal(installedData, embeddedRunner) {
+			return os.Chmod(targetPath, executableFileMode)
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to inspect local runner %s: %w", targetPath, err)
+		}
+
+		return installUnversionedRunnerCandidate(
+			candidatePath,
+			targetPath,
+			candidateVersionErr,
+		)
+	}
+
+	if errors.Is(err, os.ErrNotExist) {
+		return installRunnerCandidate(
+			candidatePath,
+			targetPath,
+			candidateVersion,
+			"installing missing runner",
+		)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to inspect local runner %s: %w", targetPath, err)
+	}
+	if bytes.Equal(installedData, embeddedRunner) {
+		return os.Chmod(targetPath, executableFileMode)
+	}
+
+	installedVersion, err := readRunnerVersion(ctx, targetPath)
+	if err != nil {
+		return installRunnerCandidate(
+			candidatePath,
+			targetPath,
+			candidateVersion,
+			"upgrading unversioned legacy runner",
+		)
+	}
+
+	if installedVersion.Major != candidateVersion.Major {
+		slog.Warn(
+			"local runner major versions differ; automatic update skipped",
+			"installedVersion", installedVersion,
+			"embeddedVersion", candidateVersion,
+			"action", "use a compatible launcher or explicitly migrate the local deployment",
+		)
+
+		return nil
+	}
+
+	if installedVersion.GT(candidateVersion) {
+		slog.Info(
+			"installed local runner is newer than the embedded runner; downgrade skipped",
+			"installedVersion", installedVersion,
+			"embeddedVersion", candidateVersion,
+		)
+
+		return nil
+	}
+
+	reason := "repairing local runner from embedded binary"
+	if candidateVersion.GT(installedVersion) {
+		reason = "upgrading local runner"
+	}
+
+	return installRunnerCandidate(candidatePath, targetPath, candidateVersion, reason)
+}
+
+func writeRunnerCandidate(targetPath string, runner []byte) (string, func(), error) {
+	temporary, err := os.CreateTemp(filepath.Dir(targetPath), ".local-runner-candidate-*")
+	if err != nil {
+		return "", func() {}, fmt.Errorf("failed to create local runner candidate: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	cleanup := func() {
+		_ = os.Remove(temporaryPath)
+	}
+
+	if err := temporary.Chmod(executableFileMode); err != nil {
+		_ = temporary.Close()
+		cleanup()
+
+		return "", func() {}, fmt.Errorf(
+			"failed to make local runner candidate executable: %w",
+			err,
+		)
+	}
+	if _, err := temporary.Write(runner); err != nil {
+		_ = temporary.Close()
+		cleanup()
+
+		return "", func() {}, fmt.Errorf("failed to write local runner candidate: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		cleanup()
+
+		return "", func() {}, fmt.Errorf("failed to sync local runner candidate: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		cleanup()
+
+		return "", func() {}, fmt.Errorf("failed to close local runner candidate: %w", err)
+	}
+
+	return temporaryPath, cleanup, nil
+}
+
+func readRunnerVersion(ctx context.Context, runnerPath string) (semver.Version, error) {
+	cmd := exec.CommandContext(ctx, runnerPath, "version")
+	cmd.Dir = filepath.Dir(runnerPath)
+	output, err := cmd.Output()
+	if err != nil {
+		return semver.Version{}, fmt.Errorf("runner version command failed: %w", err)
+	}
+
+	version, err := semver.ParseTolerant(strings.TrimSpace(string(output)))
+	if err != nil {
+		return semver.Version{}, fmt.Errorf(
+			"invalid runner version %q: %w",
+			strings.TrimSpace(string(output)),
+			err,
+		)
+	}
+
+	return version, nil
+}
+
+func installRunnerCandidate(
+	candidatePath, targetPath string,
+	version semver.Version,
+	reason string,
+) error {
+	if err := replaceRunnerCandidate(candidatePath, targetPath); err != nil {
+		return err
+	}
+
+	slog.Info(reason, "version", version)
+
+	return nil
+}
+
+func installUnversionedRunnerCandidate(
+	candidatePath, targetPath string,
+	versionErr error,
+) error {
+	if err := replaceRunnerCandidate(candidatePath, targetPath); err != nil {
+		return err
+	}
+
+	slog.Warn(
+		"forced local runner reconciliation without version compatibility checks",
+		"environmentVariable", forceRunnerReconciliationEnv,
+		"versionError", versionErr,
+	)
+
+	return nil
+}
+
+func replaceRunnerCandidate(candidatePath, targetPath string) error {
+	if err := os.Rename(candidatePath, targetPath); err != nil {
+		return fmt.Errorf("failed to atomically replace local runner %s: %w", targetPath, err)
+	}
+	if err := os.Chmod(targetPath, executableFileMode); err != nil {
+		return fmt.Errorf("failed to set local runner permissions: %w", err)
+	}
+
+	return nil
+}
+
+func writeEmbeddedRunner(targetPath string) error {
 	if err := os.MkdirAll(filepath.Dir(targetPath), dirMode); err != nil {
 		return fmt.Errorf("failed to create local runner target directory: %w", err)
 	}
