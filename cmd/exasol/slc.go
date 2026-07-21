@@ -33,6 +33,14 @@ var slcRemoveOpts = struct {
 	NoRestart   bool
 }{}
 
+const slcOperationAbortedMessage = "Aborted; no changes were made."
+
+const slcAutoApproveFlagName = "auto-approve"
+
+const slcAutoApproveFlagDesc = "Do not prompt for confirmation before restarting the database"
+
+const slcNoRestartFlagName = "no-restart"
+
 const slcCmdShortDesc = "Manage script language containers (SLCs)"
 
 const slcCmdLongDesc = slcCmdShortDesc + `
@@ -67,7 +75,7 @@ var slcInstallCmd = &cobra.Command{
 			slcConfirmFunc(cmd, slcInstallOpts.AutoApprove, fmt.Sprintf("Installing %q", alias)),
 		)
 		if errors.Is(err, deploy.ErrSLCOperationCancelled) {
-			safePrint("Aborted; no changes were made.")
+			safePrint(slcOperationAbortedMessage)
 
 			return nil
 		}
@@ -108,7 +116,7 @@ var slcUpdateCmd = &cobra.Command{
 			slcConfirmFunc(cmd, slcUpdateOpts.AutoApprove, fmt.Sprintf("Updating %q", alias)),
 		)
 		if errors.Is(err, deploy.ErrSLCOperationCancelled) {
-			safePrint("Aborted; no changes were made.")
+			safePrint(slcOperationAbortedMessage)
 
 			return nil
 		}
@@ -157,7 +165,7 @@ var slcRemoveCmd = &cobra.Command{
 			slcConfirmFunc(cmd, slcRemoveOpts.AutoApprove, fmt.Sprintf("Removing %q", alias)),
 		)
 		if errors.Is(err, deploy.ErrSLCOperationCancelled) {
-			safePrint("Aborted; no changes were made.")
+			safePrint(slcOperationAbortedMessage)
 
 			return nil
 		}
@@ -358,27 +366,27 @@ func init() {
 	requireInitializedDeploymentDir(slcInstallCmd)
 	registerDeploymentDirFlag(slcInstallCmd, commonFlags)
 	registerVerboseFlag(slcInstallCmd, commonFlags)
-	slcInstallCmd.Flags().BoolVar(&slcInstallOpts.AutoApprove, "auto-approve", false,
-		"Do not prompt for confirmation before restarting the database")
-	slcInstallCmd.Flags().BoolVar(&slcInstallOpts.NoRestart, "no-restart", false,
+	slcInstallCmd.Flags().BoolVar(&slcInstallOpts.AutoApprove, slcAutoApproveFlagName, false,
+		slcAutoApproveFlagDesc)
+	slcInstallCmd.Flags().BoolVar(&slcInstallOpts.NoRestart, slcNoRestartFlagName, false,
 		"Record the SLC without restarting; it activates on the next start")
 
 	requireDefaultDeploymentCompatibility(slcUpdateCmd)
 	requireInitializedDeploymentDir(slcUpdateCmd)
 	registerDeploymentDirFlag(slcUpdateCmd, commonFlags)
 	registerVerboseFlag(slcUpdateCmd, commonFlags)
-	slcUpdateCmd.Flags().BoolVar(&slcUpdateOpts.AutoApprove, "auto-approve", false,
-		"Do not prompt for confirmation before restarting the database")
-	slcUpdateCmd.Flags().BoolVar(&slcUpdateOpts.NoRestart, "no-restart", false,
+	slcUpdateCmd.Flags().BoolVar(&slcUpdateOpts.AutoApprove, slcAutoApproveFlagName, false,
+		slcAutoApproveFlagDesc)
+	slcUpdateCmd.Flags().BoolVar(&slcUpdateOpts.NoRestart, slcNoRestartFlagName, false,
 		"Record the update without restarting; it applies on the next start")
 
 	requireDefaultDeploymentCompatibility(slcRemoveCmd)
 	requireInitializedDeploymentDir(slcRemoveCmd)
 	registerDeploymentDirFlag(slcRemoveCmd, commonFlags)
 	registerVerboseFlag(slcRemoveCmd, commonFlags)
-	slcRemoveCmd.Flags().BoolVar(&slcRemoveOpts.AutoApprove, "auto-approve", false,
-		"Do not prompt for confirmation before restarting the database")
-	slcRemoveCmd.Flags().BoolVar(&slcRemoveOpts.NoRestart, "no-restart", false,
+	slcRemoveCmd.Flags().BoolVar(&slcRemoveOpts.AutoApprove, slcAutoApproveFlagName, false,
+		slcAutoApproveFlagDesc)
+	slcRemoveCmd.Flags().BoolVar(&slcRemoveOpts.NoRestart, slcNoRestartFlagName, false,
 		"Record the removal without restarting; it applies on the next start")
 
 	registerDeploymentDirFlag(slcListCmd, commonFlags)

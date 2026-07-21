@@ -26,6 +26,8 @@ var ErrSLCNotSupported = errors.New(
 // ErrSLCOperationCancelled is returned when the user declines the database-restart prompt.
 var ErrSLCOperationCancelled = errors.New("operation cancelled")
 
+const slcOperationInProgressSuffix = " script language container (this may take a few minutes)"
+
 // ErrDeploymentNotPresent is returned when an SLC change operation (install/update/remove)
 // is attempted on a deployment that has only been initialized, never deployed. SLC
 // management operates on a deployed database, so there is nothing to change — and, crucially,
@@ -194,7 +196,7 @@ func InstallSLC(
 	}
 
 	slog.Info(
-		"installing "+alias+" script language container (this may take a few minutes)",
+		"installing "+alias+slcOperationInProgressSuffix,
 		"flavor", entry.Flavor,
 	)
 
@@ -271,7 +273,7 @@ func RemoveSLC(
 
 	if isLocalDeploymentRunning(ctx, deployment) {
 		slog.Info(
-			"removing "+alias+" script language container (this may take a few minutes)",
+			"removing "+alias+slcOperationInProgressSuffix,
 			"flavor", removed.Flavor,
 		)
 	}
@@ -377,7 +379,7 @@ func UpdateSLC(
 	}
 
 	slog.Info(
-		"updating "+alias+" script language container (this may take a few minutes)",
+		"updating "+alias+slcOperationInProgressSuffix,
 		"flavor", entry.Flavor,
 	)
 	outcome, err := applySLCChange(ctx, deployment, verbose, true)

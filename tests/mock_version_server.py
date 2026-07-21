@@ -11,6 +11,8 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+CONTENT_TYPE_JSON = "application/json"
+
 # Global storage for response data (with thread lock)
 stored_response: bytes | None = None
 data_lock = threading.RLock()
@@ -58,7 +60,7 @@ class VersionServerHandler(BaseHTTPRequestHandler):
             version_check_count = 0
 
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", CONTENT_TYPE_JSON)
         self.end_headers()
         self.wfile.write(f'{{"count": {count}}}'.encode())
 
@@ -100,13 +102,13 @@ class VersionServerHandler(BaseHTTPRequestHandler):
 
         if response is None:
             self.send_response(404)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", CONTENT_TYPE_JSON)
             self.end_headers()
             self.wfile.write(b'{"error":"No data available"}')
             return
 
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", CONTENT_TYPE_JSON)
         self.end_headers()
         self.wfile.write(response)
 
@@ -132,7 +134,7 @@ class VersionServerHandler(BaseHTTPRequestHandler):
         )
 
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", CONTENT_TYPE_JSON)
         self.end_headers()
         response = json.dumps(
             {"status": "success", "message": "Data stored successfully"}
