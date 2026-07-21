@@ -26,12 +26,12 @@ func (*LocalCommandRunnerImpl) Run(
 	workingDir string,
 	stdout, stderr io.Writer,
 ) error {
-	command_proc := exec.CommandContext(ctx, command[0], command[1:]...)
+	commandProc := exec.CommandContext(ctx, command[0], command[1:]...)
 
-	command_proc.Stdout = stdout
-	command_proc.Stderr = stderr
+	commandProc.Stdout = stdout
+	commandProc.Stderr = stderr
 
-	command_proc.Dir = workingDir
+	commandProc.Dir = workingDir
 
-	return command_proc.Run()
+	return commandProc.Run()
 }

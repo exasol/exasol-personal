@@ -96,7 +96,7 @@ func (logBuffer *LogBuffer) writePartsRecursive(data []byte) int {
 		logBuffer.newRecord()
 	}
 
-	bytes_consumed := len(data) - len(remainder)
+	bytesConsumed := len(data) - len(remainder)
 
-	return bytes_consumed + logBuffer.writePartsRecursive(remainder)
+	return bytesConsumed + logBuffer.writePartsRecursive(remainder)
 }
