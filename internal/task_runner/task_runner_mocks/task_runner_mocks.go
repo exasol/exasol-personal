@@ -100,7 +100,7 @@ type NodeLookupMock struct {
 	Directory []task_runner.RunScriptNode
 }
 
-var _ task_runner.NodeLookup = &NodeLookupMock{}
+var _ task_runner.NodeFinder = &NodeLookupMock{}
 
 func NewNodeLookupMock(directory []task_runner.RunScriptNode) *NodeLookupMock {
 	return &NodeLookupMock{
@@ -123,7 +123,7 @@ func NewNodeLookupDirectory(n int) []task_runner.RunScriptNode {
 	return directory
 }
 
-// Find implements task_runner.NodeLookup.
+// Find implements task_runner.NodeFinder.
 func (n *NodeLookupMock) Find(nodeNameGlob string) ([]task_runner.RunScriptNode, error) {
 	slog.Debug("Looking up node glob", "glob", nodeNameGlob, "directorySize", len(n.Directory))
 	results := []task_runner.RunScriptNode{}

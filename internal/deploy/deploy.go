@@ -254,9 +254,9 @@ type nodeLookupImpl struct {
 	deployment config.DeploymentDir
 }
 
-var _ task_runner.NodeLookup = &nodeLookupImpl{}
+var _ task_runner.NodeFinder = &nodeLookupImpl{}
 
-func NewNodeLookup(deployment config.DeploymentDir) task_runner.NodeLookup {
+func NewNodeLookup(deployment config.DeploymentDir) task_runner.NodeFinder {
 	return &nodeLookupImpl{
 		deployment: deployment,
 	}
