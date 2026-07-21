@@ -43,11 +43,11 @@ func (s *SSHRemote) Shell(ctx context.Context, out io.Writer, errOut io.Writer) 
 	}
 	defer restore()
 
-	shell_session_ctx, cancel := context.WithCancel(ctx)
+	shellSessionCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	go func() {
-		<-shell_session_ctx.Done()
+		<-shellSessionCtx.Done()
 		session.Close() // nolint: gosec
 	}()
 
