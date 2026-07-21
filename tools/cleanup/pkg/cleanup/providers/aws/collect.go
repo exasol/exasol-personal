@@ -232,15 +232,8 @@ func CollectDeploymentDetails(
 	for i := range details.Resources {
 		meta := &details.Resources[i]
 		switch meta.Ref.Type {
-		case ResourceIAMRole:
+		case ResourceIAMRole, ResourceIAMInstProf:
 			// Basic presence and created time already recorded; mark state
-			if _, ok := meta.Attr["state"]; !ok {
-				meta.Attr["state"] = "present"
-			}
-			if ct, ok := meta.Attr["createTime"].(time.Time); ok {
-				earliest = preferPtrEarlier(earliest, &ct)
-			}
-		case ResourceIAMInstProf:
 			if _, ok := meta.Attr["state"]; !ok {
 				meta.Attr["state"] = "present"
 			}
