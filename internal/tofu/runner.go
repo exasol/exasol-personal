@@ -13,6 +13,10 @@ import (
 
 var execCommandContext = exec.CommandContext
 
+const varFileArgPrefix = "-var-file="
+
+const stateArgPrefix = "-state="
+
 type LockfileMode int
 
 const (
@@ -95,10 +99,10 @@ func (s *tofuRunnerImpl) Plan(
 	args := []string{
 		"plan",
 		"-out=" + planFilePath,
-		"-var-file=" + varsFilePath,
+		varFileArgPrefix + varsFilePath,
 	}
 	if stateFilePath != "" {
-		args = append(args, "-state="+stateFilePath, "-state-out="+stateFilePath)
+		args = append(args, stateArgPrefix+stateFilePath, "-state-out="+stateFilePath)
 	}
 
 	return s.exec(ctx, args)
@@ -112,10 +116,10 @@ func (s *tofuRunnerImpl) Apply(ctx context.Context, opts ApplyOptions) error {
 		}
 	}
 	if opts.VarsFilePath != "" {
-		args = append(args, "-var-file="+opts.VarsFilePath)
+		args = append(args, varFileArgPrefix+opts.VarsFilePath)
 	}
 	if opts.StateFilePath != "" {
-		args = append(args, "-state="+opts.StateFilePath)
+		args = append(args, stateArgPrefix+opts.StateFilePath)
 	}
 	if opts.PlanFilePath != "" {
 		args = append(args, opts.PlanFilePath)
@@ -127,11 +131,11 @@ func (s *tofuRunnerImpl) Apply(ctx context.Context, opts ApplyOptions) error {
 func (s *tofuRunnerImpl) Destroy(ctx context.Context, varsFilePath, stateFilePath string) error {
 	args := []string{
 		"destroy",
-		"-var-file=" + varsFilePath,
+		varFileArgPrefix + varsFilePath,
 		"--auto-approve",
 	}
 	if stateFilePath != "" {
-		args = append(args, "-state="+stateFilePath)
+		args = append(args, stateArgPrefix+stateFilePath)
 	}
 
 	return s.exec(ctx, args)

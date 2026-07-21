@@ -23,6 +23,8 @@ type Handler interface {
 
 var ErrUnsupportedResource = errors.New("unsupported resource type for deletion")
 
+const notFoundErrorSubstring = "not found"
+
 // registry maps resource types to concrete handlers.
 var registry = map[ResourceType]Handler{}
 
@@ -78,7 +80,7 @@ func (h *computeInstanceHandler) Delete(ctx context.Context, ref ResourceRef) er
 	op, err := h.client.DeleteInstance(ctx, uuid)
 	if err != nil {
 		// Treat not found as success for idempotent cleanup
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), notFoundErrorSubstring) {
 			return nil
 		}
 		return fmt.Errorf("failed to delete instance: %w", err)
@@ -158,7 +160,7 @@ func (h *privateNetworkHandler) Delete(ctx context.Context, ref ResourceRef) err
 
 	op, err := h.client.DeletePrivateNetwork(ctx, uuid)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), notFoundErrorSubstring) {
 			return nil
 		}
 		return fmt.Errorf("failed to delete private network: %w", err)
@@ -186,7 +188,7 @@ func (h *securityGroupHandler) Delete(ctx context.Context, ref ResourceRef) erro
 
 	op, err := h.client.DeleteSecurityGroup(ctx, uuid)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), notFoundErrorSubstring) {
 			return nil
 		}
 		return fmt.Errorf("failed to delete security group: %w", err)
@@ -210,7 +212,7 @@ func (h *sshKeyHandler) Delete(ctx context.Context, ref ResourceRef) error {
 	// SSH keys use name as ID in v3
 	op, err := h.client.DeleteSSHKey(ctx, ref.ID)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), notFoundErrorSubstring) {
 			return nil
 		}
 		return fmt.Errorf("failed to delete SSH key: %w", err)
@@ -237,7 +239,7 @@ func (h *iamRoleHandler) Delete(ctx context.Context, ref ResourceRef) error {
 
 	op, err := h.client.DeleteIAMRole(ctx, uuid)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), notFoundErrorSubstring) {
 			return nil
 		}
 		return fmt.Errorf("failed to delete IAM role: %w", err)
