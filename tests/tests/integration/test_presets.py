@@ -22,7 +22,8 @@ def _first_preset_id_or_skip(exasol_path: str, preset_type: str) -> str:
     if not isinstance(presets_list, list) or len(presets_list) == 0:
         pytest.skip(f"no presets found for type {preset_type!r}")
 
-    preset_id = presets_list[0].get("id")
+    first_preset: dict[str, Any] = next(iter(presets_list), {})
+    preset_id = first_preset.get("id")
     if not isinstance(preset_id, str) or preset_id.strip() == "":
         pytest.skip(f"first preset in type {preset_type!r} has no id")
 
