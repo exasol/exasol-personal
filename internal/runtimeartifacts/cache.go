@@ -37,7 +37,7 @@ var (
 	ErrCacheLocked        = errors.New("runtime artifact cache is locked")
 )
 
-type clock interface {
+type clocker interface {
 	Now() time.Time
 }
 
@@ -55,7 +55,7 @@ type CacheConfig struct {
 type Cache struct {
 	root       string
 	configPath string
-	clock      clock
+	clock      clocker
 }
 
 type CacheEntryInfo struct {
@@ -161,7 +161,7 @@ func NewCache(root, configPath string) *Cache {
 	return newCacheWithClock(root, configPath, systemClock{})
 }
 
-func newCacheWithClock(root, configPath string, clk clock) *Cache {
+func newCacheWithClock(root, configPath string, clk clocker) *Cache {
 	return &Cache{root: filepath.Clean(root), configPath: filepath.Clean(configPath), clock: clk}
 }
 

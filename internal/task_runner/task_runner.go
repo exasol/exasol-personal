@@ -24,7 +24,7 @@ type TaskRunner interface {
 	) error
 }
 
-type NodeLookup interface {
+type NodeFinder interface {
 	Find(
 		nodeNameGlob string,
 	) ([]RunScriptNode, error)
@@ -38,7 +38,7 @@ type RunScriptNode struct {
 func NewTaskRunner(
 	localCommandRunner LocalCommandRunner,
 	remoteScriptRunner RemoteScriptRunner,
-	nodeLookup NodeLookup,
+	nodeLookup NodeFinder,
 ) TaskRunner {
 	return &TaskRunnerImpl{
 		localCommandRunner: localCommandRunner,
@@ -50,7 +50,7 @@ func NewTaskRunner(
 type TaskRunnerImpl struct {
 	localCommandRunner LocalCommandRunner
 	remoteScriptRunner RemoteScriptRunner
-	nodeLookup         NodeLookup
+	nodeLookup         NodeFinder
 }
 
 func (s *TaskRunnerImpl) RunTasks(
