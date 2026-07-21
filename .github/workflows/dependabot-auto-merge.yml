@@ -7,10 +7,6 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   auto-merge-pr:
     if: >-
@@ -18,6 +14,9 @@ jobs:
       github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     env:
       MERGE_DELAY_DAYS: "7"
     steps:
@@ -106,6 +105,9 @@ jobs:
   scheduled-recheck:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     env:
       GH_TOKEN: ${{ github.token }}
       MERGE_DELAY_DAYS: "7"
