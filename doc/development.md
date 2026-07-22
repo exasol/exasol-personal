@@ -86,10 +86,10 @@ GOOS=windows GOARCH=amd64 task build
 GOOS=darwin GOARCH=arm64 task build
 ```
 
-**Note:** The launcher resolves [OpenTofu](https://opentofu.org/) at runtime, so builds no longer need platform-specific OpenTofu downloads. For macOS Apple Silicon builds, `task generate` stages the Exasol Local runner from `RUNNER_PATH` or the runtime artifact configured in `assets/resources/resources.yaml`.
+**Note:** The launcher resolves [OpenTofu](https://opentofu.org/) at runtime, so builds no longer need platform-specific OpenTofu downloads. The Exasol Local runner (macOS Apple Silicon only) is a different kind of resource: it's marked `embed: true` in `assets/resources/resources.yaml`, so it's fetched and baked directly into the binary at build time rather than resolved at runtime. `task build` stages it for whatever `GOOS`/`GOARCH` you're targeting automatically (as in the examples above). `task generate` itself always targets the host regardless of `GOOS`/`GOARCH` — pass `TARGET_GOOS`/`TARGET_GOARCH` to target a different platform's embedded resources on their own, without a full build:
 
 ```bash
-GOOS=darwin GOARCH=arm64 task generate RUNNER_PATH=/path/to/launcher
+task generate TARGET_GOOS=darwin TARGET_GOARCH=arm64
 ```
 
 ### Building Without Task
@@ -97,19 +97,53 @@ GOOS=darwin GOARCH=arm64 task generate RUNNER_PATH=/path/to/launcher
 If you prefer to use Go commands directly (or Task is unavailable):
 
 ```bash
-# Generate code
+# Generate code, including embedded resources for the host platform
 go generate ./...
-
-# For macOS Apple Silicon builds, stage the Exasol Local runner for embedding.
-# This uses RUNNER_PATH or the runtime artifact configured in assets/resources/resources.yaml.
-go run ./tools/localrunner stage
 
 # Build the binary
 go build -o bin/exasol ./cmd/exasol
 
-# For cross-compilation, specify target OS and architecture
+# For cross-compilation, stage that target's embedded resource with
+# TARGET_GOOS/TARGET_GOARCH (not GOOS/GOARCH, which would cross-compile
+# this `go run` itself instead of just picking the tool's target), then build
+TARGET_GOOS=windows TARGET_GOARCH=amd64 go generate ./...
 GOOS=windows GOARCH=amd64 go build -o bin/exasol.exe ./cmd/exasol
 ```
+
+### Embedded resources: generation and local overrides
+
+Resources marked `embed: true` in `assets/resources/resources.yaml` (currently just `exasol-local-runner`) are fetched, checksum-verified, and baked into the binary at build time by `tools/resourceembedder`, generating build-tag-gated `.go` files under `assets/resources/generated/` (fully gitignored — nothing resource-specific is ever checked in). `task generate` (optionally parameterized by `TARGET_GOOS`/`TARGET_GOARCH`, used by `task build`'s cross-compile staging step and the release pipeline's per-target hook) performs a real, checksum-verified fetch for whatever platform it targets. `tests-unit`/`lint-golang`(-fix) instead depend on `task generate SKIP_EMBED=true`, which always writes an empty placeholder without fetching — they only need the package to compile, never the actual bytes. A platform with no declared artifact for a given resource (e.g. `exasol-local-runner` on anything but `darwin/arm64`) gets the same kind of placeholder automatically, with or without `SKIP_EMBED`.
+
+To iterate locally on the embedded resource without waiting on the real network artifact, edit its `url` in `resources.yaml` to a local path (`file://` or a bare path) instead of the real URL, then re-run the generator and rebuild:
+
+```yaml
+exasol-local-runner:
+  extract: true
+  embed: true
+  artifact:
+    darwin/arm64:
+      url: /path/to/local/mac-runner-aarch64.zip
+      sha256: <sha256 of that local file, or leave the original value in place>
+      resource_path: launcher
+```
+
+A few things worth knowing about this override:
+- `url` can point at a directory, a supported archive (`.zip`, `.tar.gz`, `.tgz`), or a bare file — the local-path source redirects straight to whatever's there, uniformly. For an `extract: true` resource (like the committed `exasol-local-runner` entry above), it still needs to be something a registered `Extractor` can unpack, since `resource_path` picks the file out of the extracted result.
+- To iterate on a locally-built `launcher` binary directly, without zipping it up each time, also set `extract: false` and drop `resource_path` for your local edit:
+
+  ```yaml
+  exasol-local-runner:
+    extract: false
+    embed: true
+    artifact:
+      darwin/arm64:
+        url: /path/to/local/launcher
+        sha256: <sha256 of that local file, or leave the original value in place>
+  ```
+
+  With `extract: false`, the bare binary is embedded and resolved exactly as given — no extraction, no `resource_path` lookup.
+- `sha256` must still be present for the YAML to parse (any non-git source requires one), but it's not checked against a local file's content — the existing value can be left in place.
+- This only affects what the *generator* embeds on its next run — the shipped binary always uses what's actually embedded in it over anything in `resources.yaml`, so a `file://` edit requires re-running the generator and rebuilding `exasol` to take effect.
 
 ## Development Workflow
 

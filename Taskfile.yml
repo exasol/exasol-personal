@@ -26,34 +26,21 @@ tasks:
     cmds:
       - "task --list"
 
-  local-runner-placeholders:
-    desc: Create placeholder files for local runtime binaries required by go:embed
-    cmds:
-      - >-
-        go run ./tools/localrunner placeholder
-        -target assets/localruntimebin/generated/darwin/arm64/mac-runner-aarch64
-
-  local-runner-stage:
-    desc: Stage Exasol Local runner binary for go:embed when targeting macOS Apple Silicon
+  generate:
+    desc: 'Run generation for all packages. TARGET_GOOS/TARGET_GOARCH: also stage a non-host platform''s embedded resources. SKIP_EMBED=true: never fetch real embedded resource data, just write empty placeholders (for lint/test builds that never look at the bytes).'
     vars:
-      RUNNER_PATH: '{{default "" .RUNNER_PATH}}'
       TARGET_GOOS: '{{default "" .TARGET_GOOS}}'
       TARGET_GOARCH: '{{default "" .TARGET_GOARCH}}'
+      SKIP_EMBED: '{{default "" .SKIP_EMBED}}'
     cmds:
+      # unset GOOS/GOARCH: an inherited value would cross-compile the
+      # directives' own tool invocations instead of just running them
+      # ("exec format error"). TARGET_GOOS/TARGET_GOARCH/SKIP_EMBED carry
+      # the resourceembedder's own settings instead, without that side effect.
       - >-
-        go run ./tools/localrunner stage
-        {{if .TARGET_GOOS}}-goos {{.TARGET_GOOS}}{{end}}
-        {{if .TARGET_GOARCH}}-goarch {{.TARGET_GOARCH}}{{end}}
-        -runner-path "{{.RUNNER_PATH}}"
-        -target assets/localruntimebin/generated/darwin/arm64/mac-runner-aarch64
-
-  generate:
-    desc: run generation for all packages
-    deps:
-      - local-runner-placeholders
-    cmds:
-      - go generate ./...
-      - task: local-runner-stage
+        unset GOOS GOARCH;
+        TARGET_GOOS="{{.TARGET_GOOS}}" TARGET_GOARCH="{{.TARGET_GOARCH}}" SKIP_EMBED="{{.SKIP_EMBED}}"
+        go generate ./...
 
   tofu-lock-update:
     desc: Regenerate multi-platform .terraform.lock.hcl files (no temp files in assets)
@@ -73,8 +60,14 @@ tasks:
   # with Windows path.
   build:
     desc: Build the binary
+    # {{env "GOOS/GOARCH"}}: passes the ambient cross-compile target (if any)
+    # through to generate's TARGET_GOOS/TARGET_GOARCH, so its embedded
+    # resources are staged for that target rather than just the host.
     deps:
-      - generate
+      - task: generate
+        vars:
+          TARGET_GOOS: '{{env "GOOS"}}'
+          TARGET_GOARCH: '{{env "GOARCH"}}'
     vars:
       DEBUG_BUILD: '{{default "false" .DEBUG_BUILD}}'
     env:
@@ -143,7 +136,9 @@ tasks:
   tests-unit:
     desc: 'Run unit tests. TEST is a regex for `go test -run` (substring match, e.g. TEST=Ready). COVERAGE=true collects a coverage profile.'
     deps:
-      - local-runner-placeholders
+      - task: generate
+        vars:
+          SKIP_EMBED: "true"
     vars:
       TEST: '{{default "" .TEST}}'
       COVERAGE: '{{default "false" .COVERAGE}}'
@@ -263,7 +258,9 @@ tasks:
   lint-golang:
     desc: Run golangci-lint linters and verify go.mod/go.sum are tidy
     deps:
-      - local-runner-placeholders
+      - task: generate
+        vars:
+          SKIP_EMBED: "true"
     cmds:
       - go tool golangci-lint run ./...
       - go mod tidy
@@ -272,7 +269,9 @@ tasks:
   lint-golang-fix:
     desc: Run golangci-lint linters and apply automatic fixes
     deps:
-      - local-runner-placeholders
+      - task: generate
+        vars:
+          SKIP_EMBED: "true"
     cmds:
       - go tool golangci-lint run ./... --fix
 

@@ -272,6 +272,28 @@ func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, entry *cache
 	return fmt.Errorf("unsupported resource scheme in %q", artifact.URL)
 }
 
+// resolveEmbedded materializes an embed:true resource from data compiled into
+// the binary. A registry miss is a hard error, never a fallback to the
+// network sources list — see design.md for why.
+func (m *Manager) resolveEmbedded(resourceID string, entry *cacheIndexEntry) error {
+	data, ok := lookupEmbedded(resourceID)
+	if !ok {
+		return fmt.Errorf("no embedded data registered for resource %q", resourceID)
+	}
+
+	fetchPath := m.cache.absolutePath(entry.ArtifactPath)
+	if err := os.MkdirAll(filepath.Dir(fetchPath), dirPerm); err != nil {
+		return err
+	}
+	if err := os.WriteFile(fetchPath, data, filePerm); err != nil {
+		return err
+	}
+
+	slog.Info("resolved resource from embedded data", "id", resourceID)
+
+	return nil
+}
+
 func (m *Manager) extract(entry cacheIndexEntry) error {
 	filename := m.cache.absolutePath(entry.ArtifactPath)
 	if entry.RedirectPath != "" {
@@ -356,7 +378,11 @@ func (m *Manager) refresh(
 	entry *cacheIndexEntry,
 	index *cacheIndex,
 ) (string, error) {
-	if err := m.fetch(ctx, artifact, entry); err != nil {
+	if entry.Embed {
+		if err := m.resolveEmbedded(resourceID, entry); err != nil {
+			return "", err
+		}
+	} else if err := m.fetch(ctx, artifact, entry); err != nil {
 		return "", errors.Join(fmt.Errorf("failed to fetch resource %q", resourceID), err)
 	}
 
@@ -467,6 +493,7 @@ func (m *Manager) resolveEntry(
 		DownloadPath: downloadPath,
 		ResourcePath: resourcePath,
 		Extract:      def.Extract,
+		Embed:        def.Embed,
 	}, nil
 }
 

@@ -40,6 +40,42 @@ func TestParseSpec_AllowsEmptySpec(t *testing.T) {
 	}
 }
 
+func TestParseSpec_RoundTripsEmbedField(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	raw := []byte(`
+embedded:
+  extract: true
+  embed: true
+  artifact:
+    linux/amd64:
+      url: https://example.com/embedded-linux.tar.gz
+      sha256: deadbeef
+      resource_path: tool
+not-embedded:
+  extract: true
+  artifact:
+    linux/amd64:
+      url: https://example.com/not-embedded-linux.tar.gz
+      sha256: deadbeef
+      resource_path: tool
+`)
+
+	// When
+	spec, err := ParseSpec(raw)
+	// Then
+	if err != nil {
+		t.Fatalf("expected spec to be valid, got %v", err)
+	}
+	if !spec["embedded"].Embed {
+		t.Fatal("expected embed: true to round-trip as true")
+	}
+	if spec["not-embedded"].Embed {
+		t.Fatal("expected omitted embed field to default to false")
+	}
+}
+
 func TestParseSpec_RejectsResourcePathWithoutExtraction(t *testing.T) {
 	t.Parallel()
 
@@ -306,6 +342,139 @@ func TestManager_RequestExtractsZipResource(t *testing.T) {
 	}
 	if string(data) != "runner" {
 		t.Fatalf("expected resolved resource content, got %q", string(data))
+	}
+}
+
+//nolint:paralleltest // embeddedResources is shared; concurrent Register calls aren't safe.
+func TestManager_RequestResolvesEmbeddedResourceWithoutNetwork(t *testing.T) {
+	// Given
+	const resourceID = "embedded-resolve-test"
+	deploymentDir := t.TempDir()
+	fixtureDir := t.TempDir()
+	archivePath := writeZipFixture(t, fixtureDir, "artifact.zip", map[string]string{
+		"launcher": "runner",
+	})
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("failed to read artifact fixture: %v", err)
+	}
+	Register(resourceID, archiveData)
+	t.Cleanup(func() { delete(embeddedResources, resourceID) })
+
+	server, requests := newCountingArtifactServer(t, "artifact.zip", archiveData)
+	spec := ResourceSpec{
+		resourceID: {
+			Extract: true,
+			Embed:   true,
+			Artifact: map[string]ArtifactSpec{
+				"darwin/arm64": {
+					URL:          server.URL + "/artifact.zip",
+					Sha256:       sha256OfTestFile(t, archivePath),
+					ResourcePath: "launcher",
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, deploymentDir, "darwin", "arm64")
+
+	// When
+	path, err := manager.Request(context.Background(), resourceID)
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("expected embedded resolution to never contact the network, got %d requests",
+			requests.Load())
+	}
+	// Same cache layout (unpack/launcher) a network-fetched zip of this shape
+	// would produce — proves extraction reused the identical code path.
+	assertPathInCache(
+		t,
+		deploymentDir,
+		path,
+		resourceID,
+		filepath.Join("darwin", "arm64"),
+		filepath.Join("unpack", "launcher"),
+	)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected resolved path to be readable, got %v", err)
+	}
+	if string(data) != "runner" {
+		t.Fatalf("expected resolved resource content, got %q", string(data))
+	}
+}
+
+func TestManager_RequestFailsWhenEmbeddedResourceNotRegistered(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deploymentDir := t.TempDir()
+	server, requests := newCountingArtifactServer(t, "artifact.zip", []byte("unused"))
+	spec := ResourceSpec{
+		"embedded-missing-test": {
+			Extract: true,
+			Embed:   true,
+			Artifact: map[string]ArtifactSpec{
+				"darwin/arm64": {
+					URL:          server.URL + "/artifact.zip",
+					Sha256:       "deadbeef",
+					ResourcePath: "launcher",
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, deploymentDir, "darwin", "arm64")
+
+	// When
+	_, err := manager.Request(context.Background(), "embedded-missing-test")
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "no embedded data registered") {
+		t.Fatalf("expected a hard error for a missing embedded registration, got %v", err)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("expected no fallback to network sources, got %d requests", requests.Load())
+	}
+}
+
+//nolint:paralleltest // embeddedResources is shared; concurrent Register calls aren't safe.
+func TestManager_RequestIgnoresEmbeddedRegistryWithoutEmbedFlag(t *testing.T) {
+	// Given
+	const resourceID = "embedded-ignored-test"
+	deploymentDir := t.TempDir()
+	Register(resourceID, []byte("should never be used"))
+	t.Cleanup(func() { delete(embeddedResources, resourceID) })
+
+	content := []byte("from the network")
+	server := newArtifactServer(t, "artifact.bin", content)
+	sum := sha256.Sum256(content)
+	spec := ResourceSpec{
+		resourceID: {
+			Artifact: map[string]ArtifactSpec{
+				"darwin/arm64": {
+					URL:          server.URL + "/artifact.bin",
+					Sha256:       hex.EncodeToString(sum[:]),
+					DownloadPath: "artifact.bin",
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, deploymentDir, "darwin", "arm64")
+
+	// When
+	path, err := manager.Request(context.Background(), resourceID)
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected resolved path to be readable, got %v", err)
+	}
+	if string(data) != string(content) {
+		t.Fatalf("expected network-fetched content, got %q", string(data))
 	}
 }
 

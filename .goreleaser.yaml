@@ -6,12 +6,6 @@ version: 2
 
 project_name: exasol-personal
 
-before:
-  hooks:
-    - go mod tidy
-    - task local-runner-placeholders
-    - go generate ./...
-
 builds:
   - env:
       - CGO_ENABLED=0
@@ -34,7 +28,7 @@ builds:
     binary: exasol
     hooks:
       pre:
-        - cmd: task local-runner-stage TARGET_GOOS="{{ .Os }}" TARGET_GOARCH="{{ .Arch }}"
+        - cmd: task generate TARGET_GOOS="{{ .Os }}" TARGET_GOARCH="{{ .Arch }}"
           output: true
       post:
         - cmd: ./.github/scripts/sign-windows-binary.sh "{{ .Path }}"
