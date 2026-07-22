@@ -1,9 +1,15 @@
 # Copyright 2026 Exasol AG
 # SPDX-License-Identifier: MIT
 
-"""Tests for the built-in (official catalog) script language containers."""
+"""Tests for the built-in (official catalog) and custom script language containers.
+
+The custom container is supplied by the runner via EXASOL_TEST_CUSTOM_SLC_FILE or
+EXASOL_TEST_CUSTOM_SLC_URL; the custom test skips if neither is set, so no large
+container is hard-coded into the suite.
+"""
 
 import json
+import os
 import sys
 import textwrap
 from collections.abc import Iterator
@@ -18,6 +24,10 @@ from framework.launcher import DeploymentConfig, Launcher
 PYTHON_ALIAS: Final = "PYTHON3"
 
 UNKNOWN_ALIAS: Final = "invalid-test-slc-alias"
+
+CUSTOM_SLC_FILE_ENV: Final = "EXASOL_TEST_CUSTOM_SLC_FILE"
+CUSTOM_SLC_URL_ENV: Final = "EXASOL_TEST_CUSTOM_SLC_URL"
+CUSTOM_ALIAS: Final = "MYPY3"
 
 
 @pytest.fixture(scope="module")
@@ -242,3 +252,45 @@ def test_slc_update_when_current_is_noop(slc_deployment: Deployment) -> None:
     assert "already up to date" in result.stdout
     assert _is_alias_installed(slc_deployment, PYTHON_ALIAS)
     assert "hi" in _run_scalar_udf(slc_deployment, PYTHON_ALIAS, "slc_e2e_update")
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.installation_e2e
+@pytest.mark.local_e2e
+def test_custom_slc_install_runs_udf(slc_deployment: Deployment) -> None:
+    """Custom install makes the container's UDFs runnable; remove cleans it up."""
+    # Given: a custom container supplied by the runner (skip when none is configured).
+    source_file = os.environ.get(CUSTOM_SLC_FILE_ENV)
+    source_url = os.environ.get(CUSTOM_SLC_URL_ENV)
+    if source_file:
+        source_args = ["--file", source_file]
+    elif source_url:
+        source_args = ["--url", source_url]
+    else:
+        pytest.skip(
+            f"set {CUSTOM_SLC_FILE_ENV} or {CUSTOM_SLC_URL_ENV} to a standard python "
+            "container to run the custom SLC e2e"
+        )
+
+    # When: installing it under a custom alias.
+    _slc(
+        slc_deployment,
+        "custom",
+        "install",
+        *source_args,
+        "--alias",
+        CUSTOM_ALIAS,
+        "--language",
+        "python",
+        "--auto-approve",
+    )
+
+    # Then: the alias is listed and its UDFs run.
+    assert CUSTOM_ALIAS in _slc(slc_deployment, "list", capture=True).stdout
+    assert "hi" in _run_scalar_udf(slc_deployment, CUSTOM_ALIAS, "slc_e2e_custom")
+
+    # When / Then: removing it clears the alias from the listing.
+    _slc(slc_deployment, "custom", "remove", CUSTOM_ALIAS)
+    assert CUSTOM_ALIAS not in _slc(slc_deployment, "list", capture=True).stdout
