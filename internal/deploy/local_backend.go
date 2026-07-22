@@ -33,19 +33,17 @@ const (
 	localInfraMemThresholdMB   = 8192
 	localInfraMemoryNoticeText = "Info: For medium to heavy local workloads, " +
 		"consider increasing VM memory to 8-16 GB."
-	localDefaultDataSizeGB     = 100
-	localDeploymentBackend     = "local"
-	localDeploymentPublicHost  = "127.0.0.1"
-	localSSHUser               = "root"
-	localDBUser                = "sys"
-	localDBPassword            = "exasol"
-	localDBContainerName       = "exasol-local-db"
-	localLegacyDBContainerName = "exasol-nano-db"
-	localManifestFileMode      = 0o600
-	localCPUCountConfigName    = "cpu_count"
-	localMemoryMBConfigName    = "memory_mb"
-	localDataSizeGBConfigName  = "data_size_gb"
-	localPortsConfigName       = "ports"
+	localDefaultDataSizeGB    = 100
+	localDeploymentBackend    = "local"
+	localDeploymentPublicHost = "127.0.0.1"
+	localSSHUser              = "root"
+	localDBUser               = "sys"
+	localDBPassword           = "exasol"
+	localManifestFileMode     = 0o600
+	localCPUCountConfigName   = "cpu_count"
+	localMemoryMBConfigName   = "memory_mb"
+	localDataSizeGBConfigName = "data_size_gb"
+	localPortsConfigName      = "ports"
 )
 
 var errUnsupportedLocalPlatform = errors.New(
