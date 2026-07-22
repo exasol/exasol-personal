@@ -24,57 +24,47 @@ The system SHALL provide a local deployment option for macOS Apple Silicon that 
 
 ### Requirement: Launcher-owned local runtime
 
-The system SHALL own the local VM runtime files, VM disk/data, and managed deployment share inside the deployment directory.
+The system SHALL own the local VM disk/data and managed deployment share inside the deployment directory, and SHALL resolve the Exasol Local VM runner through the resource manager on every use rather than maintaining a per-deployment copy of it.
 
-#### Scenario: Embedded runner is staged
+#### Scenario: Runner is resolved without a per-deployment copy
 
-- **WHEN** the launcher initializes or starts a local deployment without an installed runner
-- **THEN** it atomically writes the embedded macOS Exasol Local runner into the launcher-owned runtime directory before invoking it
+- **WHEN** the launcher initializes or starts a local deployment
+- **THEN** it resolves the Exasol Local runner through the resource manager and invokes it directly from the resolved location, without copying it into the deployment directory
 
-#### Scenario: Unversioned legacy runner is upgraded
+#### Scenario: Missing version marker is initialized
 
-- **WHEN** the launcher prepares a stopped local deployment whose installed runner does not report a valid semantic version
-- **THEN** it atomically replaces that runner with the versioned embedded migration runner before invoking it
+- **WHEN** the launcher prepares a local deployment that has no persisted runner-version marker, or an invalid one, and the resolved runner reports a valid semantic version
+- **THEN** it records the resolved runner's version as the deployment's persisted marker before invoking the runner
 
-#### Scenario: Compatible runner update is applied
+#### Scenario: Compatible runner update is recorded
 
-- **WHEN** the embedded runner is a newer patch or minor version within the installed runner's major version
-- **THEN** the launcher atomically replaces the installed runner before starting the local deployment
+- **WHEN** the resolved runner is a newer patch or minor version within the persisted marker's major version
+- **THEN** the launcher updates the persisted marker to the resolved runner's version before starting the local deployment
 
-#### Scenario: Release-candidate runner update is applied
+#### Scenario: Release-candidate runner update is recorded
 
-- **WHEN** a `v`-prefixed embedded runner release candidate has greater semantic precedence than the installed release candidate within the same major version
-- **THEN** the launcher atomically replaces the installed runner before starting the local deployment
+- **WHEN** a `v`-prefixed resolved runner release candidate has greater semantic precedence than the persisted marker's release candidate within the same major version
+- **THEN** the launcher updates the persisted marker to the resolved runner's version before starting the local deployment
 
-#### Scenario: Runner is not downgraded
+#### Scenario: Unsafe version relationship proceeds with a warning
 
-- **WHEN** the installed runner is newer than the embedded runner within the same major version
-- **THEN** the launcher retains the installed runner
+- **WHEN** the resolved runner's version differs in major version from the persisted marker, or is older than the persisted marker within the same major version
+- **THEN** the launcher proceeds using the resolved runner, logs a warning describing the version relationship, and updates the persisted marker to the resolved runner's version
 
-#### Scenario: Same-version runner content differs
-
-- **WHEN** the installed and embedded runners report the same semantic version but contain different bytes
-- **THEN** the launcher replaces the installed runner with the trusted embedded runner before starting the local deployment
-
-#### Scenario: Major runner update requires user action
-
-- **WHEN** the installed and embedded runners report different major versions
-- **THEN** the launcher retains the installed runner and informs the user that major runner updates are not automatic
-
-#### Scenario: Active runner is not replaced
+#### Scenario: Version reconciliation is skipped for non-starting lifecycle behavior
 
 - **WHEN** the launcher performs status, stop, or destroy behavior for a local deployment
-- **THEN** it does not replace an existing runner before invoking the lifecycle behavior
+- **THEN** it resolves and invokes the runner without comparing or updating the persisted version marker
 
-#### Scenario: Embedded runner version is invalid
+#### Scenario: Resolved runner version is invalid
 
-- **WHEN** the embedded runner does not report a valid semantic version during preparation
-- **THEN** the launcher fails before replacing or starting the installed runner
+- **WHEN** the resolved runner does not report a valid semantic version during preparation
+- **THEN** the launcher fails before invoking it, unless forced reconciliation is enabled
 
 #### Scenario: Internal forced-reconciliation bypass is enabled
 
-- **WHEN** development explicitly enables forced reconciliation with a differing unversioned embedded runner
-- **THEN** the launcher atomically installs the embedded runner without version compatibility checks and warns that reconciliation was forced
+- **WHEN** development explicitly enables forced reconciliation and the resolved runner does not report a valid semantic version
+- **THEN** the launcher proceeds with the resolved runner without version compatibility checks and warns that reconciliation was forced
 
 #### Scenario: Runner VM sizing is prepared
 
