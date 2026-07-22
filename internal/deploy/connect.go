@@ -44,7 +44,7 @@ func WorkflowStatePermitsConnect(deployment config.DeploymentDir) error {
 func Connect(ctx context.Context, opts *connect.Opts, deployment config.DeploymentDir) error {
 	err := withDeploymentSharedLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			slog.Debug("establishing connection to Exaol DB")
+			slog.Debug("establishing connection to Exasol DB")
 
 			if err := WorkflowStatePermitsConnect(deployment); err != nil {
 				return err
