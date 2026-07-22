@@ -1009,6 +1009,34 @@ func TestManager_GetFileDirectoryReturnedDirectly(t *testing.T) {
 	}
 }
 
+func TestManager_GetFileBareFileReturnedDirectly(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	binaryPath := filepath.Join(t.TempDir(), "launcher")
+	if err := os.WriteFile(binaryPath, []byte("binary"), filePerm); err != nil {
+		t.Fatalf("write launcher fixture: %v", err)
+	}
+	cacheDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: "file://" + binaryPath},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+
+	// When
+	path, err := manager.Get(context.Background(), def, "local-launcher")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if path != binaryPath {
+		t.Fatalf("expected path %q, got %q", binaryPath, path)
+	}
+}
+
 func TestManager_GetFileDirectoryMissingReturnsError(t *testing.T) {
 	t.Parallel()
 

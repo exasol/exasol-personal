@@ -108,19 +108,21 @@ func TestFileSource_Fetch_ArchiveReturnsRedirectPath(t *testing.T) {
 	}
 }
 
-func TestFileSource_Fetch_UnsupportedFileTypeReturnsError(t *testing.T) {
+func TestFileSource_Fetch_BareFileReturnsRedirectPath(t *testing.T) {
 	t.Parallel()
 
-	filePath := filepath.Join(t.TempDir(), "config.yaml")
+	filePath := filepath.Join(t.TempDir(), "launcher")
 	if err := os.WriteFile(filePath, []byte("content"), filePerm); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	src := FileSource{}
 
-	_, err := src.Fetch(context.Background(), "file://"+filePath, "ignored")
-	const wantMsg = "must be a directory or a supported archive file"
-	if err == nil || !strings.Contains(err.Error(), wantMsg) {
-		t.Fatalf("expected unsupported-type error, got %v", err)
+	redirectPath, err := src.Fetch(context.Background(), "file://"+filePath, "ignored")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if redirectPath != filePath {
+		t.Fatalf("expected redirect to %q, got %q", filePath, redirectPath)
 	}
 }
 

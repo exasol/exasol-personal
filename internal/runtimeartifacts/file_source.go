@@ -35,21 +35,7 @@ func (FileSource) Identify(_ context.Context, url string) (string, error) {
 }
 
 func (FileSource) Fetch(_ context.Context, url string, _ string) (string, error) {
-	absPath, err := resolveLocalPath(url)
-	if err != nil {
-		return "", err
-	}
-	info, err := os.Stat(absPath)
-	if err != nil {
-		return "", err
-	}
-	if !info.IsDir() && !isSupportedLocalArchive(absPath) {
-		return "", fmt.Errorf(
-			"resource path must be a directory or a supported archive file: %s", absPath,
-		)
-	}
-
-	return absPath, nil
+	return resolveLocalPath(url)
 }
 
 func resolveLocalPath(url string) (string, error) {
@@ -68,10 +54,4 @@ func resolveLocalPath(url string) (string, error) {
 	}
 
 	return resolved, nil
-}
-
-func isSupportedLocalArchive(path string) bool {
-	return strings.HasSuffix(path, ".tar.gz") ||
-		strings.HasSuffix(path, ".tgz") ||
-		strings.HasSuffix(path, ".zip")
 }

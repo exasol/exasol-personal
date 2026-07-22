@@ -220,10 +220,11 @@ def test_file_uri_nonexistent_path_returns_error(
     assert "does not exist" in exc.value.stderr or "not exist" in exc.value.stderr
 
 
-def test_file_uri_unsupported_file_type_returns_error(
+def test_file_uri_plain_file_without_manifest_returns_error(
     exasol_path: str, tmp_path: Path
 ) -> None:
-    # Given a plain file (not a directory or a supported archive)
+    # Given a plain file that isn't a preset directory or archive, and so
+    # can't contain infrastructure.yaml
     plain_file = tmp_path / "preset.yaml"
     plain_file.write_text("kind: infrastructure\n")
 
@@ -242,9 +243,9 @@ def test_file_uri_unsupported_file_type_returns_error(
     with pytest.raises(CalledProcessError) as exc:
         run_command(args)
 
-    # Then it fails with an error mentioning the directory/archive requirement
+    # Then it fails with an error about the missing infrastructure manifest
     assert exc.value.returncode != 0
-    assert "directory" in exc.value.stderr or "archive" in exc.value.stderr
+    assert "infrastructure manifest" in exc.value.stderr
 
 
 def test_at_ref_on_non_git_url_returns_error(exasol_path: str, tmp_path: Path) -> None:
