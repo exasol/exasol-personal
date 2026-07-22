@@ -17,6 +17,7 @@ type ResourceSpec map[string]ResourceDefinition
 // ResourceDefinition describes how to fetch and materialize a resource.
 type ResourceDefinition struct {
 	Extract  bool                    `json:"extract"  yaml:"extract"`
+	Embed    bool                    `json:"embed"    yaml:"embed"`
 	Artifact map[string]ArtifactSpec `json:"artifact" yaml:"artifact"`
 }
 

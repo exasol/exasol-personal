@@ -53,6 +53,7 @@ type cacheIndexEntry struct {
 	URL          string    `json:"url"`
 	Sha256       string    `json:"sha256"`
 	Extract      bool      `json:"extract"`
+	Embed        bool      `json:"embed"`
 	DownloadPath string    `json:"downloadPath,omitempty"`
 	ResourcePath string    `json:"resourcePath,omitempty"`
 	EntryPath    string    `json:"entryPath"`

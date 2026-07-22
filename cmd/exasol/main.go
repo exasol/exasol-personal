@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 
+	// Activates embedded runtime resources for this binary.
+	_ "github.com/exasol/exasol-personal/assets/resources/generated"
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
