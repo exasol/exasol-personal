@@ -30,3 +30,6 @@ coverage.out
 # Added by goreleaser init:
 dist/
 ci-downloads/
+
+.claude
+.env
