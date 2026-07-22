@@ -461,6 +461,29 @@ func (runtime *Runtime) runnerCommandWithOutput(
 	runnerPath string,
 	args []string,
 ) (string, error) {
+	return runtime.runRunnerCommand(ctx, runnerPath, args, nil, nil)
+}
+
+func (runtime *Runtime) runnerCommand(
+	ctx context.Context,
+	runnerPath string,
+	args []string,
+	out, outErr io.Writer,
+) error {
+	_, err := runtime.runRunnerCommand(ctx, runnerPath, args, out, outErr)
+
+	return err
+}
+
+// runRunnerCommand runs the runner and returns captured stdout, additionally
+// forwarding stdout/stderr to out/outErr as they arrive (nil is a no-op, see
+// util.CombineWriters).
+func (runtime *Runtime) runRunnerCommand(
+	ctx context.Context,
+	runnerPath string,
+	args []string,
+	out, outErr io.Writer,
+) (string, error) {
 	if len(args) == 0 {
 		return "", errors.New("local runner command is empty")
 	}
@@ -469,8 +492,8 @@ func (runtime *Runtime) runnerCommandWithOutput(
 	cmd.Dir = runtime.paths.WorkDir
 
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Stdout = util.CombineWriters(&stdout, out)
+	cmd.Stderr = util.CombineWriters(&stderr, outErr)
 
 	if err := cmd.Run(); err != nil {
 		detail := strings.TrimSpace(stdout.String() + "\n" + stderr.String())
@@ -482,36 +505,6 @@ func (runtime *Runtime) runnerCommandWithOutput(
 	}
 
 	return stdout.String(), nil
-}
-
-func (runtime *Runtime) runnerCommand(
-	ctx context.Context,
-	runnerPath string,
-	args []string,
-	out, outErr io.Writer,
-) error {
-	if len(args) == 0 {
-		return errors.New("local runner command is empty")
-	}
-
-	cmd := exec.CommandContext(ctx, runnerPath, args...)
-	cmd.Dir = runtime.paths.WorkDir
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = util.CombineWriters(&stdout, out)
-	cmd.Stderr = util.CombineWriters(&stderr, outErr)
-
-	if err := cmd.Run(); err != nil {
-		detail := strings.TrimSpace(stdout.String() + "\n" + stderr.String())
-		if detail != "" {
-			return fmt.Errorf("local runner command %q failed: %w\n%s", args[0], err, detail)
-		}
-
-		return fmt.Errorf("local runner command %q failed: %w", args[0], err)
-	}
-
-	return nil
 }
 
 func (runtime *Runtime) waitForDaemonExit(ctx context.Context) error {
