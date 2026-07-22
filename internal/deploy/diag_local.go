@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
@@ -94,7 +95,10 @@ func diagnoseLocalUnsafe(ctx context.Context, deployment config.DeploymentDir) *
 		}
 	}
 
-	dbCtx, cancel := context.WithTimeout(ctx, LocalDatabaseStartedDefaultTimeoutSeconds)
+	dbCtx, cancel := context.WithTimeout(
+		ctx,
+		LocalDatabaseStartedDefaultTimeoutSeconds*time.Second,
+	)
 	defer cancel()
 
 	dbErr := verifyDatabaseConnection(dbCtx, deployment)
