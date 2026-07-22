@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"text/tabwriter"
 
@@ -43,6 +42,8 @@ const slcNoRestartFlagName = "no-restart"
 
 const slcCmdShortDesc = "Manage script language containers (SLCs)"
 
+const slcNoneAvailableText = "No script language containers are available for this platform."
+
 const slcCmdLongDesc = slcCmdShortDesc + `
 
 Script language containers provide the language runtimes used by UDFs.
@@ -75,7 +76,7 @@ var slcInstallCmd = &cobra.Command{
 			slcConfirmFunc(cmd, slcInstallOpts.AutoApprove, fmt.Sprintf("Installing %q", alias)),
 		)
 		if errors.Is(err, deploy.ErrSLCOperationCancelled) {
-			safePrint(slcOperationAbortedMessage)
+			addTerminalNotice(slcOperationAbortedMessage)
 
 			return nil
 		}
@@ -83,8 +84,12 @@ var slcInstallCmd = &cobra.Command{
 			return err
 		}
 
+		if commonFlags.OutputJson {
+			return renderSLCCommandJSON(result)
+		}
+
 		if result.AlreadyInstalled {
-			safePrint(fmt.Sprintf(
+			addTerminalOutput(fmt.Sprintf(
 				"%s is already installed and up to date (version %s, aliases: %s). Nothing to do.",
 				result.Entry.Flavor,
 				result.Entry.Version,
@@ -116,7 +121,7 @@ var slcUpdateCmd = &cobra.Command{
 			slcConfirmFunc(cmd, slcUpdateOpts.AutoApprove, fmt.Sprintf("Updating %q", alias)),
 		)
 		if errors.Is(err, deploy.ErrSLCOperationCancelled) {
-			safePrint(slcOperationAbortedMessage)
+			addTerminalNotice(slcOperationAbortedMessage)
 
 			return nil
 		}
@@ -124,17 +129,21 @@ var slcUpdateCmd = &cobra.Command{
 			return err
 		}
 
+		if commonFlags.OutputJson {
+			return renderSLCCommandJSON(result)
+		}
+
 		if !result.Found {
-			safePrint(fmt.Sprintf(
-				"No SLC matching %q is installed, so there is nothing to update.\n"+
-					"Run `exasol slc install %s` to install it.",
-				alias, alias,
+			addTerminalOutput(fmt.Sprintf(
+				"No SLC matching %q is installed, so there is nothing to update.",
+				alias,
 			))
+			addTerminalNotice(fmt.Sprintf("Run `exasol slc install %s` to install it.", alias))
 
 			return nil
 		}
 		if result.Unchanged {
-			safePrint(fmt.Sprintf(
+			addTerminalOutput(fmt.Sprintf(
 				"%s is already up to date (version %s). Nothing to do.",
 				result.Entry.Flavor,
 				result.Entry.Version,
@@ -165,7 +174,7 @@ var slcRemoveCmd = &cobra.Command{
 			slcConfirmFunc(cmd, slcRemoveOpts.AutoApprove, fmt.Sprintf("Removing %q", alias)),
 		)
 		if errors.Is(err, deploy.ErrSLCOperationCancelled) {
-			safePrint(slcOperationAbortedMessage)
+			addTerminalNotice(slcOperationAbortedMessage)
 
 			return nil
 		}
@@ -173,8 +182,12 @@ var slcRemoveCmd = &cobra.Command{
 			return err
 		}
 
+		if commonFlags.OutputJson {
+			return renderSLCCommandJSON(result)
+		}
+
 		if !result.Found {
-			safePrint(fmt.Sprintf(
+			addTerminalOutput(fmt.Sprintf(
 				"No SLC matching %q is installed, so there is nothing to remove.",
 				alias,
 			))
@@ -208,13 +221,13 @@ func slcConfirmFunc(cmd *cobra.Command, autoApprove bool, action string) deploy.
 		}
 
 		_, _ = fmt.Fprintf(
-			cmd.OutOrStdout(),
+			cmd.ErrOrStderr(),
 			"%s will restart the database. Open connections will be dropped and running "+
 				"statements aborted.\nContinue? [y/N]: ",
 			action,
 		)
 
-		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
 			return false, err
 		}
@@ -235,7 +248,7 @@ var slcListCmd = &cobra.Command{
 		}
 
 		if commonFlags.OutputJson {
-			return renderSLCListJSON(cmd.OutOrStdout(), statuses)
+			return queueSLCListJSON(statuses)
 		}
 
 		renderSLCListText(statuses)
@@ -244,37 +257,42 @@ var slcListCmd = &cobra.Command{
 	},
 }
 
-type slcListJSONItem struct {
-	Language  string   `json:"language"`
-	Flavor    string   `json:"flavor"`
-	Version   string   `json:"version"`
-	Aliases   []string `json:"aliases"`
-	Installed bool     `json:"installed"`
+func renderSLCListJSON(writer io.Writer, statuses []deploy.SLCStatus) error {
+	content, err := formatSLCListJSON(statuses)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(writer, content)
+
+	return err
 }
 
-func renderSLCListJSON(writer io.Writer, statuses []deploy.SLCStatus) error {
-	items := make([]slcListJSONItem, 0, len(statuses))
-	for _, status := range statuses {
-		items = append(items, slcListJSONItem{
-			Language:  status.Language,
-			Flavor:    status.Flavor,
-			Version:   status.Version,
-			Aliases:   status.Aliases,
-			Installed: status.Installed,
-		})
+func queueSLCListJSON(statuses []deploy.SLCStatus) error {
+	content, err := formatSLCListJSON(statuses)
+	if err != nil {
+		return err
+	}
+	addTerminalOutput(content)
+
+	return nil
+}
+
+func formatSLCListJSON(statuses []deploy.SLCStatus) (string, error) {
+	content, err := json.MarshalIndent(statuses, "", "  ")
+	if err != nil {
+		return "", err
 	}
 
-	encoder := json.NewEncoder(writer)
-	encoder.SetIndent("", "  ")
-
-	return encoder.Encode(items)
+	return string(content), nil
 }
 
 func renderSLCListText(statuses []deploy.SLCStatus) {
-	if len(statuses) == 0 {
-		safePrint("No script language containers are available for this platform.")
+	addTerminalOutput(formatSLCListText(statuses))
+}
 
-		return
+func formatSLCListText(statuses []deploy.SLCStatus) string {
+	if len(statuses) == 0 {
+		return slcNoneAvailableText
 	}
 
 	var builder strings.Builder
@@ -297,7 +315,7 @@ func renderSLCListText(statuses []deploy.SLCStatus) {
 	}
 	_ = writer.Flush()
 
-	safePrint(strings.TrimRight(builder.String(), "\n"))
+	return strings.TrimRight(builder.String(), "\n")
 }
 
 func printSLCInstallResult(result *deploy.SLCInstallResult) {
@@ -313,6 +331,7 @@ func printSLCInstallResult(result *deploy.SLCInstallResult) {
 	)
 
 	switch result.Outcome {
+	case deploy.SLCApplyNone:
 	case deploy.SLCApplyRestarted:
 		message += " Database restarted; the language is ready to use."
 	case deploy.SLCApplyStarted:
@@ -322,7 +341,7 @@ func printSLCInstallResult(result *deploy.SLCInstallResult) {
 	default:
 	}
 
-	safePrint(message)
+	addTerminalOutput(message)
 }
 
 func printSLCUpdateResult(result *deploy.SLCUpdateResult) {
@@ -332,6 +351,7 @@ func printSLCUpdateResult(result *deploy.SLCUpdateResult) {
 	}
 
 	switch result.Outcome {
+	case deploy.SLCApplyNone:
 	case deploy.SLCApplyRestarted:
 		message += " Database restarted; the new version is ready to use."
 	case deploy.SLCApplyStarted:
@@ -341,13 +361,14 @@ func printSLCUpdateResult(result *deploy.SLCUpdateResult) {
 	default:
 	}
 
-	safePrint(message)
+	addTerminalOutput(message)
 }
 
 func printSLCRemoveResult(result *deploy.SLCRemoveResult) {
 	message := fmt.Sprintf("Removed %s.", result.Entry.Flavor)
 
 	switch result.Outcome {
+	case deploy.SLCApplyNone:
 	case deploy.SLCApplyRestarted:
 		message += " Database restarted; the language is no longer available."
 	case deploy.SLCApplyStarted:
@@ -357,7 +378,17 @@ func printSLCRemoveResult(result *deploy.SLCRemoveResult) {
 	default:
 	}
 
-	safePrint(message)
+	addTerminalOutput(message)
+}
+
+func renderSLCCommandJSON(value any) error {
+	content, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	addTerminalOutput(string(content))
+
+	return nil
 }
 
 // nolint: gochecknoinits
@@ -365,6 +396,7 @@ func init() {
 	requireDefaultDeploymentCompatibility(slcInstallCmd)
 	requireInitializedDeploymentDir(slcInstallCmd)
 	registerDeploymentDirFlag(slcInstallCmd, commonFlags)
+	registerOutputFlags(slcInstallCmd, commonFlags)
 	registerVerboseFlag(slcInstallCmd, commonFlags)
 	slcInstallCmd.Flags().BoolVar(&slcInstallOpts.AutoApprove, slcAutoApproveFlagName, false,
 		slcAutoApproveFlagDesc)
@@ -374,6 +406,7 @@ func init() {
 	requireDefaultDeploymentCompatibility(slcUpdateCmd)
 	requireInitializedDeploymentDir(slcUpdateCmd)
 	registerDeploymentDirFlag(slcUpdateCmd, commonFlags)
+	registerOutputFlags(slcUpdateCmd, commonFlags)
 	registerVerboseFlag(slcUpdateCmd, commonFlags)
 	slcUpdateCmd.Flags().BoolVar(&slcUpdateOpts.AutoApprove, slcAutoApproveFlagName, false,
 		slcAutoApproveFlagDesc)
@@ -383,6 +416,7 @@ func init() {
 	requireDefaultDeploymentCompatibility(slcRemoveCmd)
 	requireInitializedDeploymentDir(slcRemoveCmd)
 	registerDeploymentDirFlag(slcRemoveCmd, commonFlags)
+	registerOutputFlags(slcRemoveCmd, commonFlags)
 	registerVerboseFlag(slcRemoveCmd, commonFlags)
 	slcRemoveCmd.Flags().BoolVar(&slcRemoveOpts.AutoApprove, slcAutoApproveFlagName, false,
 		slcAutoApproveFlagDesc)

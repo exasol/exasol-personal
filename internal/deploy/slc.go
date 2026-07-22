@@ -26,8 +26,6 @@ var ErrSLCNotSupported = errors.New(
 // ErrSLCOperationCancelled is returned when the user declines the database-restart prompt.
 var ErrSLCOperationCancelled = errors.New("operation cancelled")
 
-const slcOperationInProgressSuffix = " script language container (this may take a few minutes)"
-
 // ErrDeploymentNotPresent is returned when an SLC change operation (install/update/remove)
 // is attempted on a deployment that has only been initialized, never deployed. SLC
 // management operates on a deployed database, so there is nothing to change — and, crucially,
@@ -76,12 +74,22 @@ func confirmOrCancel(confirm ConfirmFunc) error {
 	return nil
 }
 
-// SLCApplyOutcome describes how an install/remove was applied to the running state.
+// SLCApplyOutcome describes how an install, update, or remove was applied to the running state.
 type SLCApplyOutcome int
 
+const slcApplyOutcomeUnknown = "unknown"
+
 const (
+	SLCOperationInstall = "install"
+	SLCOperationUpdate  = "update"
+	SLCOperationRemove  = "remove"
+)
+
+const (
+	// SLCApplyNone means no apply action was needed.
+	SLCApplyNone SLCApplyOutcome = iota
 	// SLCApplyRestarted means the running database was stopped and started again.
-	SLCApplyRestarted SLCApplyOutcome = iota
+	SLCApplyRestarted
 	// SLCApplyStarted means a stopped database was started to apply the change.
 	SLCApplyStarted
 	// SLCApplyDeferred means the change was persisted but the (stopped) database was not
@@ -89,38 +97,63 @@ const (
 	SLCApplyDeferred
 )
 
+func (outcome SLCApplyOutcome) String() string {
+	switch outcome {
+	case SLCApplyNone:
+		return "none"
+	case SLCApplyRestarted:
+		return "restarted"
+	case SLCApplyStarted:
+		return "started"
+	case SLCApplyDeferred:
+		return "deferred"
+	default:
+		return slcApplyOutcomeUnknown
+	}
+}
+
+func (outcome SLCApplyOutcome) MarshalText() ([]byte, error) {
+	return []byte(outcome.String()), nil
+}
+
 // SLCInstallResult reports the outcome of an install.
 type SLCInstallResult struct {
-	Entry            config.InstalledSLC
-	AlreadyInstalled bool
-	Replaced         bool
-	Outcome          SLCApplyOutcome
+	Operation        string              `json:"operation"`
+	Entry            config.InstalledSLC `json:"entry"`
+	AlreadyInstalled bool                `json:"alreadyInstalled"`
+	Replaced         bool                `json:"replaced"`
+	Changed          bool                `json:"changed"`
+	Outcome          SLCApplyOutcome     `json:"outcome"`
 }
 
 // SLCRemoveResult reports the outcome of a remove.
 type SLCRemoveResult struct {
-	Found   bool
-	Entry   config.InstalledSLC
-	Outcome SLCApplyOutcome
+	Operation string               `json:"operation"`
+	Found     bool                 `json:"found"`
+	Changed   bool                 `json:"changed"`
+	Entry     *config.InstalledSLC `json:"entry,omitempty"`
+	Outcome   SLCApplyOutcome      `json:"outcome"`
 }
 
 // SLCUpdateResult reports the outcome of an update.
 type SLCUpdateResult struct {
-	Found       bool
-	Unchanged   bool
-	FromFlavor  string
-	FromVersion string
-	Entry       config.InstalledSLC
-	Outcome     SLCApplyOutcome
+	Operation   string               `json:"operation"`
+	Found       bool                 `json:"found"`
+	Unchanged   bool                 `json:"unchanged"`
+	Changed     bool                 `json:"changed"`
+	FromFlavor  string               `json:"fromFlavor,omitempty"`
+	FromVersion string               `json:"fromVersion,omitempty"`
+	Entry       *config.InstalledSLC `json:"entry,omitempty"`
+	Outcome     SLCApplyOutcome      `json:"outcome"`
 }
 
 // SLCStatus describes one catalog SLC and whether it is installed in this deployment.
 type SLCStatus struct {
-	Language  string
-	Flavor    string
-	Version   string
-	Aliases   []string
-	Installed bool
+	Language  string   `json:"language"`
+	Flavor    string   `json:"flavor"`
+	Version   string   `json:"version"`
+	Aliases   []string `json:"aliases"`
+	Installed bool     `json:"installed"`
 }
 
 // InstallSLC resolves an alias against the official SLC catalog, records the SLC in
@@ -160,7 +193,12 @@ func InstallSLC(
 
 	// An identical already-installed image is a no-op: no state change, no restart.
 	if idx := findInstalledByImage(state.InstalledSLCs, entry.Image); idx >= 0 {
-		return &SLCInstallResult{Entry: state.InstalledSLCs[idx], AlreadyInstalled: true}, nil
+		return &SLCInstallResult{
+			Operation:        SLCOperationInstall,
+			Entry:            state.InstalledSLCs[idx],
+			AlreadyInstalled: true,
+			Outcome:          SLCApplyNone,
+		}, nil
 	}
 
 	replaces, err := slc.CheckInstallable(installedEntries(state), entry)
@@ -184,22 +222,30 @@ func InstallSLC(
 
 	if !restart {
 		slog.Info(
-			alias+" script language container recorded; it will activate on the next start",
+			"script language container install recorded",
+			"alias", alias,
 			"flavor", entry.Flavor,
+			"version", entry.Version,
+			"replaced", replaces,
+			"activation", "next_start",
 		)
 
 		return &SLCInstallResult{
-			Entry:    toInstalledSLC(entry),
-			Replaced: replaces,
-			Outcome:  SLCApplyDeferred,
+			Operation: SLCOperationInstall,
+			Entry:     toInstalledSLC(entry),
+			Replaced:  replaces,
+			Changed:   true,
+			Outcome:   SLCApplyDeferred,
 		}, nil
 	}
 
 	slog.Info(
-		"installing "+alias+slcOperationInProgressSuffix,
+		"installing script language container",
+		"alias", alias,
 		"flavor", entry.Flavor,
+		"version", entry.Version,
+		"may_take_minutes", true,
 	)
-
 	outcome, err := applySLCChange(ctx, deployment, verbose, true)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -208,12 +254,20 @@ func InstallSLC(
 		)
 	}
 
-	slog.Info(alias + " script language container is installed")
+	slog.Info(
+		"script language container installed",
+		"alias", alias,
+		"flavor", entry.Flavor,
+		"version", entry.Version,
+		"outcome", outcome.String(),
+	)
 
 	return &SLCInstallResult{
-		Entry:    toInstalledSLC(entry),
-		Replaced: replaces,
-		Outcome:  outcome,
+		Operation: SLCOperationInstall,
+		Entry:     toInstalledSLC(entry),
+		Replaced:  replaces,
+		Changed:   true,
+		Outcome:   outcome,
 	}, nil
 }
 
@@ -243,7 +297,7 @@ func RemoveSLC(
 
 	index := findInstalledSLC(state.InstalledSLCs, alias)
 	if index < 0 {
-		return &SLCRemoveResult{Found: false}, nil
+		return &SLCRemoveResult{Operation: SLCOperationRemove, Found: false}, nil
 	}
 
 	// Confirm before disrupting a running database (only when a restart will happen).
@@ -264,35 +318,51 @@ func RemoveSLC(
 
 	if !restart {
 		slog.Info(
-			alias+" script language container recorded for removal; it applies on the next start",
+			"script language container removal recorded",
+			"alias", alias,
 			"flavor", removed.Flavor,
+			"version", removed.Version,
+			"activation", "next_start",
 		)
 
-		return &SLCRemoveResult{Found: true, Entry: removed, Outcome: SLCApplyDeferred}, nil
+		return &SLCRemoveResult{
+			Operation: SLCOperationRemove,
+			Found:     true,
+			Changed:   true,
+			Entry:     &removed,
+			Outcome:   SLCApplyDeferred,
+		}, nil
 	}
 
 	if isLocalDeploymentRunning(ctx, deployment) {
 		slog.Info(
-			"removing "+alias+slcOperationInProgressSuffix,
+			"removing script language container",
+			"alias", alias,
 			"flavor", removed.Flavor,
+			"version", removed.Version,
+			"may_take_minutes", true,
 		)
 	}
-
 	outcome, err := applySLCChange(ctx, deployment, verbose, false)
 	if err != nil {
 		return nil, err
 	}
 
-	if outcome == SLCApplyDeferred {
-		slog.Info(
-			alias+" script language container removed; it will no longer load on the next start",
-			"flavor", removed.Flavor,
-		)
-	} else {
-		slog.Info(alias + " script language container is removed")
-	}
+	slog.Info(
+		"script language container removed",
+		"alias", alias,
+		"flavor", removed.Flavor,
+		"version", removed.Version,
+		"outcome", outcome.String(),
+	)
 
-	return &SLCRemoveResult{Found: true, Entry: removed, Outcome: outcome}, nil
+	return &SLCRemoveResult{
+		Operation: SLCOperationRemove,
+		Found:     true,
+		Changed:   true,
+		Entry:     &removed,
+		Outcome:   outcome,
+	}, nil
 }
 
 // UpdateSLC re-resolves an installed SLC against the catalog and, if the resolved image
@@ -330,14 +400,20 @@ func UpdateSLC(
 
 	index := findInstalledSLC(state.InstalledSLCs, alias)
 	if index < 0 {
-		return &SLCUpdateResult{Found: false}, nil
+		return &SLCUpdateResult{Operation: SLCOperationUpdate, Found: false}, nil
 	}
 	installed := state.InstalledSLCs[index]
 
 	// Shared no-op test with install: an unchanged (content-addressed) image is nothing to
 	// update.
 	if findInstalledByImage(state.InstalledSLCs, entry.Image) >= 0 {
-		return &SLCUpdateResult{Found: true, Unchanged: true, Entry: installed}, nil
+		return &SLCUpdateResult{
+			Operation: SLCOperationUpdate,
+			Found:     true,
+			Unchanged: true,
+			Entry:     &installed,
+			Outcome:   SLCApplyNone,
+		}, nil
 	}
 
 	// An update can move to a new flavor (e.g. the unversioned alias shifting from
@@ -357,21 +433,29 @@ func UpdateSLC(
 	}
 
 	result := &SLCUpdateResult{
+		Operation:   SLCOperationUpdate,
 		Found:       true,
+		Changed:     true,
 		FromFlavor:  installed.Flavor,
 		FromVersion: installed.Version,
-		Entry:       toInstalledSLC(entry),
 	}
+	resultEntry := toInstalledSLC(entry)
+	result.Entry = &resultEntry
 
-	state.InstalledSLCs = upsertInstalledSLC(remaining, toInstalledSLC(entry))
+	state.InstalledSLCs = upsertInstalledSLC(remaining, resultEntry)
 	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
 		return nil, err
 	}
 
 	if !restart {
 		slog.Info(
-			alias+" script language container update recorded; it will apply on the next start",
+			"script language container update recorded",
+			"alias", alias,
+			"from_flavor", installed.Flavor,
+			"from_version", installed.Version,
 			"flavor", entry.Flavor,
+			"version", entry.Version,
+			"activation", "next_start",
 		)
 		result.Outcome = SLCApplyDeferred
 
@@ -379,8 +463,13 @@ func UpdateSLC(
 	}
 
 	slog.Info(
-		"updating "+alias+slcOperationInProgressSuffix,
+		"updating script language container",
+		"alias", alias,
+		"from_flavor", installed.Flavor,
+		"from_version", installed.Version,
 		"flavor", entry.Flavor,
+		"version", entry.Version,
+		"may_take_minutes", true,
 	)
 	outcome, err := applySLCChange(ctx, deployment, verbose, true)
 	if err != nil {
@@ -391,8 +480,17 @@ func UpdateSLC(
 			err,
 		)
 	}
-	slog.Info(alias + " script language container is updated")
 	result.Outcome = outcome
+
+	slog.Info(
+		"script language container updated",
+		"alias", alias,
+		"from_flavor", installed.Flavor,
+		"from_version", installed.Version,
+		"flavor", entry.Flavor,
+		"version", entry.Version,
+		"outcome", outcome.String(),
+	)
 
 	return result, nil
 }
