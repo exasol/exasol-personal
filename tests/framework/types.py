@@ -11,6 +11,7 @@ class SubprocessRunKwargs(TypedDict, total=False):
     check: bool  # Raise an error on non-0 exit status.
     capture_output: bool  # Capture stdout and stder.
     encoding: str  # Encoding for text-mode subprocess streams.
+    timeout: float  # Seconds to wait before killing the child process.
     stdin: StdIO
     stdout: StdIO
     stderr: StdIO

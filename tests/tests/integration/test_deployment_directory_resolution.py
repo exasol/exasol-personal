@@ -477,3 +477,104 @@ def test_info_reports_uninitialized_resolved_default_dir(
     assert str(default_dir) in result.stdout
     assert "No Exasol Personal deployment exists" in result.stderr
     assert "exasol install <infra preset>" in result.stderr
+
+
+@pytest.mark.launcher_tests
+def test_status_reports_resolved_default_dir(exasol_path: str, tmp_path: Path) -> None:
+    # Given a home without a default deployment and an empty non-deployment cwd
+    home = tmp_path / "home"
+    cwd = tmp_path / "work"
+    home.mkdir()
+    cwd.mkdir()
+    default_dir = home / ".exasol" / "personal" / "deployments" / "default"
+
+    # When status runs outside any deployment directory
+    command = [str(Path(exasol_path).resolve()), "status", "--json"]
+    result = subprocess.run(
+        command,
+        cwd=cwd,
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Then it reports not_initialized against the resolved default dir
+    data = json.loads(result.stdout)
+    assert data["status"] == "not_initialized"
+    assert data["deploymentDir"] == str(default_dir)
+
+
+@pytest.mark.launcher_tests
+def test_init_without_flag_uses_default_dir(exasol_path: str, tmp_path: Path) -> None:
+    # Given a home and cwd with no recognized deployment directory
+    home = tmp_path / "home"
+    cwd = tmp_path / "work"
+    home.mkdir()
+    cwd.mkdir()
+    default_dir = home / ".exasol" / "personal" / "deployments" / "default"
+
+    # When init runs with no --deployment-dir
+    command = [
+        str(Path(exasol_path).resolve()),
+        "init",
+        "aws",
+        "--no-launcher-version-check",
+    ]
+    subprocess.run(
+        command,
+        cwd=cwd,
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Then the default directory is created and initialized
+    assert (default_dir / ".exasolLauncherState.json").exists()
+
+
+@pytest.mark.launcher_tests
+def test_status_resolves_current_deployment_dir(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a deployment directory initialized in place
+    deployment_dir = tmp_path / "deployment"
+    deployment_dir.mkdir()
+    launcher = str(Path(exasol_path).resolve())
+    init_command = [
+        launcher,
+        "init",
+        "aws",
+        "--deployment-dir",
+        str(deployment_dir),
+        "--no-launcher-version-check",
+    ]
+    subprocess.run(
+        init_command,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # When status runs with cwd inside the deployment (no flag)
+    status_command = [launcher, "status", "--json"]
+    from_cwd = subprocess.run(
+        status_command,
+        cwd=deployment_dir,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(from_cwd.stdout)["deploymentDir"] == str(deployment_dir)
+
+    # When status targets cwd explicitly with --deployment-dir .
+    explicit_command = [launcher, "status", "--json", "--deployment-dir", "."]
+    explicit = subprocess.run(
+        explicit_command,
+        cwd=deployment_dir,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(explicit.stdout)["deploymentDir"] == str(deployment_dir)

@@ -59,20 +59,27 @@ The project uses multiple layers of testing to ensure quality at different level
   - Validate idempotency and state management
   - Check file creation and configuration handling
   
-### 3. Python Deployment Tests
+### 3. Python Cloud Tests (deployment / e2e / chaos)
 
-- **Location:** `tests/deployment/`
-- **Purpose:** Full end-to-end tests with real AWS infrastructure
-- **Run with:** `task tests-deployment` (from project root)
+Cloud tests provision real infrastructure and share one session-scoped deployment
+(the `reusable_deployment` fixture). They are split by kind across three directories,
+and each test is stamped with a kind marker matching its directory (`-m deployment`,
+`-m e2e`, `-m chaos`):
+
+- **`tests/deployment/`** — provisioning and lifecycle (stop/start, custom sizing, local VM ports, remote archive).
+- **`tests/e2e/`** — read-only connect / query / output workflows against the running deployment.
+- **`tests/chaos/`** — fault injection and recovery (interrupting in-flight lifecycle operations).
+
+- **Run with:** `task tests-deployment` (runs all three), or the marker-scoped tasks below.
 - **Speed:** Slow (10-30+ minutes)
-- **Resources:** **Creates real AWS resources (incurs costs!)**
+- **Resources:** **Creates real cloud resources (incurs costs!)**
 - **When to use:**
   - Validate complete deployment workflows
   - Test actual cloud provisioning
   - Verify deployed database functionality
   - Pre-release validation
 
-**Warning:** Deployment tests provision actual AWS infrastructure and will incur charges. Use sparingly and clean up resources after testing.
+**Warning:** Cloud tests provision actual infrastructure and will incur charges. Use sparingly and clean up resources after testing.
 
 ## Running Tests
 
@@ -129,19 +136,43 @@ poetry run pytest --exasol-path=../bin/exasol tests/integration/test_cli.py::tes
 # Run with verbose output
 poetry run pytest --exasol-path=../bin/exasol tests/integration -v
 
-# Run deployment tests (default: AWS preset)
+# Run all cloud tests (default: AWS preset)
 export AWS_PROFILE=your-profile
-poetry run pytest --exasol-path=../bin/exasol tests/deployment
+poetry run pytest --exasol-path=../bin/exasol tests/deployment tests/e2e tests/chaos
 
-# Run deployment tests with Azure preset
-poetry run pytest --exasol-path=../bin/exasol --infra=azure tests/deployment
+# Run all cloud tests with Azure preset
+poetry run pytest --exasol-path=../bin/exasol --infra=azure tests/deployment tests/e2e tests/chaos
 
-# Run only infrastructure-focused deployment tests
-poetry run pytest --exasol-path=../bin/exasol --infra=aws -m "infrastructure_e2e" tests/deployment
+# Run a single kind (directory or marker both work)
+poetry run pytest --exasol-path=../bin/exasol tests/e2e
+poetry run pytest --exasol-path=../bin/exasol -m "chaos" tests/deployment tests/e2e tests/chaos
+
+# Run only infrastructure-focused tests
+poetry run pytest --exasol-path=../bin/exasol --infra=aws -m "infrastructure_e2e" tests/deployment tests/e2e tests/chaos
 
 # Run only installation-focused end-to-end tests
-poetry run pytest --exasol-path=../bin/exasol --infra=aws -m "installation_e2e" tests/deployment
+poetry run pytest --exasol-path=../bin/exasol --infra=aws -m "installation_e2e" tests/deployment tests/e2e tests/chaos
 ```
+
+### Seeing the commands a test runs
+
+Live logging is on at `INFO`, which does not include the individual launcher
+invocations. Raise it to `DEBUG` and every command the suite executes is printed
+before it starts, with its working directory when one is set:
+
+```bash
+poetry run pytest --exasol-path=../bin/exasol tests/integration --log-cli-level=DEBUG
+```
+
+```
+DEBUG executing command: ../bin/exasol presets list --json
+DEBUG executing command (cwd: /tmp/.../work): /.../exasol status --json --deployment staging
+```
+
+This covers every command regardless of how a test invokes it — the shared
+`run_command` helpers, the `framework` launcher, and tests that reach for
+`subprocess` directly — because the root `conftest.py` logs at the single point
+they all funnel through. Nothing needs to be passed to the helpers to opt in.
 
 ## Continuous Integration
 
