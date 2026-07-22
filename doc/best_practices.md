@@ -25,18 +25,19 @@ For more detailed information, consider these resources:
 - [Reddit Discussion on init() Best Practices](https://www.reddit.com/r/golang/comments/prtpqy/best_practices_regarding_init_function_and_small/)
 - [StackOverflow: Is it bad to use init() functions?](https://stackoverflow.com/questions/56039154/is-it-really-bad-to-use-init-functions-in-go)
 
-## Only print to the terminal in `cmd` packages
+## Keep CLI output in the command layer
 
-**Rule:** Do not use `fmt.Printf`, `fmt.Println`, or other functions that print directly to the terminal inside packages outside of your `cmd` layer.
+**Rule:** Command implementations own terminal presentation. Library packages return data and errors; they do not print user-facing output directly.
 
 ### Explanation
 
-The Go standard library’s `fmt` package provides functions like `Print`, `Println`, and `Printf` that write formatted output to standard output (`os.Stdout`) by default. These are useful in CLI entry points, but they hard-code a specific output destination (the terminal).
+Terminal output is part of the CLI contract, not part of the deployment, configuration, or runtime libraries. Keeping it in the command layer preserves a clean separation between core logic and presentation, makes library code reusable outside a terminal, and keeps command output testable.
 
-When code in lower-level packages prints directly to the terminal, it couples those packages to a particular execution context. Code that prints to stdout cannot be easily reused in environments where terminal output is inappropriate, such as servers, tests, background jobs, libraries, or GUI applications.
+The command layer should build text and JSON output from the same returned domain objects. Library packages should accept and return objects, not pre-rendered CLI representations whose only purpose is to be printed. Text output may intentionally be shorter or more human-oriented, but JSON output must be complete enough for automation and agent workflows.
 
-By restricting direct terminal output to the `cmd` package (or other designated boundary layers), you preserve separation between **core logic** and **presentation**. Other packages should return values or accept an `io.Writer` for output instead of printing directly. This makes logic testable (you can capture or mock output) and reusable in contexts beyond a terminal. A common idiom in Go is to use `fmt.Fprintf(w, ...)` with an `io.Writer` parameter when output must be produced programmatically, rather than writing straight to stdout. :contentReference[oaicite:1]{index=1}
+Use stdout only for primary command output. When `--json` is selected, stdout must contain only valid JSON for successful command output so callers can parse it directly without filtering. Human guidance, progress notes, current-directory notices, prompts, and call-to-action messages belong on stderr.
 
+Expected errors are not successful command output. Unsupported features, invalid platform/backend combinations, validation failures, and other expected failures should be returned through the command error path so they are written to stderr and never mixed into stdout.
 
-
+Route queued terminal output through the command helpers: use `addTerminalOutput` for primary stdout output and `addTerminalNotice` for stderr notices. This preserves ordering and keeps JSON stdout parseable when root-level notices are added.
 
