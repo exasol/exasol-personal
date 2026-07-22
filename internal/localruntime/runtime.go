@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/blang/semver/v4"
-	"github.com/exasol/exasol-personal/assets/localruntimebin"
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 	"github.com/exasol/exasol-personal/internal/util"
 	"golang.org/x/crypto/ssh"
 )
@@ -32,20 +32,30 @@ import (
 const (
 	DirName            = "local"
 	runtimeDirName     = "runtime"
-	RunnerFileName     = localruntimebin.RunnerBinaryName
 	vmDirName          = "vm"
 	vmStateFileName    = "vm-state.json"
 	vmPIDFileName      = "vm.pid"
 	PrivateKeyFileName = "node_access.pem"
-	openSSHKeyPEMType  = "OPENSSH PRIVATE KEY"
-	stopPollInterval   = 500 * time.Millisecond
-	stopTimeout        = 90 * time.Second
-	dirMode            = 0o750
-	privateFileMode    = 0o600
-	executableFileMode = 0o700
-	maxTCPPort         = 65535
-	// Internal escape hatch for development with embedded runners that predate version reporting.
+	// runnerVersionMarkerFileName records the semver of the runner this
+	// deployment was last prepared/started with. It's a launcher-owned file,
+	// distinct from vm-state.json, whose schema is dictated by the runner's
+	// own external contract and isn't ours to extend.
+	runnerVersionMarkerFileName = "runner-version.json"
+	openSSHKeyPEMType           = "OPENSSH PRIVATE KEY"
+	stopPollInterval            = 500 * time.Millisecond
+	stopTimeout                 = 90 * time.Second
+	dirMode                     = 0o750
+	privateFileMode             = 0o600
+	markerFileMode              = 0o600
+	executableFileMode          = 0o700
+	maxTCPPort                  = 65535
+	// Internal escape hatch for development with runners that predate version reporting.
 	forceRunnerReconciliationEnv = "EXASOL_LOCAL_FORCE_RUNNER_RECONCILIATION"
+	// Internal escape hatch for tests: exasol-local-runner is embed-only, so
+	// non-macOS test hosts have no way to resolve a runner through the
+	// Manager at all. Setting this to a path bypasses resolution entirely.
+	runnerOverridePathEnv       = "EXASOL_LOCAL_RUNNER_OVERRIDE_PATH"
+	exasolLocalRunnerResourceID = "exasol-local-runner"
 )
 
 type Config struct {
@@ -65,12 +75,12 @@ type State struct {
 }
 
 type Paths struct {
-	Root           string
-	WorkDir        string
-	RunnerPath     string
-	VMDir          string
-	StatePath      string
-	PrivateKeyPath string
+	Root                    string
+	WorkDir                 string
+	VMDir                   string
+	StatePath               string
+	PrivateKeyPath          string
+	RunnerVersionMarkerPath string
 }
 
 func NewPaths(deployment config.DeploymentDir) Paths {
@@ -78,12 +88,12 @@ func NewPaths(deployment config.DeploymentDir) Paths {
 	workDir := filepath.Join(root, runtimeDirName)
 
 	return Paths{
-		Root:           root,
-		WorkDir:        workDir,
-		RunnerPath:     filepath.Join(workDir, RunnerFileName),
-		VMDir:          filepath.Join(workDir, vmDirName),
-		StatePath:      filepath.Join(workDir, vmStateFileName),
-		PrivateKeyPath: filepath.Join(root, PrivateKeyFileName),
+		Root:                    root,
+		WorkDir:                 workDir,
+		VMDir:                   filepath.Join(workDir, vmDirName),
+		StatePath:               filepath.Join(workDir, vmStateFileName),
+		PrivateKeyPath:          filepath.Join(root, PrivateKeyFileName),
+		RunnerVersionMarkerPath: filepath.Join(workDir, runnerVersionMarkerFileName),
 	}
 }
 
@@ -113,28 +123,64 @@ type runnerState struct {
 	Ports     runnerPorts `json:"ports"`
 }
 
-func Prepare(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	runtimeConfig Config,
-	out, outErr io.Writer,
-) error {
-	runtime := newRuntime(deployment, runtimeConfig)
-	return runtime.prepare(ctx, out, outErr)
+type Runtime struct {
+	deployment config.DeploymentDir
+	paths      Paths
+	manager    *runtimeartifacts.Manager
 }
 
-func RunCommand(
+// manager may be nil for operations that never need to invoke the runner
+// (e.g. Destroy on a deployment that was never prepared).
+func New(deployment config.DeploymentDir, manager *runtimeartifacts.Manager) *Runtime {
+	return &Runtime{
+		deployment: deployment,
+		paths:      NewPaths(deployment),
+		manager:    manager,
+	}
+}
+
+func (runtime *Runtime) Deployment() config.DeploymentDir {
+	return runtime.deployment
+}
+
+func (runtime *Runtime) Paths() Paths {
+	return runtime.paths
+}
+
+// VM sizing (CPU/memory/data disk) is not a Prepare concern: it's passed
+// directly as RunCommand args for "start".
+func (runtime *Runtime) Prepare(ctx context.Context, out, outErr io.Writer) error {
+	if err := os.MkdirAll(runtime.paths.WorkDir, dirMode); err != nil {
+		return fmt.Errorf("failed to create local runtime directory: %w", err)
+	}
+	runnerPath, err := runtime.resolveRunnerPath(ctx)
+	if err != nil {
+		return err
+	}
+	if err := runtime.reconcileRunnerVersion(ctx, runnerPath); err != nil {
+		return err
+	}
+	if err := runtime.ensureSSHKey(); err != nil {
+		return err
+	}
+
+	return runtime.initializeVMIfNeeded(ctx, runnerPath, out, outErr)
+}
+
+func (runtime *Runtime) RunCommand(
 	ctx context.Context,
-	deployment config.DeploymentDir,
 	args []string,
 	out, outErr io.Writer,
 ) error {
-	runtime := newRuntime(deployment, Config{})
-	return runtime.runnerCommand(ctx, args, out, outErr)
+	runnerPath, err := runtime.resolveRunnerPath(ctx)
+	if err != nil {
+		return err
+	}
+
+	return runtime.runnerCommand(ctx, runnerPath, args, out, outErr)
 }
 
-func ReadState(deployment config.DeploymentDir) (*State, error) {
-	runtime := newRuntime(deployment, Config{})
+func (runtime *Runtime) ReadState() (*State, error) {
 	state, err := readRunnerState(runtime.paths.StatePath)
 	if err != nil {
 		return nil, err
@@ -147,8 +193,8 @@ type VMStatus struct {
 	Running bool `json:"running"`
 }
 
-func Status(ctx context.Context, deployment config.DeploymentDir) (*VMStatus, error) {
-	return runnerCommandJSON[VMStatus](ctx, deployment, "status")
+func (runtime *Runtime) Status(ctx context.Context) (*VMStatus, error) {
+	return runnerCommandJSON[VMStatus](ctx, runtime, "status")
 }
 
 // PortState is one of the runner's classified per-port reachability states,
@@ -175,23 +221,23 @@ type HealthCheckResult struct {
 // reachability. Unlike Status, this can trigger real network dials on the
 // runner side, so callers should only invoke it when they actually need a
 // reachability diagnosis, not from routine/frequent code paths.
-func HealthCheck(ctx context.Context, deployment config.DeploymentDir) (*HealthCheckResult, error) {
-	return runnerCommandJSON[HealthCheckResult](ctx, deployment, "health-check")
+func (runtime *Runtime) HealthCheck(ctx context.Context) (*HealthCheckResult, error) {
+	return runnerCommandJSON[HealthCheckResult](ctx, runtime, "health-check")
 }
 
 // runnerCommandJSON is shared by Status and HealthCheck, which differ only
 // in the subcommand name and result shape.
 func runnerCommandJSON[T any](
 	ctx context.Context,
-	deployment config.DeploymentDir,
+	runtime *Runtime,
 	command string,
 ) (*T, error) {
-	runtime := newRuntime(deployment, Config{})
-	if err := runtime.ensureRunnerExecutable(); err != nil {
+	runnerPath, err := runtime.resolveRunnerPath(ctx)
+	if err != nil {
 		return nil, err
 	}
 
-	stdout, err := runtime.runnerCommandWithOutput(ctx, []string{command})
+	stdout, err := runtime.runnerCommandWithOutput(ctx, runnerPath, []string{command})
 	if err != nil {
 		return nil, err
 	}
@@ -204,29 +250,22 @@ func runnerCommandJSON[T any](
 	return &result, nil
 }
 
-func Stop(ctx context.Context, deployment config.DeploymentDir, out, outErr io.Writer) error {
-	runtime := newRuntime(deployment, Config{})
-	if err := runtime.ensureRunnerExecutable(); err != nil {
+func (runtime *Runtime) Stop(ctx context.Context, out, outErr io.Writer) error {
+	runnerPath, err := runtime.resolveRunnerPath(ctx)
+	if err != nil {
 		return err
 	}
 
-	if err := runtime.runnerCommand(ctx, []string{"stop"}, out, outErr); err != nil {
+	if err := runtime.runnerCommand(ctx, runnerPath, []string{"stop"}, out, outErr); err != nil {
 		return err
 	}
 
 	return runtime.waitForDaemonExit(ctx)
 }
 
-func Destroy(ctx context.Context, deployment config.DeploymentDir, out, outErr io.Writer) error {
-	runtime := newRuntime(deployment, Config{})
-	if _, err := os.Stat(runtime.paths.RunnerPath); err == nil {
-		if err := runtime.runnerCommand(ctx, []string{"stop"}, out, outErr); err == nil {
-			if err := runtime.waitForDaemonExit(ctx); err != nil {
-				return err
-			}
-		}
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("failed to inspect local runner: %w", err)
+func (runtime *Runtime) Destroy(ctx context.Context, out, outErr io.Writer) error {
+	if err := runtime.stopBeforeDestroy(ctx, out, outErr); err != nil {
+		return err
 	}
 
 	if err := os.RemoveAll(runtime.paths.Root); err != nil {
@@ -236,43 +275,47 @@ func Destroy(ctx context.Context, deployment config.DeploymentDir, out, outErr i
 	return nil
 }
 
-type localRuntime struct {
-	deployment           config.DeploymentDir
-	paths                Paths
-	runtimeConfig        Config
-	embeddedRunner       []byte
-	embeddedRunnerExists bool
-}
+// stopBeforeDestroy stops a still-running VM before its files are removed. A
+// deployment that was never prepared (paths.VMDir absent) has nothing to
+// stop; a runner that fails to resolve or stop is treated the same way,
+// since Destroy's job is cleanup, not reporting a runner-invocation failure.
+func (runtime *Runtime) stopBeforeDestroy(ctx context.Context, out, outErr io.Writer) error {
+	if _, err := os.Stat(runtime.paths.VMDir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 
-func newRuntime(deployment config.DeploymentDir, runtimeConfig Config) *localRuntime {
-	return &localRuntime{
-		deployment:           deployment,
-		paths:                NewPaths(deployment),
-		runtimeConfig:        runtimeConfig,
-		embeddedRunner:       localruntimebin.RunnerBinary,
-		embeddedRunnerExists: localruntimebin.RunnerBinaryAvailable,
+		return fmt.Errorf("failed to inspect local VM directory: %w", err)
 	}
+
+	runnerPath, err := runtime.resolveRunnerPath(ctx)
+	if err != nil {
+		//nolint:nilerr // best-effort: cleanup proceeds even if the runner can't be resolved.
+		return nil
+	}
+	if err := runtime.runnerCommand(ctx, runnerPath, []string{"stop"}, out, outErr); err != nil {
+		//nolint:nilerr // best-effort: cleanup proceeds even if the running VM can't be stopped.
+		return nil
+	}
+
+	return runtime.waitForDaemonExit(ctx)
 }
 
-func (runtime *localRuntime) prepare(
+// The runner is never copied into the deployment directory: cmd.Dir is set
+// to the deployment's working directory independently of wherever the
+// manager resolves the binary itself (see runnerCommand/runnerCommandWithOutput),
+// so there's nothing for a per-deployment copy to do.
+func (runtime *Runtime) resolveRunnerPath(ctx context.Context) (string, error) {
+	if override := strings.TrimSpace(os.Getenv(runnerOverridePathEnv)); override != "" {
+		return override, nil
+	}
+
+	return runtime.manager.Request(ctx, exasolLocalRunnerResourceID)
+}
+
+func (runtime *Runtime) initializeVMIfNeeded(
 	ctx context.Context,
-	out, outErr io.Writer,
-) error {
-	if err := os.MkdirAll(runtime.paths.WorkDir, dirMode); err != nil {
-		return fmt.Errorf("failed to create local runtime directory: %w", err)
-	}
-	if err := runtime.reconcileRunnerExecutable(ctx); err != nil {
-		return err
-	}
-	if err := runtime.ensureSSHKey(); err != nil {
-		return err
-	}
-
-	return runtime.initializeVMIfNeeded(ctx, out, outErr)
-}
-
-func (runtime *localRuntime) initializeVMIfNeeded(
-	ctx context.Context,
+	runnerPath string,
 	out, outErr io.Writer,
 ) error {
 	if _, err := os.Stat(runtime.paths.VMDir); err == nil {
@@ -283,13 +326,14 @@ func (runtime *localRuntime) initializeVMIfNeeded(
 
 	return runtime.runnerCommand(
 		ctx,
+		runnerPath,
 		[]string{"init", "--ssh-key", runtime.paths.PrivateKeyPath},
 		out,
 		outErr,
 	)
 }
 
-func (runtime *localRuntime) toState(state *runnerState) (*State, error) {
+func (runtime *Runtime) toState(state *runnerState) (*State, error) {
 	keyFile, err := runtime.paths.PrivateKeyRelativePath(runtime.deployment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve local SSH key path: %w", err)
@@ -305,155 +349,61 @@ func (runtime *localRuntime) toState(state *runnerState) (*State, error) {
 	}, nil
 }
 
-func (runtime *localRuntime) ensureRunnerExecutable() error {
-	targetPath := runtime.paths.RunnerPath
-	if info, err := os.Stat(targetPath); err == nil {
-		if info.IsDir() {
-			return fmt.Errorf("local runner target is a directory: %s", targetPath)
-		}
-
-		return nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("failed to inspect local runner %s: %w", targetPath, err)
-	}
-
-	return writeEmbeddedRunner(targetPath)
-}
-
-func (runtime *localRuntime) reconcileRunnerExecutable(ctx context.Context) error {
-	if !runtime.embeddedRunnerExists || len(runtime.embeddedRunner) == 0 {
-		return runtime.ensureRunnerExecutable()
-	}
-
-	return reconcileRunner(ctx, runtime.paths.RunnerPath, runtime.embeddedRunner)
-}
-
-func reconcileRunner(ctx context.Context, targetPath string, embeddedRunner []byte) error {
-	if err := os.MkdirAll(filepath.Dir(targetPath), dirMode); err != nil {
-		return fmt.Errorf("failed to create local runner target directory: %w", err)
-	}
-
-	candidatePath, cleanup, err := writeRunnerCandidate(targetPath, embeddedRunner)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
-	candidateVersion, err := readRunnerVersion(ctx, candidatePath)
+// reconcileRunnerVersion records/updates this deployment's persisted runner
+// version marker based on the runner the manager just resolved. The runner
+// is always resolved fresh from the shared cache, so there is no older
+// installed copy to fall back to: an unsafe version relationship (a major
+// mismatch, or the resolved runner being older than the marker) is logged
+// as a warning and the marker is updated to match, rather than refusing to
+// proceed.
+func (runtime *Runtime) reconcileRunnerVersion(ctx context.Context, runnerPath string) error {
+	resolvedVersion, err := readRunnerVersion(ctx, runnerPath)
 	forceReconciliation := strings.TrimSpace(os.Getenv(forceRunnerReconciliationEnv)) == "1"
-	if err != nil && !forceReconciliation {
-		return fmt.Errorf("embedded local runner does not report a valid version: %w", err)
-	}
-	candidateVersionErr := err
+	if err != nil {
+		if forceReconciliation {
+			slog.Warn(
+				"forced local runner reconciliation without version compatibility checks",
+				"environmentVariable", forceRunnerReconciliationEnv,
+				"versionError", err,
+			)
 
-	installedData, err := os.ReadFile(targetPath)
-	if candidateVersionErr != nil && forceReconciliation {
-		if err == nil && bytes.Equal(installedData, embeddedRunner) {
-			return os.Chmod(targetPath, executableFileMode)
-		}
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("failed to inspect local runner %s: %w", targetPath, err)
+			return nil
 		}
 
-		return installUnversionedRunnerCandidate(
-			candidatePath,
-			targetPath,
-			candidateVersionErr,
-		)
+		return fmt.Errorf("resolved local runner does not report a valid version: %w", err)
 	}
 
-	if errors.Is(err, os.ErrNotExist) {
-		return installRunnerCandidate(
-			candidatePath,
-			targetPath,
-			candidateVersion,
-			"installing missing runner",
-		)
-	}
+	markerVersion, err := readRunnerVersionMarker(runtime.paths.RunnerVersionMarkerPath)
 	if err != nil {
-		return fmt.Errorf("failed to inspect local runner %s: %w", targetPath, err)
-	}
-	if bytes.Equal(installedData, embeddedRunner) {
-		return os.Chmod(targetPath, executableFileMode)
+		return writeRunnerVersionMarker(runtime.paths.RunnerVersionMarkerPath, resolvedVersion)
 	}
 
-	installedVersion, err := readRunnerVersion(ctx, targetPath)
-	if err != nil {
-		return installRunnerCandidate(
-			candidatePath,
-			targetPath,
-			candidateVersion,
-			"upgrading unversioned legacy runner",
-		)
-	}
-
-	if installedVersion.Major != candidateVersion.Major {
+	switch {
+	case markerVersion.Major != resolvedVersion.Major:
 		slog.Warn(
-			"local runner major versions differ; automatic update skipped",
-			"installedVersion", installedVersion,
-			"embeddedVersion", candidateVersion,
-			"action", "use a compatible launcher or explicitly migrate the local deployment",
+			"resolved local runner major version differs from this deployment's recorded "+
+				"version; proceeding anyway",
+			"recordedVersion", markerVersion,
+			"resolvedVersion", resolvedVersion,
 		)
-
-		return nil
-	}
-
-	if installedVersion.GT(candidateVersion) {
+	case resolvedVersion.LT(markerVersion):
+		slog.Warn(
+			"resolved local runner is older than this deployment's recorded version; "+
+				"proceeding anyway",
+			"recordedVersion", markerVersion,
+			"resolvedVersion", resolvedVersion,
+		)
+	case resolvedVersion.GT(markerVersion):
 		slog.Info(
-			"installed local runner is newer than the embedded runner; downgrade skipped",
-			"installedVersion", installedVersion,
-			"embeddedVersion", candidateVersion,
+			"resolved local runner is newer than this deployment's recorded version",
+			"recordedVersion", markerVersion,
+			"resolvedVersion", resolvedVersion,
 		)
-
-		return nil
+	default:
+		// Identical version: nothing to log.
 	}
 
-	reason := "repairing local runner from embedded binary"
-	if candidateVersion.GT(installedVersion) {
-		reason = "upgrading local runner"
-	}
-
-	return installRunnerCandidate(candidatePath, targetPath, candidateVersion, reason)
-}
-
-func writeRunnerCandidate(targetPath string, runner []byte) (string, func(), error) {
-	temporary, err := os.CreateTemp(filepath.Dir(targetPath), ".local-runner-candidate-*")
-	if err != nil {
-		return "", func() {}, fmt.Errorf("failed to create local runner candidate: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	cleanup := func() {
-		_ = os.Remove(temporaryPath)
-	}
-
-	if err := temporary.Chmod(executableFileMode); err != nil {
-		_ = temporary.Close()
-		cleanup()
-
-		return "", func() {}, fmt.Errorf(
-			"failed to make local runner candidate executable: %w",
-			err,
-		)
-	}
-	if _, err := temporary.Write(runner); err != nil {
-		_ = temporary.Close()
-		cleanup()
-
-		return "", func() {}, fmt.Errorf("failed to write local runner candidate: %w", err)
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		cleanup()
-
-		return "", func() {}, fmt.Errorf("failed to sync local runner candidate: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		cleanup()
-
-		return "", func() {}, fmt.Errorf("failed to close local runner candidate: %w", err)
-	}
-
-	return temporaryPath, cleanup, nil
+	return writeRunnerVersionMarker(runtime.paths.RunnerVersionMarkerPath, resolvedVersion)
 }
 
 func readRunnerVersion(ctx context.Context, runnerPath string) (semver.Version, error) {
@@ -476,70 +426,46 @@ func readRunnerVersion(ctx context.Context, runnerPath string) (semver.Version, 
 	return version, nil
 }
 
-func installRunnerCandidate(
-	candidatePath, targetPath string,
-	version semver.Version,
-	reason string,
-) error {
-	if err := replaceRunnerCandidate(candidatePath, targetPath); err != nil {
+//nolint:tagliatelle // Marker file schema is ours; keeping it a single lowercase field.
+type runnerVersionMarker struct {
+	Version string `json:"version"`
+}
+
+func readRunnerVersionMarker(path string) (semver.Version, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return semver.Version{}, err
+	}
+
+	var marker runnerVersionMarker
+	if err := json.Unmarshal(data, &marker); err != nil {
+		return semver.Version{}, fmt.Errorf("invalid local runner version marker: %w", err)
+	}
+
+	return semver.ParseTolerant(strings.TrimSpace(marker.Version))
+}
+
+func writeRunnerVersionMarker(path string, version semver.Version) error {
+	data, err := json.Marshal(runnerVersionMarker{Version: version.String()})
+	if err != nil {
 		return err
 	}
 
-	slog.Info(reason, "version", version)
-
-	return nil
-}
-
-func installUnversionedRunnerCandidate(
-	candidatePath, targetPath string,
-	versionErr error,
-) error {
-	if err := replaceRunnerCandidate(candidatePath, targetPath); err != nil {
-		return err
-	}
-
-	slog.Warn(
-		"forced local runner reconciliation without version compatibility checks",
-		"environmentVariable", forceRunnerReconciliationEnv,
-		"versionError", versionErr,
-	)
-
-	return nil
-}
-
-func replaceRunnerCandidate(candidatePath, targetPath string) error {
-	if err := os.Rename(candidatePath, targetPath); err != nil {
-		return fmt.Errorf("failed to atomically replace local runner %s: %w", targetPath, err)
-	}
-	if err := os.Chmod(targetPath, executableFileMode); err != nil {
-		return fmt.Errorf("failed to set local runner permissions: %w", err)
-	}
-
-	return nil
-}
-
-func writeEmbeddedRunner(targetPath string) error {
-	if err := os.MkdirAll(filepath.Dir(targetPath), dirMode); err != nil {
-		return fmt.Errorf("failed to create local runner target directory: %w", err)
-	}
-	if err := localruntimebin.WriteBinary(targetPath); err != nil {
-		return fmt.Errorf("failed to write embedded local runner %s: %w", targetPath, err)
-	}
-
-	return nil
+	return os.WriteFile(path, data, markerFileMode)
 }
 
 // runnerCommandWithOutput runs the runner and returns captured stdout.
 // Use this for commands whose output must be parsed (e.g. status JSON).
-func (runtime *localRuntime) runnerCommandWithOutput(
+func (runtime *Runtime) runnerCommandWithOutput(
 	ctx context.Context,
+	runnerPath string,
 	args []string,
 ) (string, error) {
 	if len(args) == 0 {
 		return "", errors.New("local runner command is empty")
 	}
 
-	cmd := exec.CommandContext(ctx, runtime.paths.RunnerPath, args...)
+	cmd := exec.CommandContext(ctx, runnerPath, args...)
 	cmd.Dir = runtime.paths.WorkDir
 
 	var stdout, stderr bytes.Buffer
@@ -558,8 +484,9 @@ func (runtime *localRuntime) runnerCommandWithOutput(
 	return stdout.String(), nil
 }
 
-func (runtime *localRuntime) runnerCommand(
+func (runtime *Runtime) runnerCommand(
 	ctx context.Context,
+	runnerPath string,
 	args []string,
 	out, outErr io.Writer,
 ) error {
@@ -567,7 +494,7 @@ func (runtime *localRuntime) runnerCommand(
 		return errors.New("local runner command is empty")
 	}
 
-	cmd := exec.CommandContext(ctx, runtime.paths.RunnerPath, args...)
+	cmd := exec.CommandContext(ctx, runnerPath, args...)
 	cmd.Dir = runtime.paths.WorkDir
 
 	var stdout bytes.Buffer
@@ -587,7 +514,7 @@ func (runtime *localRuntime) runnerCommand(
 	return nil
 }
 
-func (runtime *localRuntime) waitForDaemonExit(ctx context.Context) error {
+func (runtime *Runtime) waitForDaemonExit(ctx context.Context) error {
 	pid, err := runtime.readDaemonPID()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -621,7 +548,7 @@ func (runtime *localRuntime) waitForDaemonExit(ctx context.Context) error {
 	}
 }
 
-func (runtime *localRuntime) readDaemonPID() (int, error) {
+func (runtime *Runtime) readDaemonPID() (int, error) {
 	pidPath := filepath.Join(runtime.paths.WorkDir, vmPIDFileName)
 	pidData, err := os.ReadFile(pidPath)
 	if err != nil {
@@ -656,7 +583,7 @@ func processRunning(pid int) bool {
 	return false
 }
 
-func (runtime *localRuntime) ensureSSHKey() error {
+func (runtime *Runtime) ensureSSHKey() error {
 	if keyData, err := os.ReadFile(runtime.paths.PrivateKeyPath); err == nil {
 		if isOpenSSHPrivateKey(keyData) {
 			return nil

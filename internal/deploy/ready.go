@@ -12,6 +12,7 @@ import (
 	exasolerrors "github.com/exasol/exasol-driver-go/pkg/errors"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/connect"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
 var (
@@ -84,19 +85,16 @@ func WaitForDatabaseStarted(
 	)
 }
 
-func WaitForLocalDatabaseStarted(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-) error {
+func WaitForLocalDatabaseStarted(ctx context.Context, runtime *localruntime.Runtime) error {
 	// Fail fast on an already-blocked network path instead of waiting out the
 	// whole backoff window on a problem that will never resolve on its own.
-	if err := classifyLocalReachability(ctx, deployment); err != nil {
+	if err := classifyLocalReachability(ctx, runtime); err != nil {
 		return err
 	}
 
 	return waitForDatabaseStartedWithBackoff(
 		ctx,
-		deployment,
+		runtime.Deployment(),
 		LocalDatabaseStartedInitialBackoff,
 		LocalDatabaseStartedMaxBackoff,
 	)

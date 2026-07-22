@@ -284,6 +284,7 @@ func TestLocalBackendSetupWorkspace_Noops(t *testing.T) {
 	backend := newLocalBackend(
 		config.NewDeploymentDir(t.TempDir()),
 		&presets.InfrastructureManifest{},
+		nil,
 	)
 	err := backend.SetupWorkspace(context.Background())
 	// Then
@@ -305,7 +306,7 @@ func TestLocalBackendReadConfiguration_ExposesSizingValues(t *testing.T) {
 	}
 
 	// When
-	backend := newLocalBackend(config.NewDeploymentDir(t.TempDir()), manifest)
+	backend := newLocalBackend(config.NewDeploymentDir(t.TempDir()), manifest, nil)
 	values, err := backend.ReadConfiguration()
 	// Then
 	if err != nil {
@@ -333,7 +334,7 @@ func TestLocalBackendConfigure_WritesSizingValuesToManifest(t *testing.T) {
 	}
 
 	// When
-	backend := newLocalBackend(deployment, manifest)
+	backend := newLocalBackend(deployment, manifest, nil)
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{
@@ -381,7 +382,7 @@ func TestLocalBackendConfigure_WarnsForLowMemory(t *testing.T) {
 	defer slog.SetDefault(originalLogger)
 
 	// When
-	backend := newLocalBackend(deployment, manifest)
+	backend := newLocalBackend(deployment, manifest, nil)
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{localMemoryMBConfigName: "8192"},
@@ -413,7 +414,7 @@ func TestLocalBackendConfigure_RejectsInvalidSizingValues(t *testing.T) {
 	}
 
 	// When
-	backend := newLocalBackend(deployment, manifest)
+	backend := newLocalBackend(deployment, manifest, nil)
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{localCPUCountConfigName: "0"},
@@ -438,7 +439,7 @@ func TestLocalBackendConfigure_RejectsMemoryBelowMinimum(t *testing.T) {
 		Local:       &presets.InfrastructureLocal{},
 	}
 
-	backend := newLocalBackend(deployment, manifest)
+	backend := newLocalBackend(deployment, manifest, nil)
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{localMemoryMBConfigName: "4095"},

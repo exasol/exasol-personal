@@ -4,6 +4,7 @@
 package localruntime
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/ed25519"
@@ -20,12 +21,68 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exasol/exasol-personal/assets/localruntimebin"
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 	"golang.org/x/crypto/ssh"
 )
 
 const windowsGOOS = "windows"
+
+// runnerZipEntryName matches resources.yaml's resource_path for
+// exasol-local-runner, so these tests exercise the same extract +
+// resource_path shape production resolves through.
+const runnerZipEntryName = "launcher"
+
+// newTestManagerForRunner builds a Manager whose "exasol-local-runner"
+// resource resolves through the same extract: true / resource_path shape the
+// real resources.yaml entry uses: scriptContent is packed into a minimal,
+// single-entry zip (mirroring the real release archive), and FileSource's
+// local-path redirect + the existing ZipExtractor unpack it, preserving the
+// executable mode recorded in the zip entry.
+func newTestManagerForRunner(t *testing.T, scriptContent []byte) *runtimeartifacts.Manager {
+	t.Helper()
+
+	zipPath := writeRunnerZip(t, scriptContent)
+	spec := runtimeartifacts.ResourceSpec{
+		exasolLocalRunnerResourceID: {
+			Extract: true,
+			Artifact: map[string]runtimeartifacts.ArtifactSpec{
+				"any": {URL: zipPath, ResourcePath: runnerZipEntryName},
+			},
+		},
+	}
+
+	return runtimeartifacts.NewResourceManagerForPlatform(
+		spec, t.TempDir(), runtime.GOOS, runtime.GOARCH,
+	)
+}
+
+func writeRunnerZip(t *testing.T, scriptContent []byte) string {
+	t.Helper()
+
+	zipPath := filepath.Join(t.TempDir(), "runner.zip")
+	file, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("failed to create runner zip fixture: %v", err)
+	}
+	defer file.Close()
+
+	writer := zip.NewWriter(file)
+	header := &zip.FileHeader{Name: runnerZipEntryName, Method: zip.Deflate}
+	header.SetMode(0o755)
+	entry, err := writer.CreateHeader(header)
+	if err != nil {
+		t.Fatalf("failed to create runner zip entry: %v", err)
+	}
+	if _, err := entry.Write(scriptContent); err != nil {
+		t.Fatalf("failed to write runner zip entry: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("failed to close runner zip fixture: %v", err)
+	}
+
+	return zipPath
+}
 
 func TestReadRunnerState_ParsesForwardedPorts(t *testing.T) {
 	t.Parallel()
@@ -114,8 +171,9 @@ func TestDestroy_RemovesLocalRuntime(t *testing.T) {
 		t.Fatalf("failed to write test runtime file: %v", err)
 	}
 
-	// When
-	err := Destroy(context.Background(), deployment, nil, nil)
+	// When: paths.VMDir was never created, so Destroy never needs to resolve
+	// a runner, and a nil manager is safe here.
+	err := New(deployment, nil).Destroy(context.Background(), nil, nil)
 	// Then
 	if err != nil {
 		t.Fatalf("expected destroy cleanup to succeed, got %v", err)
@@ -125,34 +183,33 @@ func TestDestroy_RemovesLocalRuntime(t *testing.T) {
 	}
 }
 
-func TestEnsureRunnerExecutable_DoesNotOverwriteExistingRunner(t *testing.T) {
-	t.Parallel()
+// TestResolveRunnerPath_OverrideEnvBypassesManager uses a nil manager, so
+// resolving through it would panic on a nil dereference -- proving the
+// override truly bypasses the Manager rather than merely taking priority
+// over some registered value.
+func TestResolveRunnerPath_OverrideEnvBypassesManager(t *testing.T) {
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("fake local runner script is POSIX-only")
+	}
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
-	existingContent := []byte("#!/bin/sh\necho existing runner\n")
-	if err := os.MkdirAll(filepath.Dir(localRuntime.paths.RunnerPath), 0o750); err != nil {
-		t.Fatalf("failed to create runner directory: %v", err)
-	}
-	writeExecutableTestFile(t, localRuntime.paths.RunnerPath, existingContent)
+	localRuntime := New(deployment, nil)
+	runnerPath := writeRunnerScript(t, "1.0.0")
+	t.Setenv(runnerOverridePathEnv, runnerPath)
 
 	// When
-	err := localRuntime.ensureRunnerExecutable()
+	resolved, err := localRuntime.resolveRunnerPath(context.Background())
 	// Then
 	if err != nil {
-		t.Fatalf("expected existing runner to be accepted, got %v", err)
+		t.Fatalf("expected override to resolve without a manager, got %v", err)
 	}
-	data, err := os.ReadFile(localRuntime.paths.RunnerPath)
-	if err != nil {
-		t.Fatalf("expected existing runner to be readable, got %v", err)
-	}
-	if string(data) != string(existingContent) {
-		t.Fatalf("expected existing runner not to be overwritten, got %q", string(data))
+	if resolved != runnerPath {
+		t.Fatalf("expected resolved path %q, got %q", runnerPath, resolved)
 	}
 }
 
-func TestPrepare_UsesExistingRunnerWithSSHKey(t *testing.T) {
+func TestPrepare_ResolvesRunnerAndRunsInitWithSSHKey(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == windowsGOOS {
@@ -161,11 +218,7 @@ func TestPrepare_UsesExistingRunnerWithSSHKey(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
-	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
-	}
-	existingRunner := `#!/bin/sh
+	runnerScript := `#!/bin/sh
 set -eu
 case "$1" in
   version)
@@ -185,15 +238,14 @@ case "$1" in
     ;;
 esac
 `
-	localRuntime.embeddedRunner = []byte(existingRunner)
-	localRuntime.embeddedRunnerExists = true
-	writeExecutableTestFile(t, localRuntime.paths.RunnerPath, []byte(existingRunner))
+	manager := newTestManagerForRunner(t, []byte(runnerScript))
+	localRuntime := New(deployment, manager)
 
 	// When
-	err := localRuntime.prepare(context.Background(), nil, nil)
+	err := localRuntime.Prepare(context.Background(), nil, nil)
 	// Then
 	if err != nil {
-		t.Fatalf("expected prepare to succeed with existing runner, got %v", err)
+		t.Fatalf("expected prepare to succeed, got %v", err)
 	}
 	keyPath, err := os.ReadFile(filepath.Join(localRuntime.paths.WorkDir, "init-key"))
 	if err != nil {
@@ -202,12 +254,47 @@ esac
 	if string(keyPath) != localRuntime.paths.PrivateKeyPath {
 		t.Fatalf("expected init key %q, got %q", localRuntime.paths.PrivateKeyPath, string(keyPath))
 	}
-	data, err := os.ReadFile(localRuntime.paths.RunnerPath)
+	markerVersion, err := readRunnerVersionMarker(localRuntime.paths.RunnerVersionMarkerPath)
 	if err != nil {
-		t.Fatalf("expected runner to be readable, got %v", err)
+		t.Fatalf("expected a version marker to be recorded, got %v", err)
 	}
-	if string(data) != existingRunner {
-		t.Fatalf("expected prepare not to overwrite existing runner, got %q", string(data))
+	if markerVersion.String() != "1.0.0" {
+		t.Fatalf("expected recorded version 1.0.0, got %s", markerVersion.String())
+	}
+}
+
+func TestPrepare_SkipsInitWhenVMAlreadyInitialized(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("fake local runner script is POSIX-only")
+	}
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	localRuntime := New(deployment, nil)
+	if err := os.MkdirAll(localRuntime.paths.VMDir, 0o750); err != nil {
+		t.Fatalf("failed to create local VM directory: %v", err)
+	}
+	runnerScript := `#!/bin/sh
+case "$1" in
+  version)
+    printf 'v1.0.0\n'
+    ;;
+  *)
+    echo "unexpected command: $1 (init should have been skipped)" >&2
+    exit 2
+    ;;
+esac
+`
+	manager := newTestManagerForRunner(t, []byte(runnerScript))
+	localRuntime = New(deployment, manager)
+
+	// When
+	err := localRuntime.Prepare(context.Background(), nil, nil)
+	// Then
+	if err != nil {
+		t.Fatalf("expected prepare to skip init and succeed, got %v", err)
 	}
 }
 
@@ -216,7 +303,7 @@ func TestEnsureSSHKey_PreservesExistingPrivateKey(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
+	localRuntime := New(deployment, nil)
 	existingKey := generateOpenSSHPrivateKey(t)
 	if err := os.MkdirAll(filepath.Dir(localRuntime.paths.PrivateKeyPath), 0o750); err != nil {
 		t.Fatalf("failed to create local key directory: %v", err)
@@ -248,7 +335,7 @@ func TestEnsureSSHKey_GeneratesEd25519Key(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
+	localRuntime := New(deployment, nil)
 
 	// When
 	if err := localRuntime.ensureSSHKey(); err != nil {
@@ -284,7 +371,7 @@ func TestEnsureSSHKey_ReplacesLegacyPKCS8PrivateKey(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
+	localRuntime := New(deployment, nil)
 	legacyKey := generatePKCS8PrivateKey(t)
 	if err := os.MkdirAll(filepath.Dir(localRuntime.paths.PrivateKeyPath), 0o750); err != nil {
 		t.Fatalf("failed to create local key directory: %v", err)
@@ -345,7 +432,7 @@ func generatePKCS8PrivateKey(t *testing.T) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: data})
 }
 
-func TestStop_InvokesOriginalRunnerStop(t *testing.T) {
+func TestStop_InvokesResolvedRunnerStop(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == windowsGOOS {
@@ -354,17 +441,18 @@ func TestStop_InvokesOriginalRunnerStop(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
+	localRuntime := New(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime directory: %v", err)
 	}
 
 	markerPath := filepath.Join(localRuntime.paths.WorkDir, "stop-called")
 	runnerScript := "#!/bin/sh\nprintf '%s %s\\n' \"$0\" \"$*\" > stop-called\n"
-	writeExecutableTestFile(t, localRuntime.paths.RunnerPath, []byte(runnerScript))
+	manager := newTestManagerForRunner(t, []byte(runnerScript))
+	localRuntime = New(deployment, manager)
 
 	// When
-	err := Stop(context.Background(), deployment, nil, nil)
+	err := localRuntime.Stop(context.Background(), nil, nil)
 	// Then
 	if err != nil {
 		t.Fatalf("expected runner stop to succeed, got %v", err)
@@ -377,8 +465,80 @@ func TestStop_InvokesOriginalRunnerStop(t *testing.T) {
 	if !strings.Contains(markerText, " stop") {
 		t.Fatalf("expected stop argument to be passed, got %q", markerText)
 	}
-	if !strings.Contains(markerText, RunnerFileName) {
-		t.Fatalf("expected stop to run through the original runner, got %q", markerText)
+	if !strings.HasSuffix(
+		strings.Fields(markerText)[0],
+		string(filepath.Separator)+runnerZipEntryName,
+	) {
+		t.Fatalf("expected stop to run through the resolved, extracted runner, got %q", markerText)
+	}
+}
+
+func TestRunCommand_InvokesResolvedRunnerWithArgs(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("fake local runner script is POSIX-only")
+	}
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	localRuntime := New(deployment, nil)
+	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
+		t.Fatalf("failed to create local runtime directory: %v", err)
+	}
+	runnerScript := "#!/bin/sh\nprintf '%s\\n' \"$*\"\n"
+	manager := newTestManagerForRunner(t, []byte(runnerScript))
+	localRuntime = New(deployment, manager)
+	var out bytes.Buffer
+
+	// When
+	err := localRuntime.RunCommand(
+		context.Background(),
+		[]string{"start", "--ports", "auto"},
+		&out,
+		nil,
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("expected RunCommand to succeed, got %v", err)
+	}
+	if strings.TrimSpace(out.String()) != "start --ports auto" {
+		t.Fatalf("expected args to be passed through to the resolved runner, got %q", out.String())
+	}
+}
+
+func TestDestroy_StopsRunningVMBeforeRemoving(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("fake local runner script is POSIX-only")
+	}
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	paths := NewPaths(deployment)
+	if err := os.MkdirAll(paths.VMDir, 0o750); err != nil {
+		t.Fatalf("failed to create local VM directory: %v", err)
+	}
+	runnerScript := "#!/bin/sh\nprintf 'stop-invoked %s\\n' \"$*\"\n"
+	manager := newTestManagerForRunner(t, []byte(runnerScript))
+	localRuntime := New(deployment, manager)
+	var out bytes.Buffer
+
+	// When
+	err := localRuntime.Destroy(context.Background(), &out, nil)
+	// Then
+	if err != nil {
+		t.Fatalf("expected destroy to succeed, got %v", err)
+	}
+	if !strings.Contains(out.String(), "stop-invoked stop") {
+		t.Fatalf(
+			"expected destroy to resolve and stop the running VM before removing it, got output %q",
+			out.String(),
+		)
+	}
+	if _, statErr := os.Stat(paths.Root); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected %s to be removed, got stat error %v", paths.Root, statErr)
 	}
 }
 
@@ -391,7 +551,7 @@ func TestHealthCheck_ParsesPortStates(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
+	localRuntime := New(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime directory: %v", err)
 	}
@@ -399,10 +559,11 @@ func TestHealthCheck_ParsesPortStates(t *testing.T) {
 	runnerScript := `#!/bin/sh
 echo '{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}'
 `
-	writeExecutableTestFile(t, localRuntime.paths.RunnerPath, []byte(runnerScript))
+	manager := newTestManagerForRunner(t, []byte(runnerScript))
+	localRuntime = New(deployment, manager)
 
 	// When
-	result, err := HealthCheck(context.Background(), deployment)
+	result, err := localRuntime.HealthCheck(context.Background())
 	// Then
 	if err != nil {
 		t.Fatalf("expected health-check to succeed, got %v", err)
@@ -424,16 +585,17 @@ func TestHealthCheck_ReturnsErrorOnRunnerFailure(t *testing.T) {
 
 	// Given: an old runner that does not understand "health-check" yet.
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
+	localRuntime := New(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime directory: %v", err)
 	}
 
 	runnerScript := "#!/bin/sh\necho 'Unknown command: health-check' >&2\nexit 1\n"
-	writeExecutableTestFile(t, localRuntime.paths.RunnerPath, []byte(runnerScript))
+	manager := newTestManagerForRunner(t, []byte(runnerScript))
+	localRuntime = New(deployment, manager)
 
 	// When
-	_, err := HealthCheck(context.Background(), deployment)
+	_, err := localRuntime.HealthCheck(context.Background())
 	// Then
 	if err == nil {
 		t.Fatal("expected health-check against an unsupporting runner to fail")
@@ -445,7 +607,7 @@ func TestWaitForDaemonExit_IgnoresMissingPIDFile(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
+	localRuntime := New(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime directory: %v", err)
 	}
@@ -467,7 +629,7 @@ func TestWaitForDaemonExit_RejectsStillRunningPID(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
+	localRuntime := New(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime directory: %v", err)
 	}
@@ -487,64 +649,6 @@ func TestWaitForDaemonExit_RejectsStillRunningPID(t *testing.T) {
 	// Then
 	if err == nil {
 		t.Fatal("expected still-running PID to prevent stop completion")
-	}
-}
-
-func TestWriteEmbeddedRunner_WritesBundledRunner(t *testing.T) {
-	t.Parallel()
-
-	if !localruntimebin.RunnerBinaryAvailable {
-		t.Skip("embedded local runner is only available for macOS Apple Silicon builds")
-	}
-
-	// Given
-	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
-
-	// When
-	err := writeEmbeddedRunner(targetPath)
-	// Then
-	if err != nil {
-		t.Fatalf("expected embedded runner to be written, got %v", err)
-	}
-	data, err := os.ReadFile(targetPath)
-	if err != nil {
-		t.Fatalf("expected embedded runner to be readable, got %v", err)
-	}
-	if len(data) == 0 {
-		t.Fatal("expected embedded runner to be non-empty")
-	}
-	info, err := os.Stat(targetPath)
-	if err != nil {
-		t.Fatalf("expected embedded runner to exist, got %v", err)
-	}
-	if info.Mode().Perm() != 0o700 {
-		t.Fatalf("expected embedded runner mode 0700, got %o", info.Mode().Perm())
-	}
-}
-
-func TestWriteEmbeddedRunner_OverwritesExistingRunner(t *testing.T) {
-	t.Parallel()
-	if !localruntimebin.RunnerBinaryAvailable {
-		t.Skip("embedded local runner is only available for macOS Apple Silicon builds")
-	}
-
-	// Given
-	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
-	existingContent := []byte("#!/bin/sh\necho existing runner\n")
-	writeExecutableTestFile(t, targetPath, existingContent)
-
-	// When
-	err := writeEmbeddedRunner(targetPath)
-	// Then
-	if err != nil {
-		t.Fatalf("expected embedded runner write to succeed, got %v", err)
-	}
-	data, err := os.ReadFile(targetPath)
-	if err != nil {
-		t.Fatalf("expected existing runner to be readable, got %v", err)
-	}
-	if !bytes.Equal(data, localruntimebin.RunnerBinary) {
-		t.Fatal("expected embedded runner to overwrite existing runner")
 	}
 }
 

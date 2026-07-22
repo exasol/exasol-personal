@@ -53,13 +53,15 @@ var errUnsupportedLocalPlatform = errors.New(
 func newLocalBackend(
 	deployment config.DeploymentDir,
 	manifest *presets.InfrastructureManifest,
+	localRuntime *localruntime.Runtime,
 ) *localBackend {
-	return &localBackend{deployment: deployment, manifest: manifest}
+	return &localBackend{deployment: deployment, manifest: manifest, runtime: localRuntime}
 }
 
 type localBackend struct {
 	deployment config.DeploymentDir
 	manifest   *presets.InfrastructureManifest
+	runtime    *localruntime.Runtime
 }
 
 func (*localBackend) ValidateEnvironment() error {
@@ -325,7 +327,7 @@ func (b *localBackend) OpenHostShell(
 	}
 
 	if err := sshRemote.Shell(ctx, os.Stdout, os.Stderr); err != nil {
-		return diagnoseLocalFailure(ctx, b.deployment, err)
+		return diagnoseLocalFailure(ctx, b.runtime, err)
 	}
 
 	return nil
@@ -343,7 +345,7 @@ func (b *localBackend) OpenCOSShell(ctx context.Context) error {
 	}
 
 	if err := sshRemote.RunInteractiveCommand(ctx, command, os.Stdout, os.Stderr); err != nil {
-		return diagnoseLocalFailure(ctx, b.deployment, err)
+		return diagnoseLocalFailure(ctx, b.runtime, err)
 	}
 
 	return nil
@@ -496,17 +498,9 @@ func (b *localBackend) Deploy(
 	out, outErr io.Writer,
 	_ DeployOptions,
 ) error {
-	if err := b.ValidateEnvironment(); err != nil {
-		return err
-	}
-	runtimeConfig, err := resolveLocalRuntimeConfig(b.manifest, detectLocalHostMemoryMB(ctx))
-	if err != nil {
-		return err
-	}
-
 	// Deploy has no caller-supplied timeout in the backend interface, unlike
 	// Start; 0 falls back to LocalDatabaseStartedDefaultTimeoutSeconds.
-	return deployLocalRuntime(ctx, b.deployment, runtimeConfig, 0, out, outErr)
+	return b.deployOrStart(ctx, 0, out, outErr)
 }
 
 func (b *localBackend) Start(
@@ -514,6 +508,30 @@ func (b *localBackend) Start(
 	out, outErr io.Writer,
 	waitTimeoutSeconds int,
 ) error {
+	return b.deployOrStart(ctx, waitTimeoutSeconds, out, outErr)
+}
+
+func (b *localBackend) Stop(
+	ctx context.Context,
+	out, outErr io.Writer,
+) error {
+	return stopLocalRuntime(ctx, b.runtime, out, outErr)
+}
+
+func (b *localBackend) Destroy(
+	ctx context.Context,
+	out, outErr io.Writer,
+) error {
+	return destroyLocalRuntime(ctx, b.runtime, out, outErr)
+}
+
+// deployOrStart validates the environment, resolves runtime config, and
+// starts the VM. Deploy and Start differ only in the timeout they pass through.
+func (b *localBackend) deployOrStart(
+	ctx context.Context,
+	waitTimeoutSeconds int,
+	out, outErr io.Writer,
+) error {
 	if err := b.ValidateEnvironment(); err != nil {
 		return err
 	}
@@ -522,19 +540,5 @@ func (b *localBackend) Start(
 		return err
 	}
 
-	return startLocalRuntime(ctx, b.deployment, runtimeConfig, waitTimeoutSeconds, out, outErr)
-}
-
-func (b *localBackend) Stop(
-	ctx context.Context,
-	out, outErr io.Writer,
-) error {
-	return stopLocalRuntime(ctx, b.deployment, out, outErr)
-}
-
-func (b *localBackend) Destroy(
-	ctx context.Context,
-	out, outErr io.Writer,
-) error {
-	return destroyLocalRuntime(ctx, b.deployment, out, outErr)
+	return startLocalRuntime(ctx, b.runtime, runtimeConfig, waitTimeoutSeconds, out, outErr)
 }

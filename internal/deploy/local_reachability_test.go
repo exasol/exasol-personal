@@ -4,14 +4,17 @@
 package deploy
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
 // testRunnerExecutableMode is a named constant rather than an inline literal
@@ -19,15 +22,26 @@ import (
 // don't flag these test fixtures for needing an executable fake runner.
 const testRunnerExecutableMode = 0o700
 
+// runnerZipEntryName matches resources.yaml's resource_path for
+// exasol-local-runner.
+const runnerZipEntryName = "launcher"
+
+// exasolLocalRunnerResourceID mirrors internal/localruntime's unexported
+// resource ID constant, which callers here need too to build a matching test
+// ResourceSpec.
+const exasolLocalRunnerResourceID = "exasol-local-runner"
+
 func TestClassifyLocalReachability_AllPortsBlocked(t *testing.T) {
 	t.Parallel()
 	skipOnWindows(t)
 
 	deployment := newLocalTestDeployment(t)
+	ensureLocalRuntimeWorkDir(t, deployment)
 	blockedJSON := `{"ports":{"ssh":{"state":"blocked"},"db":{"state":"blocked"}}}`
-	writeFakeCombinedRunner(t, deployment, "", blockedJSON)
+	manager := writeFakeCombinedRunner(t, "", blockedJSON)
+	localRuntime := localruntime.New(deployment, manager)
 
-	err := classifyLocalReachability(context.Background(), deployment)
+	err := classifyLocalReachability(context.Background(), localRuntime)
 	if err == nil {
 		t.Fatal("expected a reachability error when every port is blocked")
 	}
@@ -43,10 +57,12 @@ func TestClassifyLocalReachability_OnlyDatabasePortBlocked(t *testing.T) {
 	// A reachable SSH port alongside a blocked database port means the
 	// network path itself is fine; the problem is database-specific.
 	deployment := newLocalTestDeployment(t)
+	ensureLocalRuntimeWorkDir(t, deployment)
 	mixedJSON := `{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}`
-	writeFakeCombinedRunner(t, deployment, "", mixedJSON)
+	manager := writeFakeCombinedRunner(t, "", mixedJSON)
+	localRuntime := localruntime.New(deployment, manager)
 
-	if err := classifyLocalReachability(context.Background(), deployment); err != nil {
+	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no reachability error when at least one port is reachable, got %v", err)
 	}
 }
@@ -64,7 +80,10 @@ description: test infrastructure
 backend: tofu
 `)
 
-	if err := classifyLocalReachability(context.Background(), deployment); err != nil {
+	// A nil manager is safe here: classifyLocalReachability short-circuits on
+	// isLocalDeployment before it would ever be dereferenced.
+	localRuntime := localruntime.New(deployment, nil)
+	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no-op for non-local deployment, got %v", err)
 	}
 }
@@ -77,19 +96,12 @@ func TestClassifyLocalReachability_HealthCheckUnavailableIsNoop(t *testing.T) {
 	// local failure into a reachability error; the caller's original error
 	// should stand instead.
 	deployment := newLocalTestDeployment(t)
-	paths := localruntime.NewPaths(deployment)
-	if err := os.MkdirAll(paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
-	}
+	ensureLocalRuntimeWorkDir(t, deployment)
 	runnerScript := "#!/bin/sh\necho 'Unknown command: health-check' >&2\nexit 1\n"
-	if err := os.WriteFile(paths.RunnerPath, []byte(runnerScript), 0o600); err != nil {
-		t.Fatalf("failed to write fake runner: %v", err)
-	}
-	if err := os.Chmod(paths.RunnerPath, testRunnerExecutableMode); err != nil {
-		t.Fatalf("failed to mark fake runner executable: %v", err)
-	}
+	manager := newTestManagerForRunner(t, []byte(runnerScript))
+	localRuntime := localruntime.New(deployment, manager)
 
-	if err := classifyLocalReachability(context.Background(), deployment); err != nil {
+	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no-op when health-check is unavailable, got %v", err)
 	}
 }
@@ -117,30 +129,81 @@ backend: local
 	return deployment
 }
 
-// writeFakeCombinedRunner writes a single fake runner script that answers
-// both "status" and "health-check", since callers in this package may invoke
-// either against whatever binary is staged at the runner path. statusJSON is
-// the raw response body for "status" (e.g. `{"running":true}`).
-func writeFakeCombinedRunner(
-	t *testing.T,
-	deployment config.DeploymentDir,
-	statusJSON, healthCheckJSON string,
-) {
+// ensureLocalRuntimeWorkDir creates the deployment's local runtime work
+// directory, which cmd.Dir requires to exist before the resolved runner can
+// actually be invoked.
+func ensureLocalRuntimeWorkDir(t *testing.T, deployment config.DeploymentDir) {
 	t.Helper()
 
-	paths := localruntime.NewPaths(deployment)
-	if err := os.MkdirAll(paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
+	if err := os.MkdirAll(localruntime.NewPaths(deployment).WorkDir, 0o750); err != nil {
+		t.Fatalf("failed to create local runtime work dir: %v", err)
 	}
+}
+
+// writeFakeCombinedRunner builds a Manager whose "exasol-local-runner"
+// resource resolves to a single fake runner script that answers both
+// "status" and "health-check", since callers in this package may invoke
+// either against whatever the manager resolves. statusJSON is the raw
+// response body for "status" (e.g. `{"running":true}`).
+func writeFakeCombinedRunner(
+	t *testing.T,
+	statusJSON, healthCheckJSON string,
+) *runtimeartifacts.Manager {
+	t.Helper()
 
 	script := "#!/bin/sh\n" +
 		"if [ \"$1\" = status ]; then echo '" + statusJSON + "'; exit 0; fi\n" +
 		"if [ \"$1\" = health-check ]; then echo '" + healthCheckJSON + "'; exit 0; fi\n" +
 		"exit 1\n"
-	if err := os.WriteFile(paths.RunnerPath, []byte(script), 0o600); err != nil {
-		t.Fatalf("failed to write fake runner: %v", err)
+
+	return newTestManagerForRunner(t, []byte(script))
+}
+
+// newTestManagerForRunner builds a Manager whose "exasol-local-runner"
+// resource resolves through the same extract: true / resource_path shape the
+// real resources.yaml entry uses: scriptContent is packed into a minimal,
+// single-entry zip (mirroring the real release archive).
+func newTestManagerForRunner(t *testing.T, scriptContent []byte) *runtimeartifacts.Manager {
+	t.Helper()
+
+	zipPath := writeRunnerZip(t, scriptContent)
+	spec := runtimeartifacts.ResourceSpec{
+		exasolLocalRunnerResourceID: {
+			Extract: true,
+			Artifact: map[string]runtimeartifacts.ArtifactSpec{
+				"any": {URL: zipPath, ResourcePath: runnerZipEntryName},
+			},
+		},
 	}
-	if err := os.Chmod(paths.RunnerPath, testRunnerExecutableMode); err != nil {
-		t.Fatalf("failed to mark fake runner executable: %v", err)
+
+	return runtimeartifacts.NewResourceManagerForPlatform(
+		spec, t.TempDir(), runtime.GOOS, runtime.GOARCH,
+	)
+}
+
+func writeRunnerZip(t *testing.T, scriptContent []byte) string {
+	t.Helper()
+
+	zipPath := filepath.Join(t.TempDir(), "runner.zip")
+	file, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("failed to create runner zip fixture: %v", err)
 	}
+	defer file.Close()
+
+	writer := zip.NewWriter(file)
+	header := &zip.FileHeader{Name: runnerZipEntryName, Method: zip.Deflate}
+	header.SetMode(testRunnerExecutableMode)
+	entry, err := writer.CreateHeader(header)
+	if err != nil {
+		t.Fatalf("failed to create runner zip entry: %v", err)
+	}
+	if _, err := entry.Write(scriptContent); err != nil {
+		t.Fatalf("failed to write runner zip entry: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("failed to close runner zip fixture: %v", err)
+	}
+
+	return zipPath
 }

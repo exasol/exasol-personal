@@ -22,7 +22,7 @@ func TestDiagnoseLocalUnsafe_UnsupportedPlatform(t *testing.T) {
 	// test since Go runs all non-parallel tests to completion first).
 	deployment := newLocalTestDeployment(t)
 
-	diagnostics := diagnoseLocalUnsafe(context.Background(), deployment)
+	diagnostics := diagnoseLocalUnsafe(context.Background(), localruntime.New(deployment, nil))
 
 	if diagnostics.PlatformSupported {
 		t.Fatalf("expected unsupported platform, got %+v", diagnostics)
@@ -45,7 +45,7 @@ description: test infrastructure
 backend: tofu
 `)
 
-	diagnostics := diagnoseLocalUnsafe(context.Background(), deployment)
+	diagnostics := diagnoseLocalUnsafe(context.Background(), localruntime.New(deployment, nil))
 
 	if !diagnostics.PlatformSupported {
 		t.Fatal("expected platform support to bypass via EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM")
@@ -60,9 +60,10 @@ func TestDiagnoseLocalUnsafe_VMNotRunning(t *testing.T) {
 	t.Setenv(localAllowUnsupportedEnv, "1")
 
 	deployment := newLocalTestDeployment(t)
-	writeFakeCombinedRunner(t, deployment, `{"running":false}`, "")
+	ensureLocalRuntimeWorkDir(t, deployment)
+	manager := writeFakeCombinedRunner(t, `{"running":false}`, "")
 
-	diagnostics := diagnoseLocalUnsafe(context.Background(), deployment)
+	diagnostics := diagnoseLocalUnsafe(context.Background(), localruntime.New(deployment, manager))
 
 	if diagnostics.VMRunning == nil || *diagnostics.VMRunning {
 		t.Fatalf("expected VMRunning to be false, got %+v", diagnostics)
@@ -81,11 +82,12 @@ func TestDiagnoseLocalUnsafe_VMRunningReportsPortsAndHealth(t *testing.T) {
 	t.Setenv(localAllowUnsupportedEnv, "1")
 
 	deployment := newLocalTestDeployment(t)
+	ensureLocalRuntimeWorkDir(t, deployment)
 	healthJSON := `{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}`
-	writeFakeCombinedRunner(t, deployment, `{"running":true}`, healthJSON)
+	manager := writeFakeCombinedRunner(t, `{"running":true}`, healthJSON)
 	writeFakeVMState(t, deployment, "192.168.64.5", 20022, 28563, 0)
 
-	diagnostics := diagnoseLocalUnsafe(context.Background(), deployment)
+	diagnostics := diagnoseLocalUnsafe(context.Background(), localruntime.New(deployment, manager))
 
 	if diagnostics.VMRunning == nil || !*diagnostics.VMRunning {
 		t.Fatalf("expected VMRunning to be true, got %+v", diagnostics)
@@ -109,10 +111,11 @@ func TestDiagnoseLocalUnsafe_VMRunningMatchesRunningState_NoWarning(t *testing.T
 	t.Setenv(localAllowUnsupportedEnv, "1")
 
 	deployment := newLocalTestDeployment(t)
-	writeFakeCombinedRunner(t, deployment, `{"running":true}`, `{"ports":{}}`)
+	ensureLocalRuntimeWorkDir(t, deployment)
+	manager := writeFakeCombinedRunner(t, `{"running":true}`, `{"ports":{}}`)
 	writeFakeWorkflowState(t, deployment, &config.WorkflowStateRunning{})
 
-	diagnostics := diagnoseLocalUnsafe(context.Background(), deployment)
+	diagnostics := diagnoseLocalUnsafe(context.Background(), localruntime.New(deployment, manager))
 
 	if diagnostics.Warning != "" {
 		t.Fatalf("expected no warning when workflow state matches a running VM, got %q",
@@ -125,13 +128,14 @@ func TestDiagnoseLocalUnsafe_VMRunningButStateNotRunning_Warning(t *testing.T) {
 	t.Setenv(localAllowUnsupportedEnv, "1")
 
 	deployment := newLocalTestDeployment(t)
-	writeFakeCombinedRunner(t, deployment, `{"running":true}`, `{"ports":{}}`)
+	ensureLocalRuntimeWorkDir(t, deployment)
+	manager := writeFakeCombinedRunner(t, `{"running":true}`, `{"ports":{}}`)
 	writeFakeWorkflowState(t, deployment, &config.WorkflowStateInterrupted{
 		Error:                      "boom",
 		InterruptedDuringOperation: "start",
 	})
 
-	diagnostics := diagnoseLocalUnsafe(context.Background(), deployment)
+	diagnostics := diagnoseLocalUnsafe(context.Background(), localruntime.New(deployment, manager))
 
 	if diagnostics.Warning == "" {
 		t.Fatal("expected a warning when a VM is running but the workflow state doesn't expect one")

@@ -5,208 +5,229 @@ package localruntime
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/blang/semver/v4"
 	"github.com/exasol/exasol-personal/internal/config"
 )
 
-func TestReconcileRunner_InstallsMissingRunner(t *testing.T) {
-	t.Parallel()
-	requirePOSIXRunnerTest(t)
+func newTestRuntimeForReconciliation(t *testing.T) *Runtime {
+	t.Helper()
 
-	// Given
-	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
-	embedded := versionedRunner("1.2.3", "embedded")
+	deployment := config.NewDeploymentDir(t.TempDir())
+	testRuntime := New(deployment, nil)
+	if err := os.MkdirAll(testRuntime.paths.WorkDir, dirMode); err != nil {
+		t.Fatalf("failed to create runtime work dir: %v", err)
+	}
 
-	// When
-	err := reconcileRunner(context.Background(), targetPath, embedded)
-	// Then
-	assertRunnerContent(t, targetPath, embedded)
+	return testRuntime
+}
+
+func seedVersionMarker(t *testing.T, testRuntime *Runtime, version string) {
+	t.Helper()
+
+	parsed, err := semver.ParseTolerant(version)
 	if err != nil {
-		t.Fatalf("expected missing runner installation to succeed, got %v", err)
+		t.Fatalf("failed to parse test marker version %q: %v", version, err)
+	}
+	markerPath := testRuntime.paths.RunnerVersionMarkerPath
+	if err := writeRunnerVersionMarker(markerPath, parsed); err != nil {
+		t.Fatalf("failed to seed version marker: %v", err)
 	}
 }
 
-func TestReconcileRunner_UpgradesUnversionedRunner(t *testing.T) {
-	t.Parallel()
-	requirePOSIXRunnerTest(t)
+func assertMarkerVersion(t *testing.T, testRuntime *Runtime, expected string) {
+	t.Helper()
 
-	// Given
-	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
-	writeExecutableTestFile(t, targetPath, []byte("#!/bin/sh\nexit 2\n"))
-	embedded := versionedRunner("1.2.3", "embedded")
-
-	// When
-	err := reconcileRunner(context.Background(), targetPath, embedded)
-	// Then
+	actual, err := readRunnerVersionMarker(testRuntime.paths.RunnerVersionMarkerPath)
 	if err != nil {
-		t.Fatalf("expected unversioned runner upgrade to succeed, got %v", err)
+		t.Fatalf("expected a readable version marker, got %v", err)
 	}
-	assertRunnerContent(t, targetPath, embedded)
+	if actual.String() != expected {
+		t.Fatalf("expected marker version %q, got %q", expected, actual.String())
+	}
 }
 
-func TestReconcileRunner_UpgradesNewerMinorRunner(t *testing.T) {
-	t.Parallel()
+func writeRunnerScript(t *testing.T, version string) string {
+	t.Helper()
 	requirePOSIXRunnerTest(t)
 
-	// Given
-	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
-	writeExecutableTestFile(t, targetPath, versionedRunner("1.1.4", "installed"))
-	embedded := versionedRunner("1.2.0", "embedded")
+	path := filepath.Join(t.TempDir(), "launcher")
+	writeExecutableTestFile(t, path, versionedRunner(version, "runner"))
 
-	// When
-	err := reconcileRunner(context.Background(), targetPath, embedded)
-	// Then
-	if err != nil {
-		t.Fatalf("expected compatible runner upgrade to succeed, got %v", err)
-	}
-	assertRunnerContent(t, targetPath, embedded)
+	return path
 }
 
-func TestReconcileRunner_UpgradesNewerReleaseCandidate(t *testing.T) {
+func TestReconcileRunnerVersion_InitializesMissingMarker(t *testing.T) {
 	t.Parallel()
-	requirePOSIXRunnerTest(t)
 
 	// Given
-	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
-	writeExecutableTestFile(t, targetPath, versionedRunner("1.2.3-rc1", "installed"))
-	embedded := versionedRunner("1.2.3-rc2", "embedded")
+	testRuntime := newTestRuntimeForReconciliation(t)
+	runnerPath := writeRunnerScript(t, "1.2.3")
 
 	// When
-	err := reconcileRunner(context.Background(), targetPath, embedded)
+	err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
 	// Then
 	if err != nil {
-		t.Fatalf("expected release-candidate runner upgrade to succeed, got %v", err)
+		t.Fatalf("expected marker initialization to succeed, got %v", err)
 	}
-	assertRunnerContent(t, targetPath, embedded)
+	assertMarkerVersion(t, testRuntime, "1.2.3")
 }
 
-func TestReconcileRunner_DoesNotDowngradeRunner(t *testing.T) {
+func TestReconcileRunnerVersion_ReplacesInvalidMarker(t *testing.T) {
 	t.Parallel()
-	requirePOSIXRunnerTest(t)
 
 	// Given
-	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
-	installed := versionedRunner("1.3.0", "installed")
-	writeExecutableTestFile(t, targetPath, installed)
+	testRuntime := newTestRuntimeForReconciliation(t)
+	invalidMarker := []byte("not json")
+	markerPath := testRuntime.paths.RunnerVersionMarkerPath
+	if err := os.WriteFile(markerPath, invalidMarker, markerFileMode); err != nil {
+		t.Fatalf("failed to seed invalid marker: %v", err)
+	}
+	runnerPath := writeRunnerScript(t, "1.2.3")
 
 	// When
-	err := reconcileRunner(context.Background(), targetPath, versionedRunner("1.2.9", "embedded"))
+	err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
 	// Then
 	if err != nil {
-		t.Fatalf("expected runner downgrade to be skipped, got %v", err)
+		t.Fatalf("expected invalid marker to be replaced, got %v", err)
 	}
-	assertRunnerContent(t, targetPath, installed)
+	assertMarkerVersion(t, testRuntime, "1.2.3")
 }
 
-func TestReconcileRunner_KeepsIdenticalRunner(t *testing.T) {
+func TestReconcileRunnerVersion_UpdatesOnCompatibleMinorBump(t *testing.T) {
 	t.Parallel()
-	requirePOSIXRunnerTest(t)
 
 	// Given
-	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
-	embedded := versionedRunner("1.2.3", "same")
-	writeExecutableTestFile(t, targetPath, embedded)
+	testRuntime := newTestRuntimeForReconciliation(t)
+	seedVersionMarker(t, testRuntime, "1.1.4")
+	runnerPath := writeRunnerScript(t, "1.2.0")
 
 	// When
-	err := reconcileRunner(context.Background(), targetPath, embedded)
+	err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
 	// Then
 	if err != nil {
-		t.Fatalf("expected identical runner reconciliation to succeed, got %v", err)
+		t.Fatalf("expected compatible upgrade to succeed, got %v", err)
 	}
-	assertRunnerContent(t, targetPath, embedded)
+	assertMarkerVersion(t, testRuntime, "1.2.0")
 }
 
-func TestReconcileRunner_RepairsDifferentRunnerWithSameVersion(t *testing.T) {
+func TestReconcileRunnerVersion_UpdatesOnReleaseCandidateBump(t *testing.T) {
 	t.Parallel()
-	requirePOSIXRunnerTest(t)
 
 	// Given
-	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
-	writeExecutableTestFile(t, targetPath, versionedRunner("1.2.3", "installed"))
-	embedded := versionedRunner("1.2.3", "embedded")
+	testRuntime := newTestRuntimeForReconciliation(t)
+	seedVersionMarker(t, testRuntime, "1.2.3-rc1")
+	runnerPath := writeRunnerScript(t, "1.2.3-rc2")
 
 	// When
-	err := reconcileRunner(context.Background(), targetPath, embedded)
+	err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
 	// Then
 	if err != nil {
-		t.Fatalf("expected same-version runner repair to succeed, got %v", err)
+		t.Fatalf("expected release-candidate upgrade to succeed, got %v", err)
 	}
-	assertRunnerContent(t, targetPath, embedded)
+	assertMarkerVersion(t, testRuntime, "1.2.3-rc2")
 }
 
-func TestReconcileRunner_PreservesRunnerAcrossMajorVersions(t *testing.T) {
+// TestReconcileRunnerVersion_ProceedsAndUpdatesOnDowngrade verifies that an
+// older-than-recorded resolved runner is accepted (with a warning) and the
+// marker updated to match, rather than refused: there is no older installed
+// runner to fall back to instead.
+func TestReconcileRunnerVersion_ProceedsAndUpdatesOnDowngrade(t *testing.T) {
 	t.Parallel()
-	requirePOSIXRunnerTest(t)
 
 	// Given
-	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
-	installed := versionedRunner("1.9.0", "installed")
-	writeExecutableTestFile(t, targetPath, installed)
+	testRuntime := newTestRuntimeForReconciliation(t)
+	seedVersionMarker(t, testRuntime, "1.3.0")
+	runnerPath := writeRunnerScript(t, "1.2.9")
 
 	// When
-	err := reconcileRunner(context.Background(), targetPath, versionedRunner("2.0.0", "embedded"))
+	err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
 	// Then
 	if err != nil {
-		t.Fatalf("expected major runner update to be skipped, got %v", err)
+		t.Fatalf("expected downgrade to proceed with a warning, got %v", err)
 	}
-	assertRunnerContent(t, targetPath, installed)
+	assertMarkerVersion(t, testRuntime, "1.2.9")
 }
 
-func TestReconcileRunner_RejectsInvalidEmbeddedRunnerWithoutChangingInstalled(t *testing.T) {
+func TestReconcileRunnerVersion_KeepsIdenticalVersion(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	testRuntime := newTestRuntimeForReconciliation(t)
+	seedVersionMarker(t, testRuntime, "1.2.3")
+	runnerPath := writeRunnerScript(t, "1.2.3")
+
+	// When
+	err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
+	// Then
+	if err != nil {
+		t.Fatalf("expected identical-version reconciliation to succeed, got %v", err)
+	}
+	assertMarkerVersion(t, testRuntime, "1.2.3")
+}
+
+// TestReconcileRunnerVersion_ProceedsAndUpdatesOnMajorMismatch verifies the
+// same policy for a major-version mismatch: proceed with the resolved
+// runner and update the marker, since there is no older installed runner to
+// fall back to instead.
+func TestReconcileRunnerVersion_ProceedsAndUpdatesOnMajorMismatch(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	testRuntime := newTestRuntimeForReconciliation(t)
+	seedVersionMarker(t, testRuntime, "1.9.0")
+	runnerPath := writeRunnerScript(t, "2.0.0")
+
+	// When
+	err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
+	// Then
+	if err != nil {
+		t.Fatalf("expected major-version mismatch to proceed with a warning, got %v", err)
+	}
+	assertMarkerVersion(t, testRuntime, "2.0.0")
+}
+
+func TestReconcileRunnerVersion_RejectsInvalidResolvedRunnerVersion(t *testing.T) {
 	t.Parallel()
 	requirePOSIXRunnerTest(t)
 
 	// Given
-	targetPath := filepath.Join(t.TempDir(), RunnerFileName)
-	installed := versionedRunner("1.2.3", "installed")
-	writeExecutableTestFile(t, targetPath, installed)
+	testRuntime := newTestRuntimeForReconciliation(t)
+	seedVersionMarker(t, testRuntime, "1.2.3")
+	runnerPath := filepath.Join(t.TempDir(), "launcher")
+	writeExecutableTestFile(t, runnerPath, []byte("#!/bin/sh\nprintf 'invalid-version\\n'\n"))
 
 	// When
-	err := reconcileRunner(
-		context.Background(),
-		targetPath,
-		[]byte("#!/bin/sh\nprintf 'invalid-version\\n'\n"),
-	)
+	err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
+
 	// Then
-	if err == nil ||
-		!strings.Contains(err.Error(), "embedded local runner does not report a valid version") {
-		t.Fatalf("expected invalid embedded runner error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "does not report a valid version") {
+		t.Fatalf("expected invalid resolved runner version error, got %v", err)
 	}
-	assertRunnerContent(t, targetPath, installed)
+	assertMarkerVersion(t, testRuntime, "1.2.3")
 }
 
-func TestReconcileRunnerExecutable_InternalOverrideForcesUnversionedRunnerUpdate(t *testing.T) {
+func TestReconcileRunnerVersion_ForcedBypassProceedsOnInvalidVersion(t *testing.T) {
 	requirePOSIXRunnerTest(t)
 
 	// Given
 	t.Setenv(forceRunnerReconciliationEnv, "1")
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := newRuntime(deployment, Config{})
-	embedded := []byte("#!/bin/sh\n# embedded\nexit 1\n")
-	localRuntime.embeddedRunner = embedded
-	localRuntime.embeddedRunnerExists = true
-	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
-		t.Fatalf("failed to create runner directory: %v", err)
-	}
-	writeExecutableTestFile(
-		t,
-		localRuntime.paths.RunnerPath,
-		[]byte("#!/bin/sh\n# installed\nexit 2\n"),
-	)
+	testRuntime := newTestRuntimeForReconciliation(t)
+	seedVersionMarker(t, testRuntime, "1.2.3")
+	runnerPath := filepath.Join(t.TempDir(), "launcher")
+	writeExecutableTestFile(t, runnerPath, []byte("#!/bin/sh\nprintf 'invalid-version\\n'\n"))
 
 	// When
-	err := localRuntime.reconcileRunnerExecutable(context.Background())
+	err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
 	// Then
 	if err != nil {
-		t.Fatalf("expected internal override to force reconciliation, got %v", err)
+		t.Fatalf("expected forced reconciliation to bypass the invalid version, got %v", err)
 	}
-	assertRunnerContent(t, localRuntime.paths.RunnerPath, embedded)
 }
 
 func requirePOSIXRunnerTest(t *testing.T) {
@@ -224,18 +245,4 @@ func versionedRunner(version, identity string) []byte {
 		"  exit 0\n" +
 		"fi\n" +
 		"exit 2\n")
-}
-
-func assertRunnerContent(t *testing.T, path string, expected []byte) {
-	t.Helper()
-	actual, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("expected runner %s to exist", path)
-		}
-		t.Fatalf("failed to read runner %s: %v", path, err)
-	}
-	if string(actual) != string(expected) {
-		t.Fatalf("expected runner content %q, got %q", string(expected), string(actual))
-	}
 }

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
@@ -43,12 +42,12 @@ const localReachabilityMessage = "could not reach the local database endpoint be
 // unavailable (e.g. an old runner daemon that predates health-check
 // support), or when at least one port is reachable, since that means the
 // problem is not network-wide.
-func classifyLocalReachability(ctx context.Context, deployment config.DeploymentDir) error {
-	if !isLocalDeployment(deployment) {
+func classifyLocalReachability(ctx context.Context, runtime *localruntime.Runtime) error {
+	if !isLocalDeployment(runtime.Deployment()) {
 		return nil
 	}
 
-	result, err := localruntime.HealthCheck(ctx, deployment)
+	result, err := runtime.HealthCheck(ctx)
 	if err != nil {
 		slog.Debug("local health-check unavailable; skipping reachability classification",
 			"error", err)
@@ -77,15 +76,14 @@ func classifyLocalReachability(ctx context.Context, deployment config.Deployment
 
 // diagnoseLocalFailure re-classifies a local-deployment operation failure
 // as a localReachabilityError when the local runtime's forwarded ports are
-// all unreachable, deferring to the original error otherwise. Callers that
-// dial out to the local VM (start, connect, shell) share this exact
-// fallback.
-func diagnoseLocalFailure(ctx context.Context, deployment config.DeploymentDir, err error) error {
+// all unreachable, deferring to the original error otherwise.
+func diagnoseLocalFailure(ctx context.Context, runtime *localruntime.Runtime, err error) error {
 	if err == nil {
 		return nil
 	}
 
-	if reachabilityErr := classifyLocalReachability(ctx, deployment); reachabilityErr != nil {
+	reachabilityErr := classifyLocalReachability(ctx, runtime)
+	if reachabilityErr != nil {
 		return reachabilityErr
 	}
 

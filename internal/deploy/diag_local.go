@@ -34,7 +34,12 @@ type LocalDiagnostics struct {
 
 func DiagnoseLocal(ctx context.Context, deployment config.DeploymentDir, writer io.Writer) error {
 	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
-		diagnostics := diagnoseLocalUnsafe(ctx, deployment)
+		manager, err := newResourceManager()
+		if err != nil {
+			return err
+		}
+
+		diagnostics := diagnoseLocalUnsafe(ctx, localruntime.New(deployment, manager))
 
 		encoder := json.NewEncoder(writer)
 		encoder.SetIndent("", "  ")
@@ -46,7 +51,10 @@ func DiagnoseLocal(ctx context.Context, deployment config.DeploymentDir, writer 
 // diagnoseLocalUnsafe never fails on its own: each check populates whatever
 // it can and stops at the first one that doesn't apply, so a diagnostic
 // command doesn't itself become another thing that can error out.
-func diagnoseLocalUnsafe(ctx context.Context, deployment config.DeploymentDir) *LocalDiagnostics {
+func diagnoseLocalUnsafe(
+	ctx context.Context,
+	localRuntime *localruntime.Runtime,
+) *LocalDiagnostics {
 	diagnostics := &LocalDiagnostics{
 		Platform: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 	}
@@ -58,12 +66,13 @@ func diagnoseLocalUnsafe(ctx context.Context, deployment config.DeploymentDir) *
 	}
 	diagnostics.PlatformSupported = true
 
+	deployment := localRuntime.Deployment()
 	if !isLocalDeployment(deployment) {
 		diagnostics.Message = "this deployment is not using the local preset"
 		return diagnostics
 	}
 
-	vmStatus, err := getLocalVMStatus(ctx, deployment)
+	vmStatus, err := localRuntime.Status(ctx)
 	if err != nil {
 		diagnostics.Message = fmt.Sprintf("could not determine local VM status: %s", err)
 		return diagnostics
@@ -80,7 +89,7 @@ func diagnoseLocalUnsafe(ctx context.Context, deployment config.DeploymentDir) *
 
 	diagnostics.Warning = unexpectedRunningVMWarning(deployment)
 
-	if state, err := localruntime.ReadState(deployment); err == nil {
+	if state, err := localRuntime.ReadState(); err == nil {
 		diagnostics.Ports = map[string]int{"ssh": state.SSHPort, "db": state.DBPort}
 		if state.UIPort != 0 {
 			diagnostics.Ports["ui"] = state.UIPort
@@ -88,7 +97,7 @@ func diagnoseLocalUnsafe(ctx context.Context, deployment config.DeploymentDir) *
 		diagnostics.GuestIP = state.VMIP
 	}
 
-	if health, err := localruntime.HealthCheck(ctx, deployment); err == nil {
+	if health, err := localRuntime.HealthCheck(ctx); err == nil {
 		diagnostics.PortHealth = make(map[string]string, len(health.Ports))
 		for name, portHealth := range health.Ports {
 			diagnostics.PortHealth[name] = string(portHealth.State)

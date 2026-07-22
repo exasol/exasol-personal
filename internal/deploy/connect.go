@@ -9,6 +9,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/connect"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
 type Output struct {
@@ -56,7 +57,12 @@ func Connect(ctx context.Context, opts *connect.Opts, deployment config.Deployme
 			}
 
 			if err := connect.Connect(ctx, opts, deployment, connectionInfo); err != nil {
-				return diagnoseLocalFailure(ctx, deployment, err)
+				manager, managerErr := newResourceManager()
+				if managerErr != nil {
+					return err
+				}
+
+				return diagnoseLocalFailure(ctx, localruntime.New(deployment, manager), err)
 			}
 
 			return nil
