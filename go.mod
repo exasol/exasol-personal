@@ -9,6 +9,7 @@ require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/lmittmann/tint v1.1.3
+	github.com/pkg/sftp v1.13.7
 	github.com/zclconf/go-cty v1.19.0
 	go.yaml.in/yaml/v3 v3.0.4
 )
@@ -151,6 +152,7 @@ require (
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/manuelarte/embeddedstructfieldcheck v0.3.0 // indirect
 	github.com/manuelarte/funcorder v0.5.0 // indirect

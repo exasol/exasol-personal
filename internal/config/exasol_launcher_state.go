@@ -85,6 +85,11 @@ type ExasolPersonalState struct {
 	// launcher re-applies on every start.
 	//nolint:tagliatelle // JSON key mirrors the "SLC" domain abbreviation.
 	InstalledSLCs []InstalledSLC `json:"installedSlcs,omitempty"`
+	// InstalledCustomSLCs is kept separate from the official list because custom SLCs are
+	// materialized and activated by a different mechanism (BucketFS unpack + SCRIPT_LANGUAGES,
+	// not image mount): the start path that re-applies image mounts must never see them.
+	//nolint:tagliatelle // JSON key mirrors the "SLC" domain abbreviation.
+	InstalledCustomSLCs []InstalledCustomSLC `json:"installedCustomSlcs,omitempty"`
 }
 
 // InstalledSLC records one installed script language container so the launcher can
@@ -96,6 +101,21 @@ type InstalledSLC struct {
 	Image    string   `json:"image"`
 	Target   string   `json:"target"`
 	Aliases  []string `json:"aliases"`
+}
+
+// InstalledCustomSLC records one user-supplied script language container. Its files
+// live in BucketFS and its activation lives in the SCRIPT_LANGUAGES database
+// parameter, both of which persist across restart — so, unlike InstalledSLC, nothing
+// here is re-applied on start. Sha256 is the content identity used for the install/
+// update no-op check (mirroring how the official path uses the content-addressed image
+// tag); Source is retained only for display and re-download on update.
+type InstalledCustomSLC struct {
+	Alias        string `json:"alias"`
+	Language     string `json:"language"`
+	BucketPath   string `json:"bucketPath"`
+	Sha256       string `json:"sha256"`
+	Source       string `json:"source"`
+	DisplacedURI string `json:"displacedUri,omitempty"`
 }
 
 // DirectoryExasolPersonalStatefile.
