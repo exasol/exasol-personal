@@ -74,6 +74,20 @@ func confirmOrCancel(confirm ConfirmFunc) error {
 	return nil
 }
 
+//nolint:revive // restart is a user-controlled flag (--no-restart), not internal control coupling.
+func confirmRestartIfRunning(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	restart bool,
+	confirm ConfirmFunc,
+) error {
+	if restart && isLocalDeploymentRunning(ctx, deployment) {
+		return confirmOrCancel(confirm)
+	}
+
+	return nil
+}
+
 // SLCApplyOutcome describes how an install, update, or remove was applied to the running state.
 type SLCApplyOutcome int
 
@@ -191,6 +205,10 @@ func InstallSLC(
 		return nil, err
 	}
 
+	if err := checkOfficialAliasNotHeldByCustom(state.InstalledCustomSLCs, entry.Aliases); err != nil {
+		return nil, err
+	}
+
 	// An identical already-installed image is a no-op: no state change, no restart.
 	if idx := findInstalledByImage(state.InstalledSLCs, entry.Image); idx >= 0 {
 		return &SLCInstallResult{
@@ -209,10 +227,8 @@ func InstallSLC(
 	// Confirm before disrupting a running database. Only prompt when a restart will
 	// actually happen; validation above has already succeeded, so we never prompt for an
 	// install that would fail anyway.
-	if restart && isLocalDeploymentRunning(ctx, deployment) {
-		if err := confirmOrCancel(confirm); err != nil {
-			return nil, err
-		}
+	if err := confirmRestartIfRunning(ctx, deployment, restart, confirm); err != nil {
+		return nil, err
 	}
 
 	state.InstalledSLCs = upsertInstalledSLC(state.InstalledSLCs, toInstalledSLC(entry))
@@ -301,10 +317,8 @@ func RemoveSLC(
 	}
 
 	// Confirm before disrupting a running database (only when a restart will happen).
-	if restart && isLocalDeploymentRunning(ctx, deployment) {
-		if err := confirmOrCancel(confirm); err != nil {
-			return nil, err
-		}
+	if err := confirmRestartIfRunning(ctx, deployment, restart, confirm); err != nil {
+		return nil, err
 	}
 
 	removed := state.InstalledSLCs[index]
@@ -398,6 +412,10 @@ func UpdateSLC(
 		return nil, err
 	}
 
+	if err := checkOfficialAliasNotHeldByCustom(state.InstalledCustomSLCs, entry.Aliases); err != nil {
+		return nil, err
+	}
+
 	index := findInstalledSLC(state.InstalledSLCs, alias)
 	if index < 0 {
 		return &SLCUpdateResult{Operation: SLCOperationUpdate, Found: false}, nil
@@ -426,10 +444,8 @@ func UpdateSLC(
 		return nil, err
 	}
 
-	if restart && isLocalDeploymentRunning(ctx, deployment) {
-		if err := confirmOrCancel(confirm); err != nil {
-			return nil, err
-		}
+	if err := confirmRestartIfRunning(ctx, deployment, restart, confirm); err != nil {
+		return nil, err
 	}
 
 	result := &SLCUpdateResult{
@@ -680,6 +696,30 @@ func findInstalledByImage(installed []config.InstalledSLC, image string) int {
 	}
 
 	return -1
+}
+
+// checkOfficialAliasNotHeldByCustom enforces the mirror of the custom-install collision
+// rule: an official SLC cannot be installed while a custom SLC owns one of its aliases,
+// because SCRIPT_LANGUAGES (custom) is not overwritten by the official builtin scan, so the
+// alias would keep resolving to the custom SLC — a silent surprise. The user must remove the
+// custom SLC first.
+func checkOfficialAliasNotHeldByCustom(
+	customs []config.InstalledCustomSLC,
+	officialAliases []string,
+) error {
+	for _, custom := range customs {
+		for _, official := range officialAliases {
+			if strings.EqualFold(custom.Alias, official) {
+				return fmt.Errorf(
+					"alias %q is currently provided by a custom SLC; remove it with "+
+						"`exasol slc custom remove %s` before installing this official SLC",
+					strings.ToUpper(official), custom.Alias,
+				)
+			}
+		}
+	}
+
+	return nil
 }
 
 func findInstalledSLC(installed []config.InstalledSLC, alias string) int {

@@ -11,8 +11,48 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
+
+func TestSLCCommandSeparation(t *testing.T) {
+	t.Parallel()
+
+	for name, cmd := range map[string]*cobra.Command{
+		"install": slcCustomInstallCmd,
+		"update":  slcCustomUpdateCmd,
+		"remove":  slcCustomRemoveCmd,
+	} {
+		if !hasSubcommand(slcCustomCmd, name) {
+			t.Fatalf("slc custom is missing the %q subcommand", name)
+		}
+		if cmd.Flags().Lookup("no-restart") != nil {
+			t.Fatalf("custom %s must not carry --no-restart", name)
+		}
+	}
+
+	for _, flag := range []string{"file", "url", "alias", "language"} {
+		if slcCustomInstallCmd.Flags().Lookup(flag) == nil {
+			t.Fatalf("slc custom install is missing --%s", flag)
+		}
+		if slcInstallCmd.Flags().Lookup(flag) != nil {
+			t.Fatalf("official install must not carry --%s", flag)
+		}
+	}
+	if slcInstallCmd.Flags().Lookup("no-restart") == nil {
+		t.Fatal("official install must keep --no-restart")
+	}
+}
+
+func hasSubcommand(parent *cobra.Command, name string) bool {
+	for _, sub := range parent.Commands() {
+		if sub.Name() == name {
+			return true
+		}
+	}
+
+	return false
+}
 
 // On an unsupported architecture `slc list` degrades gracefully: SLCStatuses returns an
 // empty set (no error), which the renderers must present as the "none available" message
@@ -21,8 +61,14 @@ import (
 func TestRenderSLCListTextNoneAvailable(t *testing.T) {
 	t.Parallel()
 
-	output := formatSLCListText([]deploy.SLCStatus{})
+	// Given
+	official := []deploy.SLCStatus{}
+	custom := []deploy.CustomSLCStatus{}
 
+	// When
+	output := formatSLCListText(official, custom)
+
+	// Then
 	if strings.TrimSpace(
 		output,
 	) != "No script language containers are available for this platform." {
@@ -35,7 +81,7 @@ func TestRenderSLCListTextQueuesPrimaryOutput(t *testing.T) {
 	resetTerminalMessages()
 	defer resetTerminalMessages()
 
-	renderSLCListText([]deploy.SLCStatus{})
+	renderSLCListText([]deploy.SLCStatus{}, []deploy.CustomSLCStatus{})
 
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
@@ -53,13 +99,54 @@ func TestRenderSLCListTextQueuesPrimaryOutput(t *testing.T) {
 func TestRenderSLCListJSONEmptyIsArray(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	var buf bytes.Buffer
-	if err := renderSLCListJSON(&buf, []deploy.SLCStatus{}); err != nil {
+
+	// When
+	err := renderSLCListJSON(&buf, []deploy.SLCStatus{}, []deploy.CustomSLCStatus{})
+	// Then
+	if err != nil {
 		t.Fatalf("expected json render to succeed, got %v", err)
 	}
-
 	if got := strings.TrimSpace(buf.String()); got != "[]" {
 		t.Fatalf("expected empty JSON array, got %q", got)
+	}
+}
+
+// A custom SLC appears in both renderers, distinguished by type in JSON and a separate
+// section in text, so `slc list` covers custom containers alongside official ones.
+
+func TestRenderSLCListTextIncludesCustom(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	custom := []deploy.CustomSLCStatus{{Alias: "MYPY3", Language: "python", Source: "my.tar.gz"}}
+
+	// When
+	output := formatSLCListText([]deploy.SLCStatus{}, custom)
+
+	// Then
+	if !strings.Contains(output, "CUSTOM ALIAS") || !strings.Contains(output, "MYPY3") {
+		t.Fatalf("expected custom section with the alias, got %q", output)
+	}
+}
+
+func TestRenderSLCListJSONIncludesCustomType(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	var buf bytes.Buffer
+	custom := []deploy.CustomSLCStatus{{Alias: "MYPY3", Language: "python", Source: "my.tar.gz"}}
+
+	// When
+	err := renderSLCListJSON(&buf, []deploy.SLCStatus{}, custom)
+	// Then
+	if err != nil {
+		t.Fatalf("expected json render to succeed, got %v", err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, `"type": "custom"`) || !strings.Contains(got, `"alias": "MYPY3"`) {
+		t.Fatalf("expected custom-typed JSON item, got %q", got)
 	}
 }
 

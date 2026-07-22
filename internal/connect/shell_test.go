@@ -366,6 +366,7 @@ func TestLooksLikeScriptDDL(t *testing.T) {
 		"CREATE TABLE t -- function\nAS SELECT 1",
 		"CREATE CONNECTION c TO 'a script b'",
 		"CREATE USER u IDENTIFIED BY 'my function pw'",
+		"CREATE SCHEMA s; CREATE PYTHON3 SCALAR SCRIPT foo AS",
 	}
 	for _, sql := range notScripts {
 		require.Falsef(t, looksLikeScriptDDL(sql), "expected not script DDL: %q", sql)
@@ -423,6 +424,35 @@ func TestSplitStatementsScriptDelimiter(t *testing.T) {
 			"SELECT add1(41) FROM dual;\n"
 		statements, _ := splitStatements(sql)
 		require.Len(t, statements, 3)
+	})
+
+	t.Run("create statement before a script splits correctly", func(t *testing.T) {
+		t.Parallel()
+
+		sql := "CREATE SCHEMA IF NOT EXISTS s;\n" +
+			"OPEN SCHEMA s;\n" +
+			"CREATE PYTHON3 SCALAR SCRIPT hello() RETURNS INT AS\n" +
+			"def run(c):\n return 1\n/\n" +
+			"SELECT hello();\n"
+		statements, _ := splitStatements(sql)
+		require.Equal(t, []string{
+			"CREATE SCHEMA IF NOT EXISTS s",
+			"OPEN SCHEMA s",
+			"CREATE PYTHON3 SCALAR SCRIPT hello() RETURNS INT AS\ndef run(c):\n return 1",
+			"SELECT hello()",
+		}, statements)
+	})
+
+	t.Run("create statement before a java script keeps the body intact", func(t *testing.T) {
+		t.Parallel()
+
+		sql := "CREATE SCHEMA s;\n" +
+			"CREATE JAVA SCALAR SCRIPT m(x DOUBLE) RETURNS DOUBLE AS\n" +
+			"class M { double run() { return x * 2.0; } }\n/\n"
+		statements, _ := splitStatements(sql)
+		require.Len(t, statements, 2)
+		require.Equal(t, "CREATE SCHEMA s", statements[0])
+		require.Contains(t, statements[1], "return x * 2.0;")
 	})
 
 	t.Run("script without slash is buffered, not split on body semicolons", func(t *testing.T) {

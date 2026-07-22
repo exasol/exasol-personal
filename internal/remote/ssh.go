@@ -14,6 +14,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 )
@@ -145,6 +146,40 @@ func (s *SSHRemote) RunScript(ctx context.Context, script io.Reader, out, errOut
 	return session.Run("/bin/bash")
 }
 
+type SFTPSession struct {
+	client    *sftp.Client
+	sshClient *ssh.Client
+}
+
+func (s *SSHRemote) OpenSFTP() (*SFTPSession, error) {
+	sshClient, err := startSSHClient(s.options)
+	if err != nil {
+		return nil, err
+	}
+
+	sftpClient, err := sftp.NewClient(sshClient)
+	if err != nil {
+		_ = sshClient.Close()
+
+		return nil, fmt.Errorf("%w: failed to open sftp session", err)
+	}
+
+	return &SFTPSession{client: sftpClient, sshClient: sshClient}, nil
+}
+
+func (s *SFTPSession) Client() *sftp.Client {
+	return s.client
+}
+
+func (s *SFTPSession) Close() error {
+	err := s.client.Close()
+	if closeErr := s.sshClient.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+
+	return err
+}
+
 type SSHConnectionOptions struct {
 	Host string
 	Port string
@@ -152,7 +187,7 @@ type SSHConnectionOptions struct {
 	Key  []byte
 }
 
-func startSSHSession(options *SSHConnectionOptions) (*ssh.Session, error) {
+func startSSHClient(options *SSHConnectionOptions) (*ssh.Client, error) {
 	signer, err := ssh.ParsePrivateKey(options.Key)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse private key: %w", err)
@@ -177,6 +212,15 @@ func startSSHSession(options *SSHConnectionOptions) (*ssh.Session, error) {
 	client, err := ssh.Dial("tcp", net.JoinHostPort(options.Host, options.Port), config)
 	if err != nil {
 		return nil, ErrFailedToConnect
+	}
+
+	return client, nil
+}
+
+func startSSHSession(options *SSHConnectionOptions) (*ssh.Session, error) {
+	client, err := startSSHClient(options)
+	if err != nil {
+		return nil, err
 	}
 
 	session, err := client.NewSession()

@@ -502,6 +502,21 @@ func (b *tofuBackend) Destroy(
 	return nil
 }
 
+// errCustomSLCCloudUnsupported marks custom SLC delivery as not yet wired for cloud
+// deployments: cloud BucketFS is reached over the BucketFS HTTP service rather than the VM
+// filesystem, so it needs a distinct delivery implementation.
+var errCustomSLCCloudUnsupported = errors.New(
+	"custom script language containers are not yet supported on cloud deployments",
+)
+
+func (*tofuBackend) deliverCustomSLC(_ context.Context, _ string, _ io.Reader) error {
+	return errCustomSLCCloudUnsupported
+}
+
+func (*tofuBackend) removeCustomSLCFiles(_ context.Context, _ string) error {
+	return errCustomSLCCloudUnsupported
+}
+
 func (b *tofuBackend) hasTofu() bool {
 	return b.cfg != nil
 }

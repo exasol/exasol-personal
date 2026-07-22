@@ -50,6 +50,10 @@ type deploymentBackend interface {
 	ReadDeploymentConfigVariables() (map[string]ConfigVariableDefinition, error)
 	OpenHostShell(ctx context.Context, selectedNode string) error
 	OpenCOSShell(ctx context.Context) error
+	// deliverCustomSLC is backend-specific because BucketFS is reached differently per backend
+	// (local: the VM filesystem; cloud: the BucketFS HTTP service); activation stays shared.
+	deliverCustomSLC(ctx context.Context, dir string, tarball io.Reader) error
+	removeCustomSLCFiles(ctx context.Context, dir string) error
 	Deploy(ctx context.Context, out, outErr io.Writer, options DeployOptions) error
 	Start(ctx context.Context, out, outErr io.Writer, waitTimeoutSeconds int) error
 	Stop(ctx context.Context, out, outErr io.Writer) error
