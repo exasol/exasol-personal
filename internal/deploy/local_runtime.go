@@ -21,58 +21,40 @@ import (
 // Internal escape hatch for fake local-runner integration tests.
 const localSkipDatabaseWaitEnv = "EXASOL_LOCAL_SKIP_DB_WAIT"
 
-func deployLocalRuntime(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	runtimeConfig localRuntimeConfig,
-	waitTimeoutSeconds int,
-	out, outErr io.Writer,
-) error {
-	return startLocalRuntime(ctx, deployment, runtimeConfig, waitTimeoutSeconds, out, outErr)
-}
-
 func startLocalRuntime(
 	ctx context.Context,
-	deployment config.DeploymentDir,
+	runtime *localruntime.Runtime,
 	runtimeConfig localRuntimeConfig,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
-	if err := localruntime.Prepare(
-		ctx,
-		deployment,
-		toLocalRuntimeConfig(runtimeConfig),
-		out,
-		outErr,
-	); err != nil {
+	if err := runtime.Prepare(ctx, out, outErr); err != nil {
 		return err
 	}
 
-	return startPreparedLocalRuntime(
-		ctx, deployment, runtimeConfig, waitTimeoutSeconds, out, outErr,
-	)
+	return startPreparedLocalRuntime(ctx, runtime, runtimeConfig, waitTimeoutSeconds, out, outErr)
 }
 
 func startPreparedLocalRuntime(
 	ctx context.Context,
-	deployment config.DeploymentDir,
+	runtime *localruntime.Runtime,
 	runtimeConfig localRuntimeConfig,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
-	paths := localruntime.NewPaths(deployment)
+	paths := runtime.Paths()
 	if err := os.Remove(paths.StatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to remove stale local VM state: %w", err)
 	}
 
 	localConfig := toLocalRuntimeConfig(runtimeConfig)
 	startArgs := []string{"start"}
-	versionCheckArgs, err := localRunnerVersionCheckArgs(deployment)
+	versionCheckArgs, err := localRunnerVersionCheckArgs(runtime.Deployment())
 	if err != nil {
 		return err
 	}
 	startArgs = append(startArgs, versionCheckArgs...)
-	slcArgs, err := localRunnerSlcArgs(deployment)
+	slcArgs, err := localRunnerSlcArgs(runtime.Deployment())
 	if err != nil {
 		return err
 	}
@@ -85,22 +67,16 @@ func startPreparedLocalRuntime(
 		strconv.Itoa(localConfig.MemoryMB),
 		strconv.Itoa(localConfig.DataSizeGB),
 	)
-	if err := localruntime.RunCommand(
-		ctx,
-		deployment,
-		startArgs,
-		out,
-		outErr,
-	); err != nil {
-		return diagnoseLocalFailure(ctx, deployment, err)
+	if err := runtime.RunCommand(ctx, startArgs, out, outErr); err != nil {
+		return diagnoseLocalFailure(ctx, runtime, err)
 	}
 
-	state, err := localruntime.ReadState(deployment)
+	state, err := runtime.ReadState()
 	if err != nil {
 		return err
 	}
 
-	return writeLocalRuntimeArtifactsAndWait(ctx, deployment, state, waitTimeoutSeconds)
+	return writeLocalRuntimeArtifactsAndWait(ctx, runtime, state, waitTimeoutSeconds)
 }
 
 func localRunnerVersionCheckArgs(deployment config.DeploymentDir) ([]string, error) {
@@ -156,7 +132,13 @@ func reconcileLocalVMState(
 		return nil
 	}
 
-	vmStatus, err := getLocalVMStatus(ctx, deployment)
+	manager, err := newResourceManager()
+	if err != nil {
+		slog.Warn("could not construct resource manager during reconciliation", "error", err)
+		return nil
+	}
+
+	vmStatus, err := localruntime.New(deployment, manager).Status(ctx)
 	if err != nil {
 		slog.Warn("could not determine local VM status during reconciliation", "error", err)
 		return nil
@@ -181,34 +163,28 @@ func isLocalDeployment(deployment config.DeploymentDir) bool {
 	return err == nil && kind == backendTypeLocal
 }
 
-func getLocalVMStatus(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-) (*localruntime.VMStatus, error) {
-	return localruntime.Status(ctx, deployment)
-}
-
 func stopLocalRuntime(
 	ctx context.Context,
-	deployment config.DeploymentDir,
+	runtime *localruntime.Runtime,
 	out, outErr io.Writer,
 ) error {
-	if err := localruntime.Stop(ctx, deployment, out, outErr); err != nil {
+	if err := runtime.Stop(ctx, out, outErr); err != nil {
 		return err
 	}
 
-	return updateLocalDeploymentArtifactState(deployment, StatusStopped)
+	return updateLocalDeploymentArtifactState(runtime.Deployment(), StatusStopped)
 }
 
 func destroyLocalRuntime(
 	ctx context.Context,
-	deployment config.DeploymentDir,
+	runtime *localruntime.Runtime,
 	out, outErr io.Writer,
 ) error {
-	if err := localruntime.Destroy(ctx, deployment, out, outErr); err != nil {
+	if err := runtime.Destroy(ctx, out, outErr); err != nil {
 		return err
 	}
 
+	deployment := runtime.Deployment()
 	for _, path := range []string{
 		deployment.NodeDetailsPath(),
 		deployment.SecretsPath(),
@@ -233,11 +209,11 @@ func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.Config 
 
 func writeLocalRuntimeArtifactsAndWait(
 	ctx context.Context,
-	deployment config.DeploymentDir,
+	runtime *localruntime.Runtime,
 	state *localruntime.State,
 	waitTimeoutSeconds int,
 ) error {
-	if err := writeLocalDeploymentArtifacts(deployment, state); err != nil {
+	if err := writeLocalDeploymentArtifacts(runtime.Deployment(), state); err != nil {
 		return err
 	}
 	if os.Getenv(localSkipDatabaseWaitEnv) != "" {
@@ -250,7 +226,7 @@ func writeLocalRuntimeArtifactsAndWait(
 	waitCtx, cancel := context.WithTimeout(ctx, time.Duration(waitTimeoutSeconds)*time.Second)
 	defer cancel()
 
-	return WaitForLocalDatabaseStarted(waitCtx, deployment)
+	return WaitForLocalDatabaseStarted(waitCtx, runtime)
 }
 
 func writeLocalDeploymentArtifacts(

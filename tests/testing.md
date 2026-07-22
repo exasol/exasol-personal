@@ -106,7 +106,7 @@ Integration tests can be run using `task tests-integration` or in CI using `task
 | `test_init_local_rejects_unsupported_platform_before_writing_files` | Tests platform validation for local deployments |
 | `test_init_local_accepts_explicit_minimum_memory` | Tests minimum memory configuration for local deployments |
 | `test_init_local_rejects_memory_below_minimum` | Tests that memory below the minimum is rejected before any files are written |
-| `test_deploy_local_with_prestaged_fake_runner` | Tests local deployment end-to-end using a fake runner script |
+| `test_deploy_local_with_fake_runner_override` | Tests local deployment end-to-end using a fake runner script |
 
 ## Reconfiguration
 

@@ -19,8 +19,6 @@ import (
 const (
 	localTestDeploymentID     = "exasol-local-test"
 	localTestClusterIdentity  = "exasol-personal;exasol-local-test;local;local"
-	privateTestFileMode       = 0o600
-	executableTestFileMode    = 0o700
 	localTestDatabasePort     = 28563
 	localTestSSHForwardedPort = 20022
 )
@@ -195,8 +193,9 @@ func TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts(t *testing.T) {
 		}
 	}
 
-	// When
-	err := destroyLocalRuntime(context.Background(), deployment, nil, nil)
+	// When: paths.VMDir was never created, so destroyLocalRuntime never needs
+	// to resolve a runner, and a nil manager is safe here.
+	err := destroyLocalRuntime(context.Background(), localruntime.New(deployment, nil), nil, nil)
 	// Then
 	if err != nil {
 		t.Fatalf("expected destroy cleanup to succeed, got %v", err)
@@ -215,6 +214,7 @@ func TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts(t *testing.T) {
 
 func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 	t.Parallel()
+	skipOnWindows(t)
 
 	// Given
 	deployment := newTestDeploymentWithState(t)
@@ -222,7 +222,7 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 	if err := os.MkdirAll(paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime work dir: %v", err)
 	}
-	writeExecutableTestFile(t, paths.RunnerPath, []byte("#!/bin/sh\nexit 0\n"))
+	manager := newTestManagerForRunner(t, []byte("#!/bin/sh\nexit 0\n"))
 	if err := config.WriteDeploymentInfo(deployment.Root(), &config.DeploymentInfo{
 		Backend:         localDeploymentBackend,
 		DeploymentId:    localTestDeploymentID,
@@ -240,7 +240,7 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 	}
 
 	// When
-	err := stopLocalRuntime(context.Background(), deployment, nil, nil)
+	err := stopLocalRuntime(context.Background(), localruntime.New(deployment, manager), nil, nil)
 	// Then
 	if err != nil {
 		t.Fatalf("expected local stop to succeed, got %v", err)
@@ -283,15 +283,4 @@ func newTestDeploymentWithVersionCheckState(
 	}
 
 	return deployment
-}
-
-func writeExecutableTestFile(t *testing.T, path string, content []byte) {
-	t.Helper()
-
-	if err := os.WriteFile(path, content, privateTestFileMode); err != nil {
-		t.Fatalf("failed to write executable test file %s: %v", path, err)
-	}
-	if err := os.Chmod(path, executableTestFileMode); err != nil {
-		t.Fatalf("failed to mark executable test file %s executable: %v", path, err)
-	}
 }

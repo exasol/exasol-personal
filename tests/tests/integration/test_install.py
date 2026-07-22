@@ -306,7 +306,7 @@ def test_init_local_rejects_memory_below_minimum(
     sys.platform.startswith("win"),
     reason="fake local runner script is POSIX-only",
 )
-def test_deploy_local_with_prestaged_fake_runner(
+def test_deploy_local_with_fake_runner_override(
     exasol_path: str, tmp_path: Path
 ) -> None:
     # Given a fake local runner that implements the runner contract without a VM
@@ -316,7 +316,8 @@ def test_deploy_local_with_prestaged_fake_runner(
 set -eu
 case "$1" in
   version)
-    # Keep the pre-staged test runner across production runner reconciliation.
+    # A version far ahead of anything real, so version reconciliation
+    # never mistakes this fake runner for a downgrade.
     printf 'v999.0.0\n'
     ;;
   init)
@@ -376,6 +377,10 @@ esac
         **os.environ,
         "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM": "1",
         "EXASOL_LOCAL_SKIP_DB_WAIT": "1",
+        # exasol-local-runner is embed-only, so this is the only way to
+        # inject a fake runner on a platform (e.g. Linux CI) with no
+        # embedded artifact for it at all.
+        "EXASOL_LOCAL_RUNNER_OVERRIDE_PATH": str(runner),
     }
 
     # Given a local deployment directory
@@ -407,12 +412,7 @@ esac
         "memory-mb"
     ]
 
-    runner_target = deployment_dir / "local" / "runtime" / "mac-runner-aarch64"
-    runner_target.parent.mkdir(parents=True)
-    runner_target.write_text(
-        runner.read_text().replace('"2048"', str(expected_memory_mb))
-    )
-    runner_target.chmod(0o700)
+    runner.write_text(runner.read_text().replace('"2048"', str(expected_memory_mb)))
 
     # When local deploy is invoked
     result = run_command(

@@ -11,9 +11,14 @@ import (
 
 	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
+
+func newResourceManager() (*runtimeartifacts.Manager, error) {
+	return runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
+}
 
 const (
 	backendTypeTofu  = "tofu"
@@ -101,16 +106,16 @@ func newDeploymentBackend(
 		return nil, err
 	}
 
+	manager, err := newResourceManager()
+	if err != nil {
+		return nil, err
+	}
+
 	switch kind {
 	case backendTypeTofu:
-		manager, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
-		if err != nil {
-			return nil, err
-		}
-
 		return newTofuBackend(deployment, manifest, manager), nil
 	case backendTypeLocal:
-		return newLocalBackend(deployment, manifest), nil
+		return newLocalBackend(deployment, manifest, localruntime.New(deployment, manager)), nil
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnknownDeploymentType, kind)
 	}

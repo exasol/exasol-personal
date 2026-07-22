@@ -14,6 +14,7 @@ import (
 
 	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/slc"
 )
 
@@ -610,7 +611,12 @@ func applySLCChange(
 }
 
 func isLocalDeploymentRunning(ctx context.Context, deployment config.DeploymentDir) bool {
-	status, err := getLocalVMStatus(ctx, deployment)
+	manager, err := newResourceManager()
+	if err != nil {
+		return false
+	}
+
+	status, err := localruntime.New(deployment, manager).Status(ctx)
 	if err != nil {
 		return false
 	}

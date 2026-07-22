@@ -12,6 +12,7 @@ import (
 	"os"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
 const (
@@ -259,7 +260,13 @@ func localVMStoppedStatus(ctx context.Context, deployment config.DeploymentDir) 
 		return nil
 	}
 
-	vmStatus, err := getLocalVMStatus(ctx, deployment)
+	manager, err := newResourceManager()
+	if err != nil {
+		slog.Debug("failed to construct resource manager for local VM status check", "error", err)
+		return nil
+	}
+
+	vmStatus, err := localruntime.New(deployment, manager).Status(ctx)
 	if err != nil {
 		slog.Debug("local VM status check failed", "error", err)
 		return nil
