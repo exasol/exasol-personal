@@ -220,8 +220,7 @@ func (*Manager) identify(ctx context.Context, artifact ArtifactSpec) string {
 			continue
 		}
 		if id, ok := src.(Identifier); ok {
-			hash, err := id.Identify(ctx, artifact.URL)
-			if err != nil {
+			if hash, err := id.Identify(ctx, artifact.URL); err == nil {
 				return hash
 			}
 		}
