@@ -28,6 +28,13 @@ log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s %(levelname)s %(funcName)s: %(message)s"
 markers = [
+  # Test-kind markers, stamped automatically by the directory a test lives in
+  # (see tests/tests/conftest.py). Each test belongs to exactly one kind.
+  "integration: Offline CLI tests that need no cloud deployment.",
+  "deployment: Cloud provisioning and lifecycle tests.",
+  "e2e: Connect / query / output workflow tests against a running deployment.",
+  "chaos: Fault-injection, interruption, and recovery tests.",
+  # Behavioral markers used for provider selection and CI filtering.
   "launcher_tests: Tests that validate launcher CLI and behavioral contracts without real cloud deployment.",
   "installation_e2e: End-to-end tests focused on installation-level behavior.",
   "infrastructure_e2e: End-to-end tests focused on cloud infrastructure behavior.",
@@ -35,6 +42,7 @@ markers = [
   "provider_aws: Tests that assert AWS-specific behavior.",
   "provider_azure: Tests that assert Azure-specific behavior.",
   "provider_stackit: Tests that assert STACKIT-specific behavior.",
+  "stress: Long-running stress/scale tests (e.g. large data import).",
 ]
 
 [tool.mypy]

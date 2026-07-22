@@ -1,7 +1,10 @@
 # Copyright 2026 Exasol AG
 # SPDX-License-Identifier: MIT
+
 import json
 import os
+import stat
+import subprocess
 import time
 from pathlib import Path
 from subprocess import CalledProcessError
@@ -432,3 +435,52 @@ def test_init_skips_version_check(
     # Check that version check was attempted (since lastVersionCheck was removed)
     count = get_version_check_count(mock_version_server)
     assert count == 1, f"Expected 1 version check, but got {count}"
+
+
+def test_init_in_non_writable_dir_fails_with_clear_error(
+    exasol_path: str,
+    tmp_path: Path,
+) -> None:
+    """Init into a non-writable directory must fail with an actionable error.
+
+    Note: the launcher writes most state under --deployment-dir, plus a readline
+    history file under $XDG_CACHE_HOME. This test exercises the former: the
+    deployment directory itself is read-only.
+    """
+    # Given a deployment directory the user cannot write to
+    deployment_dir = tmp_path / "locked"
+    deployment_dir.mkdir()
+    deployment_dir.chmod(stat.S_IRUSR | stat.S_IXUSR)
+
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+
+    # When init is invoked against it
+    try:
+        proc = subprocess.run(
+            [
+                exasol_path,
+                "init",
+                infra_id,
+                "--deployment-dir",
+                str(deployment_dir),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        # Then init exits non-zero with a message that references the path or
+        # a permission problem, not a panic / Python traceback
+        assert proc.returncode != 0
+        combined = (proc.stdout + proc.stderr).lower()
+        assert "panic:" not in combined
+        assert "traceback" not in combined
+        assert (
+            "permission" in combined
+            or "denied" in combined
+            or "read-only" in combined
+            or str(deployment_dir).lower() in combined
+        ), f"Error did not name the path or permission cause: {combined!r}"
+    finally:
+        # Restore permissions so tmp_path cleanup can remove the directory
+        deployment_dir.chmod(stat.S_IRWXU)

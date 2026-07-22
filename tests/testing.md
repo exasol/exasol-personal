@@ -1,13 +1,22 @@
 
 
-# Deployment Testing
+# Cloud test suites
 
-Deployment tests can be triggered using `task github:trigger-deployment-tests`
+Cloud tests share one session-scoped deployment (the `reusable_deployment` fixture in
+`tests/tests/conftest.py`) and are split by kind across three directories. Each test is
+also stamped with a kind marker (`e2e`, `deployment`, `chaos`) matching its directory, so
+`-m e2e` / `-m deployment` / `-m chaos` select a whole kind. They can be triggered using
+`task github:trigger-deployment-tests`.
 
-`tests/tests/deployment/test_standard_deployment.py`
+## E2E Testing
+
+Read-only connect / query / output workflows against the running deployment.
+
+`tests/tests/e2e/test_connect_query.py`
 
 | Test | Targets | Description |
 |------|---------|-------------|
+| `test_connectable` | cloud | Confirms the deployed database is reachable |
 | `test_single_query` | local, cloud | Runs a basic `SELECT * FROM Dual` query to confirm the DB is reachable and functional |
 | `test_exit_command` | local, cloud | Confirms the `exit` command properly terminates the interactive shell session |
 | `test_multiple_queries` | local, cloud | Runs a sequence of DDL + DML operations (create schema, create table, insert rows, select) |
@@ -17,12 +26,41 @@ Deployment tests can be triggered using `task github:trigger-deployment-tests`
 | `test_diag_cos_runs_confd_client` | cloud | Runs COS diagnostic commands (skipped for local infra, which uses a VM shell fallback) |
 | `test_license_session_limit` | local, cloud | Confirms the Exasol Personal license enforces a 20 concurrent session cap |
 
+## Deployment Testing
+
+Provisioning and lifecycle behavior.
+
+`tests/tests/deployment/test_deploy_lifecycle.py`
+
+| Test | Targets | Description |
+|------|---------|-------------|
+| `test_stop_and_start` | cloud | Verifies the stop → start lifecycle and that `info` reports the correct cluster state at each step |
+| `test_remote_archive_registered` | cloud | Verifies a remote archive volume is registered and exposed via the Admin UI backup options |
+
 `tests/tests/deployment/test_local_deployment.py`
 
 | Test | Targets | Description |
 |------|---------|-------------|
 | `test_ports_override_sets_db_port` | local | Verifies that `--ports db:<port>` correctly routes the DB port through to the VM; confirms the DB is reachable on the custom port |
 | `test_ports_override_stable_across_restarts` | local | Verifies that a custom DB port assigned at `exasol init` is preserved in `deployment.json` and remains reachable after a stop/start cycle |
+
+`tests/tests/deployment/test_custom.py`
+
+| Test | Targets | Description |
+|------|---------|-------------|
+| `test_custom_deployment_rejects_small_instance_types` | cloud | Verifies custom deployments reject instance types below the minimum sizing |
+| `test_custom_deployment_success` | cloud | Verifies a custom-configured deployment provisions successfully |
+
+## Chaos Testing
+
+Fault-injection and recovery. Each chaos test restores the deployment to a
+database-ready state on exit so the other cloud suites can rely on a running cluster.
+
+`tests/tests/chaos/test_lifecycle_faults.py`
+
+| Test | Targets | Description |
+|------|---------|-------------|
+| `test_start_interrupt_sets_interrupted_state` | cloud | Interrupts in-flight stop and start operations and asserts the deployment reaches the `interrupted` state, then recovers |
 
 # Integration Testing
 
