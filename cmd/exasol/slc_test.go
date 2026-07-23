@@ -14,10 +14,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// On an unsupported architecture `slc list` degrades gracefully: SLCStatuses returns an
-// empty set (no error), which the renderers must present as the "none available" message
-// and an empty JSON array — never an error or a non-zero exit.
-
 func TestRenderSLCListTextNoneAvailable(t *testing.T) {
 	t.Parallel()
 

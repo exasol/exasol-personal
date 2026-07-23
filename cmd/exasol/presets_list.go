@@ -169,12 +169,13 @@ Use the '--json' option to print the output in JSON format.
 			return err
 		}
 
-		out := cmd.OutOrStdout()
 		if commonFlags.OutputJson {
-			return renderPresetListJSON(out, catalog)
+			return addJSONTerminalOutput(catalog)
 		}
 
-		return renderPresetListText(out, presetsListFlags.TypeFilter, catalog)
+		return addRenderedTerminalOutput(func(writer io.Writer) error {
+			return renderPresetListText(writer, presetsListFlags.TypeFilter, catalog)
+		})
 	},
 }
 

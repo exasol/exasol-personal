@@ -4,7 +4,10 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
@@ -39,28 +42,53 @@ var statusCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 		deployment := commonFlags.Deployment()
-		var output string
+		var status *deploy.StatusOutput
 		var err error
-		formatter := deploy.StatusTextFormatter
-		if commonFlags.OutputJson {
-			formatter = deploy.StatusJSONFormatter
-		}
 
 		if statusOpts.unsafe {
 			slog.Debug("acquiring deployment status without lock")
-			output, err = deploy.StatusUnsafe(cmd.Context(), deployment, formatter)
+			status, err = deploy.StatusUnsafe(cmd.Context(), deployment)
 		} else {
 			slog.Debug("acquiring deployment status with lock")
-			output, err = deploy.Status(cmd.Context(), deployment, formatter)
+			status, err = deploy.Status(cmd.Context(), deployment)
 		}
 		if err != nil {
 			return err
 		}
 
-		safePrint(output)
+		var output string
+		if commonFlags.OutputJson {
+			output, err = formatStatusJSON(*status)
+			if err != nil {
+				return err
+			}
+		} else {
+			output = formatStatusText(*status)
+		}
+		addTerminalOutput(output)
 
 		return nil
 	},
+}
+
+func formatStatusJSON(status deploy.StatusOutput) (string, error) {
+	data, err := json.MarshalIndent(status, "", "  ")
+	if err != nil {
+		return "", err
+	}
+
+	return string(data), nil
+}
+
+func formatStatusText(status deploy.StatusOutput) string {
+	var builder strings.Builder
+	_, _ = fmt.Fprintf(&builder, "Deployment directory: %s\n", status.DeploymentDir)
+	_, _ = fmt.Fprintf(&builder, "Status: %s\n", status.Status)
+	if status.Message != "" {
+		_, _ = fmt.Fprintf(&builder, "Message: %s\n", status.Message)
+	}
+
+	return strings.TrimRight(builder.String(), "\n")
 }
 
 func registerStatusFlags() {

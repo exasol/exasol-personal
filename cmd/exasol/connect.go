@@ -50,6 +50,8 @@ var connectCmd = &cobra.Command{
 		}
 
 		connectOpts.OutputFormat = selectedConnectOutputFormat(cmd)
+		connectOpts.Stdout = cmd.OutOrStdout()
+		connectOpts.Stderr = cmd.ErrOrStderr()
 
 		return deploy.Connect(cmd.Context(), &connectOpts, commonFlags.Deployment())
 	},

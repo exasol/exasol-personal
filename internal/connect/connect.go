@@ -75,6 +75,12 @@ type Opts struct {
 	// MaxRows caps the number of rows displayed per query. A negative value
 	// means "unset" (use the per-mode default); 0 means unlimited.
 	MaxRows int
+	// Stdout receives successful query output. The command layer owns the
+	// concrete terminal stream.
+	Stdout io.Writer
+	// Stderr receives interactive notices and truncation messages. The command
+	// layer owns the concrete terminal stream.
+	Stderr io.Writer
 }
 
 // MaxRowsUnset is the sentinel for a MaxRows that was not set on the command
@@ -161,6 +167,7 @@ func Connect(
 	connectionInfo *config.ConnectionInfo,
 ) error {
 	slog.Debug("running connect")
+	writers := connectWriters(opts)
 
 	// Resolve any non-interactive SQL source up front so that an unreadable
 	// --file fails fast without opening a database connection.
@@ -174,7 +181,7 @@ func Connect(
 	interactiveShell := !nonInteractive && util.IsInteractiveStdin()
 	databaseOptFns := []exasol.OptFn{}
 	if interactiveShell {
-		databaseOptFns = append(databaseOptFns, exasol.WithVersionOutput(os.Stderr))
+		databaseOptFns = append(databaseOptFns, exasol.WithVersionOutput(writers.stderr))
 	}
 
 	database, err := NewExasolConnection(
@@ -197,7 +204,6 @@ func Connect(
 
 	defer database.Close()
 
-	output := os.Stdout
 	printer := printResultTable
 	switch opts.OutputFormat {
 	case OutputFormatTable:
@@ -225,7 +231,8 @@ func Connect(
 			ctx,
 			nonInteractiveSQL,
 			database,
-			output,
+			writers.stdout,
+			writers.stderr,
 			opts.JSONFormat,
 			maxRows,
 		)
@@ -242,12 +249,12 @@ func Connect(
 			return err
 		}
 
-		if err := printer(output, queryResult); err != nil {
+		if err := printer(writers.stdout, queryResult); err != nil {
 			return err
 		}
 
 		if queryResult.Truncated() {
-			return printTruncationFooter(os.Stderr, len(queryResult.Rows()))
+			return printTruncationFooter(writers.stderr, len(queryResult.Rows()))
 		}
 
 		return nil
@@ -258,7 +265,7 @@ func Connect(
 	}
 
 	if interactiveShell {
-		if err := printExitHint(os.Stderr); err != nil {
+		if err := printExitHint(writers.stderr); err != nil {
 			return err
 		}
 	}
@@ -266,6 +273,27 @@ func Connect(
 	return RunShellWithOpts(processInput, ShellOpts{
 		ExecuteOnSemicolon: opts.ExecuteOnSemicolon,
 	})
+}
+
+type connectOutputWriters struct {
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func connectWriters(opts *Opts) connectOutputWriters {
+	stdout := opts.Stdout
+	if stdout == nil {
+		stdout = io.Discard
+	}
+	stderr := opts.Stderr
+	if stderr == nil {
+		stderr = io.Discard
+	}
+
+	return connectOutputWriters{
+		stdout: stdout,
+		stderr: stderr,
+	}
 }
 
 // resolveNonInteractiveSQL returns the SQL to run non-interactively, derived

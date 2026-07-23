@@ -58,10 +58,16 @@ func TestCacheListCommandInitializesConfig(t *testing.T) {
 
 	cmd := *cacheListCmd
 	var buf bytes.Buffer
+	var stderr bytes.Buffer
 	cmd.SetOut(&buf)
+	resetTerminalMessages()
 
 	if err := cmd.RunE(&cmd, nil); err != nil {
 		t.Fatalf("expected cache list to succeed, got %v", err)
+	}
+	writeTerminalMessages(&buf, &stderr)
+	if stderr.String() != "" {
+		t.Fatalf("expected no stderr output, got %q", stderr.String())
 	}
 
 	expectedConfig := filepath.Join(config.LauncherDirPath(home), "runtime-artifacts.yaml")
