@@ -472,7 +472,8 @@ def test_info_reports_uninitialized_resolved_default_dir(
         check=True,
     )
 
-    # Then info reports the resolved default directory and guides the user
-    assert "No Exasol Personal deployment exists" in result.stderr
+    # Then info reports the resolved default directory on stdout and guides the user
+    # on stderr; next-step guidance is shown for text output (interactive or not).
     assert str(default_dir) in result.stdout
+    assert "No Exasol Personal deployment exists" in result.stderr
     assert "exasol install <infra preset>" in result.stderr

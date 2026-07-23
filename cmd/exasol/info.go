@@ -75,11 +75,11 @@ var deploymentInfoCmd = &cobra.Command{
 		if err := addRenderedDeploymentInfoText(report); err != nil {
 			return err
 		}
-		notice, err := formatDeploymentInfoNotice(report)
+		guidance, err := formatDeploymentInfoNotice(report)
 		if err != nil {
 			return err
 		}
-		addTerminalNotice(notice)
+		addTerminalCallToAction(guidance)
 
 		return nil
 	},

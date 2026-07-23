@@ -65,7 +65,7 @@ func TestCacheListCommandInitializesConfig(t *testing.T) {
 	if err := cmd.RunE(&cmd, nil); err != nil {
 		t.Fatalf("expected cache list to succeed, got %v", err)
 	}
-	writeTerminalMessages(&buf, &stderr)
+	writeTerminalMessages(terminalConfig{stdout: &buf, stderr: &stderr, showCallsToAction: true})
 	if stderr.String() != "" {
 		t.Fatalf("expected no stderr output, got %q", stderr.String())
 	}
@@ -87,6 +87,32 @@ func TestCacheListCommandInitializesConfig(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "No cached runtime artifacts.") {
 		t.Fatalf("expected empty-cache message, got %q", buf.String())
+	}
+}
+
+//nolint:paralleltest // mutates shared terminal message queues and global env
+func TestCacheUnlockCommandReportsConfirmationOnStderr(t *testing.T) {
+	home := t.TempDir()
+	cacheHome := t.TempDir()
+	setCacheCommandTestEnv(t, home, cacheHome)
+
+	cmd := *cacheUnlockCmd
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	resetTerminalMessages()
+
+	if err := cmd.RunE(&cmd, nil); err != nil {
+		t.Fatalf("expected cache unlock to succeed, got %v", err)
+	}
+	writeTerminalMessages(terminalConfig{stdout: &stdout, stderr: &stderr, showCallsToAction: true})
+
+	// The unlock confirmation is an operational notice: it belongs on stderr and
+	// must not pollute stdout, which stays reserved for primary/JSON output.
+	if strings.Contains(stdout.String(), "Runtime artifact cache lock cleared.") {
+		t.Fatalf("confirmation must not appear on stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Runtime artifact cache lock cleared.") {
+		t.Fatalf("expected confirmation on stderr, got %q", stderr.String())
 	}
 }
 

@@ -35,7 +35,7 @@ func TestRenderSLCListTextQueuesPrimaryOutput(t *testing.T) {
 
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
-	writeTerminalMessages(&stdout, &stderr)
+	writeTerminalMessages(terminalConfig{stdout: &stdout, stderr: &stderr, showCallsToAction: true})
 
 	if strings.TrimSpace(stdout.String()) !=
 		"No script language containers are available for this platform." {
@@ -84,7 +84,7 @@ func TestRenderSLCCommandJSONQueuesParseablePrimaryOutput(t *testing.T) {
 
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
-	writeTerminalMessages(&stdout, &stderr)
+	writeTerminalMessages(terminalConfig{stdout: &stdout, stderr: &stderr, showCallsToAction: true})
 
 	if stderr.String() != "" {
 		t.Fatalf("unexpected stderr: %q", stderr.String())

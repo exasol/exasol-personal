@@ -155,15 +155,15 @@ func runInitForInitializedDeployment(
 		return err
 	}
 	if changed {
-		addTerminalNotice(formatConfigurationChangedNotice(values))
+		addConfigurationChangedOutput(values)
 
 		return nil
 	}
 	addTerminalNotice(
 		"deployment directory is already initialized with the requested presets; " +
-			"configuration was not changed. Run `exasol config set` to " +
-			"update configuration.",
+			"configuration was not changed.",
 	)
+	addTerminalCallToAction("Run `exasol config set` to update configuration.")
 
 	return nil
 }
