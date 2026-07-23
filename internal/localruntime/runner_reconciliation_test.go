@@ -15,6 +15,14 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 )
 
+// Tests in this package are intentionally serial (no t.Parallel): they write
+// local-runner executables and fork/exec them, which in parallel intermittently
+// fails with "text file busy" (ETXTBSY) when a concurrent open-for-write
+// descriptor is inherited by another goroutine's fork/exec. The reconcile tests
+// also share the process-global EXASOL_LOCAL_FORCE_RUNNER_RECONCILIATION env var
+// (set via t.Setenv). Revisit if runner write/exec and the env override become
+// isolated per test.
+
 func newTestRuntimeForReconciliation(t *testing.T) *Runtime {
 	t.Helper()
 
@@ -62,9 +70,8 @@ func writeRunnerScript(t *testing.T, version string) string {
 	return path
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestReconcileRunnerVersion_InitializesMissingMarker(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	testRuntime := newTestRuntimeForReconciliation(t)
 	runnerPath := writeRunnerScript(t, "1.2.3")
@@ -78,9 +85,8 @@ func TestReconcileRunnerVersion_InitializesMissingMarker(t *testing.T) {
 	assertMarkerVersion(t, testRuntime, "1.2.3")
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestReconcileRunnerVersion_ReplacesInvalidMarker(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	testRuntime := newTestRuntimeForReconciliation(t)
 	invalidMarker := []byte("not json")
@@ -99,9 +105,8 @@ func TestReconcileRunnerVersion_ReplacesInvalidMarker(t *testing.T) {
 	assertMarkerVersion(t, testRuntime, "1.2.3")
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestReconcileRunnerVersion_UpdatesOnCompatibleMinorBump(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	testRuntime := newTestRuntimeForReconciliation(t)
 	seedVersionMarker(t, testRuntime, "1.1.4")
@@ -116,9 +121,8 @@ func TestReconcileRunnerVersion_UpdatesOnCompatibleMinorBump(t *testing.T) {
 	assertMarkerVersion(t, testRuntime, "1.2.0")
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestReconcileRunnerVersion_UpdatesOnReleaseCandidateBump(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	testRuntime := newTestRuntimeForReconciliation(t)
 	seedVersionMarker(t, testRuntime, "1.2.3-rc1")
@@ -137,9 +141,9 @@ func TestReconcileRunnerVersion_UpdatesOnReleaseCandidateBump(t *testing.T) {
 // older-than-recorded resolved runner is accepted (with a warning) and the
 // marker updated to match, rather than refused: there is no older installed
 // runner to fall back to instead.
+//
+//nolint:paralleltest // serial package; see note at top of file
 func TestReconcileRunnerVersion_ProceedsAndUpdatesOnDowngrade(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	testRuntime := newTestRuntimeForReconciliation(t)
 	seedVersionMarker(t, testRuntime, "1.3.0")
@@ -154,9 +158,8 @@ func TestReconcileRunnerVersion_ProceedsAndUpdatesOnDowngrade(t *testing.T) {
 	assertMarkerVersion(t, testRuntime, "1.2.9")
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestReconcileRunnerVersion_KeepsIdenticalVersion(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	testRuntime := newTestRuntimeForReconciliation(t)
 	seedVersionMarker(t, testRuntime, "1.2.3")
@@ -175,9 +178,9 @@ func TestReconcileRunnerVersion_KeepsIdenticalVersion(t *testing.T) {
 // same policy for a major-version mismatch: proceed with the resolved
 // runner and update the marker, since there is no older installed runner to
 // fall back to instead.
+//
+//nolint:paralleltest // serial package; see note at top of file
 func TestReconcileRunnerVersion_ProceedsAndUpdatesOnMajorMismatch(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	testRuntime := newTestRuntimeForReconciliation(t)
 	seedVersionMarker(t, testRuntime, "1.9.0")
@@ -192,8 +195,8 @@ func TestReconcileRunnerVersion_ProceedsAndUpdatesOnMajorMismatch(t *testing.T) 
 	assertMarkerVersion(t, testRuntime, "2.0.0")
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestReconcileRunnerVersion_RejectsInvalidResolvedRunnerVersion(t *testing.T) {
-	t.Parallel()
 	requirePOSIXRunnerTest(t)
 
 	// Given

@@ -26,6 +26,14 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// Tests in this package are intentionally serial (no t.Parallel): they write
+// local-runner executables and fork/exec them, which in parallel intermittently
+// fails with "text file busy" (ETXTBSY) when a concurrent open-for-write
+// descriptor is inherited by another goroutine's fork/exec. The reconcile tests
+// also share the process-global EXASOL_LOCAL_FORCE_RUNNER_RECONCILIATION env var
+// (set via t.Setenv). Revisit if runner write/exec and the env override become
+// isolated per test.
+
 const windowsGOOS = "windows"
 
 // runnerZipEntryName matches resources.yaml's resource_path for
@@ -84,9 +92,8 @@ func writeRunnerZip(t *testing.T, scriptContent []byte) string {
 	return zipPath
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestReadRunnerState_ParsesForwardedPorts(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	statePath := filepath.Join(t.TempDir(), "vm-state.json")
 	writeRunnerStateFile(t, statePath, map[string]any{
@@ -110,9 +117,8 @@ func TestReadRunnerState_ParsesForwardedPorts(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestReadRunnerState_AcceptsMissingUIPort(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	statePath := filepath.Join(t.TempDir(), "vm-state.json")
 	writeRunnerStateFile(t, statePath, map[string]any{
@@ -136,9 +142,8 @@ func TestReadRunnerState_AcceptsMissingUIPort(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestReadRunnerState_RejectsInvalidPorts(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	statePath := filepath.Join(t.TempDir(), "vm-state.json")
 	writeRunnerStateFile(t, statePath, map[string]any{
@@ -158,9 +163,8 @@ func TestReadRunnerState_RejectsInvalidPorts(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestDestroy_RemovesLocalRuntime(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	paths := NewPaths(deployment)
@@ -209,9 +213,8 @@ func TestResolveRunnerPath_OverrideEnvBypassesManager(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestPrepare_ResolvesRunnerAndRunsInitWithSSHKey(t *testing.T) {
-	t.Parallel()
-
 	if runtime.GOOS == windowsGOOS {
 		t.Skip("fake local runner script is POSIX-only")
 	}
@@ -263,9 +266,8 @@ esac
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestPrepare_SkipsInitWhenVMAlreadyInitialized(t *testing.T) {
-	t.Parallel()
-
 	if runtime.GOOS == windowsGOOS {
 		t.Skip("fake local runner script is POSIX-only")
 	}
@@ -298,9 +300,8 @@ esac
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestEnsureSSHKey_PreservesExistingPrivateKey(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	localRuntime := New(deployment, nil)
@@ -330,9 +331,8 @@ func TestEnsureSSHKey_PreservesExistingPrivateKey(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestEnsureSSHKey_GeneratesEd25519Key(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	localRuntime := New(deployment, nil)
@@ -366,9 +366,8 @@ func TestEnsureSSHKey_GeneratesEd25519Key(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestEnsureSSHKey_ReplacesLegacyPKCS8PrivateKey(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	localRuntime := New(deployment, nil)
@@ -432,9 +431,8 @@ func generatePKCS8PrivateKey(t *testing.T) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: data})
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestStop_InvokesResolvedRunnerStop(t *testing.T) {
-	t.Parallel()
-
 	if runtime.GOOS == windowsGOOS {
 		t.Skip("fake local runner script is POSIX-only")
 	}
@@ -473,9 +471,8 @@ func TestStop_InvokesResolvedRunnerStop(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestRunCommand_InvokesResolvedRunnerWithArgs(t *testing.T) {
-	t.Parallel()
-
 	if runtime.GOOS == windowsGOOS {
 		t.Skip("fake local runner script is POSIX-only")
 	}
@@ -507,9 +504,8 @@ func TestRunCommand_InvokesResolvedRunnerWithArgs(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestDestroy_StopsRunningVMBeforeRemoving(t *testing.T) {
-	t.Parallel()
-
 	if runtime.GOOS == windowsGOOS {
 		t.Skip("fake local runner script is POSIX-only")
 	}
@@ -542,9 +538,8 @@ func TestDestroy_StopsRunningVMBeforeRemoving(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestHealthCheck_ParsesPortStates(t *testing.T) {
-	t.Parallel()
-
 	if runtime.GOOS == windowsGOOS {
 		t.Skip("fake local runner script is POSIX-only")
 	}
@@ -576,9 +571,8 @@ echo '{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}'
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestHealthCheck_ReturnsErrorOnRunnerFailure(t *testing.T) {
-	t.Parallel()
-
 	if runtime.GOOS == windowsGOOS {
 		t.Skip("fake local runner script is POSIX-only")
 	}
@@ -602,9 +596,8 @@ func TestHealthCheck_ReturnsErrorOnRunnerFailure(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestWaitForDaemonExit_IgnoresMissingPIDFile(t *testing.T) {
-	t.Parallel()
-
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	localRuntime := New(deployment, nil)
@@ -620,9 +613,8 @@ func TestWaitForDaemonExit_IgnoresMissingPIDFile(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // serial package; see note at top of file
 func TestWaitForDaemonExit_RejectsStillRunningPID(t *testing.T) {
-	t.Parallel()
-
 	if runtime.GOOS == windowsGOOS {
 		t.Skip("process signal checks are POSIX-only")
 	}
