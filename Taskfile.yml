@@ -261,11 +261,13 @@ tasks:
       - poetry run mypy {{.TESTS_DIR}}
 
   lint-golang:
-    desc: Run golangci-lint linters
+    desc: Run golangci-lint linters and verify go.mod/go.sum are tidy
     deps:
       - local-runner-placeholders
     cmds:
       - go tool golangci-lint run ./...
+      - go mod tidy
+      - git diff --exit-code go.mod go.sum
 
   lint-golang-fix:
     desc: Run golangci-lint linters and apply automatic fixes
