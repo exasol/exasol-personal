@@ -138,7 +138,9 @@ var slcUpdateCmd = &cobra.Command{
 				"No SLC matching %q is installed, so there is nothing to update.",
 				alias,
 			))
-			addTerminalNotice(fmt.Sprintf("Run `exasol slc install %s` to install it.", alias))
+			addTerminalCallToAction(
+				fmt.Sprintf("Run `exasol slc install %s` to install it.", alias),
+			)
 
 			return nil
 		}

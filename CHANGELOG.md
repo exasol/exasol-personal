@@ -26,6 +26,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
+- Established a consistent CLI output contract. Successful primary output stays on stdout (and is the only content on stdout under `--json`), while operational notices, prompts, and next-step guidance go to stderr. Next-step guidance (call-to-action) — such as the available-update hint and `info`'s "Next steps" — is shown on stderr for text output whether or not the session is interactive, so agents and scripts driving the CLI still receive it; it is suppressed under `--json`, where consumers branch on structured state instead of prose.
+
+  As part of this, `exasol config set` and `exasol config reset` now print the effective configuration to stdout (previously stderr), and `exasol cache unlock` reports its confirmation on stderr.
+
 - Improved README guidance to emphasize local deployment as the fastest way to try Exasol Personal.
 
 - Improved local deployment error reporting: when the local database endpoint cannot be reached and every forwarded port is unreachable, connect/start/stop now report a clearer network-wide reachability error instead of a generic failure.

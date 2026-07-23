@@ -211,7 +211,7 @@ func maybeAddVersionUpdateHint(cmd *cobra.Command, deployment config.DeploymentD
 		return
 	}
 
-	addTerminalNotice(fmt.Sprintf(
+	addTerminalCallToAction(fmt.Sprintf(
 		"A new version of Exasol Personal is available: %s. "+
 			"Run `exasol version --latest` for more details.",
 		result.LatestVersion,

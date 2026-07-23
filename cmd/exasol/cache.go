@@ -117,7 +117,7 @@ using the runtime artifact cache.
 		if err := artifactCache.Unlock(); err != nil {
 			return err
 		}
-		addTerminalOutput("Runtime artifact cache lock cleared.")
+		addTerminalNotice("Runtime artifact cache lock cleared.")
 
 		return nil
 	},

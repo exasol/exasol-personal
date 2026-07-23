@@ -148,7 +148,7 @@ func TestVersionCmdQueuesPrimaryOutputForTerminalFlush(t *testing.T) {
 	stderr := bytes.Buffer{}
 
 	// When: queued terminal messages are flushed.
-	writeTerminalMessages(&stdout, &stderr)
+	writeTerminalMessages(terminalConfig{stdout: &stdout, stderr: &stderr, showCallsToAction: true})
 
 	// Then: primary command output goes to stdout and notices do not pollute it.
 	if stdout.String() != "1.4.1\n" {
