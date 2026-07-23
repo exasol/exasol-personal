@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"os"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -70,7 +69,7 @@ var startCmd = &cobra.Command{
 		}
 
 		if commonFlags.OutputJson {
-			return renderLifecycleCompletionJSON(os.Stdout, lifecycleCompletionOutput{
+			return addLifecycleCompletionTerminalOutput(lifecycleCompletionOutput{
 				DeploymentState: deploy.StatusRunning,
 				DatabaseReady:   true,
 			})
@@ -99,7 +98,7 @@ var stopCmd = &cobra.Command{
 		}
 
 		if commonFlags.OutputJson {
-			return renderLifecycleCompletionJSON(os.Stdout, lifecycleCompletionOutput{
+			return addLifecycleCompletionTerminalOutput(lifecycleCompletionOutput{
 				DeploymentState: deploy.StatusStopped,
 				DatabaseReady:   false,
 			})
@@ -107,6 +106,10 @@ var stopCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+func addLifecycleCompletionTerminalOutput(output lifecycleCompletionOutput) error {
+	return addJSONTerminalOutput(output)
 }
 
 func registerStartFlags() {

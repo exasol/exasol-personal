@@ -27,12 +27,7 @@ func confirmYes(input string) bool {
 	return input == "y" || input == "yes"
 }
 
-// Print without linter complaints.
-func safePrint(str string) {
-	fmt.Print(str) // nolint:revive, forbidigo
-}
-
-// askForUserConfirmation asks the user for confirmation via stdout, and uses validators
+// askForUserConfirmation asks the user for confirmation via stderr, and uses validators
 // (Currently only accounting the first one on the variadic) to
 // check if the confirmation is positive. If prompt is an empty string, a default prompt
 // is emitted.
@@ -46,7 +41,7 @@ func askForUserConfirmation(prompt string, validators ...UserConfirmationValidat
 	}
 
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("%s: ", prompt) //nolint
+	_, _ = fmt.Fprintf(os.Stderr, "%s: ", prompt)
 
 	response, err := reader.ReadString('\n')
 	if err != nil {

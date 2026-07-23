@@ -52,7 +52,7 @@ var configGetCmd = &cobra.Command{
 		if commonFlags.OutputJson {
 			return printConfigurationJSON(values)
 		}
-		safePrint(formatConfigurationValues(values))
+		addTerminalOutput(formatConfigurationValues(values))
 
 		return nil
 	},
@@ -125,13 +125,7 @@ func init() {
 }
 
 func printConfigurationJSON(configuration deploy.DeploymentConfiguration) error {
-	data, err := json.MarshalIndent(configurationJSON(configuration), "", "  ")
-	if err != nil {
-		return err
-	}
-	safePrint(string(data) + "\n")
-
-	return nil
+	return addJSONTerminalOutput(configurationJSON(configuration))
 }
 
 func configurationJSON(configuration deploy.DeploymentConfiguration) map[string]any {

@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"os"
 
 	generaltypes "github.com/exasol/exasol-personal/internal/connect/types"
 )
@@ -47,6 +46,7 @@ func runJSONStatements(
 	sql string,
 	database generaltypes.Databaser,
 	output io.Writer,
+	noticeOutput io.Writer,
 	jsonFormat JSONFormat,
 	maxRows int,
 ) error {
@@ -87,7 +87,7 @@ func runJSONStatements(
 		})
 
 		if queryResult.Truncated() {
-			if err := printTruncationFooter(os.Stderr, len(queryResult.Rows())); err != nil {
+			if err := printTruncationFooter(noticeOutput, len(queryResult.Rows())); err != nil {
 				return err
 			}
 		}

@@ -4,8 +4,6 @@
 package main
 
 import (
-	"os"
-
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
@@ -28,7 +26,12 @@ var diagLocalCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		return deploy.DiagnoseLocal(cmd.Context(), commonFlags.Deployment(), os.Stdout)
+		diagnostics, err := deploy.DiagnoseLocal(cmd.Context(), commonFlags.Deployment())
+		if err != nil {
+			return err
+		}
+
+		return addJSONTerminalOutput(diagnostics)
 	},
 }
 

@@ -504,12 +504,6 @@ func SLCStatuses(deployment config.DeploymentDir) ([]SLCStatus, error) {
 		return nil, err
 	}
 	entries, err := catalog.List(runtime.GOARCH)
-	// `slc list` degrades gracefully on architectures the catalog has no SLCs for: it
-	// reports "none available" rather than failing (unlike install/update, which need a
-	// concrete SLC and let this error surface).
-	if errors.Is(err, slc.ErrArchitectureUnsupported) {
-		return []SLCStatus{}, nil
-	}
 	if err != nil {
 		return nil, err
 	}

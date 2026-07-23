@@ -113,7 +113,7 @@ func TestRenderDeploymentInfoJSONOmitsTerminalOnlyGuidance(t *testing.T) {
 	}
 }
 
-func TestRenderDeploymentInfoTextAppendsStateGuidance(t *testing.T) {
+func TestRenderDeploymentInfoTextOmitsStateGuidance(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -130,22 +130,17 @@ func TestRenderDeploymentInfoTextAppendsStateGuidance(t *testing.T) {
 		t.Fatalf("expected deployment info text to render: %v", err)
 	}
 	content := output.String()
-	if !strings.Contains(
-		content,
-		"Exasol Product Documentation:\n"+
-			"  https://docs.exasol.com/\n\n"+
-			"No Exasol Personal deployment exists",
-	) {
-		t.Fatalf("expected documentation and guidance to be separated, got:\n%s", content)
+	if !strings.Contains(content, "Deployment State: not_initialized") {
+		t.Fatalf("expected text output to contain deployment state, got:\n%s", content)
 	}
-	for _, expected := range []string{
-		"Deployment State: not_initialized",
+	for _, guidance := range []string{
+		"Exasol Product Documentation",
 		"No Exasol Personal deployment exists",
 		"exasol install <infra preset>",
 		"exasol presets list",
 	} {
-		if !strings.Contains(content, expected) {
-			t.Fatalf("expected text output to contain %q, got:\n%s", expected, content)
+		if strings.Contains(content, guidance) {
+			t.Fatalf("expected text output to omit guidance %q, got:\n%s", guidance, content)
 		}
 	}
 }
@@ -178,8 +173,6 @@ func TestRenderDeploymentInfoTextIncludesInitializedOverview(t *testing.T) {
 		"Deployment State: initialized",
 		"Infrastructure preset: AWS",
 		"Installation preset: Ubuntu",
-		"Ready for deployment",
-		"exasol deploy",
 	} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("expected text output to contain %q, got:\n%s", expected, content)
@@ -206,9 +199,6 @@ func TestRenderDeploymentInfoTextExplainsActiveOperation(t *testing.T) {
 	content := output.String()
 	for _, expected := range []string{
 		"Deployment State: operation_in_progress",
-		"operation is in progress",
-		"Please wait",
-		"exasol status",
 	} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("expected text output to contain %q, got:\n%s", expected, content)
@@ -216,5 +206,63 @@ func TestRenderDeploymentInfoTextExplainsActiveOperation(t *testing.T) {
 	}
 	if strings.Contains(content, "SQL clients documentation") {
 		t.Fatalf("expected active operation output to omit SQL docs, got:\n%s", content)
+	}
+	if strings.Contains(content, "Please wait") {
+		t.Fatalf("expected active operation guidance to stay out of stdout, got:\n%s", content)
+	}
+}
+
+func TestFormatDeploymentInfoNoticeIncludesStateGuidance(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	report := &deploy.DeploymentInfoReport{
+		DeploymentDir:   "/deployment",
+		DeploymentState: deploy.StatusNotInitialized,
+	}
+
+	// When
+	content, err := formatDeploymentInfoNotice(report)
+	if err != nil {
+		t.Fatalf("expected terminal notice to render: %v", err)
+	}
+
+	// Then
+	for _, expected := range []string{
+		"Exasol Product Documentation",
+		"No Exasol Personal deployment exists",
+		"exasol install <infra preset>",
+		"exasol presets list",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("expected terminal notice to contain %q, got:\n%s", expected, content)
+		}
+	}
+}
+
+func TestFormatDeploymentInfoNoticeExplainsActiveOperation(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	report := &deploy.DeploymentInfoReport{
+		DeploymentDir:   "/deployment",
+		DeploymentState: deploy.StatusOperationInProgress,
+	}
+
+	// When
+	content, err := formatDeploymentInfoNotice(report)
+	if err != nil {
+		t.Fatalf("expected terminal notice to render: %v", err)
+	}
+
+	// Then
+	for _, expected := range []string{
+		"operation is in progress",
+		"Please wait",
+		"exasol status",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("expected terminal notice to contain %q, got:\n%s", expected, content)
+		}
 	}
 }
