@@ -169,7 +169,7 @@ tasks:
       - poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}integration
 
   tests-deployment:
-    desc: Run deployment tests (`e.g. task tests-deployment INFRA=aws TEST=test_standard_deployment.py::test_license_session_limit`)
+    desc: Run all cloud tests (deployment, e2e, chaos). Filter with `-k` via TEST, e.g. `task tests-deployment INFRA=aws TEST=test_stop_and_start`
     deps: [tests-setup]
     dir: '{{.TESTS_DIR}}'
     vars:
@@ -178,7 +178,7 @@ tasks:
       STACKIT_PROJECT_ID: '{{default "" .STACKIT_PROJECT_ID}}'
     cmds:
       - |
-        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{if .STACKIT_PROJECT_ID}}--stackit-project-id={{.STACKIT_PROJECT_ID}}{{end}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment{{if .TEST}}{{.SEP}}{{.TEST}}{{end}}
+        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{if .STACKIT_PROJECT_ID}}--stackit-project-id={{.STACKIT_PROJECT_ID}}{{end}} {{if .TEST}}-k "{{.TEST}}"{{end}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}e2e {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}chaos
 
   tests-deployment-infrastructure:
     desc: Run infrastructure-focused deployment tests
@@ -189,7 +189,7 @@ tasks:
       STACKIT_PROJECT_ID: '{{default "" .STACKIT_PROJECT_ID}}'
     cmds:
       - |
-        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{if .STACKIT_PROJECT_ID}}--stackit-project-id={{.STACKIT_PROJECT_ID}}{{end}} -m "infrastructure_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
+        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{if .STACKIT_PROJECT_ID}}--stackit-project-id={{.STACKIT_PROJECT_ID}}{{end}} -m "infrastructure_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}e2e {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}chaos
 
   tests-deployment-installation:
     desc: Run installation-focused end-to-end tests
@@ -200,14 +200,14 @@ tasks:
       STACKIT_PROJECT_ID: '{{default "" .STACKIT_PROJECT_ID}}'
     cmds:
       - |
-        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{if .STACKIT_PROJECT_ID}}--stackit-project-id={{.STACKIT_PROJECT_ID}}{{end}} -m "installation_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
+        poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{if .STACKIT_PROJECT_ID}}--stackit-project-id={{.STACKIT_PROJECT_ID}}{{end}} -m "installation_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}e2e {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}chaos
 
   tests-deployment-local:
     desc: Run local VM deployment tests (macOS Apple Silicon only)
     deps: [tests-setup]
     dir: '{{.TESTS_DIR}}'
     cmds:
-      - poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra=local -m "local_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
+      - poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra=local -m "local_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}e2e {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}chaos
 
   lint-ruff:
     desc: Run ruff check
