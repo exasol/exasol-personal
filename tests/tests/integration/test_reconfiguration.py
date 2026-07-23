@@ -179,8 +179,11 @@ def test_config_set_updates_same_preset_variables(
         ]
     )
 
-    # Then it succeeds and preserves local infrastructure state
+    # Then it succeeds and preserves local infrastructure state. The effective
+    # configuration is primary output on stdout; the apply guidance is call-to-action
+    # output on stderr, shown for text output (interactive or not).
     assert result.returncode == 0
+    assert "cluster-size = 3" in result.stdout
     assert "run `exasol deploy` to apply these changes" in result.stderr
     assert state_file.read_text() == "partial state"
     assert _get_active_configuration(
@@ -233,8 +236,11 @@ def test_init_updates_same_preset_variables(exasol_path: str, tmp_path: Path) ->
         ]
     )
 
-    # Then it patches only the supplied option and tells the user to deploy
+    # Then it patches only the supplied option. The effective configuration is
+    # primary output on stdout; the apply guidance is call-to-action output on
+    # stderr, shown for text output (interactive or not).
     assert result.returncode == 0
+    assert "cluster-size = 3" in result.stdout
     assert "run `exasol deploy` to apply these changes" in result.stderr
     assert _get_active_configuration(
         exasol_path,

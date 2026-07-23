@@ -77,7 +77,7 @@ func TestStatusOutputUsesQueuedTerminalOutput(t *testing.T) {
 	var stderr bytes.Buffer
 
 	// When
-	writeTerminalMessages(&stdout, &stderr)
+	writeTerminalMessages(&stdout, &stderr, true)
 
 	// Then
 	if stderr.String() != "" {

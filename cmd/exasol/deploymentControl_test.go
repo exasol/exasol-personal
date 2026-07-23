@@ -104,7 +104,7 @@ func TestAddLifecycleCompletionTerminalOutputQueuesJSON(t *testing.T) {
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	writeTerminalMessages(&stdout, &stderr)
+	writeTerminalMessages(&stdout, &stderr, true)
 
 	if stderr.String() != "" {
 		t.Fatalf("unexpected stderr: %q", stderr.String())

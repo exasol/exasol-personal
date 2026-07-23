@@ -105,10 +105,12 @@ def test_info_reports_missing_deployment_without_error(
     # When info is invoked before a deployment exists
     result = run_command([exasol_path, "info", "--deployment-dir", str(deployment_dir)])
 
-    # Then it exits successfully, reports state on stdout, and guides the user on stderr
-    assert "No Exasol Personal deployment exists" in result.stderr
+    # Then it reports state on stdout and guides the user on stderr. Next-step
+    # guidance is call-to-action output shown for text output (interactive or not),
+    # so agents and scripts driving the CLI still receive it.
     assert str(deployment_dir) in result.stdout
-    assert "exasol install <infra preset>" in result.stderr
+    assert "Deployment State: not_initialized" in result.stdout
+    assert "No Exasol Personal deployment exists" in result.stderr
     assert "exasol presets list" in result.stderr
 
 
@@ -155,5 +157,6 @@ def test_info_command_init_deployment(exasol_path: str, tmp_path: Path) -> None:
     # When the info command is being invoked
     result = run_command([exasol_path, "info", "--deployment-dir", str(deployment_dir)])
 
-    # Then it indicates that it's ready for deployment on stderr
+    # Then it reports the initialized state on stdout and guides the user on stderr.
+    assert "Deployment State: initialized" in result.stdout
     assert "Ready for deployment" in result.stderr

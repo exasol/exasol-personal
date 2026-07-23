@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bytes"
 	"reflect"
 	"strings"
 	"testing"
@@ -89,6 +90,49 @@ func TestFormatConfigurationValuesKeepsPresetTypesSeparate(t *testing.T) {
 				"expected formatted configuration to contain %q, got:\n%s", expected, formatted,
 			)
 		}
+	}
+}
+
+//nolint:paralleltest // mutates shared terminal message queues; must run serially
+func TestAddConfigurationChangedOutputSplitsValuesAndGuidance(t *testing.T) {
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+
+	configuration := deploy.DeploymentConfiguration{
+		Infrastructure: deploy.DeploymentConfigurationSection{
+			Options: []deploy.DeploymentConfigValue{{Name: "cluster_size", Value: 3}},
+		},
+	}
+
+	// Given a configuration change is routed to the terminal, and calls to action
+	// are not visible (non-interactive or JSON).
+	addConfigurationChangedOutput(configuration)
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	writeTerminalMessages(&stdout, &stderr, false)
+
+	// Then the effective configuration is primary output on stdout, and the apply
+	// guidance is suppressed.
+	if !strings.Contains(stdout.String(), "cluster-size = 3") {
+		t.Fatalf("expected configuration values on stdout, got: %q", stdout.String())
+	}
+	if strings.Contains(stderr.String(), "exasol deploy") {
+		t.Fatalf("expected apply guidance to be suppressed, got stderr: %q", stderr.String())
+	}
+
+	// And when calls to action are visible, the apply guidance appears on stderr
+	// while stdout still carries only the configuration values.
+	resetTerminalMessages()
+	addConfigurationChangedOutput(configuration)
+	stdout.Reset()
+	stderr.Reset()
+	writeTerminalMessages(&stdout, &stderr, true)
+
+	if strings.Contains(stdout.String(), "exasol deploy") {
+		t.Fatalf("apply guidance must not appear on stdout, got: %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "run `exasol deploy`") {
+		t.Fatalf("expected apply guidance on stderr, got: %q", stderr.String())
 	}
 }
 

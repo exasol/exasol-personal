@@ -77,7 +77,7 @@ var configSetCmd = &cobra.Command{
 			return fmt.Errorf("configuration failed: %w", err)
 		}
 
-		addTerminalNotice(formatConfigurationChangedNotice(values))
+		addConfigurationChangedOutput(values)
 
 		return nil
 	},
@@ -100,7 +100,7 @@ var configResetCmd = &cobra.Command{
 			return fmt.Errorf("configuration reset failed: %w", err)
 		}
 
-		addTerminalNotice(formatConfigurationChangedNotice(values))
+		addConfigurationChangedOutput(values)
 
 		return nil
 	},
@@ -175,9 +175,18 @@ func configurationOptionsJSON(values []deploy.DeploymentConfigValue) map[string]
 	return result
 }
 
-func formatConfigurationChangedNotice(configuration deploy.DeploymentConfiguration) string {
-	return strings.TrimRight(formatConfigurationValues(configuration), "\n") +
-		"\nconfiguration updated locally; run `exasol deploy` to apply these changes"
+// configurationApplyGuidance is call-to-action guidance shown after a
+// configuration change. It nudges the user toward the follow-up command and is
+// only relevant to an interactive user.
+const configurationApplyGuidance = "configuration updated locally; " +
+	"run `exasol deploy` to apply these changes"
+
+// addConfigurationChangedOutput routes a configuration change to the terminal:
+// the effective configuration values are primary output (stdout), and the
+// apply guidance is a call to action (interactive-only stderr).
+func addConfigurationChangedOutput(configuration deploy.DeploymentConfiguration) {
+	addTerminalOutput(formatConfigurationValues(configuration))
+	addTerminalCallToAction(configurationApplyGuidance)
 }
 
 func formatConfigurationValues(configuration deploy.DeploymentConfiguration) string {
