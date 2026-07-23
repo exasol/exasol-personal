@@ -35,9 +35,22 @@ Terminal output is part of the CLI contract, not part of the deployment, configu
 
 The command layer should build text and JSON output from the same returned domain objects. Library packages should accept and return objects, not pre-rendered CLI representations whose only purpose is to be printed. Text output may intentionally be shorter or more human-oriented, but JSON output must be complete enough for automation and agent workflows.
 
-Use stdout only for primary command output. When `--json` is selected, stdout must contain only valid JSON for successful command output so callers can parse it directly without filtering. Human guidance, progress notes, current-directory notices, prompts, and call-to-action messages belong on stderr.
+### The output contract
 
-Expected errors are not successful command output. Unsupported features, invalid platform/backend combinations, validation failures, and other expected failures should be returned through the command error path so they are written to stderr and never mixed into stdout.
+Classify every piece of terminal output as one of three kinds and route it accordingly:
 
-Route queued terminal output through the command helpers: use `addTerminalOutput` for primary stdout output and `addTerminalNotice` for stderr notices. This preserves ordering and keeps JSON stdout parseable when root-level notices are added.
+- **Primary output** — the result the user asked for. Goes to stdout. Under `--json` it is the only content on stdout and must be valid JSON, so callers can parse it without filtering.
+- **Operational notice** — context a user needs to interpret the result, such as which deployment directory was used or that the license was accepted. Goes to stderr, and is shown even when stdout is piped or `--json` is selected. It never appears on stdout.
+- **Call-to-action (CTA)** — decorative next-step guidance that nudges the user toward a follow-up command (for example "run `exasol deploy` to apply", an available-update hint, or a "Next steps" block). Goes to stderr, and is shown only to interactive users.
+
+Use the delete-test to tell a CTA from a notice: if removing the message changes neither the result nor its correctness reporting, it is a CTA.
+
+### Routing rules
+
+- Send primary output to stdout only. Never mix prose, prompts, or guidance into stdout, and especially not into `--json` output.
+- Send notices, prompts, progress, and CTAs to stderr. Placing human-facing messaging on stderr keeps stdout parseable when it is piped, and keeps `--json` stdout clean.
+- Suppress CTAs only when `--json` is selected. CTAs are textual guidance that any reader benefits from — including a non-interactive agent driving the CLI in a workflow — so do not gate them on an interactive terminal. Under `--json`, consumers want structured output and should branch on structured state fields instead of prose, so CTAs are suppressed there. Keep CTAs on stderr rather than stdout: the stderr placement is a structural guarantee that stdout stays pure. (Ephemeral rendered output such as progress indicators, spinners, or color is different: gate that on an interactive terminal, since it corrupts logs and pipes.)
+- Return expected failures — unsupported features, invalid platform/backend combinations, validation failures — through the command error path so they are written to stderr with a non-zero exit status and never mixed into stdout.
+
+Route queued terminal output through the command helpers so ordering is preserved and JSON stdout stays parseable: primary output through the stdout helper, operational notices through the stderr-notice helper, and CTAs through the dedicated call-to-action helper that applies the suppression rules above.
 
