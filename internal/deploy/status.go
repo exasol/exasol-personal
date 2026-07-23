@@ -5,7 +5,6 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -38,43 +37,18 @@ type StatusOutput struct {
 	Error         string `json:"error,omitempty"`
 }
 
-func StatusJSONFormatter(status StatusOutput) (string, error) {
-	data, err := json.MarshalIndent(status, "", "  ")
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
-}
-
-func StatusTextFormatter(status StatusOutput) (string, error) {
-	output := ""
-	output += fmt.Sprintf("Deployment directory: %s\n", status.DeploymentDir)
-	output += fmt.Sprintf("Status: %s\n", status.Status)
-
-	if status.Message != "" {
-		output += fmt.Sprintf("Message: %s\n", status.Message)
-	}
-
-	return output, nil
-}
-
-type StatusFormatter func(status StatusOutput) (string, error)
-
 func Status(
 	ctx context.Context,
 	deployment config.DeploymentDir,
-	formatter StatusFormatter,
-) (string, error) {
-	return statusWithFormatter(ctx, deployment, GetStatusWithLock, formatter)
+) (*StatusOutput, error) {
+	return statusWithGetter(ctx, deployment, GetStatusWithLock)
 }
 
 func StatusUnsafe(
 	ctx context.Context,
 	deployment config.DeploymentDir,
-	formatter StatusFormatter,
-) (string, error) {
-	return statusWithFormatter(ctx, deployment, GetStatus, formatter)
+) (*StatusOutput, error) {
+	return statusWithGetter(ctx, deployment, GetStatus)
 }
 
 type statusGetter func(ctx context.Context,
@@ -82,21 +56,20 @@ type statusGetter func(ctx context.Context,
 	checkConnection bool,
 ) (*StatusOutput, error)
 
-func statusWithFormatter(
+func statusWithGetter(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	getStatus statusGetter,
-	format StatusFormatter,
-) (string, error) {
+) (*StatusOutput, error) {
 	slog.Debug("reading deployment status")
 
 	status, err := getStatus(ctx, deployment, true)
 	if err != nil || status == nil {
-		return "", err
+		return nil, err
 	}
 	status.DeploymentDir = deployment.Root()
 
-	return format(*status)
+	return status, nil
 }
 
 func GetStatusWithLock(

@@ -27,7 +27,9 @@ or clearing cache locks.
 			return err
 		}
 
-		return renderCacheDiagnosticsText(cmd.OutOrStdout(), artifactCache.Diagnose())
+		return addRenderedTerminalOutput(func(writer io.Writer) error {
+			return renderCacheDiagnosticsText(writer, artifactCache.Diagnose())
+		})
 	},
 }
 

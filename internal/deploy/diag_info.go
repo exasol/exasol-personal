@@ -5,30 +5,21 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
-	"io"
 
 	"github.com/exasol/exasol-personal/internal/config"
 )
 
-func DumpDeploymentInfo(
+func GetDiagnosticDeploymentInfo(
 	ctx context.Context,
 	deployment config.DeploymentDir,
-	writer io.Writer,
-) error {
-	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
-		return dumpDeploymentInfoUnsafe(deployment, writer)
+) (*config.DeploymentInfo, error) {
+	var details *config.DeploymentInfo
+	err := withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
+		var readErr error
+		details, readErr = config.ReadDeploymentInfo(deployment)
+
+		return readErr
 	})
-}
 
-func dumpDeploymentInfoUnsafe(deployment config.DeploymentDir, writer io.Writer) error {
-	details, err := config.ReadDeploymentInfo(deployment)
-	if err != nil {
-		return err
-	}
-
-	encoder := json.NewEncoder(writer)
-	encoder.SetIndent("", "  ")
-
-	return encoder.Encode(details)
+	return details, err
 }

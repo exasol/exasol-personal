@@ -86,3 +86,34 @@ func TestLifecycleCommandsRegisterJSONFlag(t *testing.T) {
 		}
 	}
 }
+
+//nolint:paralleltest // mutates shared terminal message queues
+func TestAddLifecycleCompletionTerminalOutputQueuesJSON(t *testing.T) {
+	// Given
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+
+	// When
+	err := addLifecycleCompletionTerminalOutput(lifecycleCompletionOutput{
+		DeploymentState: deploy.StatusRunning,
+		DatabaseReady:   true,
+	})
+	// Then
+	if err != nil {
+		t.Fatalf("expected lifecycle completion output to queue: %v", err)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	writeTerminalMessages(&stdout, &stderr)
+
+	if stderr.String() != "" {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+	var decoded lifecycleCompletionOutput
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatalf("expected queued stdout to contain valid JSON, got %q: %v", stdout.String(), err)
+	}
+	if decoded.DeploymentState != deploy.StatusRunning || !decoded.DatabaseReady {
+		t.Fatalf("unexpected lifecycle output: %+v", decoded)
+	}
+}

@@ -4,14 +4,13 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	_ "embed" // required for the go:embed directive below
 	"encoding/json"
 	"io"
-	"os"
+	"strings"
 	"text/template"
 
-	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
@@ -30,35 +29,16 @@ Example usage:
 //go:embed info_text.tmpl
 var deploymentInfoTextTemplateSource string
 
+//go:embed info_notice.tmpl
+var deploymentInfoNoticeTemplateSource string
+
 var deploymentInfoTextTemplate = template.Must(
 	template.New("deployment-info-text").Parse(deploymentInfoTextTemplateSource),
 )
 
-func fetchDeploymentInfoJSON(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	writer io.Writer,
-) error {
-	report, err := deploy.GetDeploymentInfoReport(ctx, deployment)
-	if err != nil {
-		return err
-	}
-
-	return renderDeploymentInfoJSON(writer, report)
-}
-
-func fetchDeploymentInfoText(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	writer io.Writer,
-) error {
-	report, err := deploy.GetDeploymentInfoReport(ctx, deployment)
-	if err != nil {
-		return err
-	}
-
-	return renderDeploymentInfoText(writer, report)
-}
+var deploymentInfoNoticeTemplate = template.Must(
+	template.New("deployment-info-notice").Parse(deploymentInfoNoticeTemplateSource),
+)
 
 func renderDeploymentInfoJSON(
 	writer io.Writer,
@@ -84,14 +64,46 @@ var deploymentInfoCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		ctx := cmd.Context()
-		deployment := commonFlags.Deployment()
+		report, err := deploy.GetDeploymentInfoReport(cmd.Context(), commonFlags.Deployment())
+		if err != nil {
+			return err
+		}
 		if commonFlags.OutputJson {
-			return fetchDeploymentInfoJSON(ctx, deployment, os.Stdout)
+			return addRenderedDeploymentInfoJSON(report)
 		}
 
-		return fetchDeploymentInfoText(ctx, deployment, os.Stdout)
+		if err := addRenderedDeploymentInfoText(report); err != nil {
+			return err
+		}
+		notice, err := formatDeploymentInfoNotice(report)
+		if err != nil {
+			return err
+		}
+		addTerminalNotice(notice)
+
+		return nil
 	},
+}
+
+func addRenderedDeploymentInfoJSON(report *deploy.DeploymentInfoReport) error {
+	return addRenderedTerminalOutput(func(writer io.Writer) error {
+		return renderDeploymentInfoJSON(writer, report)
+	})
+}
+
+func addRenderedDeploymentInfoText(report *deploy.DeploymentInfoReport) error {
+	return addRenderedTerminalOutput(func(writer io.Writer) error {
+		return renderDeploymentInfoText(writer, report)
+	})
+}
+
+func formatDeploymentInfoNotice(report *deploy.DeploymentInfoReport) (string, error) {
+	var output bytes.Buffer
+	if err := deploymentInfoNoticeTemplate.Execute(&output, report); err != nil {
+		return "", err
+	}
+
+	return strings.TrimRight(output.String(), "\n"), nil
 }
 
 // nolint: gochecknoinits

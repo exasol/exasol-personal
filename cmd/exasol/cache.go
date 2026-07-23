@@ -55,10 +55,12 @@ var cacheListCmd = &cobra.Command{
 			return err
 		}
 		if commonFlags.OutputJson {
-			return renderCacheListJSON(cmd.OutOrStdout(), entries)
+			return addJSONTerminalOutput(entries)
 		}
 
-		return renderCacheListText(cmd.OutOrStdout(), artifactCache.Root(), entries)
+		return addRenderedTerminalOutput(func(writer io.Writer) error {
+			return renderCacheListText(writer, artifactCache.Root(), entries)
+		})
 	},
 }
 
@@ -91,7 +93,9 @@ Use --dry-run to preview a cleanup without removing files.
 			return err
 		}
 
-		return renderCacheCleanText(cmd.OutOrStdout(), summary)
+		return addRenderedTerminalOutput(func(writer io.Writer) error {
+			return renderCacheCleanText(writer, summary)
+		})
 	},
 }
 
@@ -113,9 +117,9 @@ using the runtime artifact cache.
 		if err := artifactCache.Unlock(); err != nil {
 			return err
 		}
-		_, err = fmt.Fprintln(cmd.OutOrStdout(), "Runtime artifact cache lock cleared.")
+		addTerminalOutput("Runtime artifact cache lock cleared.")
 
-		return err
+		return nil
 	},
 }
 

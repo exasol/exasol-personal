@@ -105,11 +105,11 @@ def test_info_reports_missing_deployment_without_error(
     # When info is invoked before a deployment exists
     result = run_command([exasol_path, "info", "--deployment-dir", str(deployment_dir)])
 
-    # Then it exits successfully and guides the user toward creating a deployment
-    assert "No Exasol Personal deployment exists" in result.stdout
+    # Then it exits successfully, reports state on stdout, and guides the user on stderr
+    assert "No Exasol Personal deployment exists" in result.stderr
     assert str(deployment_dir) in result.stdout
-    assert "exasol install <infra preset>" in result.stdout
-    assert "exasol presets list" in result.stdout
+    assert "exasol install <infra preset>" in result.stderr
+    assert "exasol presets list" in result.stderr
 
 
 def test_info_json_reports_missing_deployment_without_error(
@@ -155,5 +155,5 @@ def test_info_command_init_deployment(exasol_path: str, tmp_path: Path) -> None:
     # When the info command is being invoked
     result = run_command([exasol_path, "info", "--deployment-dir", str(deployment_dir)])
 
-    # Then it indicates that it's ready for deployment
-    assert "Ready for deployment" in result.stdout
+    # Then it indicates that it's ready for deployment on stderr
+    assert "Ready for deployment" in result.stderr

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -418,7 +419,15 @@ func TestRunJSONStatements(t *testing.T) {
 			}},
 		}
 
-		err := runJSONStatements(t.Context(), "SELECT 1", database, &buf, JSONFormatCompact, 0)
+		err := runJSONStatements(
+			t.Context(),
+			"SELECT 1",
+			database,
+			&buf,
+			io.Discard,
+			JSONFormatCompact,
+			0,
+		)
 
 		require.NoError(t, err)
 		require.JSONEq(t, `{
@@ -465,6 +474,7 @@ func TestRunJSONStatements(t *testing.T) {
 			"OPEN SCHEMA foo; SELECT 1 WHERE FALSE",
 			database,
 			&buf,
+			io.Discard,
 			JSONFormatCompact,
 			0,
 		)
@@ -520,6 +530,7 @@ func TestRunJSONStatements(t *testing.T) {
 			"SELECT 1; INVALID SQL",
 			database,
 			&buf,
+			io.Discard,
 			JSONFormatCompact,
 			0,
 		)

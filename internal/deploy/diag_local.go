@@ -5,9 +5,7 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"runtime"
 
@@ -31,15 +29,18 @@ type LocalDiagnostics struct {
 	Message           string            `json:"message,omitempty"`
 }
 
-func DiagnoseLocal(ctx context.Context, deployment config.DeploymentDir, writer io.Writer) error {
-	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
-		diagnostics := diagnoseLocalUnsafe(ctx, deployment)
+func DiagnoseLocal(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+) (*LocalDiagnostics, error) {
+	var diagnostics *LocalDiagnostics
+	err := withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
+		diagnostics = diagnoseLocalUnsafe(ctx, deployment)
 
-		encoder := json.NewEncoder(writer)
-		encoder.SetIndent("", "  ")
-
-		return encoder.Encode(diagnostics)
+		return nil
 	})
+
+	return diagnostics, err
 }
 
 // diagnoseLocalUnsafe never fails on its own: each check populates whatever

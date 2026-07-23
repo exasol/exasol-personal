@@ -4,7 +4,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -68,10 +67,12 @@ var deploymentsListCmd = &cobra.Command{
 			return err
 		}
 		if commonFlags.OutputJson {
-			return renderDeploymentsListJSON(cmd.OutOrStdout(), entries)
+			return addJSONTerminalOutput(entries)
 		}
 
-		return renderDeploymentsListText(cmd.OutOrStdout(), entries)
+		return addRenderedTerminalOutput(func(writer io.Writer) error {
+			return renderDeploymentsListText(writer, entries)
+		})
 	},
 }
 
@@ -164,13 +165,6 @@ func activeDeploymentDirPath() (string, error) {
 	}
 
 	return deployment.Root(), nil
-}
-
-func renderDeploymentsListJSON(writer io.Writer, entries []deploymentListEntry) error {
-	encoder := json.NewEncoder(writer)
-	encoder.SetIndent("", "  ")
-
-	return encoder.Encode(entries)
 }
 
 func renderDeploymentsListText(writer io.Writer, entries []deploymentListEntry) error {
