@@ -21,12 +21,11 @@ All CI jobs declare explicit minimal permissions.
 ### Dependabot Auto-Merge (`dependabot-auto-merge.yml`)
 
 Runs for Dependabot pull requests and enables auto-merge for Go and Python patch and minor version updates after required branch protection checks pass.
-Eligible pull requests wait 7 days after PR creation before the workflow approves them and enables auto-merge.
-Security update pull requests are still opened immediately because Dependabot cooldown does not delay security updates, but they use the same 7-day merge delay unless maintainers merge them manually.
-Security updates outside the normal Go and Python patch/minor policy require the optional `DEPENDABOT_ALERTS_TOKEN` secret so the workflow can identify the linked Dependabot alert during pull request-triggered runs.
-GitHub Actions updates and major version updates that are not identified as security updates remain manual review items.
+Eligibility is derived from the pull request's branch name: Go and Python updates that land on their ecosystem's grouped update branch (see `groups` in [`dependabot.yml`](../.github/dependabot.yml)) are routine and are approved immediately, since Dependabot cooldown already delayed their creation.
+Any Go or Python Dependabot branch that falls outside its group is treated as a security update — Dependabot never assigns security updates to a group — and waits 7 days after PR creation before the workflow approves it and enables auto-merge, since Dependabot cooldown does not delay security updates.
+GitHub Actions updates remain manual review items regardless of grouping.
 Repository auto-merge must be enabled for this workflow to queue eligible pull requests.
-The workflow uses `pull_request_target` only for trusted Dependabot metadata and GitHub pull request operations; it does not check out or execute pull request code.
+The workflow uses `pull_request_target` only for pull request metadata (branch name, creation time, review status) and GitHub pull request operations; it does not check out or execute pull request code, and does not depend on Dependabot's commit-message metadata.
 Scheduled rechecks run every 6 hours to pick up eligible open Dependabot PRs after the merge delay has elapsed.
 
 Dependabot version updates use built-in cooldown periods before PR creation:
@@ -35,7 +34,7 @@ Dependabot version updates use built-in cooldown periods before PR creation:
 - Go and Python patch updates wait 2 days.
 - Go and Python minor updates wait 7 days.
 
-The merge delay is separate from Dependabot cooldown: cooldown delays routine PR creation, while the workflow delay defers approval and auto-merge after the PR exists.
+The merge delay is separate from Dependabot cooldown: cooldown delays routine PR creation, while the workflow delay defers approval and auto-merge for ungrouped (security) PRs after they exist.
 Auto-merge does not itself rebase Dependabot PRs; branch protection and Dependabot's own update behavior determine whether stale branches are refreshed before merging.
 
 ### Release Pipeline (`release.yml`)

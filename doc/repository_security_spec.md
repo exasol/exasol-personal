@@ -20,7 +20,7 @@ General guidance is in [CI Security Best Practices](ci_security_best_practices.m
 - PR jobs are non-privileged and must not use secrets or OIDC cloud credentials.
 - PR jobs use explicit minimal permissions (`contents: read`).
 - `pull_request_target` is not used for contributor code execution.
-- [`dependabot-auto-merge.yml`](../.github/workflows/dependabot-auto-merge.yml) may use `pull_request_target` only for Dependabot-authored pull requests, only without checking out or executing pull request code, and only to inspect Dependabot metadata, approve eligible pull requests, and enable auto-merge.
+- [`dependabot-auto-merge.yml`](../.github/workflows/dependabot-auto-merge.yml) may use `pull_request_target` only for Dependabot-authored pull requests, only without checking out or executing pull request code, and only to inspect pull request metadata (branch name, creation time, review status), approve eligible pull requests, and enable auto-merge.
 
 ### Trusted Privileged Lane
 
@@ -39,7 +39,7 @@ General guidance is in [CI Security Best Practices](ci_security_best_practices.m
 - Mutable installer patterns in privileged paths are not allowed.
 - GitHub Actions dependencies are maintained through Dependabot.
 - Dependabot version updates use built-in cooldown before pull request creation so routine updates have an ecosystem observation period; Dependabot security updates are not delayed by cooldown.
-- Dependabot auto-merge is limited to eligible Go and Python patch/minor updates plus identified security updates after a 7-day merge delay and required branch protection checks pass. GitHub Actions updates and non-security major updates require manual review.
+- Dependabot auto-merge approves and enables auto-merge immediately for Go and Python patch/minor updates once they reach their ecosystem's grouped update branch (cooldown already delayed their creation). Any Go/Python update outside that group is treated as a security update and waits an additional 7-day merge delay, since Dependabot cooldown does not delay security updates; required branch protection checks still gate the actual merge. GitHub Actions updates always require manual review.
 - Repository auto-merge may be enabled to let the Dependabot workflow queue eligible pull requests behind branch protection checks.
 
 ### Workflow Change Governance
@@ -98,7 +98,6 @@ This ensures workflow and release-control changes cannot merge without maintaine
 
 - Prefer OIDC short-lived credentials over long-lived cloud secrets.
 - Move high-risk credentials behind protected environments only.
-- If `DEPENDABOT_ALERTS_TOKEN` is configured for security-update detection, use a least-privilege GitHub App or personal access token with read access to Dependabot alerts only.
 - Audit and reduce repository/org secret inventory on a regular cadence.
 
 This keeps privileged automation aligned with least-privilege and limits blast radius if workflow code changes.

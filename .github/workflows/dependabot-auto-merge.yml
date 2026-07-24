@@ -20,37 +20,36 @@ jobs:
     env:
       MERGE_DELAY_DAYS: "7"
     steps:
-      - name: Fetch Dependabot metadata
-        id: metadata
-        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
-        with:
-          github-token: ${{ secrets.DEPENDABOT_ALERTS_TOKEN || github.token }}
-          alert-lookup: ${{ secrets.DEPENDABOT_ALERTS_TOKEN != '' }}
-
-      - name: Check auto-merge policy
+      - name: Classify pull request
         id: policy
         env:
-          ALERT_STATE: ${{ steps.metadata.outputs.alert-state }}
-          PACKAGE_ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
-          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          case "${ALERT_STATE}:${PACKAGE_ECOSYSTEM}:${UPDATE_TYPE}" in
-            OPEN:*)
+          # Every version-update group in dependabot.yml uses "patterns: ['*']",
+          # so a routine update always lands on the group's branch. Anything else
+          # on a gomod/pip dependabot branch is an individual (security) update,
+          # since security updates are never assigned to a group.
+          case "${HEAD_REF}" in
+            dependabot/go_modules/*go-weekly-updates-*|dependabot/pip/*python-weekly-updates-*)
               echo "eligible=true" >> "${GITHUB_OUTPUT}"
-              echo "reason=security update" >> "${GITHUB_OUTPUT}"
+              echo "requires-delay=false" >> "${GITHUB_OUTPUT}"
+              echo "reason=routine grouped update" >> "${GITHUB_OUTPUT}"
               ;;
-            *:gomod:version-update:semver-patch|*:gomod:version-update:semver-minor|*:pip:version-update:semver-patch|*:pip:version-update:semver-minor)
+            dependabot/go_modules/*|dependabot/pip/*)
               echo "eligible=true" >> "${GITHUB_OUTPUT}"
-              echo "reason=${PACKAGE_ECOSYSTEM} ${UPDATE_TYPE}" >> "${GITHUB_OUTPUT}"
+              echo "requires-delay=true" >> "${GITHUB_OUTPUT}"
+              echo "reason=ungrouped update, treated as security" >> "${GITHUB_OUTPUT}"
               ;;
             *)
               echo "eligible=false" >> "${GITHUB_OUTPUT}"
-              echo "reason=${PACKAGE_ECOSYSTEM} ${UPDATE_TYPE}" >> "${GITHUB_OUTPUT}"
+              echo "requires-delay=false" >> "${GITHUB_OUTPUT}"
+              echo "reason=outside the auto-merge lanes" >> "${GITHUB_OUTPUT}"
               ;;
           esac
 
       - name: Check merge delay
         id: delay
+        if: steps.policy.outputs.requires-delay == 'true'
         env:
           PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
           MERGE_DELAY_DAYS: ${{ env.MERGE_DELAY_DAYS }}
@@ -65,7 +64,7 @@ jobs:
           else
             remaining=$((required_age - age))
             echo "passed=false" >> "${GITHUB_OUTPUT}"
-            echo "Dependabot PR is waiting for the ${MERGE_DELAY_DAYS}-day merge delay. Remaining seconds: ${remaining}"
+            echo "Dependabot security PR is waiting for the ${MERGE_DELAY_DAYS}-day merge delay. Remaining seconds: ${remaining}"
           fi
 
       - name: Report manual review requirement
@@ -76,7 +75,7 @@ jobs:
           echo "Dependabot PR requires manual review: ${REASON}"
 
       - name: Report merge delay
-        if: steps.policy.outputs.eligible == 'true' && steps.delay.outputs.passed != 'true'
+        if: steps.policy.outputs.requires-delay == 'true' && steps.delay.outputs.passed != 'true'
         env:
           REASON: ${{ steps.policy.outputs.reason }}
           MERGE_DELAY_DAYS: ${{ env.MERGE_DELAY_DAYS }}
@@ -84,7 +83,7 @@ jobs:
           echo "Dependabot PR is eligible for auto-merge after the ${MERGE_DELAY_DAYS}-day merge delay: ${REASON}"
 
       - name: Approve pull request
-        if: steps.policy.outputs.eligible == 'true' && steps.delay.outputs.passed == 'true'
+        if: steps.policy.outputs.eligible == 'true' && (steps.policy.outputs.requires-delay != 'true' || steps.delay.outputs.passed == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -96,7 +95,7 @@ jobs:
           fi
 
       - name: Enable auto-merge
-        if: steps.policy.outputs.eligible == 'true' && steps.delay.outputs.passed == 'true'
+        if: steps.policy.outputs.eligible == 'true' && (steps.policy.outputs.requires-delay != 'true' || steps.delay.outputs.passed == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -134,8 +133,15 @@ jobs:
             head_ref=$(jq -r '.headRefName' <<< "${pr}")
             review_decision=$(jq -r '.reviewDecision' <<< "${pr}")
 
+            # See the "Classify pull request" step in the auto-merge-pr job for
+            # why grouped branches are routine and everything else is treated
+            # as a security update requiring the merge delay.
             case "${head_ref}" in
+              dependabot/go_modules/*go-weekly-updates-*|dependabot/pip/*python-weekly-updates-*)
+                requires_delay=false
+                ;;
               dependabot/go_modules/*|dependabot/pip/*)
+                requires_delay=true
                 ;;
               *)
                 echo "Skipping Dependabot PR #${number}: manual review lane (${head_ref})"
@@ -143,15 +149,17 @@ jobs:
                 ;;
             esac
 
-            created=$(date -d "${created_at}" +%s)
-            now=$(date +%s)
-            required_age=$((MERGE_DELAY_DAYS * 24 * 60 * 60))
-            age=$((now - created))
+            if [[ "${requires_delay}" == "true" ]]; then
+              created=$(date -d "${created_at}" +%s)
+              now=$(date +%s)
+              required_age=$((MERGE_DELAY_DAYS * 24 * 60 * 60))
+              age=$((now - created))
 
-            if [[ "${age}" -lt "${required_age}" ]]; then
-              remaining=$((required_age - age))
-              echo "Skipping Dependabot PR #${number}: waiting for ${MERGE_DELAY_DAYS}-day merge delay. Remaining seconds: ${remaining}"
-              continue
+              if [[ "${age}" -lt "${required_age}" ]]; then
+                remaining=$((required_age - age))
+                echo "Skipping Dependabot PR #${number}: waiting for ${MERGE_DELAY_DAYS}-day merge delay. Remaining seconds: ${remaining}"
+                continue
+              fi
             fi
 
             if [[ "${review_decision}" != "APPROVED" ]]; then
