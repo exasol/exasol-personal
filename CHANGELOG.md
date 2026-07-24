@@ -6,6 +6,18 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Breaking Changes
+
+- None.
+
+## 2.2.0 - 2026-07-24
+
+### Added
+
 - Added named deployment selection with `--deployment` / `-d`, so users can manage multiple deployments under the default Exasol Personal deployment root without passing full directory paths.
 
   Example: `exasol status --deployment demo` targets the named `demo` deployment. `--deployment` and `--deployment-dir` cannot be used together.
