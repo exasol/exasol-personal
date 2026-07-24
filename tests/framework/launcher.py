@@ -257,10 +257,19 @@ class Launcher:
             )
             return False
 
-        if "Ready for deployment" not in info_result.stdout:
+        if "Deployment State: initialized" not in info_result.stdout:
             logging.error(
-                "Info output does not contain 'No workflow state file was found': %s",
+                "Info stdout does not report initialized state: %s",
                 info_result.stdout,
+            )
+            return False
+
+        if "Ready for deployment" not in info_result.stderr:
+            logging.error(
+                "Info stderr does not contain ready-for-deployment guidance.\n"
+                "stdout: %s\nstderr: %s",
+                info_result.stdout,
+                info_result.stderr,
             )
             return False
 
