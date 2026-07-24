@@ -87,8 +87,34 @@ func TestTerminalMessagesShowCallsToActionWhenVisible(t *testing.T) {
 	if stdout.String() != "" {
 		t.Fatalf("unexpected stdout: %q", stdout.String())
 	}
-	if stderr.String() != "directory notice\nrun `exasol deploy`\n" {
+	if stderr.String() != "directory notice\n\nrun `exasol deploy`\n" {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+// TestTerminalMessagesPrintCallsToActionLastInCombinedTerminalOutput must not
+// run in parallel: it mutates the package-level terminal message queues.
+//
+//nolint:paralleltest // mutates shared package globals; must run serially
+func TestTerminalMessagesPrintCallsToActionLastInCombinedTerminalOutput(t *testing.T) {
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+
+	// Given: all output kinds are queued.
+	addTerminalNotice("directory notice")
+	addTerminalCallToAction("run `exasol deploy`")
+	addTerminalOutput("deployment overview")
+
+	// When: stdout and stderr are rendered to the same terminal.
+	terminal := bytes.Buffer{}
+	writeTerminalMessages(terminalConfig{
+		stdout: &terminal, stderr: &terminal, showCallsToAction: true,
+	})
+
+	// Then: the call to action is visually separated and printed last.
+	expected := "directory notice\ndeployment overview\n\nrun `exasol deploy`\n"
+	if terminal.String() != expected {
+		t.Fatalf("unexpected terminal output: %q", terminal.String())
 	}
 }
 

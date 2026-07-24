@@ -70,18 +70,22 @@ type terminalConfig struct {
 }
 
 func writeTerminalMessages(cfg terminalConfig) {
+	hasPrecedingMessages := len(terminalNotices) > 0 || len(terminalOutputs) > 0
 	for _, message := range terminalNotices {
 		_, _ = fmt.Fprintln(cfg.stderr, message)
 	}
 	terminalNotices = nil
+	for _, message := range terminalOutputs {
+		_, _ = fmt.Fprintln(cfg.stdout, message)
+	}
+	terminalOutputs = nil
 	if cfg.showCallsToAction {
+		if len(terminalCallsToAction) > 0 && hasPrecedingMessages {
+			_, _ = fmt.Fprintln(cfg.stderr)
+		}
 		for _, message := range terminalCallsToAction {
 			_, _ = fmt.Fprintln(cfg.stderr, message)
 		}
 	}
 	terminalCallsToAction = nil
-	for _, message := range terminalOutputs {
-		_, _ = fmt.Fprintln(cfg.stdout, message)
-	}
-	terminalOutputs = nil
 }
