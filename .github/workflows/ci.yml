@@ -106,9 +106,12 @@ jobs:
   sonarqube:
     runs-on: ubuntu-latest
     needs: tests-unit
-    # Fork PRs never receive repo secrets under the pull_request trigger, so SONAR_TOKEN
-    # wouldn't be available anyway; skip them explicitly rather than run a scan that fails.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # Fork PRs and Dependabot PRs never receive repo secrets under the pull_request trigger,
+    # so SONAR_TOKEN wouldn't be available anyway; skip them explicitly rather than run a scan that fails.
+    if: >-
+      github.event_name == 'push' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]')
     permissions:
       contents: read
     steps:
