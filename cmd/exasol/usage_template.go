@@ -244,8 +244,8 @@ func otherLocalFlags(cmd *cobra.Command) []*pflag.Flag {
 
 // nolint: revive, lll
 const customUsageTemplate = `Usage:
-{{ if .HasAvailableSubCommands}}  {{.CommandPath}} [command] [flags]{{ else }}  {{.UseLine}}
-{{ end }}
+	{{if .HasAvailableSubCommands}}{{.CommandPath}} [command] [flags]{{else}}{{.UseLine}}{{end}}
+
 {{ if .HasAvailableSubCommands }}
 
 {{- $cmd := . }}
