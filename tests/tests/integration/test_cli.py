@@ -49,6 +49,27 @@ def test_help_output_never_has_more_than_one_blank_line(exasol_path: str) -> Non
     assert "\n\n\n" not in leaf_help
 
 
+def test_help_usage_section_is_indented_and_separated(exasol_path: str) -> None:
+    # Given representative help outputs for root, parent, and leaf commands
+    commands = [
+        ([exasol_path, "--help"], "exasol [command] [flags]"),
+        ([exasol_path, "presets", "--help"], "exasol presets [command] [flags]"),
+        ([exasol_path, "status", "--help"], "exasol status [flags]"),
+        ([exasol_path, "presets", "list", "--help"], "exasol presets list [flags]"),
+    ]
+
+    for command, usage_line in commands:
+        # When help output is rendered
+        output = run_command(command).stdout
+        lines = output.splitlines()
+        usage_index = lines.index("Usage:")
+
+        # Then the Usage section has the same shape as other indented sections
+        assert lines[usage_index + 1] == f"\t{usage_line}"
+        assert lines[usage_index + 2] == ""
+        assert lines[usage_index + 3] != ""
+
+
 def test_version(exasol_path: str) -> None:
     # Given the current version of the program based on the the latest git version tag
     git_describe_command_result = run_command(
