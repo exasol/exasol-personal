@@ -23,8 +23,10 @@ import (
 )
 
 const (
-	localSupportedOS           = "darwin"
-	localSupportedArch         = "arm64"
+	localSupportedMacOS       = "darwin"
+	localSupportedMacArch     = "arm64"
+	localSupportedWindowsOS   = "windows"
+	localSupportedWindowsArch = "amd64"
 	localAllowUnsupportedEnv   = "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM"
 	hostMemoryDefaultDivisor   = 2
 	localDefaultCPUCount       = 2
@@ -47,7 +49,7 @@ const (
 )
 
 var errUnsupportedLocalPlatform = errors.New(
-	"local deployments are only supported on macOS Apple Silicon",
+	"local deployments are only supported on macOS Apple Silicon or Windows amd64",
 )
 
 func newLocalBackend(
@@ -218,11 +220,16 @@ func validateLocalPlatform(goos, goarch, allowUnsupported string) error {
 	if allowUnsupported != "" {
 		return nil
 	}
-	if goos == localSupportedOS && goarch == localSupportedArch {
+	if isSupportedLocalPlatform(goos, goarch) {
 		return nil
 	}
 
 	return fmt.Errorf("%w (current platform: %s/%s)", errUnsupportedLocalPlatform, goos, goarch)
+}
+
+func isSupportedLocalPlatform(goos, goarch string) bool {
+	return (goos == localSupportedMacOS && goarch == localSupportedMacArch) ||
+		(goos == localSupportedWindowsOS && goarch == localSupportedWindowsArch)
 }
 
 func canonicalLocalConfigName(name string) string {
@@ -321,6 +328,9 @@ func (b *localBackend) OpenHostShell(
 	ctx context.Context,
 	_ string,
 ) error {
+	if !localruntime.SupportsSSH() {
+		return errors.New("host shell is not supported by the Windows local runner")
+	}
 	sshRemote, err := localSSHRemoteUnsafe(b.deployment)
 	if err != nil {
 		return err
@@ -334,6 +344,9 @@ func (b *localBackend) OpenHostShell(
 }
 
 func (b *localBackend) OpenCOSShell(ctx context.Context) error {
+	if !localruntime.SupportsSSH() {
+		return errors.New("container shell is not supported by the Windows local runner")
+	}
 	sshRemote, err := localSSHRemoteUnsafe(b.deployment)
 	if err != nil {
 		return err

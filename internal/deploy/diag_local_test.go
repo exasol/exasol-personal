@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -15,6 +16,9 @@ import (
 
 func TestDiagnoseLocalUnsafe_UnsupportedPlatform(t *testing.T) {
 	t.Parallel()
+	if isSupportedLocalPlatform(runtime.GOOS, runtime.GOARCH) {
+		t.Skip("current platform supports local deployments")
+	}
 
 	// Deliberately does not set localAllowUnsupportedEnv, unlike the
 	// "supported platform" tests below (which cannot run in parallel with

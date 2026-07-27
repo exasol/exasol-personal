@@ -406,6 +406,55 @@ func TestManager_RequestResolvesEmbeddedResourceWithoutNetwork(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // embeddedResources is shared; concurrent Register calls aren't safe.
+func TestManager_RequestResolvesEmbeddedResourceWithoutDeclaredPlatformArtifact(t *testing.T) {
+	// Given
+	const resourceID = "embedded-undeclared-platform-test"
+	const runnerContent = "runner"
+	cacheDir := t.TempDir()
+	fixtureDir := t.TempDir()
+	archivePath := writeZipFixture(
+		t,
+		fixtureDir,
+		"artifact.zip",
+		map[string]string{"launcher": runnerContent},
+	)
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("failed to read artifact fixture: %v", err)
+	}
+	Register(resourceID, archiveData)
+	t.Cleanup(func() { delete(embeddedResources, resourceID) })
+	spec := ResourceSpec{
+		resourceID: {
+			Extract: true,
+			Embed:   true,
+			Artifact: map[string]ArtifactSpec{
+				"darwin/arm64": {
+					URL:          "https://example.com/artifact.zip",
+					Sha256:       "deadbeef",
+					ResourcePath: "launcher",
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, cacheDir, "windows", "amd64")
+
+	// When
+	path, err := manager.Request(context.Background(), resourceID)
+	// Then
+	if err != nil {
+		t.Fatalf("expected embedded resource to resolve, got %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected resolved path to be readable, got %v", err)
+	}
+	if string(data) != runnerContent {
+		t.Fatalf("expected runner content, got %q", string(data))
+	}
+}
+
 func TestManager_RequestFailsWhenEmbeddedResourceNotRegistered(t *testing.T) {
 	t.Parallel()
 

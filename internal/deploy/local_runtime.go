@@ -49,16 +49,18 @@ func startPreparedLocalRuntime(
 
 	localConfig := toLocalRuntimeConfig(runtimeConfig)
 	startArgs := []string{"start"}
-	versionCheckArgs, err := localRunnerVersionCheckArgs(runtime.Deployment())
-	if err != nil {
-		return err
+	if localruntime.SupportsSSH() {
+		versionCheckArgs, err := localRunnerVersionCheckArgs(runtime.Deployment())
+		if err != nil {
+			return err
+		}
+		startArgs = append(startArgs, versionCheckArgs...)
+		slcArgs, err := localRunnerSlcArgs(runtime.Deployment())
+		if err != nil {
+			return err
+		}
+		startArgs = append(startArgs, slcArgs...)
 	}
-	startArgs = append(startArgs, versionCheckArgs...)
-	slcArgs, err := localRunnerSlcArgs(runtime.Deployment())
-	if err != nil {
-		return err
-	}
-	startArgs = append(startArgs, slcArgs...)
 	if localConfig.Ports != "" {
 		startArgs = append(startArgs, "--ports", localConfig.Ports)
 	}
@@ -244,15 +246,6 @@ func writeLocalDeploymentArtifacts(
 		}
 	}
 
-	sshPort := strconv.Itoa(state.SSHPort)
-	sshCommand := fmt.Sprintf(
-		"ssh -i %s %s@%s -p %s",
-		state.PrivateKeyRelativePath,
-		localSSHUser,
-		localDeploymentPublicHost,
-		sshPort,
-	)
-
 	info := &config.DeploymentInfo{
 		Backend:         localDeploymentBackend,
 		DeploymentId:    deploymentID,
@@ -267,10 +260,19 @@ func writeLocalDeploymentArtifacts(
 			DBPort:                     state.DBPort,
 			Username:                   localDBUser,
 			InsecureSkipCertValidation: true,
-			SSHCommand:                 sshCommand,
-			SSHPort:                    sshPort,
-			ShellSupported:             true,
 		},
+	}
+	if localruntime.SupportsSSH() {
+		sshPort := strconv.Itoa(state.SSHPort)
+		info.Connection.SSHCommand = fmt.Sprintf(
+			"ssh -i %s %s@%s -p %s",
+			state.PrivateKeyRelativePath,
+			localSSHUser,
+			localDeploymentPublicHost,
+			sshPort,
+		)
+		info.Connection.SSHPort = sshPort
+		info.Connection.ShellSupported = true
 	}
 	if err := config.WriteDeploymentInfo(deployment.Root(), info); err != nil {
 		return err

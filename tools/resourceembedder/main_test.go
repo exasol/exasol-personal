@@ -4,9 +4,12 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,6 +19,62 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
+
+func TestGeneratePlatform_EmbedsRunnerPathForUndeclaredPlatform(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	runnerPath := filepath.Join(t.TempDir(), "launcher.exe")
+	if err := os.WriteFile(runnerPath, []byte("windows runner"), 0o700); err != nil {
+		t.Fatalf("failed to write runner fixture: %v", err)
+	}
+	def := runtimeartifacts.ResourceDefinition{
+		Extract: true,
+		Embed:   true,
+		Artifact: map[string]runtimeartifacts.ArtifactSpec{
+			"darwin/arm64": {URL: "https://example.com/launcher.zip", Sha256: "deadbeef", ResourcePath: "launcher"},
+		},
+	}
+	spec := runtimeartifacts.ResourceSpec{"exasol-local-runner": def}
+	outputDir := t.TempDir()
+	g := &generator{
+		outputDir:  outputDir,
+		goos:       "windows",
+		goarch:     "amd64",
+		runnerPath: runnerPath,
+	}
+
+	// When
+	err := g.generatePlatform(context.Background(), spec)
+
+	// Then
+	if err != nil {
+		t.Fatalf("expected local runner override to be embedded, got %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(outputDir, "exasol_local_runner_windows_amd64.bin"))
+	if err != nil {
+		t.Fatalf("expected embedded runner archive, got %v", err)
+	}
+	archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("expected embedded runner to be a zip archive, got %v", err)
+	}
+	if len(archive.File) != 1 || archive.File[0].Name != "launcher" {
+		t.Fatalf("expected archive to contain launcher, got %+v", archive.File)
+	}
+	reader, err := archive.File[0].Open()
+	if err != nil {
+		t.Fatalf("expected archive entry to open, got %v", err)
+	}
+	defer reader.Close()
+	content, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("expected archive entry to be readable, got %v", err)
+	}
+	if string(content) != "windows runner" {
+		t.Fatalf("expected runner data, got %q", content)
+	}
+}
 
 func newFixtureServer(t *testing.T, name string, data []byte) *httptest.Server {
 	t.Helper()

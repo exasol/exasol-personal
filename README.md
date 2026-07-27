@@ -21,7 +21,7 @@
 
 ## 🔥 Key Features
 
-- 💻 **Runs Locally in Seconds** — Spin up a full Exasol database on your own Mac with one command (macOS today; Windows & Linux coming soon)
+- 💻 **Runs Locally in Seconds** — Spin up a full Exasol database on your Mac or Windows PC with one command (Linux coming soon)
 - 🤖 **Built for Agentic AI** — Connect AI agents and LLM tools directly through a scriptable CLI
 - 🧠 **Built-in AI Functions** — Leverage native AI/ML capabilities with GPU acceleration, right where your data lives
 - 🏎️ **In-Memory Performance** — Run complex analytics at in-memory speed with Exasol's industry-leading analytics engine
@@ -34,9 +34,9 @@
 
 ## ✅ Prerequisites
 
-**Local deployment (recommended — fastest):** a Mac with at least 8 GB RAM.
+**Local deployment (recommended — fastest):** a Mac with at least 8 GB RAM, or a Windows amd64 PC with Podman and WSL2 available.
 
-> Local deployment is currently **macOS only**. Windows and Linux support is coming soon — until then, use a cloud deployment on those platforms.
+> Local deployment is supported on macOS Apple Silicon and Windows amd64. Linux support is coming soon.
 
 **Cloud deployment:** an account on one of the supported providers, with permission to provision compute instances:
 
@@ -63,9 +63,9 @@ Verify the installation with `exasol version`.
 
 ## 🏎️ Quick Start — Run Exasol Locally
 
-The fastest way to try Exasol: a full database running on your own Mac.
+The fastest way to try Exasol: a full database running on your own Mac or Windows PC.
 
-> **Currently macOS only.** Windows and Linux support is coming soon — to run Exasol on those platforms today, use a cloud deployment (see the **Deploy to the Cloud** section below).
+> Local deployment is supported on macOS Apple Silicon and Windows amd64. Use a cloud deployment on Linux (see the **Deploy to the Cloud** section below).
 
 With the launcher installed (see **Install the Launcher** above), start a local Exasol database:
 ```bash
@@ -161,7 +161,7 @@ exasol start
 ```
 The IP addresses of the nodes will change when you restart Exasol Personal. Check the output of the `start` command to know how to connect to the deployment after a restart.
 
-For local deployments, which currently require macOS with at least 8 GB RAM, the launcher manages a local VM runtime and an internal deployment share inside the deployment directory. If you do not configure local VM memory explicitly, it defaults to about 50% of detected host memory. Configured local VM memory must be at least 4096 MB. The initial local database credentials are `sys` / `exasol`. `exasol shell host` opens the local VM shell, and `exasol shell container` opens a shell inside the local database container.
+For local deployments, the launcher manages the platform-specific local runtime inside the deployment directory. On macOS, it manages a VM and an internal deployment share; on Windows, the runner manages the Podman/WSL2 runtime. If you do not configure local runtime memory explicitly, it defaults to about 50% of detected host memory where available. Configured local runtime memory must be at least 4096 MB. The initial local database credentials are `sys` / `exasol`. Shell access is available on macOS; it is not yet available for Windows local deployments.
 
 ## 🗑️ Remove Exasol Personal
 

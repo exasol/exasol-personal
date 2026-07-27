@@ -90,7 +90,10 @@ func diagnoseLocalUnsafe(
 	diagnostics.Warning = unexpectedRunningVMWarning(deployment)
 
 	if state, err := localRuntime.ReadState(); err == nil {
-		diagnostics.Ports = map[string]int{"ssh": state.SSHPort, "db": state.DBPort}
+		diagnostics.Ports = map[string]int{"db": state.DBPort}
+		if localruntime.SupportsSSH() {
+			diagnostics.Ports["ssh"] = state.SSHPort
+		}
 		if state.UIPort != 0 {
 			diagnostics.Ports["ui"] = state.UIPort
 		}

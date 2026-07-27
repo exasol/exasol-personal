@@ -50,6 +50,17 @@ func TestValidateLocalPlatform_AcceptsMacOSAppleSilicon(t *testing.T) {
 	}
 }
 
+func TestValidateLocalPlatform_AcceptsWindowsAMD64(t *testing.T) {
+	t.Parallel()
+
+	// Given / When
+	err := validateLocalPlatform("windows", "amd64", "")
+	// Then
+	if err != nil {
+		t.Fatalf("expected platform to be accepted, got %v", err)
+	}
+}
+
 func TestValidateLocalPlatform_RejectsUnsupportedPlatform(t *testing.T) {
 	t.Parallel()
 
@@ -70,6 +81,21 @@ func TestValidateLocalPlatform_AllowsUnsupportedPlatformForTests(t *testing.T) {
 	// Then
 	if err != nil {
 		t.Fatalf("expected override to accept platform, got %v", err)
+	}
+}
+
+func TestLocalShellsAreRejectedWhenRunnerHasNoSSH(t *testing.T) {
+	t.Parallel()
+	if localruntime.SupportsSSH() {
+		t.Skip("the macOS local runner supports SSH shells")
+	}
+
+	backend := &localBackend{}
+	if err := backend.OpenHostShell(context.Background(), ""); err == nil {
+		t.Fatal("expected host shell to be rejected without SSH support")
+	}
+	if err := backend.OpenCOSShell(context.Background()); err == nil {
+		t.Fatal("expected container shell to be rejected without SSH support")
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 )
 
@@ -144,7 +145,13 @@ func (m *Manager) Get(
 ) (string, error) {
 	artifact, err := def.Resolve(m.platform.GOOS, m.platform.GOARCH)
 	if err != nil {
-		return "", err
+		if !def.Embed {
+			return "", err
+		}
+		if _, registered := lookupEmbedded(resourceID); !registered {
+			return "", err
+		}
+		artifact = embeddedArtifact(resourceID, def)
 	}
 
 	// If the source can identify its content before fetching, use that identity
@@ -202,6 +209,33 @@ func (m *Manager) Get(
 	}
 
 	return resolvedPath, nil
+}
+
+// embeddedArtifact provides cache metadata for a resource that was embedded
+// during a local build even though the checked-in manifest has no artifact for
+// this target yet. The registered bytes remain the source of truth; the URL
+// and digest only give the cache a stable, per-content identity.
+func embeddedArtifact(resourceID string, def ResourceDefinition) ArtifactSpec {
+	data, _ := lookupEmbedded(resourceID)
+	sum := sha256.Sum256(data)
+	artifact := ArtifactSpec{
+		URL:    "embedded://" + resourceID + "/resource.zip",
+		Sha256: hex.EncodeToString(sum[:]),
+	}
+	keys := make([]string, 0, len(def.Artifact))
+	for key := range def.Artifact {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		candidate := def.Artifact[key]
+		artifact.DownloadPath = candidate.DownloadPath
+		artifact.ResourcePath = candidate.ResourcePath
+
+		break
+	}
+
+	return artifact
 }
 
 // Request looks up a definition from the static spec by ID and resolves it.

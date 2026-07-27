@@ -6,6 +6,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Added initial Windows amd64 support for `exasol install local`. The Windows runner uses Podman/WSL2 and currently does not support host/container shells, SLCs, or scheduled database version checks.
+
 - Added named deployment selection with `--deployment` / `-d`, so users can manage multiple deployments under the default Exasol Personal deployment root without passing full directory paths.
 
   Example: `exasol status --deployment demo` targets the named `demo` deployment. `--deployment` and `--deployment-dir` cannot be used together.

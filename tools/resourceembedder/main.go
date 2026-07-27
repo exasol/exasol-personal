@@ -15,6 +15,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	_ "embed" // required by go:embed on resourceFileTemplateSource below
@@ -35,10 +36,11 @@ import (
 )
 
 const (
-	dirPerm             = 0o700
-	filePerm            = 0o600
-	generatedDirRelPath = "assets/resources/generated"
-	generatedPkg        = "generated"
+	dirPerm               = 0o700
+	filePerm              = 0o600
+	generatedDirRelPath   = "assets/resources/generated"
+	generatedPkg          = "generated"
+	localRunnerResourceID = "exasol-local-runner"
 )
 
 //go:embed resource_file.go.tmpl
@@ -63,9 +65,10 @@ func repoRoot() (string, error) {
 }
 
 type config struct {
-	goos      string
-	goarch    string
-	skipEmbed bool
+	goos       string
+	goarch     string
+	skipEmbed  bool
+	runnerPath string
 }
 
 func main() {
@@ -104,10 +107,11 @@ func run(ctx context.Context, args []string) error {
 			cfg.goos,
 			cfg.goarch,
 		),
-		outputDir: outputDir,
-		goos:      cfg.goos,
-		goarch:    cfg.goarch,
-		skipEmbed: cfg.skipEmbed,
+		outputDir:  outputDir,
+		goos:       cfg.goos,
+		goarch:     cfg.goarch,
+		skipEmbed:  cfg.skipEmbed,
+		runnerPath: cfg.runnerPath,
 	}
 
 	return g.generatePlatform(ctx, spec)
@@ -128,6 +132,7 @@ func parseFlags(args []string) (config, error) {
 		cfg.goarch = goarch
 	}
 	cfg.skipEmbed = strings.TrimSpace(os.Getenv("SKIP_EMBED")) == "true"
+	cfg.runnerPath = strings.TrimSpace(os.Getenv("RUNNER_PATH"))
 	flags.StringVar(&cfg.goos, "goos", cfg.goos, "Target GOOS")
 	flags.StringVar(&cfg.goarch, "goarch", cfg.goarch, "Target GOARCH")
 	flags.BoolVar(
@@ -136,6 +141,7 @@ func parseFlags(args []string) (config, error) {
 		cfg.skipEmbed,
 		"Never fetch real artifact data; always write an empty placeholder (for lint/test builds that never look at the embedded bytes)",
 	)
+	flags.StringVar(&cfg.runnerPath, "runner-path", cfg.runnerPath, "Local Exasol Local runner executable to embed")
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
 	}
@@ -161,11 +167,12 @@ type platformFileData struct {
 }
 
 type generator struct {
-	manager   *runtimeartifacts.Manager
-	outputDir string
-	goos      string
-	goarch    string
-	skipEmbed bool
+	manager    *runtimeartifacts.Manager
+	outputDir  string
+	goos       string
+	goarch     string
+	skipEmbed  bool
+	runnerPath string
 }
 
 // generatePlatform combines every embed: true resource in spec that declares
@@ -212,6 +219,9 @@ func (g *generator) resolveResourceEmbed(
 		// not: skip it unconditionally and just satisfy the build constraint.
 		return nil, nil
 	}
+	if resourceID == localRunnerResourceID && g.runnerPath != "" {
+		return g.embedLocalRunnerOverride(resourceID, def)
+	}
 
 	if _, err := def.Resolve(g.goos, g.goarch); err != nil {
 		return nil, nil
@@ -237,6 +247,61 @@ func (g *generator) resolveResourceEmbed(
 		return nil, err
 	}
 
+	return g.writeEmbeddedData(resourceID, data)
+}
+
+func (g *generator) embedLocalRunnerOverride(
+	resourceID string,
+	def runtimeartifacts.ResourceDefinition,
+) (*resourceEmbed, error) {
+	runnerData, err := os.ReadFile(g.runnerPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read RUNNER_PATH %s: %w", g.runnerPath, err)
+	}
+
+	archiveData, err := zipRunnerData(runnerData, embeddedResourcePath(def))
+	if err != nil {
+		return nil, err
+	}
+
+	return g.writeEmbeddedData(resourceID, archiveData)
+}
+
+func embeddedResourcePath(def runtimeartifacts.ResourceDefinition) string {
+	keys := make([]string, 0, len(def.Artifact))
+	for key := range def.Artifact {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if path := def.Artifact[key].ResourcePath; path != "" {
+			return path
+		}
+	}
+
+	return "launcher"
+}
+
+func zipRunnerData(runnerData []byte, resourcePath string) ([]byte, error) {
+	var archive bytes.Buffer
+	writer := zip.NewWriter(&archive)
+	header := &zip.FileHeader{Name: resourcePath, Method: zip.Deflate}
+	header.SetMode(0o700)
+	entry, err := writer.CreateHeader(header)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create local runner archive entry: %w", err)
+	}
+	if _, err := entry.Write(runnerData); err != nil {
+		return nil, fmt.Errorf("failed to write local runner archive entry: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to finish local runner archive: %w", err)
+	}
+
+	return archive.Bytes(), nil
+}
+
+func (g *generator) writeEmbeddedData(resourceID string, data []byte) (*resourceEmbed, error) {
 	if err := os.MkdirAll(g.outputDir, dirPerm); err != nil {
 		return nil, err
 	}

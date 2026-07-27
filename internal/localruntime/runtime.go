@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goRuntime "runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -30,12 +31,13 @@ import (
 )
 
 const (
-	DirName            = "local"
-	runtimeDirName     = "runtime"
-	vmDirName          = "vm"
-	vmStateFileName    = "vm-state.json"
-	vmPIDFileName      = "vm.pid"
-	PrivateKeyFileName = "node_access.pem"
+	DirName             = "local"
+	runtimeDirName      = "runtime"
+	vmDirName           = "vm"
+	initializedFileName = "runner-initialized"
+	vmStateFileName     = "vm-state.json"
+	vmPIDFileName       = "vm.pid"
+	PrivateKeyFileName  = "node_access.pem"
 	// runnerVersionMarkerFileName records the semver of the runner this
 	// deployment was last prepared/started with. It's a launcher-owned file,
 	// distinct from vm-state.json, whose schema is dictated by the runner's
@@ -49,7 +51,7 @@ const (
 	markerFileMode              = 0o600
 	executableFileMode          = 0o700
 	maxTCPPort                  = 65535
-	// Internal escape hatch for development with runners that predate version reporting.
+	// Internal escape hatch for development with embedded runners that predate version reporting.
 	forceRunnerReconciliationEnv = "EXASOL_LOCAL_FORCE_RUNNER_RECONCILIATION"
 	// Internal escape hatch for tests: exasol-local-runner is embed-only, so
 	// non-macOS test hosts have no way to resolve a runner through the
@@ -81,6 +83,7 @@ type Paths struct {
 	StatePath               string
 	PrivateKeyPath          string
 	RunnerVersionMarkerPath string
+	InitializedPath         string
 }
 
 func NewPaths(deployment config.DeploymentDir) Paths {
@@ -94,6 +97,7 @@ func NewPaths(deployment config.DeploymentDir) Paths {
 		StatePath:               filepath.Join(workDir, vmStateFileName),
 		PrivateKeyPath:          filepath.Join(root, PrivateKeyFileName),
 		RunnerVersionMarkerPath: filepath.Join(workDir, runnerVersionMarkerFileName),
+		InitializedPath:         filepath.Join(workDir, initializedFileName),
 	}
 }
 
@@ -157,11 +161,13 @@ func (runtime *Runtime) Prepare(ctx context.Context, out, outErr io.Writer) erro
 	if err != nil {
 		return err
 	}
-	if err := runtime.reconcileRunnerVersion(ctx, runnerPath); err != nil {
-		return err
-	}
-	if err := runtime.ensureSSHKey(); err != nil {
-		return err
+	if runnerSupportsSSH() {
+		if err := runtime.reconcileRunnerVersion(ctx, runnerPath); err != nil {
+			return err
+		}
+		if err := runtime.ensureSSHKey(); err != nil {
+			return err
+		}
 	}
 
 	return runtime.initializeVMIfNeeded(ctx, runnerPath, out, outErr)
@@ -280,7 +286,11 @@ func (runtime *Runtime) Destroy(ctx context.Context, out, outErr io.Writer) erro
 // stop; a runner that fails to resolve or stop is treated the same way,
 // since Destroy's job is cleanup, not reporting a runner-invocation failure.
 func (runtime *Runtime) stopBeforeDestroy(ctx context.Context, out, outErr io.Writer) error {
-	if _, err := os.Stat(runtime.paths.VMDir); err != nil {
+	initializedPath := runtime.paths.VMDir
+	if !runnerSupportsSSH() {
+		initializedPath = runtime.paths.InitializedPath
+	}
+	if _, err := os.Stat(initializedPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
@@ -313,30 +323,65 @@ func (runtime *Runtime) resolveRunnerPath(ctx context.Context) (string, error) {
 	return runtime.manager.Request(ctx, exasolLocalRunnerResourceID)
 }
 
+func runnerSupportsSSH() bool {
+	return goRuntime.GOOS == "darwin" && goRuntime.GOARCH == "arm64"
+}
+
+func supportsRunnerDaemonPID() bool {
+	return runnerSupportsSSH()
+}
+
+// SupportsSSH reports whether the current local runner exposes SSH access to a guest VM.
+func SupportsSSH() bool {
+	return runnerSupportsSSH()
+}
+
 func (runtime *Runtime) initializeVMIfNeeded(
 	ctx context.Context,
 	runnerPath string,
 	out, outErr io.Writer,
 ) error {
-	if _, err := os.Stat(runtime.paths.VMDir); err == nil {
+	initializedPath := runtime.paths.VMDir
+	if !runnerSupportsSSH() {
+		initializedPath = runtime.paths.InitializedPath
+	}
+	if _, err := os.Stat(initializedPath); err == nil {
 		return nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to inspect local VM directory: %w", err)
 	}
 
-	return runtime.runnerCommand(
-		ctx,
-		runnerPath,
-		[]string{"init", "--ssh-key", runtime.paths.PrivateKeyPath},
-		out,
-		outErr,
-	)
+	args := []string{"init"}
+	if runnerSupportsSSH() {
+		args = append(args, "--ssh-key", runtime.paths.PrivateKeyPath)
+	}
+
+	if err := runtime.runnerCommand(ctx, runnerPath, args, out, outErr); err != nil {
+		return err
+	}
+	if runnerSupportsSSH() {
+		return nil
+	}
+
+	if err := os.WriteFile(
+		runtime.paths.InitializedPath,
+		[]byte("initialized\n"),
+		privateFileMode,
+	); err != nil {
+		return fmt.Errorf("failed to record local runner initialization: %w", err)
+	}
+
+	return nil
 }
 
 func (runtime *Runtime) toState(state *runnerState) (*State, error) {
-	keyFile, err := runtime.paths.PrivateKeyRelativePath(runtime.deployment)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve local SSH key path: %w", err)
+	keyFile := ""
+	if runnerSupportsSSH() {
+		var err error
+		keyFile, err = runtime.paths.PrivateKeyRelativePath(runtime.deployment)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve local SSH key path: %w", err)
+		}
 	}
 
 	return &State{
@@ -490,6 +535,7 @@ func (runtime *Runtime) runRunnerCommand(
 
 	cmd := exec.CommandContext(ctx, runnerPath, args...)
 	cmd.Dir = runtime.paths.WorkDir
+	cmd.Stdin = os.Stdin
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = util.CombineWriters(&stdout, out)
@@ -508,6 +554,9 @@ func (runtime *Runtime) runRunnerCommand(
 }
 
 func (runtime *Runtime) waitForDaemonExit(ctx context.Context) error {
+	if !supportsRunnerDaemonPID() {
+		return nil
+	}
 	pid, err := runtime.readDaemonPID()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -646,8 +695,10 @@ func validateRunnerState(state *runnerState) error {
 	if state == nil {
 		return errors.New("local VM state is missing")
 	}
-	if err := validatePort("ssh", state.Ports.SSH); err != nil {
-		return err
+	if runnerSupportsSSH() {
+		if err := validatePort("ssh", state.Ports.SSH); err != nil {
+			return err
+		}
 	}
 	if err := validatePort("database", state.Ports.DB); err != nil {
 		return err

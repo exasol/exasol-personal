@@ -116,6 +116,13 @@ Resources marked `embed: true` in `assets/resources/resources.yaml` (currently j
 
 To iterate locally on the embedded resource without waiting on the real network artifact, edit its `url` in `resources.yaml` to a local path (`file://` or a bare path) instead of the real URL, then re-run the generator and rebuild:
 
+For a one-off local Exasol Local runner executable, use `RUNNER_PATH` instead. It overrides the runner only for that generation and does not modify the manifest:
+
+```bash
+task generate TARGET_GOOS=windows TARGET_GOARCH=amd64 RUNNER_PATH="$PWD/launcher.exe"
+task build-windows
+```
+
 ```yaml
 exasol-local-runner:
   extract: true
