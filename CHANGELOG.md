@@ -22,6 +22,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol diag local` prints a JSON diagnostics snapshot for troubleshooting a local deployment.
 
+- Added direct local deployment support for Windows amd64 through the user's WSL2
+  Podman machine, including lifecycle, persistence, custom ports, diagnostics, and
+  official script language containers.
+
 - Added this changelog as the user-facing release history for Exasol Personal. Release candidates now have a single in-repo place where users can see which features, behavior changes, fixes, and breaking changes may affect them.
 
 ### Changed
@@ -33,6 +37,14 @@ Notable user-facing changes to Exasol Personal are documented here.
 - Improved the installer script output with clearer getting-started guidance, PATH setup instructions, and platform-specific next steps.
 
 - Clarified in the README where the launcher (`exasol`) is installed and that its directory must be on your `PATH`, via a dedicated "Install the Launcher" section.
+
+- Moved Nano image selection, Podman manifests, SLC mounts, readiness, persistence,
+  and workload lifecycle from the macOS VM runner into Exasol Personal. Release
+  artifacts now embed digest-pinned Nano images for macOS arm64 and Windows amd64.
+
+- Changed macOS local persistence to use the Personal-owned
+  `<deployment>/local/data/exa` directory through virtiofs. The VM's internal sparse
+  disk now contains only replaceable guest `/var` and Podman state.
 
 ### Fixed
 
@@ -46,7 +58,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Breaking Changes
 
-- None.
+- Local macOS lifecycle now requires the pinned local-vm v2 provider contract. The
+  launcher no longer contains a v1 runner code path or an ext4 `/exa` fallback.
 
 ## 2.1.0 - 2026-07-09
 
