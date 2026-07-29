@@ -59,6 +59,7 @@ var sources = []Source{
 	&GitSource{},
 	&FileSource{},
 	&HttpSource{},
+	&DockerSource{},
 }
 
 var extractors = []Extractor{
