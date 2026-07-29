@@ -17,7 +17,7 @@ import (
 	"strings"
 )
 
-const maxOCIJSONSize = 16 * 1024 * 1024
+const maxOCIJSONSize = 256 * 1024 * 1024
 
 type ociDescriptor struct {
 	Digest   string       `json:"digest"`

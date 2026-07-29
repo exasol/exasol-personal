@@ -30,6 +30,20 @@ func localImageMap() map[ociPlatform]ociPlatform {
 			Architecture: "arm64",
 		},
 		{
+			OS:           "linux",
+			Architecture: "arm64",
+		}: {
+			OS:           "linux",
+			Architecture: "arm64",
+		},
+		{
+			OS:           "linux",
+			Architecture: "amd64",
+		}: {
+			OS:           "linux",
+			Architecture: "amd64",
+		},
+		{
 			OS:           "windows",
 			Architecture: "amd64",
 		}: {

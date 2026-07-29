@@ -243,7 +243,9 @@ func exportOCIArchive(pin nanoImagePin, archivePath string) error {
 			"--override-os", pin.ContainerPlatform.OS,
 			"--override-arch", pin.ContainerPlatform.Architecture,
 			"docker://"+pin.Reference,
-			"oci-archive:"+archivePath,
+			// Specify the reference again as the target tag so it's part of the image
+			// and will be loaded by podman.
+			"oci-archive:"+archivePath+":"+pin.Reference,
 		)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

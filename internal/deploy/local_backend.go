@@ -26,6 +26,8 @@ const (
 	localMacArch               = "arm64"
 	localWindowsOS             = "windows"
 	localWindowsArch           = "amd64"
+	localLinuxOS               = "linux"
+	localLinuxArch             = "amd64"
 	localAllowUnsupportedEnv   = "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM"
 	hostMemoryDefaultDivisor   = 2
 	localDefaultCPUCount       = 2
@@ -257,7 +259,8 @@ func validateLocalPlatform(goos, goarch, allowUnsupported string) error {
 		return nil
 	}
 	if (goos == localMacOS && goarch == localMacArch) ||
-		(goos == localWindowsOS && goarch == localWindowsArch) {
+		(goos == localWindowsOS && goarch == localWindowsArch) ||
+		(goos == localLinuxOS && goarch == localLinuxArch) {
 		return nil
 	}
 

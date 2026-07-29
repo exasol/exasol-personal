@@ -180,7 +180,10 @@ func buildLocalRuntimeAdapter(
 			runtimeadapter.OSCommandRunner{},
 		)
 	default:
-		adapter = runtimeadapter.LinuxPodmanAdapter{}
+		adapter = runtimeadapter.NewLinuxPodmanAdapter(
+			deployment.Root(),
+			runtimeadapter.OSCommandRunner{},
+		)
 	}
 
 	return &preparedLocalRuntime{

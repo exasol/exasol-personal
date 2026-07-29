@@ -185,6 +185,9 @@ func PlatformCapabilities(goos string) RuntimeCapabilities {
 	if goos == "windows" {
 		return RuntimeCapabilities{SLC: true}
 	}
+	if goos == "linux" {
+		return RuntimeCapabilities{SLC: true}
+	}
 
 	return RuntimeCapabilities{}
 }

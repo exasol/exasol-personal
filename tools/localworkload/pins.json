@@ -7,6 +7,10 @@
     },
     "HostPlatforms": [
       {
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      {
         "os": "windows",
         "architecture": "amd64"
       }
@@ -19,6 +23,10 @@
       "architecture": "arm64"
     },
     "HostPlatforms": [
+      {
+        "os": "linux",
+        "architecture": "arm64"
+      },
       {
         "os": "darwin",
         "architecture": "arm64"
