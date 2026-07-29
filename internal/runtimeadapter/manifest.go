@@ -95,7 +95,7 @@ func RenderKubeManifest(spec WorkloadSpec) ([]byte, error) {
 	}
 
 	workloadName := WorkloadName(spec.DeploymentID)
-	containerName := "nano"
+	containerName := "db"
 	hostAddress := spec.DBHostAddress
 	if hostAddress == "" {
 		hostAddress = "127.0.0.1"

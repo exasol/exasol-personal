@@ -159,7 +159,7 @@ func (adapter *BasePodmanAdapter) Status(
 	if strings.EqualFold(workloadState, "Running") {
 		phase = RuntimePhaseRunning
 	}
-	containerName := name + "-nano"
+	containerName := name + "-db"
 	containerIDData, _ := adapter.Commands.Output(
 		ctx,
 		"podman",
@@ -212,7 +212,7 @@ func (adapter *BasePodmanAdapter) Logs(
 		stderr,
 		"podman",
 		"logs",
-		WorkloadName(spec.DeploymentID)+"-nano",
+		WorkloadName(spec.DeploymentID)+"-db",
 	)
 }
 

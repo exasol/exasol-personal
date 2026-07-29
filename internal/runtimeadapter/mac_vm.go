@@ -345,7 +345,7 @@ func (adapter *MacVMAdapter) Shell(
 	case ShellVM:
 		// No remote command requests an interactive root VM shell.
 	case ShellContainer:
-		name := WorkloadName(spec.DeploymentID) + "-nano"
+		name := WorkloadName(spec.DeploymentID) + "-db"
 		command := "rootfs=$(podman mount " + shellQuote(name) + ") && " +
 			"pid=$(podman inspect " + shellQuote(name) + " --format '{{.State.Pid}}') && " +
 			"cd \"$rootfs\" && exec nsenter --target \"$pid\" --uts --ipc --net /bin/sh"

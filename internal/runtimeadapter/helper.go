@@ -20,7 +20,7 @@ func RenderWorkloadHelper(
 	}
 
 	workloadName := WorkloadName(spec.DeploymentID)
-	containerName := workloadName + "-nano"
+	containerName := workloadName + "-db"
 	var slcPulls strings.Builder
 	for _, mount := range spec.SLCMounts {
 		if _, err := fmt.Fprintf(
