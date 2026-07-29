@@ -115,7 +115,7 @@ func (b *localBackend) Configure(
 	); err != nil {
 		return fmt.Errorf("failed to write local infrastructure manifest: %w", err)
 	}
-	if runtime.GOOS != localWindowsOS && runtimeConfig.memoryMB <= localInfraMemThresholdMB {
+	if runtime.GOOS == localMacOS && runtimeConfig.memoryMB <= localInfraMemThresholdMB {
 		slog.Warn(localInfraMemoryNoticeText, "memory_mb", runtimeConfig.memoryMB)
 	}
 
