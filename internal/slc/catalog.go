@@ -31,8 +31,9 @@ type Catalog struct {
 // Architecture holds the SLCs available for one container architecture.
 type Architecture struct {
 	//nolint:tagliatelle // YAML schema uses snake_case field names.
-	DefaultVersion string             `yaml:"default_version"`
-	Versions       map[string]Version `yaml:"versions"`
+	DefaultVersion    string             `yaml:"default_version"`
+	ImageArchitecture string             `yaml:"image_architecture"`
+	Versions          map[string]Version `yaml:"versions"`
 }
 
 // Version groups the language flavors shipped in one script-languages-release version.
@@ -145,6 +146,10 @@ func (c *Catalog) entries(goarch string) ([]Entry, error) {
 	if version == "" {
 		return nil, fmt.Errorf("no default_version set for architecture %q", goarch)
 	}
+	imageArchitecture := strings.TrimSpace(arch.ImageArchitecture)
+	if imageArchitecture == "" {
+		imageArchitecture = goarch
+	}
 
 	langs, ok := arch.Versions[version]
 	if !ok {
@@ -164,7 +169,7 @@ func (c *Catalog) entries(goarch string) ([]Entry, error) {
 			Language: name,
 			Flavor:   lang.Flavor,
 			Version:  version,
-			Image:    c.imageRef(lang.Flavor, goarch, lang.Hash),
+			Image:    c.imageRef(lang.Flavor, imageArchitecture, lang.Hash),
 			Target:   targetDir(lang.Flavor),
 			Aliases:  lang.Aliases,
 		})
