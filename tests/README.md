@@ -154,6 +154,26 @@ poetry run pytest --exasol-path=../bin/exasol --infra=aws -m "infrastructure_e2e
 poetry run pytest --exasol-path=../bin/exasol --infra=aws -m "installation_e2e" tests/deployment tests/e2e tests/chaos
 ```
 
+### Seeing the commands a test runs
+
+Live logging is on at `INFO`, which does not include the individual launcher
+invocations. Raise it to `DEBUG` and every command the suite executes is printed
+before it starts, with its working directory when one is set:
+
+```bash
+poetry run pytest --exasol-path=../bin/exasol tests/integration --log-cli-level=DEBUG
+```
+
+```
+DEBUG executing command: ../bin/exasol presets list --json
+DEBUG executing command (cwd: /tmp/.../work): /.../exasol status --json --deployment staging
+```
+
+This covers every command regardless of how a test invokes it — the shared
+`run_command` helpers, the `framework` launcher, and tests that reach for
+`subprocess` directly — because the root `conftest.py` logs at the single point
+they all funnel through. Nothing needs to be passed to the helpers to opt in.
+
 ## Continuous Integration
 
 All tests run automatically in GitHub Actions CI:

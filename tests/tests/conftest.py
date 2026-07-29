@@ -3,9 +3,11 @@
 
 import logging
 import platform
+import shlex
 import subprocess
 import time
 from collections.abc import Generator
+from typing import Any
 
 import pytest
 
@@ -151,6 +153,50 @@ def _stamp_kind_marker(item: pytest.Item) -> None:
         if kind in parts:
             item.add_marker(getattr(pytest.mark, kind))
             return
+
+
+# Every command the suite executes goes through subprocess, so logging one
+# central place exposes them all -- the helpers in `integration/helpers.py` and
+# `testcase_helpers.py`, the `framework` launcher, and the tests that reach for
+# `subprocess` directly. `subprocess.run` builds on `Popen`, so patching only
+# `Popen` covers both without logging the same command twice.
+_command_logger = logging.getLogger("tests.commands")
+_real_popen = subprocess.Popen
+
+
+def _format_command(args: object) -> str:
+    if isinstance(args, (str, bytes)):
+        return args.decode() if isinstance(args, bytes) else args
+    if isinstance(args, (list, tuple)):
+        return shlex.join(
+            part.decode() if isinstance(part, bytes) else str(part) for part in args
+        )
+    return str(args)
+
+
+def _logging_popen(
+    args: Any,  # noqa: ANN401
+    *rest: Any,  # noqa: ANN401
+    **kwargs: Any,  # noqa: ANN401
+) -> subprocess.Popen[Any]:
+    """Log the command line at DEBUG, then start it through the real ``Popen``."""
+    # The working directory is logged when set, because several tests rely on
+    # resolution relative to the cwd; the environment is not, since dumping it
+    # would bury the command line.
+    cwd = kwargs.get("cwd")
+    context = f" (cwd: {cwd})" if cwd is not None else ""
+    _command_logger.debug("executing command%s: %s", context, _format_command(args))
+    return _real_popen(args, *rest, **kwargs)
+
+
+# pytest passes only the hook arguments a hook actually declares, so both of
+# these take none.
+def pytest_configure() -> None:
+    subprocess.Popen = _logging_popen  # type: ignore[assignment,misc]
+
+
+def pytest_unconfigure() -> None:
+    subprocess.Popen = _real_popen  # type: ignore[misc]
 
 
 def pytest_collection_modifyitems(

@@ -14,7 +14,6 @@ import pytest
 from tests.testcase_helpers import (
     export_preset,
     first_infrastructure_preset_id_or_skip,
-    log_command,
     run_command,
 )
 
@@ -154,7 +153,6 @@ def test_debug_build_is_larger_than_release_build() -> None:
         if debug:
             env["DEBUG_BUILD"] = "true"
         command = ["task", "build"]
-        log_command(command)
         subprocess.run(
             command,
             cwd=REPO_ROOT,

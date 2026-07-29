@@ -12,15 +12,6 @@ import pytest
 
 from framework.deployment import Deployment
 from framework.launcher import DeploymentConfig, Launcher
-from tests.testcase_helpers import skip_unless_infra
-
-
-@pytest.mark.infrastructure_e2e
-def test_checksum_mismatch_triggers_refresh(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure", "exoscale", "stackit")
-    # Corrupting a cached binary and observing the checksum-mismatch refresh
-    # requires a cache populated by real cloud provisioning.
-    pytest.skip("requires a populated cache from a real deployment (see TC-CACHE-01)")
 
 
 @pytest.fixture

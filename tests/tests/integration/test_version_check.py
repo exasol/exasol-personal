@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 import requests
 
-from tests.testcase_helpers import log_command, run_command
+from tests.testcase_helpers import run_command
 
 
 def test_version_check_latest(exasol_path: str, mock_version_server: str) -> None:
@@ -185,7 +185,6 @@ def _run_latest(
     exasol_path: str, base_url: str, *args: str
 ) -> subprocess.CompletedProcess[str]:
     command = [exasol_path, "version", "--latest", *args]
-    log_command(command)
     return subprocess.run(
         command,
         check=True,

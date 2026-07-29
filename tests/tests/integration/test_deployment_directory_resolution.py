@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.testcase_helpers import log_command
-
 from .helpers import first_infrastructure_preset_id_or_skip, run_command
 
 
@@ -492,7 +490,6 @@ def test_status_reports_resolved_default_dir(exasol_path: str, tmp_path: Path) -
 
     # When status runs outside any deployment directory
     command = [str(Path(exasol_path).resolve()), "status", "--json"]
-    log_command(command)
     result = subprocess.run(
         command,
         cwd=cwd,
@@ -524,7 +521,6 @@ def test_init_without_flag_uses_default_dir(exasol_path: str, tmp_path: Path) ->
         "aws",
         "--no-launcher-version-check",
     ]
-    log_command(command)
     subprocess.run(
         command,
         cwd=cwd,
@@ -554,7 +550,6 @@ def test_status_resolves_current_deployment_dir(
         str(deployment_dir),
         "--no-launcher-version-check",
     ]
-    log_command(init_command)
     subprocess.run(
         init_command,
         capture_output=True,
@@ -564,7 +559,6 @@ def test_status_resolves_current_deployment_dir(
 
     # When status runs with cwd inside the deployment (no flag)
     status_command = [launcher, "status", "--json"]
-    log_command(status_command)
     from_cwd = subprocess.run(
         status_command,
         cwd=deployment_dir,
@@ -576,7 +570,6 @@ def test_status_resolves_current_deployment_dir(
 
     # When status targets cwd explicitly with --deployment-dir .
     explicit_command = [launcher, "status", "--json", "--deployment-dir", "."]
-    log_command(explicit_command)
     explicit = subprocess.run(
         explicit_command,
         cwd=deployment_dir,

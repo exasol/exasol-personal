@@ -14,26 +14,23 @@ deployments, a selected cloud ``--infra`` for cloud cases, real credentials,
 etc.).
 """
 
-import logging
 import os
 import platform
-import shlex
 import sys
-from subprocess import CompletedProcess
 
 import pytest
 
 # Re-export the existing integration helpers so the converted cases follow the
-# same command-invocation conventions as the rest of the suite. ``run_command``
-# is wrapped below so every executed command is logged.
+# same command-invocation conventions as the rest of the suite. Executed
+# commands need no wrapper here: the root conftest logs every command at DEBUG.
 from tests.integration.helpers import (
     export_preset,
     first_infrastructure_preset_id_or_skip,
     first_installation_preset_id_or_skip,
     installation_preset_id_or_skip,
     preset_id_or_skip,
+    run_command,
 )
-from tests.integration.helpers import run_command as _integration_run_command
 
 __all__ = [
     "IS_MACOS_ARM",
@@ -43,7 +40,6 @@ __all__ = [
     "first_installation_preset_id_or_skip",
     "installation_preset_id_or_skip",
     "local_deploy_base_args",
-    "log_command",
     "preset_id_or_skip",
     "requires_macos_arm",
     "requires_supported_local_platform",
@@ -51,26 +47,6 @@ __all__ = [
     "skip_unless_infra",
     "skip_without_cloud_deploy_optin",
 ]
-
-_logger = logging.getLogger(__name__)
-
-
-def log_command(command: list[str]) -> None:
-    """Log a command line at DEBUG so ``-o log_cli_level=DEBUG`` prints it.
-
-    Every case in this package routes its command executions through here (via
-    ``run_command`` for launcher calls, or directly for ``subprocess.run``
-    calls) so the exact commands are visible when debug logging is enabled.
-    """
-    _logger.debug("executing command: %s", shlex.join(command))
-
-
-def run_command(
-    command: list[str], env: dict[str, str] | None = None
-) -> CompletedProcess[str]:
-    """Log the command at DEBUG, then run it via the integration helper."""
-    log_command(command)
-    return _integration_run_command(command, env=env)
 
 
 # True only on the platform where real local VM deployments are supported.
