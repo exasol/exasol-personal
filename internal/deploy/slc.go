@@ -173,6 +173,9 @@ func InstallSLC(
 	if !isLocalDeployment(deployment) {
 		return nil, ErrSLCNotSupported
 	}
+	if !localPlatformCapabilities().SLC {
+		return nil, fmt.Errorf("%w on this local platform", ErrSLCNotSupported)
+	}
 	if err := requireDeploymentPresent(deployment); err != nil {
 		return nil, err
 	}
@@ -286,6 +289,9 @@ func RemoveSLC(
 	if !isLocalDeployment(deployment) {
 		return nil, ErrSLCNotSupported
 	}
+	if !localPlatformCapabilities().SLC {
+		return nil, fmt.Errorf("%w on this local platform", ErrSLCNotSupported)
+	}
 	if err := requireDeploymentPresent(deployment); err != nil {
 		return nil, err
 	}
@@ -379,6 +385,9 @@ func UpdateSLC(
 ) (*SLCUpdateResult, error) {
 	if !isLocalDeployment(deployment) {
 		return nil, ErrSLCNotSupported
+	}
+	if !localPlatformCapabilities().SLC {
+		return nil, fmt.Errorf("%w on this local platform", ErrSLCNotSupported)
 	}
 	if err := requireDeploymentPresent(deployment); err != nil {
 		return nil, err
@@ -556,23 +565,6 @@ func installedFlavors(deployment config.DeploymentDir) (map[string]bool, error) 
 	}
 
 	return installed, nil
-}
-
-// localRunnerSlcArgs builds the runner "--slc <image>=<target>" start flags from the
-// installed SLC set. This is the mechanism that re-applies mounts on every start.
-func localRunnerSlcArgs(deployment config.DeploymentDir) ([]string, error) {
-	state, err := config.ReadExasolPersonalState(deployment)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read installed SLCs: %w", err)
-	}
-
-	const argsPerSLC = 2 // each SLC contributes "--slc" plus its "<image>=<target>" value
-	args := make([]string, 0, len(state.InstalledSLCs)*argsPerSLC)
-	for _, installed := range state.InstalledSLCs {
-		args = append(args, "--slc", installed.Image+"="+installed.Target)
-	}
-
-	return args, nil
 }
 
 // applySLCChange (re)starts the local database so a changed SLC set takes effect. Success

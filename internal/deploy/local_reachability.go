@@ -9,7 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/runtimeadapter"
 )
 
 // ErrLocalReachability is the sentinel a localReachabilityError unwraps to,
@@ -40,39 +40,44 @@ const localReachabilityMessage = "could not reach the local database endpoint be
 // unreachable, which points at a network-wide problem rather than one
 // specific to the database. It returns nil (deferring to the caller's
 // original error) for non-local deployments, when the health-check itself is
-// unavailable (e.g. an old runner daemon that predates health-check
-// support), or when at least one port is reachable, since that means the
+// unavailable, or when at least one port is reachable, since that means the
 // problem is not network-wide.
 func classifyLocalReachability(ctx context.Context, deployment config.DeploymentDir) error {
 	if !isLocalDeployment(deployment) {
 		return nil
 	}
 
-	result, err := localruntime.HealthCheck(ctx, deployment)
+	status, err := getLocalRuntimeAdapterHealth(ctx, deployment)
 	if err != nil {
-		slog.Debug("local health-check unavailable; skipping reachability classification",
+		slog.Debug("local provider health-check unavailable; skipping reachability classification",
 			"error", err)
 
 		return nil
 	}
-
-	if len(result.Ports) == 0 {
+	if !runtimeNetworkPathBlocked(status) {
 		return nil
 	}
 
-	for _, port := range result.Ports {
-		switch port.State {
-		case localruntime.PortStateReachable, localruntime.PortStateRefused:
-			return nil
-		case localruntime.PortStateBlocked, localruntime.PortStateTimeout:
+	return &localReachabilityError{}
+}
+
+func runtimeNetworkPathBlocked(status *runtimeadapter.RuntimeStatus) bool {
+	if status == nil || status.VM == nil || len(status.VM.Forwards) == 0 {
+		return false
+	}
+	for _, endpoint := range status.VM.Forwards {
+		switch endpoint.Health {
+		case "reachable", "refused":
+			return false
+		case "blocked", "timeout":
 			// Keep checking other ports.
 		default:
 			// Unknown state: don't risk misclassifying; defer to caller.
-			return nil
+			return false
 		}
 	}
 
-	return &localReachabilityError{}
+	return true
 }
 
 // diagnoseLocalFailure re-classifies a local-deployment operation failure

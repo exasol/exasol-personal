@@ -88,7 +88,8 @@ install: []
 }
 
 func TestInitDeployment_RejectsUnsupportedLocalPlatformBeforeMutation(t *testing.T) {
-	if runtime.GOOS == localSupportedOS && runtime.GOARCH == localSupportedArch {
+	if (runtime.GOOS == localMacOS && runtime.GOARCH == localMacArch) ||
+		(runtime.GOOS == localWindowsOS && runtime.GOARCH == localWindowsArch) {
 		t.Skip("current platform supports local deployments")
 	}
 	t.Setenv(localAllowUnsupportedEnv, "")

@@ -13,23 +13,33 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/runtimeadapter"
 )
 
 // LocalDiagnostics is a read-only snapshot of the local deployment preset's
 // runtime and reachability state, usable at any time and not only on
 // failure.
 type LocalDiagnostics struct {
-	Platform          string            `json:"platform"`
-	PlatformSupported bool              `json:"platformSupported"`
-	VMRunning         *bool             `json:"vmRunning,omitempty"`
-	GuestIP           string            `json:"guestIp,omitempty"`
-	Ports             map[string]int    `json:"ports,omitempty"`
-	PortHealth        map[string]string `json:"portHealth,omitempty"`
-	DatabaseReady     *bool             `json:"databaseReady,omitempty"`
-	DatabaseError     string            `json:"databaseError,omitempty"`
-	Warning           string            `json:"warning,omitempty"`
-	Message           string            `json:"message,omitempty"`
+	SchemaVersion     int                                `json:"schemaVersion"`
+	Platform          string                             `json:"platform"`
+	PlatformSupported bool                               `json:"platformSupported"`
+	Capabilities      runtimeadapter.RuntimeCapabilities `json:"capabilities"`
+	RuntimeKind       string                             `json:"runtimeKind,omitempty"`
+	RuntimeRunning    *bool                              `json:"runtimeRunning,omitempty"`
+	WorkloadName      string                             `json:"workloadName,omitempty"`
+	ContainerID       string                             `json:"containerId,omitempty"`
+	VMRunning         *bool                              `json:"vmRunning,omitempty"`
+	GuestIP           string                             `json:"guestIp,omitempty"`
+	Ports             map[string]int                     `json:"ports,omitempty"`
+	PortHealth        map[string]string                  `json:"portHealth,omitempty"`
+	WorkloadPhase     string                             `json:"workloadPhase,omitempty"`
+	HookPhase         string                             `json:"hookPhase,omitempty"`
+	RequestedPort     int                                `json:"requestedPort,omitempty"`
+	ResolvedPort      int                                `json:"resolvedPort,omitempty"`
+	DatabaseReady     *bool                              `json:"databaseReady,omitempty"`
+	DatabaseError     string                             `json:"databaseError,omitempty"`
+	Warning           string                             `json:"warning,omitempty"`
+	Message           string                             `json:"message,omitempty"`
 }
 
 func DiagnoseLocal(ctx context.Context, deployment config.DeploymentDir, writer io.Writer) error {
@@ -48,7 +58,8 @@ func DiagnoseLocal(ctx context.Context, deployment config.DeploymentDir, writer 
 // command doesn't itself become another thing that can error out.
 func diagnoseLocalUnsafe(ctx context.Context, deployment config.DeploymentDir) *LocalDiagnostics {
 	diagnostics := &LocalDiagnostics{
-		Platform: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
+		SchemaVersion: 1,
+		Platform:      fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 	}
 
 	allowUnsupported := os.Getenv(localAllowUnsupportedEnv)
@@ -63,42 +74,64 @@ func diagnoseLocalUnsafe(ctx context.Context, deployment config.DeploymentDir) *
 		return diagnostics
 	}
 
-	vmStatus, err := getLocalVMStatus(ctx, deployment)
+	status, err := getLocalRuntimeAdapterHealth(ctx, deployment)
 	if err != nil {
-		diagnostics.Message = fmt.Sprintf("could not determine local VM status: %s", err)
+		diagnostics.Message = fmt.Sprintf("could not determine local runtime status: %s", err)
 		return diagnostics
 	}
 
-	running := vmStatus.Running
-	diagnostics.VMRunning = &running
+	running := status.Phase == runtimeadapter.RuntimePhaseRunning ||
+		status.Phase == runtimeadapter.RuntimePhaseDegraded
+	diagnostics.RuntimeRunning = &running
+	diagnostics.WorkloadName = status.WorkloadName
+	diagnostics.ContainerID = status.ContainerID
+	diagnostics.WorkloadPhase = string(status.Phase)
+	diagnostics.Message = status.Message
+	if manifest, manifestErr := config.ReadInfrastructureManifest(deployment); manifestErr == nil {
+		if runtimeConfig, configErr := resolveLocalRuntimeConfig(manifest, 0); configErr == nil {
+			if requested, _, portErr := parseLocalDatabasePort(runtimeConfig.ports); portErr == nil {
+				diagnostics.RequestedPort = requested
+			}
+		}
+	}
+	diagnostics.ResolvedPort = status.Database.Port
+	diagnostics.Capabilities = localPlatformCapabilities()
+	diagnostics.RuntimeKind = "podman"
+	if status.VM != nil {
+		diagnostics.RuntimeKind = "local-vm"
+		vmRunning := status.VM.Phase == "running" || status.VM.Phase == "degraded"
+		diagnostics.VMRunning = &vmRunning
+	}
+	diagnostics.Ports = map[string]int{"db": status.Database.Port}
+	if status.Database.Health != "" {
+		diagnostics.PortHealth = map[string]string{"db": status.Database.Health}
+	}
+	if status.VM != nil {
+		diagnostics.GuestIP = status.VM.GuestIP
+		diagnostics.HookPhase = status.VM.Hook
+		if status.VM.SSH != nil {
+			diagnostics.Ports["ssh"] = status.VM.SSH.Port
+		}
+		for name, endpoint := range status.VM.Forwards {
+			diagnostics.Ports[name] = endpoint.Port
+			if endpoint.Health != "" {
+				if diagnostics.PortHealth == nil {
+					diagnostics.PortHealth = map[string]string{}
+				}
+				diagnostics.PortHealth[name] = endpoint.Health
+			}
+		}
+	}
 	if !running {
 		diagnostics.Message = "The platform is ready to run the local deployment. " +
-			"Run `exasol start` to start it, then run `exasol diag local` again for more detail."
+			"Run `exasol start` to start it."
 
 		return diagnostics
 	}
 
 	diagnostics.Warning = unexpectedRunningVMWarning(deployment)
 
-	if state, err := localruntime.ReadState(deployment); err == nil {
-		diagnostics.Ports = map[string]int{"ssh": state.SSHPort, "db": state.DBPort}
-		if state.UIPort != 0 {
-			diagnostics.Ports["ui"] = state.UIPort
-		}
-		diagnostics.GuestIP = state.VMIP
-	}
-
-	if health, err := localruntime.HealthCheck(ctx, deployment); err == nil {
-		diagnostics.PortHealth = make(map[string]string, len(health.Ports))
-		for name, portHealth := range health.Ports {
-			diagnostics.PortHealth[name] = string(portHealth.State)
-		}
-	}
-
-	dbCtx, cancel := context.WithTimeout(
-		ctx,
-		LocalDatabaseStartedDefaultTimeoutSeconds*time.Second,
-	)
+	dbCtx, cancel := context.WithTimeout(ctx, LocalDatabaseStartedDefaultTimeoutSeconds*time.Second)
 	defer cancel()
 
 	dbErr := verifyDatabaseConnection(dbCtx, deployment)
@@ -142,6 +175,6 @@ func unexpectedRunningVMWarning(deployment config.DeploymentDir) string {
 	return "a local VM process is running, but the recorded deployment state does not " +
 		"expect one. This is likely a process orphaned by an earlier crash or a manually " +
 		"killed launcher invocation, and can cause a future start/install to fail with a " +
-		"VM storage conflict. Look for a `mac-runner` process for this deployment and stop " +
+		"VM storage conflict. Look for a `local-vm` process for this deployment and stop " +
 		"it, then retry."
 }

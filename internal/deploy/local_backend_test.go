@@ -8,13 +8,12 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
+	"github.com/exasol/exasol-personal/internal/runtimeadapter"
 )
 
 type logCaptureHandler struct {
@@ -47,6 +46,17 @@ func TestValidateLocalPlatform_AcceptsMacOSAppleSilicon(t *testing.T) {
 	// Then
 	if err != nil {
 		t.Fatalf("expected platform to be accepted, got %v", err)
+	}
+}
+
+func TestValidateLocalPlatform_AcceptsWindowsWSLTarget(t *testing.T) {
+	t.Parallel()
+
+	// Given / When
+	err := validateLocalPlatform("windows", "amd64", "")
+	// Then
+	if err != nil {
+		t.Fatalf("expected Windows amd64 to be accepted, got %v", err)
 	}
 }
 
@@ -84,8 +94,7 @@ func TestResolveLocalRuntimeConfig_UsesDefaults(t *testing.T) {
 		t.Fatalf("expected default config, got %v", err)
 	}
 	if runtimeConfig.cpuCount != expectedDefaults.cpuCount ||
-		runtimeConfig.memoryMB != expectedDefaults.memoryMB ||
-		runtimeConfig.dataSizeGB != expectedDefaults.dataSizeGB {
+		runtimeConfig.memoryMB != expectedDefaults.memoryMB {
 		t.Fatalf("unexpected default local config: %#v", runtimeConfig)
 	}
 }
@@ -122,8 +131,7 @@ func TestResolveLocalRuntimeConfig_UsesManifestValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected local config, got %v", err)
 	}
-	if runtimeConfig.cpuCount != 4 || runtimeConfig.memoryMB != 8192 ||
-		runtimeConfig.dataSizeGB != 250 {
+	if runtimeConfig.cpuCount != 4 || runtimeConfig.memoryMB != 8192 {
 		t.Fatalf("unexpected local config: %#v", runtimeConfig)
 	}
 }
@@ -149,7 +157,7 @@ func TestResolveLocalRuntimeConfig_ExplicitMemoryOverridesComputedDefault(t *tes
 	}
 }
 
-func TestResolveLocalRuntimeConfig_RejectsInvalidValues(t *testing.T) {
+func TestResolveLocalRuntimeConfig_IgnoresLegacyDataSize(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -159,10 +167,9 @@ func TestResolveLocalRuntimeConfig_RejectsInvalidValues(t *testing.T) {
 
 	// When
 	_, err := resolveLocalRuntimeConfig(manifest, 0)
-
 	// Then
-	if err == nil {
-		t.Fatal("expected invalid local config error, got nil")
+	if err != nil {
+		t.Fatalf("expected deprecated data size to be ignored, got %v", err)
 	}
 }
 
@@ -170,7 +177,7 @@ func TestValidateLocalRuntimeConfig_RejectsHostMemoryBelowMinimum(t *testing.T) 
 	t.Parallel()
 
 	err := validateLocalRuntimeConfig(
-		localRuntimeConfig{cpuCount: 2, memoryMB: 4096, dataSizeGB: 100},
+		localRuntimeConfig{cpuCount: 2, memoryMB: 4096},
 		6144,
 	)
 	if err == nil {
@@ -188,7 +195,7 @@ func TestValidateLocalRuntimeConfig_PrefersHostMemoryError(t *testing.T) {
 	t.Parallel()
 
 	err := validateLocalRuntimeConfig(
-		localRuntimeConfig{cpuCount: 2, memoryMB: 2048, dataSizeGB: 100},
+		localRuntimeConfig{cpuCount: 2, memoryMB: 2048},
 		6144,
 	)
 	if err == nil {
@@ -206,7 +213,7 @@ func TestValidateLocalRuntimeConfig_RejectsMemoryBelowMinimum(t *testing.T) {
 	t.Parallel()
 
 	err := validateLocalRuntimeConfig(
-		localRuntimeConfig{cpuCount: 2, memoryMB: 4095, dataSizeGB: 100},
+		localRuntimeConfig{cpuCount: 2, memoryMB: 4095},
 		8192,
 	)
 	if err == nil {
@@ -221,7 +228,7 @@ func TestValidateLocalRuntimeConfig_AcceptsMinimumMemory(t *testing.T) {
 	t.Parallel()
 
 	err := validateLocalRuntimeConfig(
-		localRuntimeConfig{cpuCount: 2, memoryMB: 4096, dataSizeGB: 100},
+		localRuntimeConfig{cpuCount: 2, memoryMB: 4096},
 		8192,
 	)
 	if err != nil {
@@ -234,10 +241,11 @@ func TestValidateLocalInitMemory_RejectsOverrideBelowMinimum(t *testing.T) {
 
 	manifest := &presets.InfrastructureManifest{Backend: backendTypeLocal}
 
-	err := validateLocalInitMemory(
+	err := validateLocalInitMemoryWithCapabilities(
 		context.Background(),
 		manifest,
 		map[string]string{localMemoryMBConfigName: "4095"},
+		runtimeadapter.PlatformCapabilities(localMacOS),
 	)
 	if err == nil {
 		t.Fatal("expected minimum memory validation error, got nil")
@@ -252,10 +260,11 @@ func TestValidateLocalInitMemory_AcceptsValidOverride(t *testing.T) {
 
 	manifest := &presets.InfrastructureManifest{Backend: backendTypeLocal}
 
-	err := validateLocalInitMemory(
+	err := validateLocalInitMemoryWithCapabilities(
 		context.Background(),
 		manifest,
 		map[string]string{localMemoryMBConfigName: "4096"},
+		runtimeadapter.PlatformCapabilities(localMacOS),
 	)
 	if err != nil {
 		t.Fatalf("expected valid override to be accepted, got %v", err)
@@ -292,7 +301,7 @@ func TestLocalBackendSetupWorkspace_Noops(t *testing.T) {
 	}
 }
 
-func TestLocalBackendReadConfiguration_ExposesSizingValues(t *testing.T) {
+func TestLocalBackendReadConfiguration_DoesNotExposeDataSizing(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -306,6 +315,7 @@ func TestLocalBackendReadConfiguration_ExposesSizingValues(t *testing.T) {
 
 	// When
 	backend := newLocalBackend(config.NewDeploymentDir(t.TempDir()), manifest)
+	backend.platform = localMacOS
 	values, err := backend.ReadConfiguration()
 	// Then
 	if err != nil {
@@ -314,10 +324,14 @@ func TestLocalBackendReadConfiguration_ExposesSizingValues(t *testing.T) {
 	defaults := defaultLocalRuntimeConfig(detectLocalHostMemoryMB(context.Background()))
 	assertConfigValue(t, values, localCPUCountConfigName, 4, localDefaultCPUCount)
 	assertConfigValue(t, values, localMemoryMBConfigName, 8192, defaults.memoryMB)
-	assertConfigValue(t, values, localDataSizeGBConfigName, 250, localDefaultDataSizeGB)
+	for _, value := range values {
+		if strings.Contains(strings.ToLower(value.Name), "data") {
+			t.Fatalf("data sizing must not be exposed: %#v", values)
+		}
+	}
 }
 
-func TestLocalBackendConfigure_WritesSizingValuesToManifest(t *testing.T) {
+func TestLocalBackendConfigure_WritesResourceValuesWithoutDataSizing(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -334,12 +348,12 @@ func TestLocalBackendConfigure_WritesSizingValuesToManifest(t *testing.T) {
 
 	// When
 	backend := newLocalBackend(deployment, manifest)
+	backend.platform = localMacOS
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{
-			localCPUCountConfigName:   "4",
-			localMemoryMBConfigName:   "8192",
-			localDataSizeGBConfigName: "250",
+			localCPUCountConfigName: "4",
+			localMemoryMBConfigName: "8192",
 		},
 		DeploymentMetadata{},
 		DeploymentLayout{},
@@ -357,7 +371,7 @@ func TestLocalBackendConfigure_WritesSizingValuesToManifest(t *testing.T) {
 	}
 	if written.Local.CPUCount != 4 ||
 		written.Local.MemoryMB != 8192 ||
-		written.Local.DataSizeGB != 250 {
+		written.Local.DataSizeGB != 0 {
 		t.Fatalf("unexpected local manifest configuration: %#v", written.Local)
 	}
 }
@@ -382,6 +396,7 @@ func TestLocalBackendConfigure_WarnsForLowMemory(t *testing.T) {
 
 	// When
 	backend := newLocalBackend(deployment, manifest)
+	backend.platform = localMacOS
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{localMemoryMBConfigName: "8192"},
@@ -414,6 +429,7 @@ func TestLocalBackendConfigure_RejectsInvalidSizingValues(t *testing.T) {
 
 	// When
 	backend := newLocalBackend(deployment, manifest)
+	backend.platform = localMacOS
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{localCPUCountConfigName: "0"},
@@ -439,6 +455,7 @@ func TestLocalBackendConfigure_RejectsMemoryBelowMinimum(t *testing.T) {
 	}
 
 	backend := newLocalBackend(deployment, manifest)
+	backend.platform = localMacOS
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{localMemoryMBConfigName: "4095"},
@@ -450,83 +467,6 @@ func TestLocalBackendConfigure_RejectsMemoryBelowMinimum(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "local memory-mb must be at least 4096 MB") {
 		t.Fatalf("unexpected minimum memory error: %v", err)
-	}
-}
-
-func TestLocalSSHConnectionOptions_UsesConnectionMetadataWithoutNodes(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	keyData := []byte("fake private key")
-	keyPath := localruntime.NewPaths(deployment).PrivateKeyPath
-	if err := os.MkdirAll(filepath.Dir(keyPath), 0o750); err != nil {
-		t.Fatalf("failed to create key directory: %v", err)
-	}
-	if err := os.WriteFile(keyPath, keyData, 0o600); err != nil {
-		t.Fatalf("failed to write key file: %v", err)
-	}
-	if err := config.WriteDeploymentInfo(deployment.Root(), &config.DeploymentInfo{
-		Backend:      localDeploymentBackend,
-		DeploymentId: "local-test",
-		Connection: &config.DeploymentConnection{
-			Host:    "127.0.0.1",
-			DBPort:  28563,
-			SSHPort: "20022",
-		},
-	}); err != nil {
-		t.Fatalf("failed to write deployment info: %v", err)
-	}
-
-	// When
-	options, err := localSSHConnectionOptions(deployment)
-	// Then
-	if err != nil {
-		t.Fatalf("expected local SSH options, got %v", err)
-	}
-	if options.Host != "127.0.0.1" {
-		t.Fatalf("expected host %q, got %q", "127.0.0.1", options.Host)
-	}
-	if options.Port != "20022" {
-		t.Fatalf("expected port %q, got %q", "20022", options.Port)
-	}
-	if options.User != "root" {
-		t.Fatalf("expected user %q, got %q", "root", options.User)
-	}
-	if string(options.Key) != string(keyData) {
-		t.Fatal("expected SSH key data to be read from local runtime path")
-	}
-}
-
-func TestLocalContainerShellCommand_UsesMountedContainerRootfs(t *testing.T) {
-	t.Parallel()
-
-	// Given / When
-	command, err := localContainerShellCommand()
-	// Then
-	if err != nil {
-		t.Fatalf("expected local shell command to render, got error: %v", err)
-	}
-	if strings.Contains(command, "doas") {
-		t.Fatalf("expected local shell command to avoid doas, got %q", command)
-	}
-	if strings.Contains(command, "podman exec") {
-		t.Fatalf("expected local shell command not to probe container shells, got %q", command)
-	}
-	if !strings.Contains(command, "podman mount") {
-		t.Fatalf(
-			"expected local shell command to fall back to mounted container rootfs, got %q",
-			command,
-		)
-	}
-	if !strings.Contains(command, "nsenter") {
-		t.Fatalf("expected local shell command to enter container namespaces, got %q", command)
-	}
-	if !strings.Contains(command, "exasol-local-db") {
-		t.Fatalf("expected local shell command to target exasol-local-db, got %q", command)
-	}
-	if strings.Contains(command, "container_name=container") {
-		t.Fatalf("expected no generic container fallback, got %q", command)
 	}
 }
 

@@ -10,16 +10,11 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"strconv"
-	"strings"
-	"time"
+	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/runtimeadapter"
 )
-
-// Internal escape hatch for fake local-runner integration tests.
-const localSkipDatabaseWaitEnv = "EXASOL_LOCAL_SKIP_DB_WAIT"
 
 func deployLocalRuntime(
 	ctx context.Context,
@@ -38,95 +33,35 @@ func startLocalRuntime(
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
-	if err := localruntime.Prepare(
-		ctx,
-		deployment,
-		toLocalRuntimeConfig(runtimeConfig),
-		out,
-		outErr,
-	); err != nil {
-		return err
-	}
-
-	return startPreparedLocalRuntime(
-		ctx, deployment, runtimeConfig, waitTimeoutSeconds, out, outErr,
-	)
-}
-
-func startPreparedLocalRuntime(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	runtimeConfig localRuntimeConfig,
-	waitTimeoutSeconds int,
-	out, outErr io.Writer,
-) error {
-	paths := localruntime.NewPaths(deployment)
-	if err := os.Remove(paths.StatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("failed to remove stale local VM state: %w", err)
-	}
-
-	localConfig := toLocalRuntimeConfig(runtimeConfig)
-	startArgs := []string{"start"}
-	versionCheckArgs, err := localRunnerVersionCheckArgs(deployment)
+	prepared, err := prepareLocalRuntimeAdapter(ctx, deployment, runtimeConfig)
 	if err != nil {
 		return err
 	}
-	startArgs = append(startArgs, versionCheckArgs...)
-	slcArgs, err := localRunnerSlcArgs(deployment)
-	if err != nil {
+	if err := prepared.adapter.Prerequisites(
+		ctx,
+		runtimePrerequisiteOptions(out),
+	); err != nil {
 		return err
 	}
-	startArgs = append(startArgs, slcArgs...)
-	if localConfig.Ports != "" {
-		startArgs = append(startArgs, "--ports", localConfig.Ports)
-	}
-	startArgs = append(startArgs,
-		strconv.Itoa(localConfig.CPUCount),
-		strconv.Itoa(localConfig.MemoryMB),
-		strconv.Itoa(localConfig.DataSizeGB),
-	)
-	if err := localruntime.RunCommand(
-		ctx,
-		deployment,
-		startArgs,
-		out,
-		outErr,
-	); err != nil {
+	status, err := prepared.adapter.Start(ctx, prepared.spec, out, outErr)
+	if err != nil {
 		return diagnoseLocalFailure(ctx, deployment, err)
 	}
-
-	state, err := localruntime.ReadState(deployment)
-	if err != nil {
+	if status.Database.Port <= 0 {
+		return errors.New("runtime did not report a resolved database port")
+	}
+	if err := writeRuntimeAdapterArtifacts(
+		deployment,
+		status,
+		prepared.adapter.Capabilities(),
+	); err != nil {
 		return err
 	}
-
-	return writeLocalRuntimeArtifactsAndWait(ctx, deployment, state, waitTimeoutSeconds)
-}
-
-func localRunnerVersionCheckArgs(deployment config.DeploymentDir) ([]string, error) {
-	launcherState, err := config.ReadExasolPersonalState(deployment)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read local version-check settings: %w", err)
-	}
-
-	if !launcherState.VersionCheckEnabled {
-		return []string{"--version-check-enabled=false"}, nil
-	}
-
-	clusterIdentity := strings.TrimSpace(launcherState.ClusterIdentity)
-	if clusterIdentity == "" {
-		return nil, errors.New("deployment state is missing cluster identity")
-	}
-
-	return []string{
-		"--version-check-enabled=true",
-		"--version-check-url", GetVersionCheckURL(),
-		"--version-check-identity", clusterIdentity,
-	}, nil
+	return waitForRuntimeDatabase(ctx, deployment, waitTimeoutSeconds)
 }
 
 // reconcileLocalVMState corrects a stale WorkflowStateRunning caused by an unclean
-// VM shutdown (e.g. SIGKILL). If the mac-runner socket reports the daemon is not
+// VM shutdown (e.g. SIGKILL). If the v2 runtime provider reports the VM is not
 // running, the state is updated to WorkflowStateStopped so that subsequent permit
 // checks in Start/Stop see a consistent state.
 //
@@ -184,8 +119,64 @@ func isLocalDeployment(deployment config.DeploymentDir) bool {
 func getLocalVMStatus(
 	ctx context.Context,
 	deployment config.DeploymentDir,
-) (*localruntime.VMStatus, error) {
-	return localruntime.Status(ctx, deployment)
+) (*localVMStatus, error) {
+	status, err := getLocalRuntimeAdapterStatus(ctx, deployment)
+	if err != nil {
+		return nil, err
+	}
+
+	return &localVMStatus{
+		Running: status.Phase == runtimeadapter.RuntimePhaseRunning ||
+			status.Phase == runtimeadapter.RuntimePhaseDegraded,
+	}, nil
+}
+
+type localVMStatus struct {
+	Running bool
+}
+
+func getLocalRuntimeAdapterStatus(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+) (*runtimeadapter.RuntimeStatus, error) {
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return nil, err
+	}
+	runtimeConfig, err := resolveLocalRuntimeConfig(manifest, detectLocalHostMemoryMB(ctx))
+	if err != nil {
+		return nil, err
+	}
+	prepared, err := reconstructLocalRuntimeAdapter(deployment, runtimeConfig)
+	if err != nil {
+		return nil, err
+	}
+	status, err := prepared.adapter.Status(ctx, prepared.spec)
+	if err != nil {
+		return nil, err
+	}
+
+	return status, nil
+}
+
+func getLocalRuntimeAdapterHealth(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+) (*runtimeadapter.RuntimeStatus, error) {
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return nil, err
+	}
+	runtimeConfig, err := resolveLocalRuntimeConfig(manifest, detectLocalHostMemoryMB(ctx))
+	if err != nil {
+		return nil, err
+	}
+	prepared, err := reconstructLocalRuntimeAdapter(deployment, runtimeConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return prepared.adapter.Health(ctx, prepared.spec)
 }
 
 func stopLocalRuntime(
@@ -193,7 +184,19 @@ func stopLocalRuntime(
 	deployment config.DeploymentDir,
 	out, outErr io.Writer,
 ) error {
-	if err := localruntime.Stop(ctx, deployment, out, outErr); err != nil {
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return err
+	}
+	runtimeConfig, err := resolveLocalRuntimeConfig(manifest, detectLocalHostMemoryMB(ctx))
+	if err != nil {
+		return err
+	}
+	prepared, err := reconstructLocalRuntimeAdapter(deployment, runtimeConfig)
+	if err != nil {
+		return err
+	}
+	if err := prepared.adapter.Stop(ctx, prepared.spec, out, outErr); err != nil {
 		return err
 	}
 
@@ -205,7 +208,35 @@ func destroyLocalRuntime(
 	deployment config.DeploymentDir,
 	out, outErr io.Writer,
 ) error {
-	if err := localruntime.Destroy(ctx, deployment, out, outErr); err != nil {
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return err
+	}
+	runtimeConfig, err := resolveLocalRuntimeConfig(manifest, detectLocalHostMemoryMB(ctx))
+	if err != nil {
+		return err
+	}
+	prepared, err := reconstructLocalRuntimeAdapter(deployment, runtimeConfig)
+	if err != nil {
+		return err
+	}
+	if err := prepared.adapter.Destroy(ctx, prepared.spec, out, outErr); err != nil {
+		return err
+	}
+	for _, path := range []string{
+		filepath.Join(deployment.Root(), "local", "control"),
+		filepath.Join(deployment.Root(), "local", "generated"),
+		filepath.Join(deployment.Root(), "local", "provider"),
+		filepath.Join(deployment.Root(), "local", "runtime"),
+	} {
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+	}
+	if err := runtimeadapter.RemovePersonalData(
+		deployment.Root(),
+		filepath.Join(deployment.Root(), "local", "data"),
+	); err != nil {
 		return err
 	}
 
@@ -220,89 +251,6 @@ func destroyLocalRuntime(
 	}
 
 	return nil
-}
-
-func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.Config {
-	return localruntime.Config{
-		CPUCount:   runtimeConfig.cpuCount,
-		MemoryMB:   runtimeConfig.memoryMB,
-		DataSizeGB: runtimeConfig.dataSizeGB,
-		Ports:      runtimeConfig.ports,
-	}
-}
-
-func writeLocalRuntimeArtifactsAndWait(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	state *localruntime.State,
-	waitTimeoutSeconds int,
-) error {
-	if err := writeLocalDeploymentArtifacts(deployment, state); err != nil {
-		return err
-	}
-	if os.Getenv(localSkipDatabaseWaitEnv) != "" {
-		return nil
-	}
-
-	if waitTimeoutSeconds <= 0 {
-		waitTimeoutSeconds = LocalDatabaseStartedDefaultTimeoutSeconds
-	}
-	waitCtx, cancel := context.WithTimeout(ctx, time.Duration(waitTimeoutSeconds)*time.Second)
-	defer cancel()
-
-	return WaitForLocalDatabaseStarted(waitCtx, deployment)
-}
-
-func writeLocalDeploymentArtifacts(
-	deployment config.DeploymentDir,
-	state *localruntime.State,
-) error {
-	if state == nil {
-		return errors.New("local runtime endpoint state is required")
-	}
-
-	deploymentID := "local"
-	if launcherState, err := config.ReadExasolPersonalState(deployment); err == nil {
-		if strings.TrimSpace(launcherState.DeploymentId) != "" {
-			deploymentID = launcherState.DeploymentId
-		}
-	}
-
-	sshPort := strconv.Itoa(state.SSHPort)
-	sshCommand := fmt.Sprintf(
-		"ssh -i %s %s@%s -p %s",
-		state.PrivateKeyRelativePath,
-		localSSHUser,
-		localDeploymentPublicHost,
-		sshPort,
-	)
-
-	info := &config.DeploymentInfo{
-		Backend:         localDeploymentBackend,
-		DeploymentId:    deploymentID,
-		DeploymentState: StatusRunning,
-		ClusterSize:     1,
-		ClusterState:    StatusRunning,
-		InstanceType:    "exasol-local",
-		Connection: &config.DeploymentConnection{
-			Host:                       localDeploymentPublicHost,
-			DisplayHost:                localDeploymentPublicHost,
-			PublicIp:                   localDeploymentPublicHost,
-			DBPort:                     state.DBPort,
-			Username:                   localDBUser,
-			InsecureSkipCertValidation: true,
-			SSHCommand:                 sshCommand,
-			SSHPort:                    sshPort,
-			ShellSupported:             true,
-		},
-	}
-	if err := config.WriteDeploymentInfo(deployment.Root(), info); err != nil {
-		return err
-	}
-
-	return config.WriteSecrets(deployment.Root(), &config.Secrets{
-		DbPassword: localDBPassword,
-	})
 }
 
 func updateLocalDeploymentArtifactState(deployment config.DeploymentDir, state string) error {

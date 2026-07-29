@@ -24,8 +24,11 @@ type InfrastructureTofu struct {
 //
 //nolint:tagliatelle // These YAML keys are part of the preset contract.
 type InfrastructureLocal struct {
-	CPUCount   int    `yaml:"cpuCount,omitempty"`
-	MemoryMB   int    `yaml:"memoryMB,omitempty"`
+	CPUCount int `yaml:"cpuCount,omitempty"`
+	MemoryMB int `yaml:"memoryMB,omitempty"`
+	// DataSizeGB is accepted only so legacy deployment manifests remain
+	// readable. Personal v2 ignores it and never writes or prompts for it.
+	// Deprecated: local storage is selected by Personal and is not user-sized.
 	DataSizeGB int    `yaml:"dataSizeGB,omitempty"`
 	Ports      string `yaml:"ports,omitempty"`
 }
