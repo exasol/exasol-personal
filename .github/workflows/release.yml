@@ -51,6 +51,10 @@ jobs:
           go-version-file: go.mod
       - name: Setup Task
         uses: ./.github/actions/setup-task
+      - name: Install Nano image packaging tool
+        run: sudo apt-get update && sudo apt-get install --yes skopeo
+      - name: Fetch digest-pinned Nano images
+        run: task local-workload-fetch
 
       - name: Setup CodeSignTool for Windows signing
         uses: ./.github/actions/setup-codesigntool

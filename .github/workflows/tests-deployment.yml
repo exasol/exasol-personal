@@ -158,8 +158,27 @@ jobs:
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
+  stage-local-nano-images:
+    if: ${{ inputs.suite != 'cloud' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/setup-go
+      - name: Install OCI image exporter
+        run: sudo apt-get update && sudo apt-get install --yes skopeo
+      - name: Fetch digest-pinned Nano images
+        run: task local-workload-fetch
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: local-nano-images-${{ github.run_id }}
+          path: assets/localworkloadbin/generated
+          compression-level: 0
+
   tests-deployment-local:
     if: ${{ inputs.suite != 'cloud' }}
+    needs: stage-local-nano-images
     environment:
       name: deployment-tests
     runs-on:
@@ -181,7 +200,14 @@ jobs:
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-      - uses: ./.github/actions/build
+      - uses: ./.github/actions/setup-go
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: local-nano-images-${{ github.run_id }}
+          path: assets/localworkloadbin/generated
+      - name: Build
+        shell: bash
+        run: task build
       - uses: ./.github/actions/tests-deployment
         with:
           infra: local
@@ -192,6 +218,52 @@ jobs:
         if: always()
         with:
           context: tests-deployment-local-self-hosted
+          status: ${{ job.status }}
+          description: ${{ env.STATUS_DESC }}
+          target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  tests-deployment-local-windows:
+    if: ${{ inputs.suite != 'cloud' }}
+    needs: stage-local-nano-images
+    environment:
+      name: deployment-tests
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - WSL2
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/status-set
+        with:
+          context: tests-deployment-local-windows-self-hosted
+          status: pending
+          description: ${{ env.STATUS_DESC }}
+          target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - uses: ./.github/actions/setup-go
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: local-nano-images-${{ github.run_id }}
+          path: assets/localworkloadbin/generated
+      - name: Build Windows hardware-validation launcher
+        shell: bash
+        run: task build
+      - uses: ./.github/actions/tests-deployment
+        with:
+          infra: local
+          task: tests-deployment-local
+          system-python: 'true'
+
+      - uses: ./.github/actions/status-set
+        if: always()
+        with:
+          context: tests-deployment-local-windows-self-hosted
           status: ${{ job.status }}
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

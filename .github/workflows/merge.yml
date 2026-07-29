@@ -9,13 +9,10 @@ on:
 permissions: {}
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  build-macos:
+    runs-on: macos-latest
     permissions:
       contents: read
-    strategy:
-      matrix:
-        os: [windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -24,15 +21,28 @@ jobs:
       - uses: ./.github/actions/build
 
       - name: Upload file
-        if: ${{ !contains(matrix.os, 'windows') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: exasol-${{ matrix.os }}
+          name: exasol-macos-latest
           path: bin/exasol
 
-      - name: Upload file (Windows)
-        if: ${{ contains(matrix.os, 'windows') }}
+  build-windows-with-nano:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-go
+      - name: Install OCI image exporter
+        run: sudo apt-get update && sudo apt-get install --yes skopeo
+      - name: Fetch and verify the pinned Windows Nano image
+        run: task local-workload-fetch TARGET_GOOS=windows TARGET_GOARCH=amd64
+      - name: Build Windows artifact with embedded Nano
+        run: task build-windows
+      - name: Upload file
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: exasol-${{ matrix.os }}
+          name: exasol-windows-latest
           path: bin/exasol.exe
