@@ -5,6 +5,7 @@ package runtimeadapter
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -84,4 +85,18 @@ esac
 
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func parsePublishedPort(value string) int {
+	value = strings.TrimSpace(value)
+	index := strings.LastIndex(value, ":")
+	if index < 0 {
+		return 0
+	}
+	port, err := strconv.Atoi(value[index+1:])
+	if err != nil || port < 1 || port > 65535 {
+		return 0
+	}
+
+	return port
 }

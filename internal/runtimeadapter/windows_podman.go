@@ -11,20 +11,15 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
-
-	"github.com/blang/semver/v4"
 )
 
 var windowsDrivePath = regexp.MustCompile(`^([A-Za-z]):[\\/](.*)$`)
 
-var minimumPodmanVersion = semver.MustParse("5.8.0")
-
 type WindowsPodmanAdapter struct {
+	BaseAdapter    BasePodmanAdapter
 	DeploymentRoot string
 	Commands       CommandRunner
 }
@@ -34,7 +29,12 @@ func NewWindowsPodmanAdapter(deploymentRoot string, commands CommandRunner) *Win
 		commands = OSCommandRunner{}
 	}
 
-	return &WindowsPodmanAdapter{DeploymentRoot: deploymentRoot, Commands: commands}
+	return &WindowsPodmanAdapter{
+		BaseAdapter: BasePodmanAdapter{
+			DeploymentRoot: deploymentRoot,
+			Commands:       commands,
+		},
+		DeploymentRoot: deploymentRoot, Commands: commands}
 }
 
 func (*WindowsPodmanAdapter) Capabilities() RuntimeCapabilities {
@@ -135,48 +135,6 @@ func (adapter *WindowsPodmanAdapter) Prerequisites(
 	return nil
 }
 
-func readPodmanVersions(
-	ctx context.Context,
-	commands CommandRunner,
-) (podmanVersions, error) {
-	read := func(template, component string) (semver.Version, error) {
-		data, err := commands.Output(ctx, "podman", "version", "--format", template)
-		if err != nil {
-			return semver.Version{}, fmt.Errorf(
-				"failed to read Podman %s version: %w",
-				component,
-				err,
-			)
-		}
-		version, err := semver.ParseTolerant(strings.TrimSpace(string(data)))
-		if err != nil {
-			return semver.Version{}, fmt.Errorf(
-				"failed to parse Podman %s version %q: %w",
-				component,
-				data,
-				err,
-			)
-		}
-
-		return version, nil
-	}
-	clientVersion, err := read("{{.Client.Version}}", "client")
-	if err != nil {
-		return podmanVersions{}, err
-	}
-	serverVersion, err := read("{{.Server.Version}}", "server")
-	if err != nil {
-		return podmanVersions{}, err
-	}
-
-	return podmanVersions{Client: clientVersion, Server: serverVersion}, nil
-}
-
-type podmanVersions struct {
-	Client semver.Version
-	Server semver.Version
-}
-
 func requireInteractiveApproval(options PrerequisiteOptions, prompt string) error {
 	if !options.Interactive || options.Confirm == nil {
 		return errors.New(prompt + " Re-run interactively to approve this user-scoped change")
@@ -272,83 +230,8 @@ func (adapter *WindowsPodmanAdapter) Start(
 	if err != nil {
 		return nil, err
 	}
-	manifestPath, imagePath, err := adapter.stage(runtimeSpec, true)
-	if err != nil {
-		return nil, err
-	}
-	if err := adapter.Commands.Run(
-		ctx,
-		nil,
-		stdout,
-		stderr,
-		"podman",
-		"load",
-		"--input",
-		imagePath,
-	); err != nil {
-		return nil, fmt.Errorf("failed to load embedded Nano image: %w", err)
-	}
-	if err := adapter.ensureSLCImages(ctx, runtimeSpec.SLCMounts, stdout, stderr); err != nil {
-		return nil, err
-	}
-	if err := adapter.Commands.Run(
-		ctx,
-		nil,
-		stdout,
-		stderr,
-		"podman",
-		"kube",
-		"play",
-		"--replace",
-		manifestPath,
-	); err != nil {
-		return nil, fmt.Errorf("failed to apply Nano workload: %w", err)
-	}
 
-	return adapter.Status(ctx, spec)
-}
-
-func (adapter *WindowsPodmanAdapter) ensureSLCImages(
-	ctx context.Context,
-	mounts []SLCMount,
-	stdout, stderr io.Writer,
-) error {
-	seen := make(map[string]struct{}, len(mounts))
-	for _, mount := range mounts {
-		if _, exists := seen[mount.Image]; exists {
-			continue
-		}
-		seen[mount.Image] = struct{}{}
-		err := adapter.Commands.Run(
-			ctx,
-			nil,
-			io.Discard,
-			io.Discard,
-			"podman",
-			"image",
-			"exists",
-			mount.Image,
-		)
-		if err == nil {
-			continue
-		}
-		if commandExitCode(err) != 1 {
-			return fmt.Errorf("failed to inspect SLC image %s: %w", mount.Image, err)
-		}
-		if err := adapter.Commands.Run(
-			ctx,
-			nil,
-			stdout,
-			stderr,
-			"podman",
-			"pull",
-			mount.Image,
-		); err != nil {
-			return fmt.Errorf("failed to pull SLC image %s: %w", mount.Image, err)
-		}
-	}
-
-	return nil
+	return adapter.BaseAdapter.Start(ctx, runtimeSpec, stdout, stderr)
 }
 
 func (adapter *WindowsPodmanAdapter) Stop(
@@ -356,128 +239,19 @@ func (adapter *WindowsPodmanAdapter) Stop(
 	spec WorkloadSpec,
 	stdout, stderr io.Writer,
 ) error {
-	status, err := adapter.Status(ctx, spec)
-	if err != nil {
-		return err
-	}
-	if status.Phase == RuntimePhaseStopped {
-		return nil
-	}
 	runtimeSpec, err := windowsRuntimeSpec(spec)
 	if err != nil {
 		return err
 	}
-	manifestPath, _, err := adapter.stage(runtimeSpec, false)
-	if err != nil {
-		return err
-	}
-	if err := adapter.Commands.Run(
-		ctx,
-		nil,
-		stdout,
-		stderr,
-		"podman",
-		"kube",
-		"down",
-		manifestPath,
-	); err != nil {
-		return fmt.Errorf("failed to stop Nano workload: %w", err)
-	}
 
-	return nil
+	return adapter.BaseAdapter.Stop(ctx, runtimeSpec, stdout, stderr)
 }
 
 func (adapter *WindowsPodmanAdapter) Status(
 	ctx context.Context,
 	spec WorkloadSpec,
 ) (*RuntimeStatus, error) {
-	name := WorkloadName(spec.DeploymentID)
-	if err := adapter.Commands.Run(
-		ctx,
-		nil,
-		io.Discard,
-		io.Discard,
-		"podman",
-		"pod",
-		"exists",
-		name,
-	); err != nil {
-		if commandExitCode(err) != 1 {
-			return nil, fmt.Errorf("failed to check Podman workload existence: %w", err)
-		}
-
-		return &RuntimeStatus{
-			Phase:        RuntimePhaseStopped,
-			WorkloadName: name,
-			Database: RuntimeEndpoint{
-				Address: "127.0.0.1",
-				Port:    spec.DBHostPort,
-			},
-		}, nil
-	}
-	data, err := adapter.Commands.Output(
-		ctx,
-		"podman",
-		"pod",
-		"inspect",
-		"--format",
-		"{{.State}}",
-		name,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to inspect Podman workload: %w", err)
-	}
-	workloadState := strings.TrimSpace(string(data))
-	phase := RuntimePhaseDegraded
-	if strings.EqualFold(workloadState, "Running") {
-		phase = RuntimePhaseRunning
-	}
-	containerName := name + "-nano"
-	containerIDData, _ := adapter.Commands.Output(
-		ctx,
-		"podman",
-		"container",
-		"inspect",
-		"--format",
-		"{{.Id}}",
-		containerName,
-	)
-	resolvedPort := spec.DBHostPort
-	if portData, portErr := adapter.Commands.Output(
-		ctx,
-		"podman",
-		"port",
-		containerName,
-		strconv.Itoa(NanoContainerPort)+"/tcp",
-	); portErr == nil {
-		if port := parsePublishedPort(string(portData)); port > 0 {
-			resolvedPort = port
-		}
-	}
-
-	return &RuntimeStatus{
-		Phase:        phase,
-		WorkloadName: name,
-		Database: RuntimeEndpoint{
-			Address: "127.0.0.1",
-			Port:    resolvedPort,
-		},
-		ContainerID: strings.TrimSpace(string(containerIDData)),
-	}, nil
-}
-
-func parsePublishedPort(value string) int {
-	value = strings.TrimSpace(value)
-	index := strings.LastIndex(value, ":")
-	if index < 0 {
-		return 0
-	}
-	port, err := strconv.Atoi(value[index+1:])
-	if err != nil || port < 1 || port > 65535 {
-		return 0
-	}
-
-	return port
+	return adapter.BaseAdapter.Status(ctx, spec)
 }
 
 func (adapter *WindowsPodmanAdapter) Health(
@@ -492,15 +266,7 @@ func (adapter *WindowsPodmanAdapter) Logs(
 	spec WorkloadSpec,
 	stdout, stderr io.Writer,
 ) error {
-	return adapter.Commands.Run(
-		ctx,
-		nil,
-		stdout,
-		stderr,
-		"podman",
-		"logs",
-		WorkloadName(spec.DeploymentID)+"-nano",
-	)
+	return adapter.BaseAdapter.Logs(ctx, spec, stdout, stderr)
 }
 
 func (adapter *WindowsPodmanAdapter) Destroy(
@@ -522,25 +288,6 @@ func (*WindowsPodmanAdapter) Shell(
 	return errors.New("VM and container shells are not supported on Windows local deployments")
 }
 
-//nolint:revive // The two string results are the manifest and image paths.
-func (adapter *WindowsPodmanAdapter) stage(
-	spec WorkloadSpec,
-	includeImage bool,
-) (string, string, error) {
-	controlPath := filepath.Join(adapter.DeploymentRoot, "local", "control")
-	manifestPath := filepath.Join(controlPath, "workload.yaml")
-	imagePath := filepath.Join(controlPath, "nano-image.tar.gz")
-	imageStage := stageManifestOnly
-	if includeImage {
-		imageStage = stageManifestAndImage
-	}
-	if err := stageWorkloadAssets(spec, manifestPath, imagePath, imageStage); err != nil {
-		return "", "", err
-	}
-
-	return manifestPath, imagePath, nil
-}
-
 func windowsRuntimeSpec(spec WorkloadSpec) (WorkloadSpec, error) {
 	wslDataPath, err := WindowsPathToWSL(spec.DataPath)
 	if err != nil {
@@ -553,15 +300,6 @@ func windowsRuntimeSpec(spec WorkloadSpec) (WorkloadSpec, error) {
 	}
 
 	return spec, nil
-}
-
-func commandExitCode(err error) int {
-	var withExitCode interface{ ExitCode() int }
-	if errors.As(err, &withExitCode) {
-		return withExitCode.ExitCode()
-	}
-
-	return -1
 }
 
 func reportsWSL2(output []byte) bool {
