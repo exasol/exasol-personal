@@ -1,0 +1,28 @@
+{
+  "linux_amd64": {
+    "Reference": "docker.io/exasol/nano@sha256:2ac98412bd8fdf046714636710182bb93ad221ec423317e9a5f2be78298cd950",
+    "ContainerPlatform": {
+      "os": "linux",
+      "architecture": "amd64"
+    },
+    "HostPlatforms": [
+      {
+        "os": "windows",
+        "architecture": "amd64"
+      }
+    ]
+  },
+  "linux_arm64": {
+    "Reference": "docker.io/exasol/nano@sha256:93512673ca38053cb45fa33eaa9ac999fc93c2c8f70c873d054432433c5e81bf",
+    "ContainerPlatform": {
+      "os": "linux",
+      "architecture": "arm64"
+    },
+    "HostPlatforms": [
+      {
+        "os": "darwin",
+        "architecture": "arm64"
+      }
+    ]
+  }
+}

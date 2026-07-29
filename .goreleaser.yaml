@@ -10,6 +10,7 @@ before:
   hooks:
     - go mod tidy
     - task local-runner-placeholders
+    - task local-workload-placeholders
     - go generate ./...
 
 builds:

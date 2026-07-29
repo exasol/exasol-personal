@@ -47,13 +47,52 @@ tasks:
         -runner-path "{{.RUNNER_PATH}}"
         -target assets/localruntimebin/generated/darwin/arm64/mac-runner-aarch64
 
+  local-workload-update:
+    desc: Update pinned image digests
+    cmds:
+      - go run ./tools/localworkload update
+
+  local-workload-placeholders:
+    desc: Create ignored go:embed placeholders for supported Nano image targets
+    cmds:
+      - go run ./tools/localworkload placeholder
+
+  local-workload-stage:
+    desc: Stage a digest-pinned Nano image archive for a supported Personal artifact
+    vars:
+      TARGET_GOOS: '{{default "" .TARGET_GOOS}}'
+      TARGET_GOARCH: '{{default "" .TARGET_GOARCH}}'
+      NANO_IMAGE_ARCHIVE: '{{default "" .NANO_IMAGE_ARCHIVE}}'
+      NANO_IMAGE_REFERENCE: '{{default "" .NANO_IMAGE_REFERENCE}}'
+    env:
+      NANO_IMAGE_ARCHIVE: '{{.NANO_IMAGE_ARCHIVE}}'
+      NANO_IMAGE_REFERENCE: '{{.NANO_IMAGE_REFERENCE}}'
+    cmds:
+      - >-
+        go run ./tools/localworkload stage
+        {{if .TARGET_GOOS}}-goos {{.TARGET_GOOS}}{{end}}
+        {{if .TARGET_GOARCH}}-goarch {{.TARGET_GOARCH}}{{end}}
+
+  local-workload-fetch:
+    desc: Fetch and stage the repository-pinned Nano image for packaging
+    vars:
+      TARGET_GOOS: '{{default "" .TARGET_GOOS}}'
+      TARGET_GOARCH: '{{default "" .TARGET_GOARCH}}'
+    cmds:
+      - >-
+        go run ./tools/localworkload fetch
+        {{if .TARGET_GOOS}}-goos {{.TARGET_GOOS}}{{end}}
+        {{if .TARGET_GOARCH}}-goarch {{.TARGET_GOARCH}}{{end}}
+
   generate:
     desc: run generation for all packages
     deps:
       - local-runner-placeholders
+      - local-workload-placeholders
     cmds:
       - go generate ./...
       - task: local-runner-stage
+      - task: local-workload-stage
 
   tofu-lock-update:
     desc: Regenerate multi-platform .terraform.lock.hcl files (no temp files in assets)
