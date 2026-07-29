@@ -31,7 +31,8 @@ exasol-local-runner:
       resource_path: launcher
 exasol-nano-image:
   extract: false
-  embed: true
+  # Enable when we move ownership of containers to exasol-personal
+  # embed: true
   artifact:
     darwin/arm64:
       url: docker://docker.io/exasol/nano:2026.2.0-nano.2@sha256:93512673ca38053cb45fa33eaa9ac999fc93c2c8f70c873d054432433c5e81bf
