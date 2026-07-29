@@ -51,6 +51,7 @@ func run(args []string) error {
 		return err
 	}
 
+	// FIXME maybe add tests for these
 	if args[0] == "update" {
 		return updateLocalImagePins()
 	}
