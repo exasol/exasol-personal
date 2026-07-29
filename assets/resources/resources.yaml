@@ -29,3 +29,19 @@ exasol-local-runner:
       url: https://github.com/exasol/exasol-local-vm/releases/download/v1.1.0/mac-launcher-aarch64.zip
       sha256: a230ce332e7779ba6aacaac7b42566985242b3a0e3e8eb65ead166f820b19d3d
       resource_path: launcher
+exasol-nano-image:
+  extract: false
+  embed: true
+  artifact:
+    darwin/arm64:
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.2@sha256:93512673ca38053cb45fa33eaa9ac999fc93c2c8f70c873d054432433c5e81bf
+      sha256: "d4aa414d3f04275305b247607016c53e8cbde7db93b2d11f2b3ea04017f05001"
+    linux/arm64:
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.2@sha256:93512673ca38053cb45fa33eaa9ac999fc93c2c8f70c873d054432433c5e81bf
+      sha256: "d4aa414d3f04275305b247607016c53e8cbde7db93b2d11f2b3ea04017f05001"
+    linux/amd64:
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.2@sha256:2ac98412bd8fdf046714636710182bb93ad221ec423317e9a5f2be78298cd950
+      sha256: "01da6cd72a39deb7007af4c8829c9e5e5a4f4dba83e6610082512b1551ef0922"
+    windows/amd64:
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.2@sha256:2ac98412bd8fdf046714636710182bb93ad221ec423317e9a5f2be78298cd950
+      sha256: "01da6cd72a39deb7007af4c8829c9e5e5a4f4dba83e6610082512b1551ef0922"
