@@ -58,6 +58,13 @@ those sources can be abandoned without losing coverage.
 - **THEN** they are grouped into area files (or merged into the existing same-area file)
 - **AND** no test file contains a single test purely as a naming artifact
 
+#### Scenario: Ported tests assert current product behavior
+
+- **WHEN** a ported test's expectations conflict with behavior on the current `main`
+  (for example output routed to stderr, or a changed runner-injection mechanism)
+- **THEN** the ported test is updated to the current behavior, or dropped if a `main`
+  test already covers that behavior correctly
+
 ### Requirement: Tooling targets all cloud directories
 
 The Taskfile cloud tasks SHALL run tests across the `deployment`, `e2e`, and `chaos`

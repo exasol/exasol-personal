@@ -19,6 +19,8 @@ Two findings from applying this change reshaped its scope:
 2. **The only remaining work is organizational.** `main` used two Python test directories
    (`integration/`, `deployment/`) with behavior markers. This change reorganizes the cloud
    tests into a four-kind layout without adding or removing any test coverage.
+   Alongside it, the Python tests that only exist in PR #120 and the branch are ported into
+   the new layout and consolidated, so those sources can be retired.
 
 ## What Changes
 
@@ -39,6 +41,12 @@ Two findings from applying this change reshaped its scope:
   cloud tests in `deployment`/`e2e`/`chaos` by behavior. The branch's `testcases/helpers.py`
   becomes the shared `tests/tests/testcase_helpers.py`; PR read-only cloud tests are rewired
   from their own `e2e_deployment` fixture to the shared `reusable_deployment` (one cluster).
+- Consolidate the ported tests rather than landing them one-test-per-file: drop the tests that
+  duplicate behavior already covered on `main`, collapse the one-test `test_tc_*.py` files into
+  per-area files, and merge same-area tests into the existing files for that area.
+- Reconcile the ported tests with the rebased `main`: upgrade the ones whose expectations the
+  rebase invalidated (call-to-action output routing, local-runner injection) and drop the ones
+  a `main` test now covers correctly.
 - Update the Taskfile cloud tasks and the testing docs to cover all three cloud directories.
 - No product/runtime code changes.
 
@@ -54,7 +62,10 @@ Two findings from applying this change reshaped its scope:
 
 - `tests/tests/`: new `e2e/` and `chaos/` directories; `deployment/test_standard_deployment.py`
   split/renamed; `reusable_deployment` moved to the root `conftest.py`; `testcases/` removed.
-- `tests/pyproject.toml`: four kind markers registered.
+- `tests/pyproject.toml`: four kind markers registered, plus a `stress` marker for the ported
+  long-running tests.
+- `tests/tests/testcase_helpers.py`: new shared helper module (from the branch's
+  `testcases/helpers.py`).
 - `Taskfile.yml`: cloud test tasks target `deployment` + `e2e` + `chaos`.
 - `tests/README.md`, `tests/testing.md`: documented layout updated.
 - No change to `cmd/exasol` or `internal/`. SonarQube config already globs `tests/**/*.py`.

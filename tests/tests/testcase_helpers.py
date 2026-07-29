@@ -18,9 +18,7 @@ import logging
 import os
 import platform
 import shlex
-import shutil
 import sys
-from pathlib import Path
 from subprocess import CompletedProcess
 
 import pytest
@@ -40,8 +38,6 @@ from tests.integration.helpers import run_command as _integration_run_command
 __all__ = [
     "IS_MACOS_ARM",
     "LOCAL_ALLOW_UNSUPPORTED_ENV",
-    "PRESET_FIXTURES_DIR",
-    "copy_named_no_resource_presets",
     "export_preset",
     "first_infrastructure_preset_id_or_skip",
     "first_installation_preset_id_or_skip",
@@ -76,11 +72,6 @@ def run_command(
     log_command(command)
     return _integration_run_command(command, env=env)
 
-
-# Reuse the same no-resource preset fixtures as the integration suite. These
-# presets deploy no external resources, so destroy/remove flows can run without
-# any cloud provider or OpenTofu.
-PRESET_FIXTURES_DIR: Path = Path(__file__).resolve().parent / "fixtures" / "presets"
 
 # True only on the platform where real local VM deployments are supported.
 IS_MACOS_ARM: bool = sys.platform == "darwin" and platform.machine().lower() in {
@@ -132,36 +123,3 @@ def skip_without_cloud_deploy_optin() -> None:
 def local_deploy_base_args(deployment_dir: str) -> list[str]:
     """Return the trailing args that point a command at a local deployment dir."""
     return ["--deployment-dir", deployment_dir, "--no-launcher-version-check"]
-
-
-def copy_named_no_resource_presets(
-    tmp_path: Path,
-    directory_name: str,
-    infrastructure_name: str,
-    installation_name: str,
-) -> tuple[Path, Path]:
-    """Materialize the named no-resource preset fixtures under ``tmp_path``.
-
-    Returns the (infra_dir, install_dir) paths ready to pass to ``init``.
-    """
-    target_dir = tmp_path / directory_name
-    shutil.copytree(PRESET_FIXTURES_DIR / "named-no-resource-template", target_dir)
-    infra_dir = target_dir / "infra"
-    install_dir = target_dir / "install"
-
-    infrastructure_manifest = infra_dir / "infrastructure.yaml"
-    infrastructure_manifest.write_text(
-        infrastructure_manifest.read_text(encoding="utf-8").replace(
-            "{{INFRASTRUCTURE_NAME}}", infrastructure_name
-        ),
-        encoding="utf-8",
-    )
-    installation_manifest = install_dir / "installation.yaml"
-    installation_manifest.write_text(
-        installation_manifest.read_text(encoding="utf-8").replace(
-            "{{INSTALLATION_NAME}}", installation_name
-        ),
-        encoding="utf-8",
-    )
-
-    return infra_dir, install_dir

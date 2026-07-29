@@ -157,6 +157,7 @@ def test_info_json_reports_missing_deployment_without_error(
     assert data["deploymentDir"] == str(deployment_dir)
     assert "message" not in data
     assert "actions" not in data
+    assert "connection" not in data
 
 
 def test_info_command_init_deployment(exasol_path: str, tmp_path: Path) -> None:

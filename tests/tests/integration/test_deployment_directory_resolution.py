@@ -585,37 +585,3 @@ def test_status_resolves_current_deployment_dir(
         check=True,
     )
     assert json.loads(explicit.stdout)["deploymentDir"] == str(deployment_dir)
-
-
-@pytest.mark.launcher_tests
-def test_info_uninitialized_text(exasol_path: str, tmp_path: Path) -> None:
-    # Given an empty deployment directory
-    deployment_dir = tmp_path / "deployment"
-    deployment_dir.mkdir()
-
-    # When info runs before a deployment exists
-    result = run_command([exasol_path, "info", "--deployment-dir", str(deployment_dir)])
-
-    # Then it guides the user toward creating a deployment (no failure)
-    assert "No Exasol Personal deployment exists" in result.stdout
-    assert str(deployment_dir) in result.stdout
-    assert "exasol install <infra preset>" in result.stdout
-    assert "exasol presets list" in result.stdout
-
-
-@pytest.mark.launcher_tests
-def test_info_uninitialized_json(exasol_path: str, tmp_path: Path) -> None:
-    # Given an empty deployment directory
-    deployment_dir = tmp_path / "deployment"
-    deployment_dir.mkdir()
-
-    # When info runs as JSON before a deployment exists
-    result = run_command(
-        [exasol_path, "info", "--json", "--deployment-dir", str(deployment_dir)]
-    )
-
-    # Then automation can branch on structured state and there is no connection
-    data = json.loads(result.stdout)
-    assert data["deploymentState"] == "not_initialized"
-    assert data["deploymentDir"] == str(deployment_dir)
-    assert "connection" not in data

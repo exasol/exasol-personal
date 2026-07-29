@@ -65,10 +65,11 @@ def test_cache_clean_reports_mode_summary(exasol_path: str, mode: str) -> None:
 @pytest.mark.launcher_tests
 def test_cache_unlock_reports_cleared(exasol_path: str) -> None:
     # When the cache lock is cleared
-    output = run_command([exasol_path, "cache", "unlock"]).stdout
+    result = run_command([exasol_path, "cache", "unlock"])
 
-    # Then it confirms the lock was cleared
-    assert "Runtime artifact cache lock cleared." in output
+    # Then it confirms the lock was cleared. The confirmation is terminal-notice
+    # output on stderr, so stdout stays free for primary output.
+    assert "Runtime artifact cache lock cleared." in result.stderr
 
 
 @pytest.mark.launcher_tests

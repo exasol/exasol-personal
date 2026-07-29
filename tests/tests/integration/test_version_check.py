@@ -165,14 +165,6 @@ def test_version_check_latest_when_up_to_date(
     assert "Download URL:" not in output
 
 
-def _current_version(exasol_path: str) -> str:
-    command = [exasol_path, "version"]
-    log_command(command)
-    return subprocess.run(
-        command, check=True, capture_output=True, text=True
-    ).stdout.strip()
-
-
 def _set_latest(base_url: str, version: str) -> None:
     payload = {
         "latestVersion": {
@@ -217,35 +209,6 @@ def test_older_reported_version_is_not_flagged_as_update(
     assert "No newer official version is available" in output
 
 
-@pytest.mark.launcher_tests
-def test_equal_version_reports_latest(
-    exasol_path: str, mock_version_server: str
-) -> None:
-    # Given the service reports the exact current version
-    _set_latest(mock_version_server, _current_version(exasol_path))
-
-    # When the update check runs
-    output = _run_latest(exasol_path, mock_version_server).stdout
-
-    # Then it reports we are on the latest version
-    assert "You are using the latest version" in output
-
-
-@pytest.mark.launcher_tests
-def test_latest_json_is_valid_on_stdout(
-    exasol_path: str, mock_version_server: str
-) -> None:
-    # Given a newer version is available
-    _set_latest(mock_version_server, "9999.0.0")
-
-    # When the update check runs with JSON output
-    output = _run_latest(exasol_path, mock_version_server, "--json").stdout
-
-    # Then stdout is valid JSON describing the latest version
-    data = json.loads(output)
-    assert data["latestVersion"]["version"] == "9999.0.0"
-
-
 posix_only = pytest.mark.skipif(
     sys.platform.startswith("win"),
     reason="fake local runner script is POSIX-only",
@@ -255,6 +218,11 @@ posix_only = pytest.mark.skipif(
 FAKE_RUNNER = """#!/usr/bin/env sh
 set -eu
 case "$1" in
+  version)
+    # A version far ahead of anything real, so version reconciliation never
+    # mistakes this fake runner for a downgrade.
+    printf 'v999.0.0\\n'
+    ;;
   init)
     mkdir -p vm vm-shared
     ;;
@@ -284,6 +252,14 @@ def _deploy_with_fake_runner(
     init_extra_args: list[str],
 ) -> list[str]:
     """Init + deploy against the recording fake runner; return the start args."""
+    # exasol-local-runner is embed-only and resolved through the resource
+    # manager, so the override path is the only way to inject a fake runner on a
+    # platform (e.g. Linux CI) with no embedded artifact for it at all.
+    runner = deployment_dir.parent / "fake-mac-runner-aarch64"
+    runner.write_text(FAKE_RUNNER)
+    runner.chmod(0o700)
+    env = {**env, "EXASOL_LOCAL_RUNNER_OVERRIDE_PATH": str(runner)}
+
     run_command(
         [
             exasol_path,
@@ -295,11 +271,6 @@ def _deploy_with_fake_runner(
         ],
         env=env,
     )
-
-    runner_target = deployment_dir / "local" / "runtime" / "mac-runner-aarch64"
-    runner_target.parent.mkdir(parents=True)
-    runner_target.write_text(FAKE_RUNNER)
-    runner_target.chmod(0o700)
 
     run_command(
         [exasol_path, "deploy", "--deployment-dir", str(deployment_dir)],

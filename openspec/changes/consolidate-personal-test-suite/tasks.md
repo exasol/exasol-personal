@@ -73,6 +73,24 @@
 - [x] 6.6 Re-validate: ruff, ruff format, mypy (34 files), `--strict-markers` collect
       (186 selected / 6 provider-deselected), zero duplicate test names.
 
+## 7. Reconcile the ported tests with rebased `main`
+
+- [x] 7.1 Upgrade ported tests that the rebase invalidated: `test_cache_unlock_reports_cleared`
+      reads stderr (CTA output routing); the two `test_version_check.py` fake-runner tests use
+      `EXASOL_LOCAL_RUNNER_OVERRIDE_PATH` and gain a `version` case in `FAKE_RUNNER`, so they
+      pass on non-macOS CI after runner resolution moved to the resource manager.
+- [x] 7.2 Drop ported tests now duplicated by rebased `main` tests: `test_info_uninitialized_text`
+      / `test_info_uninitialized_json` (vs `test_cli.py` info tests), `test_equal_version_reports_latest`
+      and `test_latest_json_is_valid_on_stdout` (vs `test_version_check_latest_when_up_to_date`
+      / `test_version_check_latest_json`). Graft the unique `"connection" not in data` assertion
+      onto the surviving `test_cli.py` JSON test.
+- [x] 7.3 Dissolve `integration/test_preset_config.py`: drop the config round-trip, re-init and
+      remove `--auto-approve` tests (all covered by `test_reconfiguration.py` / `test_init.py`),
+      move `test_preset_flags_render_with_defaults` to `integration/test_presets.py`, and delete
+      the now-empty file plus the unused `copy_named_no_resource_presets` helper.
+- [x] 7.4 Re-validate: ruff, ruff format, mypy, `--strict-markers` collect, zero duplicate test
+      names, and the full offline `integration` suite green against a locally built binary.
+
 ## Notes
 
 Net-new *behavior* tests were not authored: the v2.1 checklist gaps (git presets, start/stop
