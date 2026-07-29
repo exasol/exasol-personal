@@ -5,6 +5,7 @@ package slc_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/assets/resources"
@@ -16,6 +17,7 @@ registry: docker.io/exasol/script-language-container
 tag_template: "standard-EXASOL-all-{flavor}-release_{arch}_{hash}"
 architectures:
   arm64:
+    image_architecture: arm64
     default_version: "11.2.0"
     versions:
       "11.2.0":
@@ -112,7 +114,7 @@ func TestResolveUnsupportedArchitecture(t *testing.T) {
 
 	catalog := mustLoad(t)
 
-	_, err := catalog.Resolve("python3", "amd64")
+	_, err := catalog.Resolve("python3", "s390x")
 	if err == nil {
 		t.Fatal("expected an error resolving on an unsupported architecture")
 	}
@@ -126,7 +128,7 @@ func TestListUnsupportedArchitectureReturnsSentinel(t *testing.T) {
 
 	catalog := mustLoad(t)
 
-	_, err := catalog.List("amd64")
+	_, err := catalog.List("s390x")
 	if !errors.Is(err, slc.ErrArchitectureUnsupported) {
 		t.Errorf("expected ErrArchitectureUnsupported, got %v", err)
 	}
@@ -165,6 +167,24 @@ func TestEmbeddedCatalogResolvesPython3(t *testing.T) {
 	}
 	if entry.Flavor != "python-3.12" {
 		t.Errorf("embedded catalog python3 Flavor = %q, want python-3.12", entry.Flavor)
+	}
+}
+
+func TestEmbeddedCatalogMapsAMD64ToX64ImageTags(t *testing.T) {
+	t.Parallel()
+
+	catalog, err := slc.Load(resources.SLCCatalogYAML)
+	if err != nil {
+		t.Fatalf("failed to load embedded SLC catalog: %v", err)
+	}
+
+	entry, err := catalog.Resolve("python3", "amd64")
+	if err != nil {
+		t.Fatalf("failed to resolve amd64 python3: %v", err)
+	}
+	want := "release_x64_GM7DI5JDDTJRRDVV2QPRSNDRDT5CCYHPPEZO7HPJSIX4B5ICISZQ"
+	if !strings.Contains(entry.Image, want) {
+		t.Errorf("amd64 image = %q, want tag containing %q", entry.Image, want)
 	}
 }
 
