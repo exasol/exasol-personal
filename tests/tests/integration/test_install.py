@@ -189,8 +189,15 @@ def test_install_executes_init_step(exasol_path: str, tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(
-    sys.platform == "darwin" and platform.machine().lower() in {"arm64", "aarch64"},
-    reason="local deployments are supported on macOS Apple Silicon",
+    (
+        sys.platform == "darwin"
+        and platform.machine().lower() in {"arm64", "aarch64"}
+    )
+    or (
+        sys.platform.startswith("win")
+        and platform.machine().lower() in {"amd64", "x86_64"}
+    ),
+    reason="local deployments are supported on this platform",
 )
 def test_init_local_rejects_unsupported_platform_before_writing_files(
     exasol_path: str, tmp_path: Path
@@ -213,13 +220,16 @@ def test_init_local_rejects_unsupported_platform_before_writing_files(
 
     # Then it fails before writing deployment state
     stderr = exc.value.stderr.lower()
-    assert "local deployments are only supported on macos apple silicon" in stderr
+    assert (
+        "local deployments require macos apple silicon or windows amd64 with wsl2"
+        in stderr
+    )
     assert list(deployment_dir.iterdir()) == []
 
 
 @pytest.mark.skipif(
     sys.platform.startswith("win"),
-    reason="fake local runner script is POSIX-only",
+    reason="macOS VM resource settings are not exposed on Windows",
 )
 def test_init_local_accepts_explicit_minimum_memory(
     exasol_path: str, tmp_path: Path
@@ -267,7 +277,7 @@ def test_init_local_accepts_explicit_minimum_memory(
 
 @pytest.mark.skipif(
     sys.platform.startswith("win"),
-    reason="fake local runner script is POSIX-only",
+    reason="macOS VM resource settings are not exposed on Windows",
 )
 def test_init_local_rejects_memory_below_minimum(
     exasol_path: str, tmp_path: Path
