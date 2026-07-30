@@ -23,11 +23,11 @@ import (
 // (set via t.Setenv). Revisit if runner write/exec and the env override become
 // isolated per test.
 
-func newTestRuntimeForReconciliation(t *testing.T) *Runtime {
+func newTestRuntimeForReconciliation(t *testing.T) *MacVMRuntime {
 	t.Helper()
 
 	deployment := config.NewDeploymentDir(t.TempDir())
-	testRuntime := New(deployment, nil)
+	testRuntime := NewMacVMRuntime(deployment, nil)
 	if err := os.MkdirAll(testRuntime.paths.WorkDir, dirMode); err != nil {
 		t.Fatalf("failed to create runtime work dir: %v", err)
 	}
@@ -35,7 +35,7 @@ func newTestRuntimeForReconciliation(t *testing.T) *Runtime {
 	return testRuntime
 }
 
-func seedVersionMarker(t *testing.T, testRuntime *Runtime, version string) {
+func seedVersionMarker(t *testing.T, testRuntime *MacVMRuntime, version string) {
 	t.Helper()
 
 	parsed, err := semver.ParseTolerant(version)
@@ -48,7 +48,7 @@ func seedVersionMarker(t *testing.T, testRuntime *Runtime, version string) {
 	}
 }
 
-func assertMarkerVersion(t *testing.T, testRuntime *Runtime, expected string) {
+func assertMarkerVersion(t *testing.T, testRuntime *MacVMRuntime, expected string) {
 	t.Helper()
 
 	actual, err := readRunnerVersionMarker(testRuntime.paths.RunnerVersionMarkerPath)

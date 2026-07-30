@@ -53,7 +53,7 @@ var errUnsupportedLocalPlatform = errors.New(
 func newLocalBackend(
 	deployment config.DeploymentDir,
 	manifest *presets.InfrastructureManifest,
-	localRuntime *localruntime.Runtime,
+	localRuntime localruntime.VMRuntime,
 ) *localBackend {
 	return &localBackend{deployment: deployment, manifest: manifest, runtime: localRuntime}
 }
@@ -61,7 +61,7 @@ func newLocalBackend(
 type localBackend struct {
 	deployment config.DeploymentDir
 	manifest   *presets.InfrastructureManifest
-	runtime    *localruntime.Runtime
+	runtime    localruntime.VMRuntime
 }
 
 func (*localBackend) ValidateEnvironment() error {

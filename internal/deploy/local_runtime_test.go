@@ -196,7 +196,12 @@ func TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts(t *testing.T) {
 
 	// When: paths.VMDir was never created, so destroyLocalRuntime never needs
 	// to resolve a runner, and a nil manager is safe here.
-	err := destroyLocalRuntime(context.Background(), localruntime.New(deployment, nil), nil, nil)
+	err := destroyLocalRuntime(
+		context.Background(),
+		localruntime.NewMacVMRuntime(deployment, nil),
+		nil,
+		nil,
+	)
 	// Then
 	if err != nil {
 		t.Fatalf("expected destroy cleanup to succeed, got %v", err)
@@ -241,7 +246,12 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 	}
 
 	// When
-	err := stopLocalRuntime(context.Background(), localruntime.New(deployment, manager), nil, nil)
+	err := stopLocalRuntime(
+		context.Background(),
+		localruntime.NewMacVMRuntime(deployment, manager),
+		nil,
+		nil,
+	)
 	// Then
 	if err != nil {
 		t.Fatalf("expected local stop to succeed, got %v", err)

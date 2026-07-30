@@ -177,7 +177,7 @@ func TestDestroy_RemovesLocalRuntime(t *testing.T) {
 
 	// When: paths.VMDir was never created, so Destroy never needs to resolve
 	// a runner, and a nil manager is safe here.
-	err := New(deployment, nil).Destroy(context.Background(), nil, nil)
+	err := NewMacVMRuntime(deployment, nil).Destroy(context.Background(), nil, nil)
 	// Then
 	if err != nil {
 		t.Fatalf("expected destroy cleanup to succeed, got %v", err)
@@ -198,7 +198,7 @@ func TestResolveRunnerPath_OverrideEnvBypassesManager(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := New(deployment, nil)
+	localRuntime := NewMacVMRuntime(deployment, nil)
 	runnerPath := writeRunnerScript(t, "1.0.0")
 	t.Setenv(runnerOverridePathEnv, runnerPath)
 
@@ -242,7 +242,7 @@ case "$1" in
 esac
 `
 	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime := New(deployment, manager)
+	localRuntime := NewMacVMRuntime(deployment, manager)
 
 	// When
 	err := localRuntime.Prepare(context.Background(), nil, nil)
@@ -274,7 +274,7 @@ func TestPrepare_SkipsInitWhenVMAlreadyInitialized(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := New(deployment, nil)
+	localRuntime := NewMacVMRuntime(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.VMDir, 0o750); err != nil {
 		t.Fatalf("failed to create local VM directory: %v", err)
 	}
@@ -290,7 +290,7 @@ case "$1" in
 esac
 `
 	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime = New(deployment, manager)
+	localRuntime = NewMacVMRuntime(deployment, manager)
 
 	// When
 	err := localRuntime.Prepare(context.Background(), nil, nil)
@@ -304,7 +304,7 @@ esac
 func TestEnsureSSHKey_PreservesExistingPrivateKey(t *testing.T) {
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := New(deployment, nil)
+	localRuntime := NewMacVMRuntime(deployment, nil)
 	existingKey := generateOpenSSHPrivateKey(t)
 	if err := os.MkdirAll(filepath.Dir(localRuntime.paths.PrivateKeyPath), 0o750); err != nil {
 		t.Fatalf("failed to create local key directory: %v", err)
@@ -335,7 +335,7 @@ func TestEnsureSSHKey_PreservesExistingPrivateKey(t *testing.T) {
 func TestEnsureSSHKey_GeneratesEd25519Key(t *testing.T) {
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := New(deployment, nil)
+	localRuntime := NewMacVMRuntime(deployment, nil)
 
 	// When
 	if err := localRuntime.ensureSSHKey(); err != nil {
@@ -370,7 +370,7 @@ func TestEnsureSSHKey_GeneratesEd25519Key(t *testing.T) {
 func TestEnsureSSHKey_ReplacesLegacyPKCS8PrivateKey(t *testing.T) {
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := New(deployment, nil)
+	localRuntime := NewMacVMRuntime(deployment, nil)
 	legacyKey := generatePKCS8PrivateKey(t)
 	if err := os.MkdirAll(filepath.Dir(localRuntime.paths.PrivateKeyPath), 0o750); err != nil {
 		t.Fatalf("failed to create local key directory: %v", err)
@@ -439,7 +439,7 @@ func TestStop_InvokesResolvedRunnerStop(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := New(deployment, nil)
+	localRuntime := NewMacVMRuntime(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime directory: %v", err)
 	}
@@ -447,7 +447,7 @@ func TestStop_InvokesResolvedRunnerStop(t *testing.T) {
 	markerPath := filepath.Join(localRuntime.paths.WorkDir, "stop-called")
 	runnerScript := "#!/bin/sh\nprintf '%s %s\\n' \"$0\" \"$*\" > stop-called\n"
 	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime = New(deployment, manager)
+	localRuntime = NewMacVMRuntime(deployment, manager)
 
 	// When
 	err := localRuntime.Stop(context.Background(), nil, nil)
@@ -479,13 +479,13 @@ func TestRunCommand_InvokesResolvedRunnerWithArgs(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := New(deployment, nil)
+	localRuntime := NewMacVMRuntime(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime directory: %v", err)
 	}
 	runnerScript := "#!/bin/sh\nprintf '%s\\n' \"$*\"\n"
 	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime = New(deployment, manager)
+	localRuntime = NewMacVMRuntime(deployment, manager)
 	var out bytes.Buffer
 
 	// When
@@ -518,7 +518,7 @@ func TestDestroy_StopsRunningVMBeforeRemoving(t *testing.T) {
 	}
 	runnerScript := "#!/bin/sh\nprintf 'stop-invoked %s\\n' \"$*\"\n"
 	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime := New(deployment, manager)
+	localRuntime := NewMacVMRuntime(deployment, manager)
 	var out bytes.Buffer
 
 	// When
@@ -546,7 +546,7 @@ func TestHealthCheck_ParsesPortStates(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := New(deployment, nil)
+	localRuntime := NewMacVMRuntime(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime directory: %v", err)
 	}
@@ -555,7 +555,7 @@ func TestHealthCheck_ParsesPortStates(t *testing.T) {
 echo '{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}'
 `
 	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime = New(deployment, manager)
+	localRuntime = NewMacVMRuntime(deployment, manager)
 
 	// When
 	result, err := localRuntime.HealthCheck(context.Background())
@@ -579,14 +579,14 @@ func TestHealthCheck_ReturnsErrorOnRunnerFailure(t *testing.T) {
 
 	// Given: an old runner that does not understand "health-check" yet.
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := New(deployment, nil)
+	localRuntime := NewMacVMRuntime(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime directory: %v", err)
 	}
 
 	runnerScript := "#!/bin/sh\necho 'Unknown command: health-check' >&2\nexit 1\n"
 	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime = New(deployment, manager)
+	localRuntime = NewMacVMRuntime(deployment, manager)
 
 	// When
 	_, err := localRuntime.HealthCheck(context.Background())
@@ -600,7 +600,7 @@ func TestHealthCheck_ReturnsErrorOnRunnerFailure(t *testing.T) {
 func TestWaitForDaemonExit_IgnoresMissingPIDFile(t *testing.T) {
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := New(deployment, nil)
+	localRuntime := NewMacVMRuntime(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime directory: %v", err)
 	}
@@ -621,7 +621,7 @@ func TestWaitForDaemonExit_RejectsStillRunningPID(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := New(deployment, nil)
+	localRuntime := NewMacVMRuntime(deployment, nil)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime directory: %v", err)
 	}

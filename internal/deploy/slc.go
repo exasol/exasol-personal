@@ -592,7 +592,7 @@ func isLocalDeploymentRunning(ctx context.Context, deployment config.DeploymentD
 		return false
 	}
 
-	status, err := localruntime.New(deployment, manager).Status(ctx)
+	status, err := localruntime.NewMacVMRuntime(deployment, manager).Status(ctx)
 	if err != nil {
 		return false
 	}
