@@ -102,14 +102,6 @@ def test_diag_cache_does_not_mutate(exasol_path: str) -> None:
     assert before == after
 
 
-@pytest.mark.launcher_tests
-def test_lock_contention_surfaces_error() -> None:
-    # Reproducing genuine lock contention requires holding the cache lock for
-    # the full acquire timeout (~5 minutes) from a second process, which is not
-    # practical in an automated unit run.
-    pytest.skip("requires holding the cache lock across the ~5 min acquire timeout")
-
-
 NOISY_LINES = ("using deployment directory", "deployment log file")
 
 

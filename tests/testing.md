@@ -25,13 +25,6 @@ Read-only connect / query / output workflows against the running deployment.
 | `test_connect_interactive_shows_version_and_exit_hint` | local, cloud | Verifies that interactive mode displays the Exasol version string and an `exit` hint on startup |
 | `test_diag_cos_runs_confd_client` | cloud | Runs COS diagnostic commands (skipped for local infra, which uses a VM shell fallback) |
 | `test_license_session_limit` | local, cloud | Confirms the Exasol Personal license enforces a 20 concurrent session cap |
-| `test_large_result_sets_fully_fetched` | cloud | Verifies result sets larger than one fetch batch are returned in full |
-| `test_typed_html_safe_json` | cloud | Verifies JSON output preserves value types and escapes HTML-unsafe characters |
-| `test_non_json_output_unchanged` | cloud | Verifies the default table and CSV renderings are unaffected by the JSON contract |
-| `test_multi_statement_script_yields_single_document` | cloud | Verifies a multi-statement script produces one JSON document, not one per statement |
-| `test_statement_metadata_distinguishes_statement_kinds` | cloud | Verifies JSON metadata distinguishes DDL, DML and query statements |
-| `test_structured_sql_errors_in_json_mode` | cloud | Verifies SQL errors are reported as structured JSON instead of plain text |
-| `test_interactive_mode_unaffected` | cloud | Verifies the JSON output contract does not change interactive REPL behavior |
 | `test_password_marker_not_leaked_to_logs` | local, cloud | Verifies a failing connection never echoes the DB password into output or logs |
 | `test_connect_shows_exit_hint` | local, cloud | Verifies an interactive connection prints the "how to exit" banner |
 | `test_invalid_sql_does_not_crash_shell` | local, cloud | Verifies an invalid statement reports an error but keeps the shell alive |
@@ -43,7 +36,7 @@ Read-only connect / query / output workflows against the running deployment.
 |------|---------|-------------|
 | `test_import_csv_missing_file_reports_client_side` | local, cloud | Verifies a missing CSV path fails client-side with a clear "file not found" error |
 | `test_import_csv_uses_local_filesystem` | local, cloud | Verifies `IMPORT FROM LOCAL CSV` reads from the client filesystem, not the database node |
-| `test_import_large_csv_completes_or_fails_actionably` | local, cloud | Stress case (`-m stress`): a large CSV import either completes or fails with actionable guidance |
+| `test_import_large_csv_completes_or_fails_actionably` | local, cloud | Verifies a large CSV import either completes or fails with actionable guidance; size and timeout are tunable via `EXASOL_STRESS_CSV_MB` and `EXASOL_STRESS_TIMEOUT_S` |
 
 ## Deployment Testing
 
@@ -63,16 +56,12 @@ Provisioning and lifecycle behavior.
 | `test_deploy_is_idempotent` | cloud | Verifies re-running deploy on a healthy cluster is a clean no-op or fails with actionable guidance |
 | `test_info_includes_connection_details` | cloud | Verifies `info` surfaces the SQL host, port and Admin UI URL of a deployed cluster |
 | `test_destroy_removes_deployment` | cloud | Verifies destroy removes the cloud resources and clears deployment state |
-| `test_connection_info_normalization_and_legacy_fallback` | cloud | Verifies both the current connection block and the legacy node-based fallback are read correctly |
 
 `tests/tests/deployment/test_object_storage.py`
 
 | Test | Targets | Description |
 |------|---------|-------------|
-| `test_bootstrap_bucket_and_fetch_by_url` | cloud | Verifies bootstrap-bucket creation and that cloud-init fetches its artifacts by URL |
 | `test_minimal_iam_policy_includes_bootstrap_bucket_actions` | cloud (AWS) | Verifies the documented minimal IAM policy covers the object-storage bootstrap actions |
-| `test_bootstrap_storage_is_private` | cloud | Verifies the bootstrap storage is not publicly accessible |
-| `test_installed_versions_match_default_and_override` | cloud | Verifies the installed database and C4 versions match the default and the `--exasol-version` override |
 | `test_first_run_downloads_then_reuses_opentofu` | cloud | Verifies OpenTofu is downloaded on first use and reused from the cache afterwards |
 
 `tests/tests/deployment/test_local_deployment.py`
@@ -88,8 +77,6 @@ Provisioning and lifecycle behavior.
 |------|---------|-------------|
 | `test_full_local_deployment_lifecycle` | local | Walks a real local VM through init → deploy → stop → start → destroy |
 | `test_memory_default_is_half_host_ram` | local | Verifies the default VM memory is derived from host RAM and honours the supported minimum |
-| `test_reject_host_with_insufficient_ram` | local | Placeholder for the undersized-host rejection; always skipped because it needs a macOS Apple Silicon host with less than 8 GB RAM |
-| `test_low_memory_advisory_notice` | local | Placeholder for the low-memory advisory; always skipped because it needs a host whose resolved VM memory is 8 GB or less |
 | `test_local_deployment_json_is_endpoint_based` | local | Verifies `deployment.json` describes a local deployment as a single endpoint rather than a node list |
 | `test_node_access_key_is_openssh_and_legacy_key_is_regenerated` | local | Verifies the node access key is written in OpenSSH format and a legacy-format key is regenerated |
 | `test_allow_unsupported_escape_hatch` | any | Verifies the test-only escape hatch allows `init local` on an unsupported platform |
@@ -130,7 +117,6 @@ database-ready state on exit so the other cloud suites can rely on a running clu
 
 | Test | Targets | Description |
 |------|---------|-------------|
-| `test_checksum_mismatch_triggers_refresh` | cloud | Corrupts a cached artifact and verifies the checksum mismatch triggers a refresh instead of using it |
 | `test_deploy_fails_clearly_with_invalid_aws_credentials` | cloud (AWS) | Verifies invalid credentials produce an authentication error and leave no dangling resources |
 
 # Integration Testing
@@ -214,7 +200,6 @@ Integration tests can be run using `task tests-integration` or in CI using `task
 | `test_cache_unlock_reports_cleared` | Verifies `cache unlock` confirms the lock was cleared as a terminal notice on stderr |
 | `test_diag_cache_reports_status_fields` | Verifies `diag cache` reports the expected status fields |
 | `test_diag_cache_does_not_mutate` | Verifies `diag cache` leaves the cache contents unchanged |
-| `test_lock_contention_surfaces_error` | Placeholder for genuine lock contention; skipped because it requires holding the cache lock across processes |
 | `test_default_output_is_quiet_but_debug_and_log_are_verbose` | Verifies default output stays quiet while `--log-level debug` and log files are verbose |
 
 ## Connect CLI
@@ -282,19 +267,6 @@ Integration tests can be run using `task tests-integration` or in CI using `task
 | `test_init_performs_version_check` | Tests that init performs a launcher version check |
 | `test_init_skips_version_check` | Tests that `--no-launcher-version-check` suppresses the version check |
 | `test_init_in_non_writable_dir_fails_with_clear_error` | Verifies init into a non-writable directory fails with an actionable error |
-
-## Version Check
-
-`tests/tests/integration/test_version_check.py`
-
-| Test | Description |
-|------|-------------|
-| `test_version_check_latest` | Tests version check with formatted output |
-| `test_version_check_latest_json` | Tests version check with JSON output |
-| `test_version_check_latest_when_up_to_date` | Tests version check behavior when the current version matches the latest |
-| `test_older_reported_version_is_not_flagged_as_update` | Verifies an older reported release is not offered as an update |
-| `test_disabled_version_check_is_forwarded` | Verifies a disabled version check is forwarded to the local runner with no URL or identity |
-| `test_enabled_version_check_forwards_url_and_identity` | Verifies an enabled version check forwards the check URL and the deployment's cluster identity to the local runner |
 
 ## Install
 

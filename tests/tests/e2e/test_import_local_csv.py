@@ -126,11 +126,6 @@ def test_import_csv_uses_local_filesystem(
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
-@pytest.mark.skipif(
-    os.environ.get(_STRESS_ENV, "") != "1",
-    reason=f"Set {_STRESS_ENV}=1 to run stress tests.",
-)
-@pytest.mark.stress
 def test_import_large_csv_completes_or_fails_actionably(
     reusable_deployment: Deployment,
     tmp_path: Path,

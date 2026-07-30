@@ -390,68 +390,6 @@ def test_license_session_limit(reusable_deployment: Deployment) -> None:
     assert alive == license_session_limit
 
 
-@pytest.mark.installation_e2e
-def test_large_result_sets_fully_fetched(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure", "exoscale", "stackit", "local")
-
-    # Needs a running database and a table with >1000 rows to exercise the
-    # --max-rows behaviour and the stderr truncation footer.
-    pytest.skip("requires a running database with a >1000-row table")
-
-
-@pytest.mark.installation_e2e
-def test_typed_html_safe_json(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure", "exoscale", "stackit", "local")
-
-    # Needs a running database to evaluate SELECT expressions and inspect the
-    # JSON typing / HTML-safety of the rendered statement-record rows.
-    pytest.skip("requires a running database to render typed JSON rows")
-
-
-@pytest.mark.installation_e2e
-def test_non_json_output_unchanged(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure", "exoscale", "stackit", "local")
-
-    # Needs a running database to render the default (table) and CSV output.
-    pytest.skip("requires a running database to render table/CSV output")
-
-
-@pytest.mark.installation_e2e
-def test_multi_statement_script_yields_single_document(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure", "exoscale", "stackit", "local")
-
-    # Needs a running database to execute the multi-statement script and parse
-    # the aggregated stdout as a single JSON document.
-    pytest.skip("requires a running database to execute multi-statement scripts")
-
-
-@pytest.mark.installation_e2e
-def test_statement_metadata_distinguishes_statement_kinds(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure", "exoscale", "stackit", "local")
-
-    # Needs a running database to execute DDL/DML/query statements and inspect
-    # statementType/rowsAffected/columns/rows/truncated per record.
-    pytest.skip("requires a running database to inspect statement metadata")
-
-
-@pytest.mark.installation_e2e
-def test_structured_sql_errors_in_json_mode(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure", "exoscale", "stackit", "local")
-
-    # Needs a running database to provoke real SQL errors and inspect the
-    # structured error object in the invocation document.
-    pytest.skip("requires a running database to provoke structured SQL errors")
-
-
-@pytest.mark.installation_e2e
-def test_interactive_mode_unaffected(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure", "exoscale", "stackit", "local")
-
-    # Interactive REPL behaviour needs a TTY and a running database; verify
-    # manually per the test-case document.
-    pytest.skip("requires an interactive terminal and a running database")
-
-
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )

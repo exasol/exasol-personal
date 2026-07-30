@@ -91,24 +91,6 @@ def test_memory_default_is_half_host_ram(exasol_path: str, tmp_path: Path) -> No
 
 @pytest.mark.local_e2e
 @requires_macos_arm
-def test_reject_host_with_insufficient_ram() -> None:
-    # This case can only be observed on a macOS Apple Silicon host with less
-    # than 8 GB of RAM; there is no supported way to simulate a smaller host.
-    pytest.skip("requires a macOS Apple Silicon host with <8 GB RAM")
-
-
-@pytest.mark.local_e2e
-@requires_macos_arm
-def test_low_memory_advisory_notice() -> None:
-    # Whether the advisory appears depends on the host's resolved VM memory
-    # (<=8 GB); it can only be reliably asserted on such a host.
-    pytest.skip(
-        "requires a macOS Apple Silicon host whose resolved VM memory is <=8 GB"
-    )
-
-
-@pytest.mark.local_e2e
-@requires_macos_arm
 def test_local_deployment_json_is_endpoint_based(
     exasol_path: str, tmp_path: Path
 ) -> None:

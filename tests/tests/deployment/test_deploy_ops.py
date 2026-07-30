@@ -161,11 +161,3 @@ def test_destroy_removes_deployment(destroyable_deployment: Deployment) -> None:
     assert destroyable_deployment.has_status(StatusInitialized)
     assert destroyable_deployment.has_no_deployment()
 
-
-@pytest.mark.installation_e2e
-def test_connection_info_normalization_and_legacy_fallback(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure", "exoscale", "stackit", "local")
-
-    # Exercising both the new connection block and the legacy node-based
-    # fallback requires a real deployment.json produced by a deployment.
-    pytest.skip("requires a deployed deployment.json (new and legacy shapes)")

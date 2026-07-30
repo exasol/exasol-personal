@@ -15,14 +15,6 @@ from tests.testcase_helpers import (
 )
 
 
-@pytest.mark.infrastructure_e2e
-def test_bootstrap_bucket_and_fetch_by_url(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure", "exoscale")
-    # Verifying bootstrap-bucket creation, cloud-init URL fetches and
-    # force-destroy cleanup requires real cloud provisioning.
-    pytest.skip("requires real cloud provisioning and node cloud-init log inspection")
-
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -46,24 +38,6 @@ def test_minimal_iam_policy_includes_bootstrap_bucket_actions(infra: str) -> Non
     assert (
         "s3:PutBucketPolicy" in document or "s3:PutBucketPublicAccessBlock" in document
     )
-
-
-@pytest.mark.infrastructure_e2e
-def test_bootstrap_storage_is_private(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure")
-
-    # Asserting the public/private access behaviour requires a live deployment
-    # plus network access from inside and outside the provider VPC/VNet.
-    pytest.skip("requires live cloud storage access from inside and outside the VPC")
-
-
-@pytest.mark.infrastructure_e2e
-def test_installed_versions_match_default_and_override(infra: str) -> None:
-    skip_unless_infra(infra, "aws", "azure", "exoscale", "stackit")
-
-    # Verifying the actually-installed DB/C4 versions and the --exasol-version
-    # override requires a real deployment.
-    pytest.skip("requires a real deployment to inspect installed DB / C4 versions")
 
 
 @pytest.mark.infrastructure_e2e
