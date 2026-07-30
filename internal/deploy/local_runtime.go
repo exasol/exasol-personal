@@ -24,7 +24,7 @@ const localSkipDatabaseWaitEnv = "EXASOL_LOCAL_SKIP_DB_WAIT"
 
 func startLocalRuntime(
 	ctx context.Context,
-	runtime *localruntime.Runtime,
+	runtime localruntime.VMRuntime,
 	runtimeConfig localRuntimeConfig,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
@@ -38,7 +38,7 @@ func startLocalRuntime(
 
 func startPreparedLocalRuntime(
 	ctx context.Context,
-	runtime *localruntime.Runtime,
+	runtime localruntime.VMRuntime,
 	runtimeConfig localRuntimeConfig,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
@@ -150,7 +150,7 @@ func reconcileLocalVMState(
 		return nil
 	}
 
-	vmStatus, err := localruntime.New(deployment, manager).Status(ctx)
+	vmStatus, err := localruntime.NewMacVMRuntime(deployment, manager).Status(ctx)
 	if err != nil {
 		slog.Warn("could not determine local VM status during reconciliation", "error", err)
 		return nil
@@ -177,7 +177,7 @@ func isLocalDeployment(deployment config.DeploymentDir) bool {
 
 func stopLocalRuntime(
 	ctx context.Context,
-	runtime *localruntime.Runtime,
+	runtime localruntime.VMRuntime,
 	out, outErr io.Writer,
 ) error {
 	if err := runtime.Stop(ctx, out, outErr); err != nil {
@@ -189,7 +189,7 @@ func stopLocalRuntime(
 
 func destroyLocalRuntime(
 	ctx context.Context,
-	runtime *localruntime.Runtime,
+	runtime localruntime.VMRuntime,
 	out, outErr io.Writer,
 ) error {
 	if err := runtime.Destroy(ctx, out, outErr); err != nil {
@@ -210,8 +210,8 @@ func destroyLocalRuntime(
 	return nil
 }
 
-func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.Config {
-	return localruntime.Config{
+func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.VMConfig {
+	return localruntime.VMConfig{
 		CPUCount:   runtimeConfig.cpuCount,
 		MemoryMB:   runtimeConfig.memoryMB,
 		DataSizeGB: runtimeConfig.dataSizeGB,
@@ -221,7 +221,7 @@ func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.Config 
 
 func writeLocalRuntimeArtifactsAndWait(
 	ctx context.Context,
-	runtime *localruntime.Runtime,
+	runtime localruntime.VMRuntime,
 	state *localruntime.State,
 	waitTimeoutSeconds int,
 ) error {

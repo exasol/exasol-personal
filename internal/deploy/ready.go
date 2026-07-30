@@ -85,7 +85,7 @@ func WaitForDatabaseStarted(
 	)
 }
 
-func WaitForLocalDatabaseStarted(ctx context.Context, runtime *localruntime.Runtime) error {
+func WaitForLocalDatabaseStarted(ctx context.Context, runtime localruntime.VMRuntime) error {
 	// Fail fast on an already-blocked network path instead of waiting out the
 	// whole backoff window on a problem that will never resolve on its own.
 	if err := classifyLocalReachability(ctx, runtime); err != nil {

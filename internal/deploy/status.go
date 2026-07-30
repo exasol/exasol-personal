@@ -239,7 +239,7 @@ func localVMStoppedStatus(ctx context.Context, deployment config.DeploymentDir) 
 		return nil
 	}
 
-	vmStatus, err := localruntime.New(deployment, manager).Status(ctx)
+	vmStatus, err := localruntime.NewMacVMRuntime(deployment, manager).Status(ctx)
 	if err != nil {
 		slog.Debug("local VM status check failed", "error", err)
 		return nil
