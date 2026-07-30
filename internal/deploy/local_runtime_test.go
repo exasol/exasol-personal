@@ -14,6 +14,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/version_check"
 )
 
 const (
@@ -27,7 +28,7 @@ func TestLocalRunnerVersionCheckArgs_PassesLauncherVersionCheckSettings(t *testi
 	// Given
 	deployment := newTestDeploymentWithVersionCheckState(t, true, localTestClusterIdentity)
 	const expectedURL = "https://example.test/v1/version-check"
-	t.Setenv(VersionCheckURLEnvVar, expectedURL)
+	t.Setenv(version_check.VersionCheckURLEnvVar, expectedURL)
 
 	// When
 	args, err := localRunnerVersionCheckArgs(deployment)
