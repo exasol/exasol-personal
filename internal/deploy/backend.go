@@ -115,7 +115,11 @@ func newDeploymentBackend(
 	case backendTypeTofu:
 		return newTofuBackend(deployment, manifest, manager), nil
 	case backendTypeLocal:
-		return newLocalBackend(deployment, manifest, localruntime.New(deployment, manager)), nil
+		return newLocalBackend(
+			deployment,
+			manifest,
+			localruntime.NewMacVMRuntime(deployment, manager),
+		), nil
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnknownDeploymentType, kind)
 	}

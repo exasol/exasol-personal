@@ -41,7 +41,7 @@ func DiagnoseLocal(
 			return err
 		}
 
-		diagnostics = diagnoseLocalUnsafe(ctx, localruntime.New(deployment, manager))
+		diagnostics = diagnoseLocalUnsafe(ctx, localruntime.NewMacVMRuntime(deployment, manager))
 
 		return nil
 	})
@@ -54,7 +54,7 @@ func DiagnoseLocal(
 // command doesn't itself become another thing that can error out.
 func diagnoseLocalUnsafe(
 	ctx context.Context,
-	localRuntime *localruntime.Runtime,
+	localRuntime localruntime.VMRuntime,
 ) *LocalDiagnostics {
 	diagnostics := &LocalDiagnostics{
 		Platform: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),

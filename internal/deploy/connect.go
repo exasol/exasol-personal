@@ -62,7 +62,11 @@ func Connect(ctx context.Context, opts *connect.Opts, deployment config.Deployme
 					return err
 				}
 
-				return diagnoseLocalFailure(ctx, localruntime.New(deployment, manager), err)
+				return diagnoseLocalFailure(
+					ctx,
+					localruntime.NewMacVMRuntime(deployment, manager),
+					err,
+				)
 			}
 
 			return nil
