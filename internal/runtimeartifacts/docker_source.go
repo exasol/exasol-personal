@@ -4,142 +4,175 @@
 package runtimeartifacts
 
 import (
-	"archive/tar"
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
+
+	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"go.podman.io/image/v5/copy"
+	"go.podman.io/image/v5/docker"
+	"go.podman.io/image/v5/docker/reference"
+	ociarchive "go.podman.io/image/v5/oci/archive"
+	ocilayout "go.podman.io/image/v5/oci/layout"
+	"go.podman.io/image/v5/signature"
+	"go.podman.io/image/v5/transports"
+	"go.podman.io/image/v5/types"
 )
 
 type DockerSource struct{}
 
 func (*DockerSource) CanFetch(url string) bool {
-	_, _, err := DockerUrlDownloadTarget(url)
-	return err == nil
+	return strings.HasPrefix(url, "docker://") || strings.HasPrefix(url, "oci:") ||
+		strings.HasPrefix(url, "oci-archive:")
 }
 
 func (*DockerSource) Fetch(ctx context.Context, url, dstPath string) (string, error) {
-	tmpDownloadDir, err := os.MkdirTemp(filepath.Dir(dstPath), "download-*")
+	parsedRef, err := parseImageReference(url)
 	if err != nil {
 		return "", err
 	}
-	defer os.RemoveAll(tmpDownloadDir)
-
-	downloadUrl, targetTag, err := DockerUrlDownloadTarget(url)
+	destRef, err := ociarchive.NewReference(dstPath, parsedRef.destinationImage)
+	if err != nil {
+		return "", fmt.Errorf("create OCI archive destination: %w", err)
+	}
+	policyContext, err := newInsecurePolicyContext()
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.CommandContext(ctx,
-		"skopeo",
-		"copy",
-		"--preserve-digests",
-		downloadUrl,
-		// Specify the target tag here so it's saved as part of the image
-		// and will be loaded by podman.
-		"oci:"+tmpDownloadDir+":"+targetTag,
-	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return "", err
-	}
 
-	if err := reproducibleTar(tmpDownloadDir, dstPath); err != nil {
-		// Ignore further errors
+	timestamp := time.Unix(0, 0).UTC()
+	_, copyErr := copy.Image(ctx, policyContext, destRef, parsedRef.source, &copy.Options{
+		DestinationTimestamp: &timestamp,
+		PreserveDigests:      true,
+	})
+	destroyErr := policyContext.Destroy()
+	if err := errors.Join(copyErr, destroyErr); err != nil {
 		_ = os.Remove(dstPath)
-		return "", err
+
+		return "", fmt.Errorf("copy image to OCI archive: %w", err)
 	}
 
 	return "", nil
 }
 
-// Returns the url to copy from using skopeo and the target tag to encode in the
-// oci archive.
-// nolint: revive
-func DockerUrlDownloadTarget(url string) (string, string, error) {
-	if strings.HasPrefix(url, "docker://") {
-		re := regexp.MustCompile(`^(docker://)([^:@]+)(|:[^@]+)(|@sha256:[a-zA-Z0-9]{64})$`)
-		matches := re.FindStringSubmatch(url)
-		if matches != nil {
-			scheme, name, tag, digest := matches[1], matches[2], matches[3], matches[4]
-			return scheme + name + digest, name + tag, nil
-		}
-	} else if strings.HasPrefix(url, "oci:") || strings.HasPrefix(url, "oci-archive:") {
-		re := regexp.MustCompile(`^(oci:|oci-archive:)([^:@]+)(|:[^@]+)$`)
-		matches := re.FindStringSubmatch(url)
-		if matches != nil {
-			// digest isn't supported for oci/oci-archive
-			scheme, name, tag := matches[1], matches[2], matches[3]
-			return scheme + name + tag, name + tag, nil
-		}
+func newInsecurePolicyContext() (*signature.PolicyContext, error) {
+	policy := &signature.Policy{
+		Default: signature.PolicyRequirements{signature.NewPRInsecureAcceptAnything()},
+	}
+	policyContext, err := signature.NewPolicyContext(policy)
+	if err != nil {
+		return nil, fmt.Errorf("create image policy context: %w", err)
 	}
 
-	return "", "", fmt.Errorf("invalid url: %s", url)
+	return policyContext, nil
 }
 
-// Based on tar.Writer.AddFS(fs.FS) but sets all metadata to 0 for deterministic
-// output. fs.WalkDir uses lexicographical order which is also deterministic.
-func reproducibleTar(dir, dst string) error {
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return err
+type parsedImageReference struct {
+	source           types.ImageReference
+	destinationImage string
+}
+
+func parseImageReference(imageName string) (parsedImageReference, error) {
+	transportName, referenceName, found := strings.Cut(imageName, ":")
+	if !found {
+		return parsedImageReference{}, fmt.Errorf(
+			"image reference %q is missing a transport", imageName,
+		)
 	}
-	fsys := root.FS()
-
-	outFile, err := os.Create(dst)
-	if err != nil {
-		return err
+	transport := transports.Get(transportName)
+	if transport == nil {
+		return parsedImageReference{}, fmt.Errorf("unsupported image transport in %q", imageName)
 	}
-	defer outFile.Close()
 
-	tarWriter := tar.NewWriter(outFile)
-	defer tarWriter.Close()
+	switch transport.Name() {
+	case docker.Transport.Name():
+		return parseDockerImageReference(imageName)
+	case ocilayout.Transport.Name(), ociarchive.Transport.Name():
+		parsedReference, err := transport.ParseReference(referenceName)
+		if err != nil {
+			return parsedImageReference{}, fmt.Errorf(
+				"parse image reference %q: %w", imageName, err,
+			)
+		}
+		destName, err := archiveImageName(parsedReference)
+		if err != nil {
+			return parsedImageReference{}, err
+		}
 
-	return fs.WalkDir(fsys, ".", func(name string, dirEntry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if name == "." {
-			return nil
-		}
-		info, err := dirEntry.Info()
-		if err != nil {
-			return err
-		}
-		typ := dirEntry.Type()
-		if !typ.IsRegular() && !typ.IsDir() {
-			return errors.New("tar: cannot add non-regular file")
-		}
-		const fixedPerms = int64(0o0600)
-		header := &tar.Header{
-			Name:    name,
-			Mode:    fixedPerms,
-			Size:    info.Size(),
-			ModTime: time.Unix(0, 0),
-		}
-		if dirEntry.IsDir() {
-			header.Name += "/"
-		}
-		if err := tarWriter.WriteHeader(header); err != nil {
-			return err
-		}
-		if !typ.IsRegular() {
-			return nil
-		}
-		f, err := fsys.Open(name)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		_, err = io.Copy(tarWriter, f)
+		return parsedImageReference{
+			source:           parsedReference,
+			destinationImage: destName,
+		}, nil
+	default:
+		return parsedImageReference{}, fmt.Errorf(
+			"unsupported image transport %q", transport.Name(),
+		)
+	}
+}
 
-		return err
-	})
+func parseDockerImageReference(imageName string) (parsedImageReference, error) {
+	referenceName, found := strings.CutPrefix(imageName, docker.Transport.Name()+"://")
+	if !found {
+		return parsedImageReference{}, fmt.Errorf("invalid Docker image reference %q", imageName)
+	}
+	originalReference, err := reference.ParseNormalizedNamed(referenceName)
+	if err != nil {
+		return parsedImageReference{}, fmt.Errorf(
+			"parse Docker image reference %q: %w", imageName, err,
+		)
+	}
+	sourceNamed, err := reference.ParseDockerRef(referenceName)
+	if err != nil {
+		return parsedImageReference{}, fmt.Errorf(
+			"parse Docker source reference %q: %w", imageName, err,
+		)
+	}
+	source, err := docker.NewReference(sourceNamed)
+	if err != nil {
+		return parsedImageReference{}, fmt.Errorf(
+			"create Docker source reference %q: %w", imageName, err,
+		)
+	}
+
+	destinationNamed := reference.TrimNamed(originalReference)
+	if tagged, ok := originalReference.(reference.NamedTagged); ok {
+		destinationTagged, err := reference.WithTag(destinationNamed, tagged.Tag())
+		if err != nil {
+			return parsedImageReference{}, fmt.Errorf(
+				"create Docker destination reference %q: %w", imageName, err,
+			)
+		}
+		destinationNamed = destinationTagged
+	}
+
+	return parsedImageReference{
+		source:           source,
+		destinationImage: destinationNamed.String(),
+	}, nil
+}
+
+func archiveImageName(source types.ImageReference) (string, error) {
+	var (
+		descriptor imgspecv1.Descriptor
+		err        error
+	)
+	switch source.Transport().Name() {
+	case ocilayout.Transport.Name():
+		descriptor, err = ocilayout.LoadManifestDescriptor(source)
+	case ociarchive.Transport.Name():
+		descriptor, err = ociarchive.LoadManifestDescriptorWithContext(nil, source)
+	default:
+		return "", fmt.Errorf(
+			"cannot determine destination image for transport %q",
+			source.Transport().Name(),
+		)
+	}
+	if err != nil {
+		return "", fmt.Errorf("load source image descriptor: %w", err)
+	}
+
+	return descriptor.Annotations[imgspecv1.AnnotationRefName], nil
 }
