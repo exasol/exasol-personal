@@ -13,6 +13,7 @@ import (
 	// We should use the modern v4 within the our code though.
 	"github.com/blang/semver/v4"
 	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/exasol/exasol-personal/internal/version_check"
 	"github.com/spf13/cobra"
 )
 
@@ -115,10 +116,10 @@ func formatCurrentVersionJSON(currentVersion string) (string, error) {
 
 func formatLatestVersionText(
 	currentVersion string,
-	response *deploy.VersionCheckResponse,
+	response *version_check.VersionCheckResponse,
 ) (string, error) {
 	latestVersion := response.LatestVersion.Version
-	updateAvailable, err := deploy.IsVersionUpdateAvailable(currentVersion, latestVersion)
+	updateAvailable, err := version_check.IsVersionUpdateAvailable(currentVersion, latestVersion)
 	if err != nil {
 		return "", err
 	}
@@ -131,7 +132,7 @@ func formatLatestVersionText(
 	var builder strings.Builder
 	err = latestVersionTextTemplate.Execute(&builder, struct {
 		CurrentVersion string
-		LatestVersion  deploy.LatestVersionInfo
+		LatestVersion  version_check.LatestVersionInfo
 		State          string
 	}{
 		CurrentVersion: currentVersion,

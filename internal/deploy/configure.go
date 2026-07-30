@@ -12,6 +12,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
+	"github.com/exasol/exasol-personal/internal/version_check"
 )
 
 var ErrConfigureNotAllowed = errors.New("deployment cannot be configured in its current state")
@@ -100,7 +101,7 @@ func writeDeploymentConfiguration(
 		installManifest.Variables,
 		string(metadata.ClusterIdentity),
 		string(metadata.ID),
-		GetVersionCheckURL(),
+		version_check.GetVersionCheckURL(),
 		configValuesRawMap(configuration.Installation.Options),
 	)
 }
