@@ -98,16 +98,16 @@ If you prefer to use Go commands directly (or Task is unavailable):
 
 ```bash
 # Generate code, including embedded resources for the host platform
-go generate ./...
+GOFLAGS=-tags=containers_image_openpgp go generate ./...
 
 # Build the binary
-go build -o bin/exasol ./cmd/exasol
+go build -tags=containers_image_openpgp -o bin/exasol ./cmd/exasol
 
 # For cross-compilation, stage that target's embedded resource with
 # TARGET_GOOS/TARGET_GOARCH (not GOOS/GOARCH, which would cross-compile
 # this `go run` itself instead of just picking the tool's target), then build
-TARGET_GOOS=windows TARGET_GOARCH=amd64 go generate ./...
-GOOS=windows GOARCH=amd64 go build -o bin/exasol.exe ./cmd/exasol
+GOFLAGS=-tags=containers_image_openpgp TARGET_GOOS=windows TARGET_GOARCH=amd64 go generate ./...
+GOOS=windows GOARCH=amd64 go build -tags=containers_image_openpgp -o bin/exasol.exe ./cmd/exasol
 ```
 
 ### Embedded resources: generation and local overrides
