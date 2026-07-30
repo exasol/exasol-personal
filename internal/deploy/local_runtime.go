@@ -16,6 +16,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/version_check"
 )
 
 // Internal escape hatch for fake local-runner integration tests.
@@ -107,7 +108,7 @@ func localRunnerVersionCheckArgs(deployment config.DeploymentDir) ([]string, err
 
 	return []string{
 		"--version-check-enabled=true",
-		"--version-check-url", GetVersionCheckURL(),
+		"--version-check-url", version_check.GetVersionCheckURL(),
 		"--version-check-identity", clusterIdentity,
 	}, nil
 }

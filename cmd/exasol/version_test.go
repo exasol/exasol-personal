@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/exasol/exasol-personal/internal/version_check"
 )
 
 func TestFormatCurrentVersionText_ReportsText(t *testing.T) {
@@ -171,9 +171,9 @@ func assertContainsNone(t *testing.T, actual string, unexpected []string) {
 	}
 }
 
-func latestVersionResponse(version string) *deploy.VersionCheckResponse {
-	return &deploy.VersionCheckResponse{
-		LatestVersion: deploy.LatestVersionInfo{
+func latestVersionResponse(version string) *version_check.VersionCheckResponse {
+	return &version_check.VersionCheckResponse{
+		LatestVersion: version_check.LatestVersionInfo{
 			Version:         version,
 			Filename:        "exasol",
 			URL:             "https://example.com/exasol",

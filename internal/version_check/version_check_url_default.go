@@ -3,7 +3,7 @@
 
 //go:build !official_release
 
-package deploy
+package version_check
 
 // DefaultVersionCheckURL is the default endpoint used for version checking.
 //
