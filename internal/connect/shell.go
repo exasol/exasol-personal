@@ -226,7 +226,7 @@ func nextToken(sql string, from int) (string, int) {
 }
 
 func isTokenSeparator(sql string, pos int) bool {
-	return isSpaceByte(sql[pos]) || sql[pos] == '(' ||
+	return isSpaceByte(sql[pos]) || sql[pos] == '(' || sql[pos] == ';' ||
 		strings.HasPrefix(sql[pos:], "--") || strings.HasPrefix(sql[pos:], "/*")
 }
 
