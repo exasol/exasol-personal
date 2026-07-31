@@ -318,6 +318,19 @@ Local deployments are intended for development and exploration and do not yet su
 
 Cloud deployments support all of the above.
 
+## 🔎 Version Check
+
+Exasol Personal periodically checks for newer versions so it can let you know when an update is available. The launcher checks for a newer `exasol` binary, and cloud deployments additionally check for a newer database version. These checks send a small amount of information (such as the current version, operating system, and architecture) to Exasol.
+
+Both checks are opt-out. Pass the flags to `exasol install` to disable them:
+
+```bash
+exasol install <preset> --no-launcher-version-check   # disable the launcher update check
+exasol install <preset> --no-db-version-check         # disable the database version check (cloud deployments)
+```
+
+For details on what data is collected and how it is used, see the [Exasol Privacy Policy](https://www.exasol.com/privacy-policy/).
+
 ## ⚖️ Licensing
 
 The Exasol Launcher source code in this repository is open-source software licensed under the [MIT License](./LICENSE). You are free to use, modify, and distribute it. Contributions are made under the same terms.
