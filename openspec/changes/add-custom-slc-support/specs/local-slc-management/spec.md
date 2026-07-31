@@ -3,12 +3,11 @@
 ### Requirement: Install a custom script language container
 
 `exasol slc custom install` SHALL install a user-supplied container given a source and an
-alias: `--file <tarball>` or `--url <https-url>` (exactly one), with `--alias <NAME>`
-and `--language <python|java|r>`. The launcher SHALL materialize the container into the
-default BucketFS bucket and activate it by setting the alias in the `SCRIPT_LANGUAGES`
-database parameter, preserving every other alias. Activation SHALL take effect for new
-sessions without restarting the database. The operation SHALL be supported only on local
-deployments and SHALL require a running database.
+alias: `--source <tarball-or-https-url>`, with `--alias <NAME>` and
+`--language <python|java|r>`. The launcher SHALL deliver the container by staging it for the
+local runtime to import and mount into the database container, and SHALL activate it by setting
+the alias in the `SCRIPT_LANGUAGES` database parameter, preserving every other alias. The
+operation SHALL be supported only on local deployments.
 
 The alias MUST be a valid unquoted Exasol regular identifier restricted to ASCII: it starts
 with a letter, then letters, digits, or underscores, up to 128 characters — so it works in
@@ -17,17 +16,17 @@ See https://docs.exasol.com/db/latest/sql_references/basiclanguageelements.htm
 
 #### Scenario: Install from a local tarball
 
-- **WHEN** the user runs `slc custom install --file c.tar.gz --alias MYPY3 --language python`
-- **THEN** the container is unpacked into the default BucketFS bucket
+- **WHEN** the user runs `slc custom install --source c.tar.gz --alias MYPY3 --language python`
+- **THEN** the container is staged for the local runtime and mounted into the database container
 - **AND** `SCRIPT_LANGUAGES` gains a `MYPY3` entry while all existing aliases are preserved
-- **AND** the language is usable in new sessions without a restart
+- **AND** the language is usable once the database is ready
 
 #### Scenario: Install from a URL does not leave the download on disk
 
-- **WHEN** the user installs with `--url`
-- **THEN** the container is downloaded on the host and streamed into the deployment
-- **AND** the downloaded copy is removed after it has been unpacked
-- **AND** the URL is rejected unless it uses `https`
+- **WHEN** the user installs with an `https` URL as the source
+- **THEN** the container is downloaded on the host and staged for the local runtime
+- **AND** the downloaded copy is removed once it has been staged
+- **AND** a URL source is rejected unless it uses `https`
 
 #### Scenario: Alias and language are validated
 
@@ -36,12 +35,12 @@ See https://docs.exasol.com/db/latest/sql_references/basiclanguageelements.htm
 - **WHEN** the language is not one of python, java, or r
 - **THEN** the command is rejected
 
-#### Scenario: Exactly one source is required
+#### Scenario: A source is required
 
-- **WHEN** neither `--file` nor `--url` is given, or both are given
+- **WHEN** `--source` is not given
 - **THEN** the command is rejected
 
-#### Scenario: An invalid container is rejected before it is installed
+#### Scenario: An invalid container is rejected before it is staged
 
 - **WHEN** the supplied archive is corrupt, or is not a standard script language container
 - **THEN** the command fails before changing the deployment or the database
@@ -51,31 +50,94 @@ See https://docs.exasol.com/db/latest/sql_references/basiclanguageelements.htm
 - **WHEN** the activation of a custom SLC does not take effect
 - **THEN** the command reports an error instead of reporting success
 
-#### Scenario: A stopped database is refused
-
-- **WHEN** a custom SLC operation is attempted while the database is stopped
-- **THEN** the command fails asking the user to start the deployment first
-
 #### Scenario: Reinstalling identical content and language is a no-op
 
-- **WHEN** the requested container has the same content digest and language as the one already installed under that alias
+- **WHEN** the requested container has the same content digest and language as the one already installed and active under that alias
 - **THEN** the command makes no change and reports that nothing was done
 - **WHEN** the content digest matches but the language differs
 - **THEN** the alias is re-activated with the new language and the change is recorded
+- **WHEN** the content digest and language match but the recorded container was never activated
+- **THEN** the install is retried rather than reported as a no-op
+
+### Requirement: A custom container is addressed by its alias and content
+
+The launcher SHALL derive a custom container's image reference, mount directory, and staged
+package name from its alias and content digest, and SHALL keep custom mount directories in a
+namespace disjoint from official mount directories and from the directories the database owns.
+Changing a custom container's content SHALL therefore change its image reference, so the local
+runtime imports the new content rather than reusing the old image.
+
+#### Scenario: Custom and official containers cannot collide on a mount directory
+
+- **WHEN** a custom SLC is installed under any alias
+- **THEN** its mount directory is distinct from every official SLC mount directory and from the database's own directories
+
+#### Scenario: New content produces a new image
+
+- **WHEN** a custom alias is updated with different content
+- **THEN** the image reference changes with the content digest
+- **AND** the local runtime imports the new content instead of reusing the previously imported image
+
+### Requirement: Pending custom activation is reconciled on start
+
+The launcher SHALL record a custom container's activation as pending until it has been applied,
+and SHALL apply any pending activation once the database is ready after a start — because the
+container is mounted by the start path but activated through the database. A failure to
+reconcile SHALL be reported without failing the start.
+
+#### Scenario: A deferred install activates on the next start
+
+- **WHEN** a custom SLC was recorded with `--no-restart`
+- **AND** the deployment is started
+- **THEN** the container is mounted and its alias is activated once the database is ready
+- **AND** no further user action is required
+
+#### Scenario: An interrupted install converges on the next start
+
+- **WHEN** a custom SLC was recorded and mounted but its activation did not complete
+- **AND** the deployment is started again
+- **THEN** the activation is applied
+
+#### Scenario: A reconcile failure does not fail the start
+
+- **WHEN** a pending activation cannot be applied during a start
+- **THEN** the failure is reported as a warning
+- **AND** the database remains started
+
+### Requirement: An unavailable custom container does not stop the database
+
+The local runtime SHALL report a custom container whose staged package is missing or cannot be
+imported as unavailable, skip mounting it, and still start the database. The launcher SHALL NOT
+activate an alias whose container is unavailable, and SHALL tell the user which container is
+unavailable and why.
+
+#### Scenario: A missing package leaves the database usable
+
+- **WHEN** a recorded custom container's staged package is missing at start
+- **THEN** the database starts without that container
+- **AND** the alias is not activated
+- **AND** the user is told the container is unavailable
+
+#### Scenario: A container that cannot be imported leaves the database usable
+
+- **WHEN** a staged package is not a valid container image archive
+- **THEN** the database starts without that container
+- **AND** the command that installed it reports the failure rather than success
 
 ### Requirement: Custom SLCs are tracked separately from official ones
 
-The launcher SHALL persist installed custom SLCs in a state list separate from official
-SLCs. The mechanism that re-applies official image mounts on every start SHALL NOT include
-custom SLCs, because custom SLCs persist through BucketFS and `SCRIPT_LANGUAGES` and are not
-re-applied.
+The launcher SHALL persist installed custom SLCs in a state list separate from official SLCs,
+recording each container's image reference, mount target, staged package name, content digest,
+source, and whether its activation has been applied. This state SHALL be the source of truth
+that the start path uses to re-apply custom mounts, because an image mount does not survive
+container recreation.
 
-#### Scenario: Start does not re-apply custom SLCs as image mounts
+#### Scenario: Start re-applies custom SLCs as mounts
 
 - **WHEN** a deployment has both an official and a custom SLC installed
 - **AND** the deployment is started
-- **THEN** only the official SLC contributes an image mount
-- **AND** the custom SLC is not passed as an image mount
+- **THEN** the official SLC contributes an image mount
+- **AND** the custom SLC contributes an image mount together with the staged package the runtime must import
 
 ### Requirement: Custom and official aliases are mutually exclusive
 
@@ -107,22 +169,40 @@ to another installed custom SLC, the command SHALL require confirmation before r
 ### Requirement: Manage custom SLCs through list, update, and remove
 
 `exasol slc list` SHALL show installed custom SLCs alongside official ones, distinguished by
-type. `exasol slc custom update` SHALL replace the container behind a custom alias with a
-freshly supplied one, treating identical content and language as a no-op. `exasol slc custom
-remove` SHALL deactivate a custom SLC (removing its `SCRIPT_LANGUAGES` entry) and delete its
-BucketFS files. The top-level `slc remove` SHALL point a custom alias at `slc custom remove`.
+type, and SHALL report whether each custom container is currently available. `exasol slc custom
+update` SHALL replace the container behind a custom alias with a freshly supplied one, treating
+identical content and language as a no-op. `exasol slc remove <alias>` SHALL remove either an
+official or a custom container, deactivating a custom one — removing its `SCRIPT_LANGUAGES`
+entry, or restoring the built-in mapping it displaced — and deleting its staged package. Removing an *active* container SHALL require a running database,
+because clearing its alias goes through the database; a container that was recorded but never
+activated holds no alias and SHALL be removable while the database is stopped.
 
 #### Scenario: List includes custom SLCs
 
 - **WHEN** a custom SLC is installed
-- **THEN** `slc list` shows it with its alias and language, and `--json` marks it with a custom type
+- **THEN** `slc list` shows it with its alias, language, and availability, and `--json` marks it with a custom type
 
 #### Scenario: Remove a custom SLC
 
-- **WHEN** the user runs `slc custom remove` for a custom alias
-- **THEN** the custom SLC is deactivated and its files are deleted
-- **WHEN** the user runs the top-level `slc remove` for a custom alias
-- **THEN** the command points them at `slc custom remove` instead of removing an official SLC
+- **WHEN** the user runs `slc remove` for a custom alias
+- **THEN** the custom SLC is deactivated and its staged package is deleted
+- **AND** its mount is gone from the next start
+- **AND** the same alias removed through the official path is not mistaken for an official SLC
+
+#### Scenario: Removing a custom SLC restores a displaced built-in
+
+- **WHEN** a custom SLC that overrode a built-in alias is removed
+- **THEN** the built-in mapping is restored rather than the alias being left undefined
+
+#### Scenario: Removing an active container with a stopped database is refused
+
+- **WHEN** `slc custom remove` is run for an active container while the database is stopped
+- **THEN** the command fails asking the user to start the deployment first
+
+#### Scenario: A container that was never activated is removable while stopped
+
+- **WHEN** `slc custom remove` is run for a container recorded but never activated, while the database is stopped
+- **THEN** the container is removed and its staged package deleted, without requiring a start
 
 #### Scenario: Update replaces custom content
 
@@ -164,3 +244,107 @@ aliases, guiding the user to remove the custom SLC first.
 - **WHEN** a custom SLC owns `PYTHON3`
 - **AND** the user installs an official SLC that also declares `PYTHON3`
 - **THEN** the install is blocked, guiding the user to remove the custom SLC first
+
+### Requirement: Install, update, and remove apply through a verified database restart
+
+An SLC operation that applies through a restart SHALL restart the local database to apply the
+change, and SHALL report success only after the database is ready with the change in effect.
+This covers official install, update, and remove, and custom install and update. For a custom container, the change is in effect only once its alias resolves to the
+mounted container in `SCRIPT_LANGUAGES`.
+
+#### Scenario: Install restarts and verifies
+
+- **WHEN** `exasol slc install python3` is run on a running deployment
+- **THEN** the database is restarted with the SLC mounted
+- **AND** success is reported only after readiness and activation are verified
+
+#### Scenario: A failed apply does not report success
+
+- **WHEN** the database fails to come up with the SLC mounted (e.g. the image cannot be pulled)
+- **THEN** the command reports the failure
+- **AND** it indicates the SLC is configured but not active, rather than reporting success
+
+#### Scenario: A custom install restarts and verifies activation
+
+- **WHEN** `exasol slc custom install` is run on a running deployment
+- **THEN** the database is restarted with the container mounted, and the alias is activated
+- **AND** success is reported only after the alias is confirmed to resolve to the container
+
+#### Scenario: A custom container that could not be activated is reported, not claimed
+
+- **WHEN** a custom install restarts the database but the container is unavailable or the alias cannot be activated
+- **THEN** the command reports that the container is recorded but not active
+- **AND** the deployment remains usable
+
+### Requirement: A restart of a running database is confirmed or deferred
+
+Every SLC operation that restarts the database SHALL require confirmation before restarting a
+running database, and SHALL offer `--auto-approve` to skip the prompt and `--no-restart` to
+record the change for the next start instead of restarting now. This covers official install,
+update, and remove, and custom install and update. Custom removal does not restart the
+database, so it offers neither flag.
+
+#### Scenario: Confirmation is required before restarting a running database
+
+- **WHEN** `exasol slc install python3` is run interactively on a running deployment
+- **THEN** the command warns that the database will be restarted and open connections dropped
+- **AND** it proceeds only after the user confirms; declining makes no changes
+
+#### Scenario: `--auto-approve` skips the prompt
+
+- **WHEN** `exasol slc install python3 --auto-approve` is run on a running deployment
+- **THEN** the database is restarted to apply the SLC without prompting
+
+#### Scenario: `--no-restart` defers activation without restarting
+
+- **WHEN** `exasol slc install python3 --no-restart` is run on a running deployment
+- **THEN** the SLC is recorded and the database is not restarted
+- **AND** the SLC becomes active on the next start
+
+#### Scenario: `--no-restart` defers a custom install without restarting
+
+- **WHEN** `exasol slc custom install --no-restart` is run on a running deployment
+- **THEN** the container is staged and recorded, and the database is not restarted
+- **AND** the container is mounted and its alias activated on the next start
+
+#### Scenario: Non-interactive use without confirmation is refused
+
+- **WHEN** `exasol slc install python3` is run without a TTY and without `--auto-approve` or `--no-restart` on a running deployment
+- **THEN** the command fails asking for `--auto-approve` or `--no-restart`
+- **AND** the database is not restarted
+
+#### Scenario: No confirmation when the database is stopped
+
+- **WHEN** `exasol slc install python3` is run on a stopped deployment
+- **THEN** no restart confirmation is required, because no running database is disrupted
+
+### Requirement: Unreferenced SLC images are reclaimed
+
+Replacing or removing an SLC SHALL NOT leave the replaced or removed image occupying
+storage indefinitely; SLC images that are no longer referenced by the installed set SHALL
+be reclaimed, whether they were pulled for an official SLC or imported for a custom one.
+Reclamation MUST NOT remove the database image or any unrelated image, and a failure to remove
+an image MUST NOT fail the operation. A replaced or removed custom container's staged package
+SHALL also be deleted, so a superseded container does not occupy host storage.
+
+#### Scenario: Replacing an SLC removes the old image
+
+- **WHEN** an installed SLC is replaced by a newer version of the same flavor
+- **THEN** the newer image is mounted
+- **AND** the previous, now-unreferenced SLC image is removed from storage
+
+#### Scenario: Removing an SLC removes its image
+
+- **WHEN** an installed SLC is removed
+- **THEN** its image is removed from storage on the next database (re)start
+
+#### Scenario: Removing a custom SLC reclaims its image and package
+
+- **WHEN** a custom SLC is removed or replaced with different content
+- **THEN** its staged package is deleted from the host
+- **AND** its imported image is removed from storage on the next database (re)start
+
+#### Scenario: Images still in use are left in place
+
+- **WHEN** an SLC image cannot be removed because it is still referenced
+- **THEN** the removal is skipped without failing the install or remove

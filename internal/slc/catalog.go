@@ -18,9 +18,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// slcMountRoot is the directory the database scans for built-in script language
-// containers. Each SLC is mounted at slcMountRoot/<flavor>.
-const slcMountRoot = "/exa/slc"
+const SLCMountRoot = "/exa/slc"
 
 // Catalog is the parsed representation of slc-catalog.yaml.
 type Catalog struct {
@@ -185,7 +183,7 @@ func (c *Catalog) imageRef(flavor, goarch, hash string) string {
 }
 
 func targetDir(flavor string) string {
-	return slcMountRoot + "/" + flavor
+	return SLCMountRoot + "/" + flavor
 }
 
 func aliasList(entries []Entry) []string {

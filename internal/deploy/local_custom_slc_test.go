@@ -4,213 +4,207 @@
 package deploy
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
-	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	"github.com/pkg/sftp"
+	"github.com/exasol/exasol-personal/internal/config"
 )
 
-func TestExtractTarOverSFTP(t *testing.T) {
+func TestStageCustomSLCPackageWritesTheContainer(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	client := newLoopbackSFTPClient(t)
-	target := filepath.Join(t.TempDir(), "slc")
-	archive := buildTarGz(t, []tarEntry{
-		{name: "exaudf/", dir: true},
-		{name: "exaudf/exaudfclient", body: "#!/bin/sh\n", mode: 0o755},
-		{name: "exaudf/lib/data.txt", body: "hello", mode: 0o644},
-		{name: "exaudf/link", link: "exaudfclient"},
-	})
+	deployment := config.NewDeploymentDir(t.TempDir())
+	content := []byte("container-bytes")
 
 	// When
-	err := extractTarOverSFTP(client, bytes.NewReader(archive), target)
+	err := stageCustomSLCPackage(deployment, "custom-mypy3-abc.tar.gz", bytes.NewReader(content))
 	// Then
 	if err != nil {
-		t.Fatalf("extract failed: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	body, err := os.ReadFile(filepath.Join(target, "exaudf/lib/data.txt"))
-	if err != nil || string(body) != "hello" {
-		t.Fatalf("regular file not extracted: %q err %v", body, err)
+
+	staged := filepath.Join(customSLCStagingDir(deployment), "custom-mypy3-abc.tar.gz")
+	got, err := os.ReadFile(staged) //nolint:gosec // test-owned path
+	if err != nil {
+		t.Fatalf("expected the package staged at %s: %v", staged, err)
 	}
-	linkDest, err := os.Readlink(filepath.Join(target, "exaudf/link"))
-	if err != nil || linkDest != "exaudfclient" {
-		t.Fatalf("symlink not extracted: %q err %v", linkDest, err)
+	if !bytes.Equal(got, content) {
+		t.Fatalf("staged content mismatch: %q", got)
 	}
 }
 
-// Re-extracting into the same directory must replace the previous contents so install and
-// replace stay idempotent.
-func TestExtractTarOverSFTPReplacesExisting(t *testing.T) {
-	t.Parallel()
-
-	client := newLoopbackSFTPClient(t)
-	target := filepath.Join(t.TempDir(), "slc")
-
-	first := buildTarGz(t, []tarEntry{{name: "stale.txt", body: "old", mode: 0o644}})
-	if err := extractTarOverSFTP(client, bytes.NewReader(first), target); err != nil {
-		t.Fatal(err)
-	}
-	second := buildTarGz(t, []tarEntry{{name: "fresh.txt", body: "new", mode: 0o644}})
-	if err := extractTarOverSFTP(client, bytes.NewReader(second), target); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := os.Stat(filepath.Join(target, "stale.txt")); !os.IsNotExist(err) {
-		t.Fatalf("stale file survived replace: %v", err)
-	}
-}
-
-// extractTarOverSFTP re-checks per-entry safety as defense in depth, so a traversal entry is
-// rejected even if host-side validation were bypassed.
-func TestExtractTarOverSFTPRejectsTraversal(t *testing.T) {
+func TestStageCustomSLCPackageIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	client := newLoopbackSFTPClient(t)
-	target := filepath.Join(t.TempDir(), "slc")
-	archive := buildTarGz(t, []tarEntry{{name: "../escape.txt", body: "x", mode: 0o644}})
+	deployment := config.NewDeploymentDir(t.TempDir())
+	const name = "custom-mypy3-abc.tar.gz"
+	if err := stageCustomSLCPackage(deployment, name, strings.NewReader("first")); err != nil {
+		t.Fatal(err)
+	}
 
 	// When
-	err := extractTarOverSFTP(client, bytes.NewReader(archive), target)
+	err := stageCustomSLCPackage(deployment, name, strings.NewReader("second"))
+	// Then
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, err := os.ReadFile( //nolint:gosec // test-owned path
+		filepath.Join(customSLCStagingDir(deployment), name),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "second" {
+		t.Fatalf("expected the package replaced, got %q", got)
+	}
+}
+
+func TestStageCustomSLCPackageLeavesNothingOnFailure(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+
+	// When
+	err := stageCustomSLCPackage(deployment, "custom-mypy3-abc.tar.gz", failingReader{})
 	// Then
 	if err == nil {
-		t.Fatal("expected extraction to reject a path-traversal entry")
+		t.Fatal("expected a staging error")
+	}
+
+	entries, readErr := os.ReadDir(customSLCStagingDir(deployment))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected no staged files, got %d", len(entries))
 	}
 }
 
-func TestExtractTarOverSFTPCreatesParentForSymlink(t *testing.T) {
+func TestRemoveCustomSLCPackageToleratesAbsence(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	client := newLoopbackSFTPClient(t)
-	target := filepath.Join(t.TempDir(), "slc")
-	archive := buildTarGz(t, []tarEntry{{name: "nested/link", link: "target"}})
+	deployment := config.NewDeploymentDir(t.TempDir())
 
-	// When
-	err := extractTarOverSFTP(client, bytes.NewReader(archive), target)
-	// Then
-	if err != nil {
-		t.Fatalf("a nested symlink with no parent dir entry should extract: %v", err)
+	// When / Then
+	if err := removeCustomSLCPackage(deployment, "missing.tar.gz"); err != nil {
+		t.Fatalf("removing an absent package must succeed, got %v", err)
 	}
-	if _, err := os.Lstat(filepath.Join(target, "nested", "link")); err != nil {
-		t.Fatalf("symlink not created under a missing parent dir: %v", err)
+	if err := removeCustomSLCPackage(deployment, ""); err != nil {
+		t.Fatalf("an empty package name must be a no-op, got %v", err)
 	}
 }
 
-// A symlink to an outside directory followed by a write under it must be rejected before any
-// bytes land outside the target, closing the write-through-symlink extraction escape.
-func TestExtractTarOverSFTPRejectsSymlinkEscape(t *testing.T) {
+func TestReadSLCImageStatesTreatsAMissingReportAsEmpty(t *testing.T) {
+	t.Parallel()
+
+	// When
+	states, err := readSLCImageStates(config.NewDeploymentDir(t.TempDir()))
+	// Then
+	if err != nil {
+		t.Fatalf("a missing report must not be an error, got %v", err)
+	}
+	if len(states) != 0 {
+		t.Fatalf("expected no states, got %v", states)
+	}
+}
+
+func TestReadSLCImageStatesParsesTheReport(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	client := newLoopbackSFTPClient(t)
-	target := filepath.Join(t.TempDir(), "slc")
-	outside := t.TempDir()
-	archive := buildTarGz(t, []tarEntry{
-		{name: "escape", link: outside},
-		{name: "escape/pwned", body: "owned", mode: 0o644},
-	})
+	deployment := config.NewDeploymentDir(t.TempDir())
+	writeSLCStatusReport(t, deployment, `{"slc":[
+		{"image":"a:1","state":"imported"},
+		{"image":"b:1","state":"package-missing"}
+	]}`)
 
 	// When
-	err := extractTarOverSFTP(client, bytes.NewReader(archive), target)
+	states, err := readSLCImageStates(deployment)
 	// Then
-	if err == nil {
-		t.Fatal("expected extraction to reject a write through a symlink")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(outside, "pwned")); !os.IsNotExist(err) {
-		t.Fatalf("write escaped the target directory: %v", err)
+	if states["a:1"] != "imported" || states["b:1"] != "package-missing" {
+		t.Fatalf("unexpected states: %v", states)
 	}
 }
 
-func TestRemoveAllIfExists(t *testing.T) {
+func TestCustomSLCImageAvailable(t *testing.T) {
 	t.Parallel()
 
-	client := newLoopbackSFTPClient(t)
-
-	if err := removeAllIfExists(client, filepath.Join(t.TempDir(), "absent")); err != nil {
-		t.Fatalf("a missing path must be tolerated, got %v", err)
+	// Given
+	states := map[string]string{
+		"imported:1": slcStateImported,
+		"present:1":  slcStatePresent,
+		"pulled:1":   slcStatePulled,
+		"missing:1":  "package-missing",
+		"failed:1":   "import-failed",
 	}
 
-	_ = client.Close()
-	if err := removeAllIfExists(client, filepath.Join(t.TempDir(), "any")); err == nil {
-		t.Fatal("a non-not-exist Stat failure must be propagated, not swallowed")
+	// When / Then
+	for _, image := range []string{"imported:1", "present:1", "pulled:1"} {
+		if !customSLCImageAvailable(states, image) {
+			t.Fatalf("%s must count as available", image)
+		}
+	}
+	for _, image := range []string{"missing:1", "failed:1", "unreported:1"} {
+		if customSLCImageAvailable(states, image) {
+			t.Fatalf("%s must not count as available", image)
+		}
 	}
 }
 
-type tarEntry struct {
-	name string
-	body string
-	link string
-	mode int64
-	dir  bool
-}
-
-func buildTarGz(t *testing.T, entries []tarEntry) []byte {
+func writeSLCStatusReport(t *testing.T, deployment config.DeploymentDir, content string) {
 	t.Helper()
 
-	var buf bytes.Buffer
-	gzipWriter := gzip.NewWriter(&buf)
-	tarWriter := tar.NewWriter(gzipWriter)
-
-	for _, entry := range entries {
-		header := &tar.Header{Name: entry.name, Mode: entry.mode}
-		switch {
-		case entry.dir:
-			header.Typeflag = tar.TypeDir
-		case entry.link != "":
-			header.Typeflag = tar.TypeSymlink
-			header.Linkname = entry.link
-		default:
-			header.Typeflag = tar.TypeReg
-			header.Size = int64(len(entry.body))
-		}
-		if err := tarWriter.WriteHeader(header); err != nil {
-			t.Fatal(err)
-		}
-		if header.Typeflag == tar.TypeReg {
-			if _, err := tarWriter.Write([]byte(entry.body)); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	if err := tarWriter.Close(); err != nil {
+	path := customSLCStatusPath(deployment)
+	if err := os.MkdirAll(filepath.Dir(path), slcStagingDirMode); err != nil {
 		t.Fatal(err)
 	}
-	if err := gzipWriter.Close(); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-
-	return buf.Bytes()
 }
 
-// newLoopbackSFTPClient wires an SFTP client to an in-process SFTP server serving the real
-// filesystem over an in-memory pipe, so extraction is exercised against a genuine SFTP
-// backend without a network or a remote host.
-func newLoopbackSFTPClient(t *testing.T) *sftp.Client {
-	t.Helper()
+type failingReader struct{}
 
-	clientConn, serverConn := net.Pipe()
-	server, err := sftp.NewServer(serverConn)
-	if err != nil {
-		t.Fatalf("failed to start sftp server: %v", err)
+func (failingReader) Read([]byte) (int, error) {
+	return 0, os.ErrInvalid
+}
+
+func TestStagingDiscardsStalePartialDownloads(t *testing.T) {
+	t.Parallel()
+
+	// Given: a leftover partial download from a killed process.
+	deployment := config.NewDeploymentDir(t.TempDir())
+	dir := customSLCStagingDir(deployment)
+	if err := os.MkdirAll(dir, slcStagingDirMode); err != nil {
+		t.Fatal(err)
 	}
-	go func() { _ = server.Serve() }()
-
-	client, err := sftp.NewClientPipe(clientConn, clientConn)
-	if err != nil {
-		t.Fatalf("failed to start sftp client: %v", err)
+	stale := filepath.Join(dir, "incoming-123456.part")
+	if err := os.WriteFile(stale, []byte("half a container"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		_ = client.Close()
-		_ = server.Close()
-	})
 
-	return client
+	// When: staging anything at all.
+	err := stageCustomSLCPackage(deployment, "custom-x-abc.tar.gz", strings.NewReader("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Then: the leftover is gone and the real package is in place.
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("expected the stale partial download removed, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "custom-x-abc.tar.gz")); err != nil {
+		t.Fatalf("expected the staged package, got %v", err)
+	}
 }

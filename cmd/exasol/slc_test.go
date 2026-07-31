@@ -15,28 +15,55 @@ import (
 	"github.com/spf13/pflag"
 )
 
-func TestSLCCommandSeparation(t *testing.T) {
+func TestSLCCustomSubcommandsExist(t *testing.T) {
 	t.Parallel()
 
-	for name, cmd := range map[string]*cobra.Command{
-		"install": slcCustomInstallCmd,
-		"update":  slcCustomUpdateCmd,
-		"remove":  slcCustomRemoveCmd,
-	} {
+	// When / Then
+	for _, name := range []string{"install", "update"} {
 		if !hasSubcommand(slcCustomCmd, name) {
 			t.Fatalf("slc custom is missing the %q subcommand", name)
 		}
-		if cmd.Flags().Lookup("no-restart") != nil {
-			t.Fatalf("custom %s must not carry --no-restart", name)
-		}
 	}
+}
 
-	for _, flag := range []string{"file", "url", "alias", "language"} {
+func TestSLCCustomRemoveIsHiddenInFavourOfUnifiedRemove(t *testing.T) {
+	t.Parallel()
+
+	// When / Then
+	if !slcCustomRemoveCmd.Hidden {
+		t.Fatal("slc custom remove must be hidden in favour of the unified slc remove")
+	}
+}
+
+func TestSLCCustomOnlyFlagsAreNotOnOfficialInstall(t *testing.T) {
+	t.Parallel()
+
+	// When / Then
+	for _, flag := range []string{"source", "alias", "language"} {
 		if slcCustomInstallCmd.Flags().Lookup(flag) == nil {
 			t.Fatalf("slc custom install is missing --%s", flag)
 		}
 		if slcInstallCmd.Flags().Lookup(flag) != nil {
 			t.Fatalf("official install must not carry --%s", flag)
+		}
+	}
+}
+
+func TestSLCCustomInstallAndUpdateCarryRestartFlags(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	commands := map[string]*cobra.Command{
+		"install": slcCustomInstallCmd,
+		"update":  slcCustomUpdateCmd,
+	}
+
+	// When / Then
+	for name, cmd := range commands {
+		for _, flag := range []string{"no-restart", "auto-approve"} {
+			if cmd.Flags().Lookup(flag) == nil {
+				t.Fatalf("slc custom %s is missing --%s", name, flag)
+			}
 		}
 	}
 	if slcInstallCmd.Flags().Lookup("no-restart") == nil {
@@ -53,10 +80,6 @@ func hasSubcommand(parent *cobra.Command, name string) bool {
 
 	return false
 }
-
-// On an unsupported architecture `slc list` degrades gracefully: SLCStatuses returns an
-// empty set (no error), which the renderers must present as the "none available" message
-// and an empty JSON array — never an error or a non-zero exit.
 
 func TestRenderSLCListTextNoneAvailable(t *testing.T) {
 	t.Parallel()
@@ -112,9 +135,6 @@ func TestRenderSLCListJSONEmptyIsArray(t *testing.T) {
 		t.Fatalf("expected empty JSON array, got %q", got)
 	}
 }
-
-// A custom SLC appears in both renderers, distinguished by type in JSON and a separate
-// section in text, so `slc list` covers custom containers alongside official ones.
 
 func TestRenderSLCListTextIncludesCustom(t *testing.T) {
 	t.Parallel()
@@ -203,6 +223,7 @@ func TestSLCApplyOutcomeStringReportsNoOp(t *testing.T) {
 
 //nolint:paralleltest // reads package-global Cobra commands
 func TestSLCMutationCommandsRegisterJSONFlag(t *testing.T) {
+	// Given
 	for _, cmd := range []struct {
 		name string
 		cmd  interface{ Flag(name string) *pflag.Flag }
@@ -210,9 +231,117 @@ func TestSLCMutationCommandsRegisterJSONFlag(t *testing.T) {
 		{name: "install", cmd: slcInstallCmd},
 		{name: "update", cmd: slcUpdateCmd},
 		{name: "remove", cmd: slcRemoveCmd},
+		{name: "custom install", cmd: slcCustomInstallCmd},
+		{name: "custom update", cmd: slcCustomUpdateCmd},
+		{name: "custom remove", cmd: slcCustomRemoveCmd},
 	} {
+		// When / Then
 		if cmd.cmd.Flag("json") == nil {
 			t.Fatalf("expected slc %s to register --json", cmd.name)
 		}
+	}
+}
+
+//nolint:paralleltest // mutates shared terminal message queues
+func TestRenderCustomSLCCommandJSONCarriesTheContract(t *testing.T) {
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+
+	// Given
+	result := &deploy.CustomSLCInstallResult{
+		Operation: deploy.SLCOperationInstall,
+		Alias:     "MYPY3",
+		Language:  "python",
+		Changed:   true,
+		Outcome:   deploy.SLCApplyRestarted,
+	}
+
+	// When
+	if err := renderSLCCommandJSON(result); err != nil {
+		t.Fatalf("failed to render JSON: %v", err)
+	}
+
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	writeTerminalMessages(terminalConfig{stdout: &stdout, stderr: &stderr, showCallsToAction: true})
+
+	// Then
+	if stderr.String() != "" {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatalf("stdout is not parseable JSON: %v\n%s", err, stdout.String())
+	}
+	for key, want := range map[string]any{
+		"operation": "install",
+		"alias":     "MYPY3",
+		"outcome":   "restarted",
+	} {
+		if decoded[key] != want {
+			t.Fatalf("%s = %v, want %v", key, decoded[key], want)
+		}
+	}
+}
+
+// A prompt on stdout would corrupt --json output, so both confirmation paths must use stderr.
+func TestSLCConfirmPromptsGoToStderr(t *testing.T) {
+	t.Parallel()
+
+	for name, prompt := range map[string]func(*cobra.Command) error{
+		"custom": func(cmd *cobra.Command) error {
+			_, err := customSLCConfirmFunc(cmd, false)("overriding a built-in alias")
+
+			return err
+		},
+		"official": func(cmd *cobra.Command) error {
+			_, err := slcConfirmFunc(cmd, false, "Installing")()
+
+			return err
+		},
+	} {
+		// Given: a command whose streams are captured, and a declining answer on stdin.
+		stdout := bytes.Buffer{}
+		stderr := bytes.Buffer{}
+		cmd := &cobra.Command{}
+		cmd.SetOut(&stdout)
+		cmd.SetErr(&stderr)
+		cmd.SetIn(strings.NewReader("n\n"))
+
+		// When
+		_ = prompt(cmd)
+
+		// Then
+		if stdout.Len() != 0 {
+			t.Fatalf("%s: prompt must not write to stdout, got %q", name, stdout.String())
+		}
+	}
+}
+
+// The blank line is the one thing the per-table split could have changed.
+func TestFormatSLCListTextSeparatesOfficialFromCustom(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	official := []deploy.SLCStatus{
+		{Language: "python", Flavor: "python-3.12", Version: "3.12", Aliases: []string{"PYTHON3"}},
+	}
+	custom := []deploy.CustomSLCStatus{{Alias: "MYPY3", Language: "python", Source: "my.tar.gz"}}
+
+	// When
+	output := formatSLCListText(official, custom)
+
+	// Then
+	if !strings.Contains(output, "FLAVOR") || !strings.Contains(output, "CUSTOM ALIAS") {
+		t.Fatalf("expected both tables, got %q", output)
+	}
+	if !strings.Contains(output, "\n\n") {
+		t.Fatalf("expected a blank line between the two tables, got %q", output)
+	}
+
+	// And: a custom-only listing must not start with a blank line.
+	if got := formatSLCListText(nil, custom); strings.HasPrefix(got, "\n") {
+		t.Fatalf("a custom-only listing must not be preceded by a blank line, got %q", got)
 	}
 }

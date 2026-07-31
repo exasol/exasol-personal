@@ -4,190 +4,157 @@
 package deploy
 
 import (
-	"archive/tar"
-	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
-	"path"
+	"path/filepath"
 
-	"github.com/exasol/exasol-personal/internal/customslc"
-	"github.com/exasol/exasol-personal/internal/remote"
-	"github.com/pkg/sftp"
+	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
-const vmBucketFSDir = "/var/lib/exa/bucketfs"
+const (
+	slcStagingDirName = "slc-packages"
+	slcStatusFileName = "slc-status.json"
 
-func customSLCVMDir(dir string) string {
-	return vmBucketFSDir + "/" + customSLCBucketFS + "/" + customSLCBucket + "/" + dir
+	slcStagingDirMode  = 0o750
+	slcStagingFileMode = 0o640
+
+	slcDownloadPrefix = "incoming-"
+	slcDownloadSuffix = ".part"
+)
+
+const (
+	slcStatePresent  = "present"
+	slcStateImported = "imported"
+	slcStatePulled   = "pulled"
+)
+
+type slcImageStatus struct {
+	Image string `json:"image"`
+	State string `json:"state"`
 }
 
-// The caller validates the archive before delivery, so extraction assumes a safe container.
-func (b *localBackend) deliverCustomSLC(
-	ctx context.Context,
-	dir string,
-	tarball io.Reader,
-) error {
-	session, err := b.openSFTPSession()
-	if err != nil {
-		return err
+//nolint:tagliatelle // JSON key mirrors the "SLC" domain abbreviation.
+type slcStatusReport struct {
+	SLC []slcImageStatus `json:"slc"`
+}
+
+// Only the shared directory is reachable by the guest that imports the package.
+func customSLCStagingDir(deployment config.DeploymentDir) string {
+	return filepath.Join(localruntime.NewPaths(deployment).SharedDir, slcStagingDirName)
+}
+
+func customSLCStatusPath(deployment config.DeploymentDir) string {
+	return filepath.Join(localruntime.NewPaths(deployment).SharedDir, slcStatusFileName)
+}
+
+// Downloads write here directly: rename is only atomic within one filesystem.
+func newCustomSLCStagingFile(deployment config.DeploymentDir) (*os.File, error) {
+	dir := customSLCStagingDir(deployment)
+	if err := os.MkdirAll(dir, slcStagingDirMode); err != nil {
+		return nil, fmt.Errorf("failed to create the custom SLC staging directory: %w", err)
 	}
-	defer session.Close()
+	// The deployment lock is held here, so any partial download present is stale.
+	discardStaleCustomSLCDownloads(dir)
 
-	// Closing the session unblocks any in-flight SFTP call, so a cancelled context aborts a
-	// long extraction promptly.
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = session.Close()
-		case <-stop:
+	temp, err := os.CreateTemp(dir, slcDownloadPrefix+"*"+slcDownloadSuffix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stage the custom SLC container: %w", err)
+	}
+
+	return temp, nil
+}
+
+func discardStaleCustomSLCDownloads(dir string) {
+	stale, err := filepath.Glob(filepath.Join(dir, slcDownloadPrefix+"*"+slcDownloadSuffix))
+	if err != nil {
+		return
+	}
+	for _, path := range stale {
+		if err := os.Remove(path); err != nil {
+			slog.Warn("failed to remove a stale custom SLC download", "path", path, "error", err)
 		}
-	}()
+	}
+}
 
-	client := session.Client()
-	target := customSLCVMDir(dir)
-	if err := extractTarOverSFTP(client, tarball, target); err != nil {
-		_ = client.RemoveAll(target)
-
-		return fmt.Errorf("failed to unpack the custom SLC into the VM: %w", err)
+// Renamed into place so a start racing an interrupted stage cannot import a partial package.
+func promoteCustomSLCPackage(deployment config.DeploymentDir, tempPath, name string) error {
+	if err := os.Chmod(tempPath, slcStagingFileMode); err != nil {
+		return fmt.Errorf("failed to stage the custom SLC container: %w", err)
+	}
+	target := filepath.Join(customSLCStagingDir(deployment), name)
+	if err := os.Rename(tempPath, target); err != nil {
+		return fmt.Errorf("failed to stage the custom SLC container: %w", err)
 	}
 
 	return nil
 }
 
-func (b *localBackend) removeCustomSLCFiles(_ context.Context, dir string) error {
-	session, err := b.openSFTPSession()
+func stageCustomSLCPackage(deployment config.DeploymentDir, name string, tarball io.Reader) error {
+	temp, err := newCustomSLCStagingFile(deployment)
 	if err != nil {
 		return err
 	}
-	defer session.Close()
+	tempPath := temp.Name()
+	defer func() { _ = os.Remove(tempPath) }()
 
-	if err := removeAllIfExists(session.Client(), customSLCVMDir(dir)); err != nil {
-		return fmt.Errorf("failed to remove the custom SLC files from the VM: %w", err)
+	if _, err := io.Copy(temp, tarball); err != nil {
+		_ = temp.Close()
+
+		return fmt.Errorf("failed to stage the custom SLC container: %w", err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("failed to stage the custom SLC container: %w", err)
 	}
 
-	return nil
+	return promoteCustomSLCPackage(deployment, tempPath, name)
 }
 
-func (b *localBackend) openSFTPSession() (*remote.SFTPSession, error) {
-	remoteConn, err := localSSHRemoteUnsafe(b.deployment)
-	if err != nil {
-		return nil, err
-	}
-	session, err := remoteConn.OpenSFTP()
-	if err != nil {
-		return nil, fmt.Errorf("failed to open an sftp session to the VM: %w", err)
-	}
-
-	return session, nil
-}
-
-// extractTarOverSFTP recreates targetDir first so install and replace are idempotent, and
-// re-checks per-entry safety as defense in depth even though the caller validated the archive,
-// because this is where the filesystem writes actually happen.
-func extractTarOverSFTP(client *sftp.Client, source io.Reader, targetDir string) error {
-	if err := removeAllIfExists(client, targetDir); err != nil {
-		return err
-	}
-	if err := client.MkdirAll(targetDir); err != nil {
-		return err
-	}
-
-	reader, finish, err := customslc.OpenTar(source)
-	if err != nil {
-		return err
-	}
-	checker := customslc.NewEntryChecker()
-	for {
-		header, err := reader.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		if err := checker.Check(header); err != nil {
-			return err
-		}
-		if err := writeTarEntry(client, reader, header, targetDir); err != nil {
-			return err
-		}
-	}
-
-	return finish()
-}
-
-func writeTarEntry(
-	client *sftp.Client,
-	archive io.Reader,
-	header *tar.Header,
-	targetDir string,
-) error {
-	dest := path.Join(targetDir, path.Clean(header.Name))
-
-	switch header.Typeflag {
-	case tar.TypeDir:
-		return client.MkdirAll(dest)
-	case tar.TypeReg:
-		return writeTarFile(client, archive, dest, header.FileInfo().Mode().Perm())
-	case tar.TypeSymlink:
-		if err := client.MkdirAll(path.Dir(dest)); err != nil {
-			return err
-		}
-
-		return client.Symlink(header.Linkname, dest)
-	case tar.TypeLink:
-		if err := client.MkdirAll(path.Dir(dest)); err != nil {
-			return err
-		}
-
-		return client.Link(path.Join(targetDir, path.Clean(header.Linkname)), dest)
-	default:
-		// Character/block/fifo entries never appear in an SLC container; skipping them keeps
-		// extraction total without materializing device nodes on the remote.
+func removeCustomSLCPackage(deployment config.DeploymentDir, name string) error {
+	if name == "" {
 		return nil
 	}
-}
-
-func writeTarFile(
-	client *sftp.Client,
-	source io.Reader,
-	dest string,
-	mode os.FileMode,
-) error {
-	if err := client.MkdirAll(path.Dir(dest)); err != nil {
+	err := os.Remove(filepath.Join(customSLCStagingDir(deployment), name))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	file, err := client.Create(dest)
+
+	return nil
+}
+
+func readSLCImageStates(deployment config.DeploymentDir) (map[string]string, error) {
+	path := customSLCStatusPath(deployment)
+	content, err := os.ReadFile(path) //nolint:gosec // path is launcher-owned
 	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(file, source); err != nil {
-		_ = file.Close()
-
-		return err
-	}
-	if err := file.Close(); err != nil {
-		return err
-	}
-
-	return client.Chmod(dest, mode)
-}
-
-// removeAllIfExists exists because, unlike os.RemoveAll, the SFTP client reports a missing path
-// as an error — which would otherwise force callers to special-case first-time installs and
-// repeated removes.
-func removeAllIfExists(client *sftp.Client, targetDir string) error {
-	if _, err := client.Stat(targetDir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil
+			return map[string]string{}, nil
 		}
 
-		return err
+		return nil, err
 	}
 
-	return client.RemoveAll(targetDir)
+	var report slcStatusReport
+	if err := json.Unmarshal(content, &report); err != nil {
+		return nil, fmt.Errorf("failed to parse the local SLC status report %s: %w", path, err)
+	}
+
+	states := make(map[string]string, len(report.SLC))
+	for _, status := range report.SLC {
+		states[status.Image] = status.State
+	}
+
+	return states, nil
+}
+
+func customSLCImageAvailable(states map[string]string, image string) bool {
+	switch states[image] {
+	case slcStatePresent, slcStateImported, slcStatePulled:
+		return true
+	default:
+		return false
+	}
 }

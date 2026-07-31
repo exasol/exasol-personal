@@ -33,6 +33,7 @@ const (
 	DirName            = "local"
 	runtimeDirName     = "runtime"
 	vmDirName          = "vm"
+	sharedDirName      = "vm-shared"
 	vmStateFileName    = "vm-state.json"
 	vmPIDFileName      = "vm.pid"
 	PrivateKeyFileName = "node_access.pem"
@@ -78,6 +79,7 @@ type Paths struct {
 	Root                    string
 	WorkDir                 string
 	VMDir                   string
+	SharedDir               string
 	StatePath               string
 	PrivateKeyPath          string
 	RunnerVersionMarkerPath string
@@ -91,6 +93,7 @@ func NewPaths(deployment config.DeploymentDir) Paths {
 		Root:                    root,
 		WorkDir:                 workDir,
 		VMDir:                   filepath.Join(workDir, vmDirName),
+		SharedDir:               filepath.Join(workDir, sharedDirName),
 		StatePath:               filepath.Join(workDir, vmStateFileName),
 		PrivateKeyPath:          filepath.Join(root, PrivateKeyFileName),
 		RunnerVersionMarkerPath: filepath.Join(workDir, runnerVersionMarkerFileName),

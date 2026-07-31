@@ -185,28 +185,8 @@ func InstallSLC(
 	restart bool,
 	confirm ConfirmFunc,
 ) (*SLCInstallResult, error) {
-	if !isLocalDeployment(deployment) {
-		return nil, ErrSLCNotSupported
-	}
-	if err := requireDeploymentPresent(deployment); err != nil {
-		return nil, err
-	}
-
-	catalog, err := slc.Load(resources.SLCCatalogYAML)
+	entry, state, err := resolveOfficialSLCForChange(deployment, alias)
 	if err != nil {
-		return nil, err
-	}
-	entry, err := catalog.Resolve(alias, runtime.GOARCH)
-	if err != nil {
-		return nil, err
-	}
-
-	state, err := config.ReadExasolPersonalState(deployment)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := checkOfficialAliasNotHeldByCustom(state.InstalledCustomSLCs, entry.Aliases); err != nil {
 		return nil, err
 	}
 
@@ -392,28 +372,8 @@ func UpdateSLC(
 	restart bool,
 	confirm ConfirmFunc,
 ) (*SLCUpdateResult, error) {
-	if !isLocalDeployment(deployment) {
-		return nil, ErrSLCNotSupported
-	}
-	if err := requireDeploymentPresent(deployment); err != nil {
-		return nil, err
-	}
-
-	catalog, err := slc.Load(resources.SLCCatalogYAML)
+	entry, state, err := resolveOfficialSLCForChange(deployment, alias)
 	if err != nil {
-		return nil, err
-	}
-	entry, err := catalog.Resolve(alias, runtime.GOARCH)
-	if err != nil {
-		return nil, err
-	}
-
-	state, err := config.ReadExasolPersonalState(deployment)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := checkOfficialAliasNotHeldByCustom(state.InstalledCustomSLCs, entry.Aliases); err != nil {
 		return nil, err
 	}
 
@@ -569,18 +529,24 @@ func installedFlavors(deployment config.DeploymentDir) (map[string]bool, error) 
 	return installed, nil
 }
 
-// localRunnerSlcArgs builds the runner "--slc <image>=<target>" start flags from the
-// installed SLC set. This is the mechanism that re-applies mounts on every start.
+// A custom SLC also names its staged package, because it exists on no registry.
 func localRunnerSlcArgs(deployment config.DeploymentDir) ([]string, error) {
 	state, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read installed SLCs: %w", err)
 	}
 
-	const argsPerSLC = 2 // each SLC contributes "--slc" plus its "<image>=<target>" value
-	args := make([]string, 0, len(state.InstalledSLCs)*argsPerSLC)
+	const argsPerSLC = 4
+	total := len(state.InstalledSLCs) + len(state.InstalledCustomSLCs)
+	args := make([]string, 0, total*argsPerSLC)
 	for _, installed := range state.InstalledSLCs {
 		args = append(args, "--slc", installed.Image+"="+installed.Target)
+	}
+	for _, custom := range state.InstalledCustomSLCs {
+		args = append(args,
+			"--slc", custom.Image+"="+custom.Target,
+			"--slc-package", custom.Image+"="+custom.Package,
+		)
 	}
 
 	return args, nil
@@ -632,6 +598,39 @@ func isLocalDeploymentRunning(ctx context.Context, deployment config.DeploymentD
 	}
 
 	return status.Running
+}
+
+func resolveOfficialSLCForChange(
+	deployment config.DeploymentDir,
+	alias string,
+) (slc.Entry, *config.ExasolPersonalState, error) {
+	if !isLocalDeployment(deployment) {
+		return slc.Entry{}, nil, ErrSLCNotSupported
+	}
+	if err := requireDeploymentPresent(deployment); err != nil {
+		return slc.Entry{}, nil, err
+	}
+
+	catalog, err := slc.Load(resources.SLCCatalogYAML)
+	if err != nil {
+		return slc.Entry{}, nil, err
+	}
+	entry, err := catalog.Resolve(alias, runtime.GOARCH)
+	if err != nil {
+		return slc.Entry{}, nil, err
+	}
+
+	state, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return slc.Entry{}, nil, err
+	}
+	if err := checkOfficialAliasNotHeldByCustom(
+		state.InstalledCustomSLCs, entry.Aliases,
+	); err != nil {
+		return slc.Entry{}, nil, err
+	}
+
+	return entry, state, nil
 }
 
 func installedEntries(state *config.ExasolPersonalState) []slc.Entry {
@@ -698,11 +697,8 @@ func findInstalledByImage(installed []config.InstalledSLC, image string) int {
 	return -1
 }
 
-// checkOfficialAliasNotHeldByCustom enforces the mirror of the custom-install collision
-// rule: an official SLC cannot be installed while a custom SLC owns one of its aliases,
-// because SCRIPT_LANGUAGES (custom) is not overwritten by the official builtin scan, so the
-// alias would keep resolving to the custom SLC — a silent surprise. The user must remove the
-// custom SLC first.
+// The official builtin scan does not overwrite SCRIPT_LANGUAGES, so without this the alias
+// would keep resolving to the custom SLC.
 func checkOfficialAliasNotHeldByCustom(
 	customs []config.InstalledCustomSLC,
 	officialAliases []string,
@@ -712,7 +708,7 @@ func checkOfficialAliasNotHeldByCustom(
 			if strings.EqualFold(custom.Alias, official) {
 				return fmt.Errorf(
 					"alias %q is currently provided by a custom SLC; remove it with "+
-						"`exasol slc custom remove %s` before installing this official SLC",
+						"`exasol slc remove %s` before installing this official SLC",
 					strings.ToUpper(official), custom.Alias,
 				)
 			}

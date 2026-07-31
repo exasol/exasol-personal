@@ -43,12 +43,12 @@ func TestBuildActivationURI(t *testing.T) {
 	t.Parallel()
 
 	// When
-	uri := customslc.BuildActivationURI("bfsdefault", "default", "mypy3", customslc.LanguagePython)
+	uri := customslc.BuildActivationURI("custom-mypy3", customslc.LanguagePython)
 
 	// Then
 	assert.Equal(t,
-		"localzmq+protobuf:///bfsdefault/default/mypy3?lang=python"+
-			"#buckets/bfsdefault/default/mypy3/exaudf/exaudfclient",
+		"localzmq+protobuf:///__builtin__/slc/custom-mypy3?lang=python"+
+			"#/exaudf/exaudfclient",
 		uri,
 	)
 }
@@ -89,7 +89,6 @@ func TestSetAliasReplacesInPlacePreservingOthers(t *testing.T) {
 	updated := customslc.SetAlias(entries, "python3", "localzmq+protobuf:///x?lang=python#y")
 
 	// Then
-	// The built-in JAVA entry is untouched; PYTHON3 now points at the custom URI.
 	got, ok := customslc.FindAlias(updated, "PYTHON3")
 	require.True(t, ok)
 	assert.Equal(t, "localzmq+protobuf:///x?lang=python#y", got.URI)
@@ -147,14 +146,12 @@ func TestBuiltinAliasesDistinguishesFromContainerURIs(t *testing.T) {
 func TestDirFromURI(t *testing.T) {
 	t.Parallel()
 
-	uri := customslc.BuildActivationURI(
-		"bfsdefault",
-		"default",
-		"mypy3-abc123",
-		customslc.LanguagePython,
-	)
-	if got := customslc.DirFromURI(uri); got != "mypy3-abc123" {
-		t.Fatalf("DirFromURI = %q, want mypy3-abc123", got)
+	// Given
+	uri := customslc.BuildActivationURI("custom-mypy3", customslc.LanguagePython)
+
+	// When / Then
+	if got := customslc.DirFromURI(uri); got != "custom-mypy3" {
+		t.Fatalf("DirFromURI = %q, want custom-mypy3", got)
 	}
 	if got := customslc.DirFromURI("builtin_python3"); got != "" {
 		t.Fatalf("a built-in URI has no dir, got %q", got)
@@ -164,6 +161,7 @@ func TestDirFromURI(t *testing.T) {
 func TestIsBuiltinURI(t *testing.T) {
 	t.Parallel()
 
+	// When / Then
 	assert.True(t, customslc.IsBuiltinURI("builtin_python3"))
 	assert.False(t, customslc.IsBuiltinURI("localzmq+protobuf:///x?lang=python#y"))
 }
