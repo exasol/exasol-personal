@@ -13,13 +13,16 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/customslc"
 	"github.com/exasol/exasol-personal/internal/directorymutex"
+	"github.com/exasol/exasol-personal/internal/slc"
 )
 
 func TestValidateCustomAlias(t *testing.T) {
@@ -61,52 +64,62 @@ func TestValidateCustomAlias(t *testing.T) {
 	}
 }
 
-func TestValidateCustomSourceRequiresExactlyOne(t *testing.T) {
+func TestValidateCustomSourceRequiresAValue(t *testing.T) {
 	t.Parallel()
 
-	if _, err := validateCustomSource(CustomSLCInstallOpts{}); err == nil {
-		t.Fatal("expected an error when neither file nor url is set")
+	// When / Then
+	if _, err := validateCustomSource(""); err == nil {
+		t.Fatal("expected an error when no source is set")
 	}
-	if _, err := validateCustomSource(
-		CustomSLCInstallOpts{File: "a.tar.gz", URL: "https://x"},
-	); err == nil {
-		t.Fatal("expected an error when both file and url are set")
+	if _, err := validateCustomSource("   "); err == nil {
+		t.Fatal("expected an error for a blank source")
 	}
-	if got, err := validateCustomSource(CustomSLCInstallOpts{File: "a.tar.gz"}); err != nil ||
-		got != "a.tar.gz" {
-		t.Fatalf("expected file source, got %q err %v", got, err)
-	}
-	if got, err := validateCustomSource(CustomSLCInstallOpts{URL: "https://x"}); err != nil ||
-		got != "https://x" {
-		t.Fatalf("expected url source, got %q err %v", got, err)
+	if got, err := validateCustomSource(" a.tar.gz "); err != nil || got != "a.tar.gz" {
+		t.Fatalf("expected a trimmed file source, got %q err %v", got, err)
 	}
 }
 
-func TestValidateCustomSourceEnforcesHTTPS(t *testing.T) {
+func TestValidateCustomSourceEnforcesHTTPSForURLs(t *testing.T) {
 	t.Parallel()
 
-	if _, err := validateCustomSource(
-		CustomSLCInstallOpts{URL: "https://example.com/c.tar.gz"},
-	); err != nil {
+	// When / Then
+	if _, err := validateCustomSource("https://example.com/c.tar.gz"); err != nil {
 		t.Fatalf("an https URL should be accepted, got %v", err)
 	}
-	if _, err := validateCustomSource(
-		CustomSLCInstallOpts{URL: "http://example.com/c.tar.gz"},
-	); err == nil {
+	if _, err := validateCustomSource("http://example.com/c.tar.gz"); err == nil {
 		t.Fatal("a plaintext http URL must be rejected")
 	}
-	if _, err := validateCustomSource(CustomSLCInstallOpts{URL: "https:foo"}); err == nil {
-		t.Fatal("a URL without a host must be rejected")
+
+	// A path is not a URL: "https:foo" has no host, so it is a file name, not a rejected URL.
+	if got, err := validateCustomSource("/tmp/c.tar.gz"); err != nil || got != "/tmp/c.tar.gz" {
+		t.Fatalf("expected a local path to be accepted, got %q err %v", got, err)
+	}
+}
+
+func TestIsURLSourceDistinguishesPathsFromURLs(t *testing.T) {
+	t.Parallel()
+
+	// When / Then
+	if !isURLSource("https://example.com/c.tar.gz") {
+		t.Fatal("an https URL must be treated as a download")
+	}
+	for _, source := range []string{"/tmp/c.tar.gz", "c.tar.gz", "./c.tar.gz", "https:foo"} {
+		if isURLSource(source) {
+			t.Fatalf("%q must be treated as a local file", source)
+		}
 	}
 }
 
 func TestOfficialOwnerMatchesAliasCaseInsensitively(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	const flavor = "python-3.12"
 	installed := []config.InstalledSLC{
 		{Flavor: flavor, Aliases: []string{"PYTHON3", "PYTHON312"}},
 	}
+
+	// When / Then
 	if got := officialOwner(installed, "python3"); got != flavor {
 		t.Fatalf("expected %s, got %q", flavor, got)
 	}
@@ -115,18 +128,20 @@ func TestOfficialOwnerMatchesAliasCaseInsensitively(t *testing.T) {
 	}
 }
 
-// checkOfficialAliasNotHeldByCustom is the WF1 mirror rule: an official install must be
-// blocked when a custom SLC already owns one of its aliases.
 func TestCheckOfficialAliasNotHeldByCustom(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	customs := []config.InstalledCustomSLC{{Alias: "PYTHON3", Language: "python"}}
 
+	// When
 	err := checkOfficialAliasNotHeldByCustom(customs, []string{"PYTHON3", "PYTHON312"})
+
+	// Then
 	if err == nil {
 		t.Fatal("expected a collision error when a custom SLC owns the alias")
 	}
-	if !strings.Contains(err.Error(), "exasol slc custom remove PYTHON3") {
+	if !strings.Contains(err.Error(), "exasol slc remove PYTHON3") {
 		t.Fatalf("expected the error to guide removal, got %v", err)
 	}
 
@@ -135,18 +150,53 @@ func TestCheckOfficialAliasNotHeldByCustom(t *testing.T) {
 	}
 }
 
-func TestCustomSLCDirIsContentAddressed(t *testing.T) {
+func TestCustomSLCNamesAreDerivedFromAliasAndDigest(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	const shaA = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	const shaB = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
 
-	dirA := customSLCDir("MyPy3", shaA)
-	if dirA != "mypy3-0123456789abcdef" {
-		t.Fatalf("expected lower alias with 16-char digest, got %q", dirA)
+	// When / Then
+	if got := customSLCDir("MyPy3"); got != "custom-mypy3" {
+		t.Fatalf("dir = %q, want custom-mypy3", got)
 	}
-	if dirA == customSLCDir("MyPy3", shaB) {
-		t.Fatalf("expected distinct digests to yield distinct dirs, both were %q", dirA)
+	if got := customSLCTarget("MyPy3"); got != slc.SLCMountRoot+"/custom-mypy3" {
+		t.Fatalf("target = %q, want a path under the SLC mount root", got)
+	}
+	if got := customSLCImage("MyPy3", shaA); got != customSLCImageRepo+":mypy3-0123456789abcdef" {
+		t.Fatalf("image = %q, want the 16-char digest tag", got)
+	}
+	if got := customSLCPackageName("MyPy3", shaA); got != "custom-mypy3-0123456789abcdef.tar.gz" {
+		t.Fatalf("package = %q, want the digest-suffixed package name", got)
+	}
+
+	if customSLCImage("MyPy3", shaA) == customSLCImage("MyPy3", shaB) {
+		t.Fatal("distinct content must yield distinct image references")
+	}
+	if customSLCPackageName("MyPy3", shaA) == customSLCPackageName("MyPy3", shaB) {
+		t.Fatal("distinct content must yield distinct package names")
+	}
+}
+
+func TestCustomSLCTargetNeverCollidesWithOfficialFlavors(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	catalog, err := slc.Load(resources.SLCCatalogYAML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := catalog.List(runtime.GOARCH)
+	if err != nil {
+		t.Skipf("no catalog entries for %s: %v", runtime.GOARCH, err)
+	}
+
+	// When / Then
+	for _, entry := range entries {
+		if customSLCTarget(entry.Flavor) == entry.Target {
+			t.Fatalf("custom target collides with official flavor %q", entry.Flavor)
+		}
 	}
 }
 
@@ -160,18 +210,18 @@ func TestCustomSLCOperationsRequireDeploymentLock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	opts := CustomSLCInstallOpts{Alias: "MYPY3", Language: "python", File: "container.tar.gz"}
+	opts := CustomSLCInstallOpts{Alias: "MYPY3", Language: "python", Source: "container.tar.gz"}
 	ops := []struct {
 		name string
 		call func(context.Context) error
 	}{
 		{"install", func(ctx context.Context) error {
-			_, err := InstallCustomSLC(ctx, deployment, opts, nil)
+			_, err := InstallCustomSLC(ctx, deployment, opts, false, true, nil)
 
 			return err
 		}},
 		{"update", func(ctx context.Context) error {
-			_, err := UpdateCustomSLC(ctx, deployment, opts)
+			_, err := UpdateCustomSLC(ctx, deployment, opts, false, true, nil)
 
 			return err
 		}},
@@ -205,10 +255,12 @@ func TestCustomSLCOperationsRequireDeploymentLock(t *testing.T) {
 func TestAliasResolvesTo(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	entries := customslc.ParseScriptLanguages(
 		"MYPY3=localzmq+protobuf:///a?lang=python#a PYTHON3=builtin_python3",
 	)
 
+	// When / Then
 	if !aliasResolvesTo(entries, "mypy3", "localzmq+protobuf:///a?lang=python#a") {
 		t.Fatal("the exact recorded URI must match")
 	}
@@ -223,8 +275,10 @@ func TestAliasResolvesTo(t *testing.T) {
 func TestCustomSLCUnchanged(t *testing.T) {
 	t.Parallel()
 
-	recorded := config.InstalledCustomSLC{Sha256: "abc", Language: "python"}
+	// Given
+	recorded := config.InstalledCustomSLC{Sha256: "abc", Language: "python", Activated: true}
 
+	// When / Then
 	if !customSLCUnchanged(recorded, "abc", customslc.LanguagePython) {
 		t.Fatal("same digest and language must be a no-op")
 	}
@@ -234,46 +288,64 @@ func TestCustomSLCUnchanged(t *testing.T) {
 	if customSLCUnchanged(recorded, "def", customslc.LanguagePython) {
 		t.Fatal("a content change must not be treated as unchanged")
 	}
+
+	pending := config.InstalledCustomSLC{Sha256: "abc", Language: "python"}
+	if customSLCUnchanged(pending, "abc", customslc.LanguagePython) {
+		t.Fatal("an inactive container must be retried, not treated as unchanged")
+	}
 }
 
-func TestCarriedDisplacedURI(t *testing.T) {
+func TestCarriedDisplacedURIPreservesTheOriginalBuiltin(t *testing.T) {
 	t.Parallel()
 
-	if got := carriedDisplacedURI(nil, "builtin_python3"); got != "builtin_python3" {
-		t.Fatalf("first install: got %q, want builtin_python3", got)
+	// Given
+	installed := []config.InstalledCustomSLC{
+		{Alias: "PYTHON3", DisplacedURI: "builtin_python3"},
+		{Alias: "MYPY3"},
 	}
 
-	previous := &config.InstalledCustomSLC{Alias: "PYTHON3", DisplacedURI: "builtin_python3"}
-	if got := carriedDisplacedURI(previous, "localzmq+protobuf:///x"); got != "builtin_python3" {
-		t.Fatalf("update: got %q, want the preserved builtin_python3", got)
+	// When / Then
+	if got := carriedDisplacedURI(installed, "python3"); got != "builtin_python3" {
+		t.Fatalf("replace: got %q, want the preserved builtin_python3", got)
 	}
-
-	if got := carriedDisplacedURI(nil, ""); got != "" {
+	if got := carriedDisplacedURI(installed, "MYPY3"); got != "" {
+		t.Fatalf("a container that displaced nothing must carry nothing, got %q", got)
+	}
+	if got := carriedDisplacedURI(nil, "PYTHON3"); got != "" {
 		t.Fatalf("fresh alias: got %q, want empty", got)
 	}
 }
 
-func TestCustomSLCDirOfPrefersBucketPath(t *testing.T) {
+func TestSupersededCustomSLCPackage(t *testing.T) {
 	t.Parallel()
 
-	fromPath := customSLCDirOf(config.InstalledCustomSLC{
-		Alias:      "MYPY3",
-		BucketPath: "bfsdefault/default/mypy3-0123456789abcdef",
-	})
-	if fromPath != "mypy3-0123456789abcdef" {
-		t.Fatalf("expected the BucketPath base, got %q", fromPath)
+	// Given
+	installed := []config.InstalledCustomSLC{{Alias: "MYPY3", Package: "old.tar.gz"}}
+
+	// When / Then
+	replacement := config.InstalledCustomSLC{Alias: "MYPY3", Package: "new.tar.gz"}
+	if got := supersededCustomSLCPackage(installed, replacement); got != "old.tar.gz" {
+		t.Fatalf("expected the replaced package, got %q", got)
 	}
 
-	fallback := customSLCDirOf(config.InstalledCustomSLC{Alias: "MYPY3"})
-	if fallback != "mypy3" {
-		t.Fatalf("expected the lower alias fallback, got %q", fallback)
+	same := config.InstalledCustomSLC{Alias: "MYPY3", Package: "old.tar.gz"}
+	if got := supersededCustomSLCPackage(installed, same); got != "" {
+		t.Fatalf("the live package must never be deleted, got %q", got)
+	}
+
+	fresh := config.InstalledCustomSLC{Alias: "MYR", Package: "r.tar.gz"}
+	if got := supersededCustomSLCPackage(installed, fresh); got != "" {
+		t.Fatalf("a first install supersedes nothing, got %q", got)
 	}
 }
 
 func TestUpsertInstalledCustomSLCReplacesAndSorts(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	existing := []config.InstalledCustomSLC{{Alias: "MYPY3", Sha256: "old"}}
+
+	// When / Then
 	withR := upsertInstalledCustomSLC(
 		existing,
 		config.InstalledCustomSLC{Alias: "MYR", Sha256: "r"},
@@ -294,9 +366,7 @@ func TestUpsertInstalledCustomSLCReplacesAndSorts(t *testing.T) {
 	}
 }
 
-// The start path re-applies image mounts from InstalledSLCs only; a custom SLC in the
-// separate list must never leak into the runner's --slc flags.
-func TestLocalRunnerSlcArgsIgnoresCustomSLCs(t *testing.T) {
+func TestLocalRunnerSlcArgsIncludesCustomMountAndPackage(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -306,9 +376,12 @@ func TestLocalRunnerSlcArgsIgnoresCustomSLCs(t *testing.T) {
 		InstalledSLCs: []config.InstalledSLC{
 			{Flavor: "python-3.12", Image: "img:py", Target: "/exa/slc/py"},
 		},
-		InstalledCustomSLCs: []config.InstalledCustomSLC{
-			{Alias: "MYPY3", Language: "python", BucketPath: "bfsdefault/default/mypy3"},
-		},
+		InstalledCustomSLCs: []config.InstalledCustomSLC{{
+			Alias:   "MYPY3",
+			Image:   "custom:mypy3-abc",
+			Target:  "/exa/slc/custom-mypy3",
+			Package: "custom-mypy3-abc.tar.gz",
+		}},
 	}
 	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
 		t.Fatalf("failed to write state: %v", err)
@@ -321,13 +394,40 @@ func TestLocalRunnerSlcArgsIgnoresCustomSLCs(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := []string{"--slc", "img:py=/exa/slc/py"}
+	want := []string{
+		"--slc", "img:py=/exa/slc/py",
+		"--slc", "custom:mypy3-abc=/exa/slc/custom-mypy3",
+		"--slc-package", "custom:mypy3-abc=custom-mypy3-abc.tar.gz",
+	}
 	if strings.Join(args, " ") != strings.Join(want, " ") {
-		t.Fatalf("expected only the official mount arg, got %v", args)
+		t.Fatalf("expected official and custom args, got %v", args)
+	}
+}
+
+func TestLocalRunnerSlcArgsOmitsPackageForOfficialSLCs(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	state := &config.ExasolPersonalState{
+		DeploymentVersion: "0.0.0",
+		InstalledSLCs: []config.InstalledSLC{
+			{Flavor: "python-3.12", Image: "img:py", Target: "/exa/slc/py"},
+		},
+	}
+	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
+		t.Fatalf("failed to write state: %v", err)
+	}
+
+	// When
+	args, err := localRunnerSlcArgs(deployment)
+	// Then
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	for _, arg := range args {
-		if strings.Contains(arg, "mypy3") || strings.Contains(arg, "bfsdefault") {
-			t.Fatalf("custom SLC leaked into runner args: %v", args)
+		if arg == "--slc-package" {
+			t.Fatalf("official SLCs must not be import-delivered: %v", args)
 		}
 	}
 }
@@ -348,7 +448,7 @@ func TestConfirmOfficialAliasReuseBlocksInstalledOfficial(t *testing.T) {
 	}
 
 	// When
-	err := confirmOfficialAliasReuse(config.NewDeploymentDir(""), state, nil, "PYTHON3", confirm)
+	err := confirmOfficialAliasReuse(state, nil, "PYTHON3", confirm)
 	// Then
 	if err == nil || !strings.Contains(err.Error(), "python-3.12") {
 		t.Fatalf("expected a block naming the official flavor, got %v", err)
@@ -358,10 +458,12 @@ func TestConfirmOfficialAliasReuseBlocksInstalledOfficial(t *testing.T) {
 func TestConfirmOfficialAliasReuseConfirmsBuiltinOverride(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	entries := []customslc.AliasEntry{{Alias: "PYTHON3", URI: "builtin_python3"}}
 
+	// When / Then
 	declined := confirmOfficialAliasReuse(
-		config.NewDeploymentDir(""), &config.ExasolPersonalState{}, entries, "PYTHON3",
+		&config.ExasolPersonalState{}, entries, "PYTHON3",
 		func(string) (bool, error) { return false, nil },
 	)
 	if !errors.Is(declined, ErrSLCOperationCancelled) {
@@ -369,7 +471,7 @@ func TestConfirmOfficialAliasReuseConfirmsBuiltinOverride(t *testing.T) {
 	}
 
 	accepted := confirmOfficialAliasReuse(
-		config.NewDeploymentDir(""), &config.ExasolPersonalState{}, entries, "PYTHON3",
+		&config.ExasolPersonalState{}, entries, "PYTHON3",
 		func(string) (bool, error) { return true, nil },
 	)
 	if accepted != nil {
@@ -382,7 +484,7 @@ func TestConfirmOfficialAliasReuseAllowsFreeAlias(t *testing.T) {
 
 	// When
 	err := confirmOfficialAliasReuse(
-		config.NewDeploymentDir(""), &config.ExasolPersonalState{}, nil, "MYPY3",
+		&config.ExasolPersonalState{}, nil, "MYPY3",
 		func(string) (bool, error) {
 			t.Fatal("confirm must not be called for a non-official alias")
 
@@ -419,7 +521,10 @@ func TestHashFileMatchesSHA256(t *testing.T) {
 func TestRejectNonHTTPSRedirect(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	ctx := context.Background()
+
+	// When / Then
 	httpsReq, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com/x", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -440,6 +545,7 @@ func TestRejectNonHTTPSRedirect(t *testing.T) {
 func TestAcquireCustomTarballFromURLEvictsAfterCleanup(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	body := []byte("tarball-bytes")
 	server := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
@@ -447,11 +553,11 @@ func TestAcquireCustomTarballFromURLEvictsAfterCleanup(t *testing.T) {
 		}),
 	)
 	defer server.Close()
+	deployment := config.NewDeploymentDir(t.TempDir())
 
-	tarball, err := acquireCustomTarball(
-		context.Background(),
-		CustomSLCInstallOpts{URL: server.URL},
-	)
+	// When
+	tarball, err := acquireCustomTarball(context.Background(), deployment, server.URL)
+	// Then
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,7 +589,7 @@ func TestAcquireCustomTarballURLFailsOnNon200(t *testing.T) {
 
 	// When
 	_, err := acquireCustomTarball(
-		context.Background(), CustomSLCInstallOpts{URL: server.URL},
+		context.Background(), config.NewDeploymentDir(t.TempDir()), server.URL,
 	)
 	// Then
 	if err == nil {
@@ -494,13 +600,18 @@ func TestAcquireCustomTarballURLFailsOnNon200(t *testing.T) {
 func TestAcquireCustomTarballFromFileIsNeverDeleted(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	path := filepath.Join(t.TempDir(), "c.tar.gz")
 	content := []byte("file-bytes")
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	tarball, err := acquireCustomTarball(context.Background(), CustomSLCInstallOpts{File: path})
+	// When
+	tarball, err := acquireCustomTarball(
+		context.Background(), config.NewDeploymentDir(t.TempDir()), path,
+	)
+	// Then
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -513,6 +624,266 @@ func TestAcquireCustomTarballFromFileIsNeverDeleted(t *testing.T) {
 
 	tarball.cleanup()
 	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("cleanup must not delete a user --file: %v", err)
+		t.Fatalf("cleanup must not delete a user-supplied source: %v", err)
+	}
+}
+
+func TestReconcileCustomSLCActivationSkipsWhenNothingIsPending(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	state := &config.ExasolPersonalState{
+		DeploymentVersion: "0.0.0",
+		InstalledCustomSLCs: []config.InstalledCustomSLC{
+			{Alias: "MYPY3", Image: "custom:mypy3-abc", Activated: true},
+		},
+	}
+	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
+		t.Fatal(err)
+	}
+
+	// When / Then: no connection info exists, so any database access would fail.
+	if err := reconcileCustomSLCActivation(context.Background(), deployment); err != nil {
+		t.Fatalf("expected a no-op, got %v", err)
+	}
+}
+
+func TestReconcileCustomSLCActivationSkipsUnavailableContainers(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	state := &config.ExasolPersonalState{
+		DeploymentVersion: "0.0.0",
+		InstalledCustomSLCs: []config.InstalledCustomSLC{
+			{Alias: "MYPY3", Image: "custom:mypy3-abc", Language: "python"},
+		},
+	}
+	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
+		t.Fatal(err)
+	}
+	writeSLCStatusReport(
+		t, deployment, `{"slc":[{"image":"custom:mypy3-abc","state":"import-failed"}]}`,
+	)
+
+	// When
+	err := reconcileCustomSLCActivation(context.Background(), deployment)
+	// Then
+	if err != nil {
+		t.Fatalf("expected the unavailable container to be skipped, got %v", err)
+	}
+
+	reread, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reread.InstalledCustomSLCs[0].Activated {
+		t.Fatal("an unavailable container must not be recorded as activated")
+	}
+}
+
+func TestAcquireCustomTarballDownloadsIntoTheStagingDirectory(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	body := []byte("tarball-bytes")
+	server := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			_, _ = writer.Write(body)
+		}),
+	)
+	defer server.Close()
+	deployment := config.NewDeploymentDir(t.TempDir())
+
+	// When
+	tarball, err := acquireCustomTarball(context.Background(), deployment, server.URL)
+	// Then
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tarball.staged {
+		t.Fatal("a downloaded container must be reported as already staged")
+	}
+	if dir := filepath.Dir(tarball.path); dir != customSLCStagingDir(deployment) {
+		t.Fatalf("downloaded to %s, want the staging directory", dir)
+	}
+
+	// And: promoting it moves the file rather than copying it.
+	if err := promoteCustomSLCPackage(deployment, tarball.path, "custom-x-abc.tar.gz"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(tarball.path); !os.IsNotExist(err) {
+		t.Fatalf("expected the temporary download to be moved away, got %v", err)
+	}
+	got, err := os.ReadFile( //nolint:gosec // test-owned path
+		filepath.Join(customSLCStagingDir(deployment), "custom-x-abc.tar.gz"),
+	)
+	if err != nil || !bytes.Equal(got, body) {
+		t.Fatalf("promoted content mismatch: %q err %v", got, err)
+	}
+}
+
+func TestAcquireCustomTarballFromFileIsNotStaged(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	path := filepath.Join(t.TempDir(), "c.tar.gz")
+	if err := os.WriteFile(path, []byte("file-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// When
+	tarball, err := acquireCustomTarball(
+		context.Background(), config.NewDeploymentDir(t.TempDir()), path,
+	)
+	// Then
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tarball.staged {
+		t.Fatal("a user-supplied file must not be reported as staged")
+	}
+	if tarball.path != path {
+		t.Fatalf("expected the file used in place, got %s", tarball.path)
+	}
+}
+
+func TestVerifyCustomSLCApplied(t *testing.T) {
+	t.Parallel()
+
+	staged := config.InstalledCustomSLC{
+		Alias:    "MYPY3",
+		Language: "python",
+		Image:    "custom:mypy3-abc",
+		Sha256:   "abc",
+	}
+
+	for _, testCase := range []struct {
+		name     string
+		recorded []config.InstalledCustomSLC
+		wantErr  string
+	}{
+		{
+			name:     "removed after apply",
+			recorded: nil,
+			wantErr:  "was removed by another operation",
+		},
+		{
+			name: "replaced with a different digest",
+			recorded: []config.InstalledCustomSLC{
+				{Alias: "MYPY3", Language: "python", Sha256: "def", Activated: true},
+			},
+			wantErr: "was replaced by another operation",
+		},
+		{
+			name: "same digest but a different language",
+			recorded: []config.InstalledCustomSLC{
+				{Alias: "MYPY3", Language: "java", Sha256: "abc", Activated: true},
+			},
+			wantErr: "was replaced by another operation",
+		},
+		{
+			name: "present but inactive",
+			recorded: []config.InstalledCustomSLC{
+				{Alias: "MYPY3", Language: "python", Sha256: "abc"},
+			},
+			wantErr: "recorded but not active",
+		},
+		{
+			name: "unchanged and active",
+			recorded: []config.InstalledCustomSLC{
+				{Alias: "MYPY3", Language: "python", Sha256: "abc", Activated: true},
+			},
+		},
+	} {
+		// Given
+		deployment := config.NewDeploymentDir(t.TempDir())
+		state := &config.ExasolPersonalState{
+			DeploymentVersion:   "0.0.0",
+			InstalledCustomSLCs: testCase.recorded,
+		}
+		if err := config.WriteExasolPersonalState(state, deployment); err != nil {
+			t.Fatal(err)
+		}
+
+		// When
+		err := verifyCustomSLCApplied(deployment, staged)
+
+		// Then
+		if testCase.wantErr == "" {
+			if err != nil {
+				t.Fatalf("%s: expected success, got %v", testCase.name, err)
+			}
+
+			continue
+		}
+		if err == nil {
+			t.Fatalf("%s: expected an error", testCase.name)
+		}
+		if !strings.Contains(err.Error(), testCase.wantErr) {
+			t.Fatalf("%s: expected %q, got %v", testCase.name, testCase.wantErr, err)
+		}
+	}
+}
+
+func TestCustomSLCUnavailableErrorUsesReadableReasons(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	entry := config.InstalledCustomSLC{Alias: "MYPY3", Image: "custom:mypy3-abc"}
+	writeSLCStatusReport(
+		t, deployment, `{"slc":[{"image":"custom:mypy3-abc","state":"package-missing"}]}`,
+	)
+
+	// When
+	err := customSLCUnavailableError(deployment, entry)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "its staged container package is missing") {
+		t.Fatalf("expected the readable reason, got %v", err)
+	}
+	if strings.Contains(err.Error(), "package-missing") {
+		t.Fatalf("expected the raw state name to be hidden, got %v", err)
+	}
+}
+
+func TestReconcileWarnsAboutAnActiveButUnavailableContainer(t *testing.T) {
+	t.Parallel()
+
+	// Given: an activated container whose image the runtime reports as unavailable.
+	deployment := config.NewDeploymentDir(t.TempDir())
+	state := &config.ExasolPersonalState{
+		DeploymentVersion: "0.0.0",
+		InstalledCustomSLCs: []config.InstalledCustomSLC{{
+			Alias:     "MYPY3",
+			Language:  "python",
+			Image:     "custom:mypy3-abc",
+			Activated: true,
+		}},
+	}
+	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
+		t.Fatal(err)
+	}
+	writeSLCStatusReport(
+		t, deployment, `{"slc":[{"image":"custom:mypy3-abc","state":"package-missing"}]}`,
+	)
+
+	// When / Then: no database is reachable, so a nil error proves nothing was activated and
+	// the entry was reported instead.
+	if err := reconcileCustomSLCActivation(context.Background(), deployment); err != nil {
+		t.Fatalf("expected the unavailable container to be reported, not activated: %v", err)
+	}
+
+	reread, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reread.InstalledCustomSLCs[0].Activated {
+		t.Fatal("an already-active entry must not be de-activated by the reconcile")
 	}
 }

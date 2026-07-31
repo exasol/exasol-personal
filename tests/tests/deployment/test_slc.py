@@ -4,8 +4,9 @@
 """Tests for the built-in (official catalog) and custom script language containers.
 
 The custom container is supplied by the runner via EXASOL_TEST_CUSTOM_SLC_FILE or
-EXASOL_TEST_CUSTOM_SLC_URL; the custom test skips if neither is set, so no large
-container is hard-coded into the suite.
+EXASOL_TEST_CUSTOM_SLC_URL; the custom tests skip if neither is set, so no large
+container is hard-coded into the suite. Both are passed as `--source`, which accepts a
+local path or an https URL.
 """
 
 import json
@@ -13,6 +14,7 @@ import os
 import sys
 import textwrap
 from collections.abc import Iterator
+from pathlib import Path
 from subprocess import CalledProcessError, CompletedProcess
 from typing import Any, Final
 
@@ -61,11 +63,29 @@ def _slc_statuses(deployment: Deployment) -> list[dict[str, Any]]:
     return statuses
 
 
+def _official_statuses(deployment: Deployment) -> list[dict[str, Any]]:
+    """Return only the catalog (official) entries of `slc list --json`."""
+    return [s for s in _slc_statuses(deployment) if s.get("type") == "official"]
+
+
+def _custom_statuses(deployment: Deployment) -> list[dict[str, Any]]:
+    """Return only the user-supplied (custom) entries of `slc list --json`."""
+    return [s for s in _slc_statuses(deployment) if s.get("type") == "custom"]
+
+
+def _custom_status(deployment: Deployment, alias: str) -> dict[str, Any] | None:
+    """Return the custom entry for an alias, or None when it is not installed."""
+    for status in _custom_statuses(deployment):
+        if status["alias"].casefold() == alias.casefold():
+            return status
+    return None
+
+
 def _status_for_alias(deployment: Deployment, alias: str) -> dict[str, Any]:
     """Return the unique catalog entry declaring an SLC alias."""
     matches = [
         status
-        for status in _slc_statuses(deployment)
+        for status in _official_statuses(deployment)
         if any(
             candidate.casefold() == alias.casefold() for candidate in status["aliases"]
         )
@@ -121,7 +141,7 @@ def test_slc_list_reports_catalog_containers(slc_deployment: Deployment) -> None
     assert PYTHON_ALIAS in text
 
     # When / Then: JSON listing carries the documented fields for every entry.
-    statuses = _slc_statuses(slc_deployment)
+    statuses = _official_statuses(slc_deployment)
     assert statuses, "catalog listing should not be empty on a supported platform"
     required_fields = {"language", "flavor", "version", "aliases", "installed"}
     for status in statuses:
@@ -259,38 +279,234 @@ def test_slc_update_when_current_is_noop(slc_deployment: Deployment) -> None:
 )
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
-def test_custom_slc_install_runs_udf(slc_deployment: Deployment) -> None:
-    """Custom install makes the container's UDFs runnable; remove cleans it up."""
-    # Given: a custom container supplied by the runner (skip when none is configured).
-    source_file = os.environ.get(CUSTOM_SLC_FILE_ENV)
-    source_url = os.environ.get(CUSTOM_SLC_URL_ENV)
-    if source_file:
-        source_args = ["--file", source_file]
-    elif source_url:
-        source_args = ["--url", source_url]
-    else:
-        pytest.skip(
-            f"set {CUSTOM_SLC_FILE_ENV} or {CUSTOM_SLC_URL_ENV} to a standard python "
-            "container to run the custom SLC e2e"
+def test_custom_slc_rejects_invalid_input(slc_deployment: Deployment) -> None:
+    """Bad alias, language, or source are rejected without touching the database."""
+    # Given: invocations that must never reach the deployment.
+    invalid = [
+        ["--alias", CUSTOM_ALIAS, "--language", "python"],
+        ["--source", "c.tar.gz", "--alias", "123bad", "--language", "python"],
+        ["--source", "c.tar.gz", "--alias", CUSTOM_ALIAS, "--language", "cobol"],
+        [
+            "--source",
+            "http://example.com/c.tar.gz",
+            "--alias",
+            CUSTOM_ALIAS,
+            "--language",
+            "python",
+        ],
+    ]
+
+    for args in invalid:
+        # When / Then: the command fails.
+        with pytest.raises(CalledProcessError):
+            _slc(slc_deployment, "custom", "install", *args, capture=True)
+
+    # Then: the database is untouched and nothing was recorded.
+    _assert_database_responds(slc_deployment)
+    assert _custom_status(slc_deployment, CUSTOM_ALIAS) is None
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.installation_e2e
+@pytest.mark.local_e2e
+def test_custom_slc_rejects_invalid_container(
+    slc_deployment: Deployment, tmp_path: Path
+) -> None:
+    """A file that is not a script language container fails before any restart."""
+    # Given: a file that is not a container archive.
+    source = tmp_path / "not-a-container.tar.gz"
+    source.write_text("this is not a container")
+
+    # When: installing it.
+    with pytest.raises(CalledProcessError) as exc_info:
+        _slc(
+            slc_deployment,
+            "custom",
+            "install",
+            "--source",
+            str(source),
+            "--alias",
+            CUSTOM_ALIAS,
+            "--language",
+            "python",
+            "--auto-approve",
+            capture=True,
         )
 
-    # When: installing it under a custom alias.
-    _slc(
+    # Then: the failure names the container, and the deployment is unchanged.
+    assert "container" in (exc_info.value.stderr or "")
+    _assert_database_responds(slc_deployment)
+    assert _custom_status(slc_deployment, CUSTOM_ALIAS) is None
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.installation_e2e
+@pytest.mark.local_e2e
+def test_custom_slc_install_runs_udf(slc_deployment: Deployment) -> None:
+    """Installing a custom container makes its UDFs runnable and lists it as active."""
+    # When: installing it under a custom alias (this restarts the database).
+    _install_custom(slc_deployment, "--auto-approve")
+
+    # Then: the alias is listed as an available custom entry.
+    status = _custom_status(slc_deployment, CUSTOM_ALIAS)
+    assert status is not None
+    assert status["language"] == "python"
+    assert status["available"] is True
+
+    # And: the text listing shows it under its own section.
+    text = _slc(slc_deployment, "list", capture=True).stdout
+    assert CUSTOM_ALIAS in text
+    assert "CUSTOM ALIAS" in text
+
+    # And: a UDF written against the custom alias runs.
+    assert "hi" in _run_scalar_udf(slc_deployment, CUSTOM_ALIAS, "slc_e2e_custom")
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.installation_e2e
+@pytest.mark.local_e2e
+def test_custom_slc_reinstall_and_update_are_noops(slc_deployment: Deployment) -> None:
+    """Re-supplying identical content changes nothing, for both install and update."""
+    # Given: the container is installed (idempotent setup).
+    _install_custom(slc_deployment, "--auto-approve")
+
+    # When / Then: installing the same content again is a no-op.
+    reinstall = _install_custom(slc_deployment, "--auto-approve", capture=True)
+    assert "Nothing to do" in reinstall.stdout
+
+    # When / Then: updating to the same content is a no-op too.
+    update = _slc(
         slc_deployment,
         "custom",
+        "update",
+        "--source",
+        _custom_slc_source(),
+        "--alias",
+        CUSTOM_ALIAS,
+        "--auto-approve",
+        capture=True,
+    )
+    assert "up to date" in update.stdout
+
+    # And: it is still usable.
+    assert "hi" in _run_scalar_udf(slc_deployment, CUSTOM_ALIAS, "slc_e2e_custom_noop")
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.installation_e2e
+@pytest.mark.local_e2e
+def test_slc_remove_handles_a_custom_alias(slc_deployment: Deployment) -> None:
+    """The unified `slc remove` removes a custom container, not only official ones."""
+    # Given: the custom container is installed (idempotent setup).
+    _install_custom(slc_deployment, "--auto-approve")
+
+    # When: removing it through the top-level command.
+    _slc(slc_deployment, "remove", CUSTOM_ALIAS, "--auto-approve")
+
+    # Then: it is gone and its UDFs no longer run.
+    assert _custom_status(slc_deployment, CUSTOM_ALIAS) is None
+    assert "hi" not in _run_scalar_udf(
+        slc_deployment, CUSTOM_ALIAS, "slc_e2e_custom_unified"
+    )
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.installation_e2e
+@pytest.mark.local_e2e
+def test_custom_slc_remove_uninstalls_language(slc_deployment: Deployment) -> None:
+    """Removing a custom container clears its alias and makes its UDFs fail."""
+    # Given: the container is installed and usable (idempotent setup).
+    _install_custom(slc_deployment, "--auto-approve")
+    assert "hi" in _run_scalar_udf(
+        slc_deployment, CUSTOM_ALIAS, "slc_e2e_custom_remove"
+    )
+
+    # When: removing it.
+    _slc(slc_deployment, "custom", "remove", CUSTOM_ALIAS)
+
+    # Then: it is gone from the listing and its UDFs no longer run.
+    assert _custom_status(slc_deployment, CUSTOM_ALIAS) is None
+    assert CUSTOM_ALIAS not in _slc(slc_deployment, "list", capture=True).stdout
+    _assert_database_responds(slc_deployment)
+    assert "hi" not in _run_scalar_udf(
+        slc_deployment, CUSTOM_ALIAS, "slc_e2e_custom_remove"
+    )
+
+    # When / Then: removing it again is a no-op.
+    again = _slc(slc_deployment, "custom", "remove", CUSTOM_ALIAS, capture=True)
+    assert "nothing to remove" in again.stdout
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.installation_e2e
+@pytest.mark.local_e2e
+def test_custom_slc_no_restart_activates_on_next_start(
+    slc_deployment: Deployment,
+) -> None:
+    """`--no-restart` stages the container; the next start mounts and activates it."""
+    # Given: no custom container is installed (removal is idempotent).
+    _slc(slc_deployment, "custom", "remove", CUSTOM_ALIAS)
+
+    # When: installing with --no-restart against the running database.
+    result = _install_custom(slc_deployment, "--no-restart", capture=True)
+
+    # Then: it is recorded but not yet available, and the database is untouched.
+    assert "next start" in result.stdout
+    status = _custom_status(slc_deployment, CUSTOM_ALIAS)
+    assert status is not None
+    assert status["available"] is False
+    _assert_database_responds(slc_deployment)
+
+    # When: restarting.
+    slc_deployment.stop()
+    slc_deployment.start()
+
+    # Then: the container is mounted and its alias activated, with no user action.
+    activated = _custom_status(slc_deployment, CUSTOM_ALIAS)
+    assert activated is not None
+    assert activated["available"] is True
+    assert "hi" in _run_scalar_udf(slc_deployment, CUSTOM_ALIAS, "slc_e2e_custom_defer")
+
+    _slc(slc_deployment, "custom", "remove", CUSTOM_ALIAS)
+
+
+def _install_custom(
+    deployment: Deployment, *extra: str, capture: bool = False
+) -> CompletedProcess[str]:
+    """Install the runner-supplied custom container under CUSTOM_ALIAS (idempotent)."""
+    return _slc(
+        deployment,
+        "custom",
         "install",
-        *source_args,
+        "--source",
+        _custom_slc_source(),
         "--alias",
         CUSTOM_ALIAS,
         "--language",
         "python",
-        "--auto-approve",
+        *extra,
+        capture=capture,
     )
 
-    # Then: the alias is listed and its UDFs run.
-    assert CUSTOM_ALIAS in _slc(slc_deployment, "list", capture=True).stdout
-    assert "hi" in _run_scalar_udf(slc_deployment, CUSTOM_ALIAS, "slc_e2e_custom")
 
-    # When / Then: removing it clears the alias from the listing.
-    _slc(slc_deployment, "custom", "remove", CUSTOM_ALIAS)
-    assert CUSTOM_ALIAS not in _slc(slc_deployment, "list", capture=True).stdout
+def _custom_slc_source() -> str:
+    """Return the runner-supplied custom container, or skip when none is configured."""
+    source = os.environ.get(CUSTOM_SLC_FILE_ENV) or os.environ.get(CUSTOM_SLC_URL_ENV)
+    if not source:
+        pytest.skip(
+            f"set {CUSTOM_SLC_FILE_ENV} or {CUSTOM_SLC_URL_ENV} to a standard python "
+            "container to run the custom SLC e2e"
+        )
+    return source

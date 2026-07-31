@@ -15,12 +15,13 @@ const aliasURIParts = 2
 
 const clientRelPath = "exaudf/exaudfclient"
 
+const builtinBucketPath = "__builtin__/slc"
+
 type AliasEntry struct {
 	Alias string
 	URI   string
 }
 
-// Language is the "?lang=" URI value (e.g. python), not the alias.
 type Language string
 
 const (
@@ -50,14 +51,10 @@ func NormalizeAlias(alias string) string {
 	return strings.ToUpper(strings.TrimSpace(alias))
 }
 
-// The protocol path and the client-path fragment differ only by a leading slash, matching
-// the documented Exasol activation URI shape.
-func BuildActivationURI(bucketFS, bucket, dir string, language Language) string {
-	path := bucketFS + "/" + bucket + "/" + dir
-
+func BuildActivationURI(dir string, language Language) string {
 	return fmt.Sprintf(
-		"localzmq+protobuf:///%s?lang=%s#buckets/%s/%s",
-		path, language, path, clientRelPath,
+		"localzmq+protobuf:///%s/%s?lang=%s#/%s",
+		builtinBucketPath, dir, language, clientRelPath,
 	)
 }
 

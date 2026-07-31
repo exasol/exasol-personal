@@ -14,7 +14,6 @@ import (
 	"net"
 	"os"
 
-	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 )
@@ -144,40 +143,6 @@ func (s *SSHRemote) RunScript(ctx context.Context, script io.Reader, out, errOut
 	}()
 
 	return session.Run("/bin/bash")
-}
-
-type SFTPSession struct {
-	client    *sftp.Client
-	sshClient *ssh.Client
-}
-
-func (s *SSHRemote) OpenSFTP() (*SFTPSession, error) {
-	sshClient, err := startSSHClient(s.options)
-	if err != nil {
-		return nil, err
-	}
-
-	sftpClient, err := sftp.NewClient(sshClient)
-	if err != nil {
-		_ = sshClient.Close()
-
-		return nil, fmt.Errorf("%w: failed to open sftp session", err)
-	}
-
-	return &SFTPSession{client: sftpClient, sshClient: sshClient}, nil
-}
-
-func (s *SFTPSession) Client() *sftp.Client {
-	return s.client
-}
-
-func (s *SFTPSession) Close() error {
-	err := s.client.Close()
-	if closeErr := s.sshClient.Close(); closeErr != nil && err == nil {
-		err = closeErr
-	}
-
-	return err
 }
 
 type SSHConnectionOptions struct {

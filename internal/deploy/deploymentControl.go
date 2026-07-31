@@ -258,6 +258,8 @@ func Start(
 				slog.Error("failed to set workflow state", "error", err.Error())
 			}
 
+			reconcileCustomSLCsAfterStart(ctx, deployment)
+
 			slog.Info("database is ready to accept connections")
 
 			slog.Warn(

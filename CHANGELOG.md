@@ -6,6 +6,16 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Added `exasol slc custom install`, `update`, and `remove` to manage user-supplied (custom) script language containers in local deployments, for languages the official catalog does not ship — for example a Python container with extra packages.
+
+  The container is given as `--source`, which takes either a local tarball or an `https` URL, together with the `--alias` used in `CREATE <alias> SCALAR SCRIPT` and the `--language` it provides.
+
+  Example: `exasol slc custom install --source ./my-python.tar.gz --alias MYPY3 --language python --auto-approve`
+
+  Like the official commands, a custom install or update restarts the database to mount the container, so it accepts `--auto-approve` to skip the confirmation and `--no-restart` to record the container and activate it on the next start instead. If the container cannot be made available, the database still starts and the command reports that the container is recorded but not active.
+
+  `exasol slc list` now shows custom containers alongside official ones with a status column, and `--json` marks them with a `custom` type and an `available` field.
+
 ### Changed
 
 - Documented named deployments, the `exasol slc` command group, and `exasol diag local` in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers UDFs and script language containers, and the Limitations section no longer states that UDFs are unavailable on local deployments.
@@ -31,10 +41,6 @@ Notable user-facing changes to Exasol Personal are documented here.
 - Added the `exasol slc` command group (`install`, `list`, `update`, `remove`) to manage official script language containers (SLCs) in local deployments. Local deployments ship without any SLC, so UDFs in a given language only run once its container is installed.
 
   Example: `exasol slc install python3` installs the official Python 3 SLC so `PYTHON3` UDFs work; `exasol slc list` shows what is installed.
-
-- Added `exasol slc custom install`/`update`/`remove` to manage user-supplied (custom) script language containers in local deployments, alongside the official `exasol slc` commands. Provide a container with `--file` or an HTTPS `--url`, plus `--alias` and `--language`; it is unpacked into BucketFS and activated for the alias without restarting the database.
-
-  Example: `exasol slc custom install --file mypy.tar.gz --alias MYPY3 --language python` makes `MYPY3` UDFs available. `exasol slc list` shows custom containers next to official ones, and `exasol slc custom remove MYPY3` removes it.
 
 - Added `exasol diag local` to report local deployment runtime and reachability state — VM status, guest IP, bound host ports, per-port reachability, database readiness, and platform support — as JSON. It is safe to run whether or not the deployment is currently running.
 

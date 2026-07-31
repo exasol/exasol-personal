@@ -42,18 +42,21 @@ const slcNoRestartFlagName = "no-restart"
 
 var slcCustomInstallOpts = struct {
 	AutoApprove bool
-	File        string
-	URL         string
+	NoRestart   bool
+	Source      string
 	Alias       string
 	Language    string
 }{}
 
 var slcCustomUpdateOpts = struct {
-	File     string
-	URL      string
-	Alias    string
-	Language string
+	AutoApprove bool
+	NoRestart   bool
+	Source      string
+	Alias       string
+	Language    string
 }{}
+
+const slcCustomSourceFlagName = "source"
 
 const slcCmdShortDesc = "Manage script language containers (SLCs)"
 
@@ -182,7 +185,9 @@ var slcUpdateCmd = &cobra.Command{
 var slcRemoveCmd = &cobra.Command{
 	Use:   "remove <alias>",
 	Short: "Remove a script language container",
-	Args:  cobra.ExactArgs(1),
+	Long: "Remove an installed script language container by alias.\n\n" +
+		"Handles both official and user-supplied (custom) containers.",
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
 		alias := args[0]
@@ -192,9 +197,7 @@ var slcRemoveCmd = &cobra.Command{
 			return err
 		}
 		if isCustom {
-			return fmt.Errorf(
-				"%q is a custom SLC; remove it with `exasol slc custom remove %s`", alias, alias,
-			)
+			return runSLCCustomRemove(cmd, alias)
 		}
 
 		result, err := deploy.RemoveSLC(
@@ -267,7 +270,10 @@ var slcCustomUpdateCmd = &cobra.Command{
 var slcCustomRemoveCmd = &cobra.Command{
 	Use:   "remove <alias>",
 	Short: "Remove an installed custom script language container",
-	Args:  cobra.ExactArgs(1),
+	Long: "Remove an installed custom script language container.\n\n" +
+		"`exasol slc remove <alias>` removes either kind and is the preferred command.",
+	Hidden: true,
+	Args:   cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
 
@@ -282,9 +288,10 @@ func runSLCCustomInstall(cmd *cobra.Command) error {
 		deploy.CustomSLCInstallOpts{
 			Alias:    slcCustomInstallOpts.Alias,
 			Language: slcCustomInstallOpts.Language,
-			File:     slcCustomInstallOpts.File,
-			URL:      slcCustomInstallOpts.URL,
+			Source:   slcCustomInstallOpts.Source,
 		},
+		commonFlags.DeployVerbose,
+		!slcCustomInstallOpts.NoRestart,
 		customSLCConfirmFunc(cmd, slcCustomInstallOpts.AutoApprove),
 	)
 	if errors.Is(err, deploy.ErrSLCOperationCancelled) {
@@ -294,6 +301,10 @@ func runSLCCustomInstall(cmd *cobra.Command) error {
 	}
 	if err != nil {
 		return err
+	}
+
+	if commonFlags.OutputJson {
+		return renderSLCCommandJSON(result)
 	}
 
 	if result.AlreadyInstalled {
@@ -309,8 +320,8 @@ func runSLCCustomInstall(cmd *cobra.Command) error {
 		verb = "Replaced"
 	}
 	addTerminalOutput(fmt.Sprintf(
-		"%s custom SLC %q (language: %s). It is active for new sessions.",
-		verb, result.Alias, result.Language,
+		"%s custom SLC %q (language: %s).%s",
+		verb, result.Alias, result.Language, customSLCOutcomeSuffix(result.Outcome),
 	))
 
 	return nil
@@ -323,9 +334,11 @@ func runSLCCustomUpdate(cmd *cobra.Command) error {
 		deploy.CustomSLCInstallOpts{
 			Alias:    slcCustomUpdateOpts.Alias,
 			Language: slcCustomUpdateOpts.Language,
-			File:     slcCustomUpdateOpts.File,
-			URL:      slcCustomUpdateOpts.URL,
+			Source:   slcCustomUpdateOpts.Source,
 		},
+		commonFlags.DeployVerbose,
+		!slcCustomUpdateOpts.NoRestart,
+		customSLCConfirmFunc(cmd, slcCustomUpdateOpts.AutoApprove),
 	)
 	if errors.Is(err, deploy.ErrSLCOperationCancelled) {
 		addTerminalNotice(slcOperationAbortedMessage)
@@ -334,6 +347,10 @@ func runSLCCustomUpdate(cmd *cobra.Command) error {
 	}
 	if err != nil {
 		return err
+	}
+
+	if commonFlags.OutputJson {
+		return renderSLCCommandJSON(result)
 	}
 
 	if !result.Found {
@@ -352,10 +369,25 @@ func runSLCCustomUpdate(cmd *cobra.Command) error {
 	}
 
 	addTerminalOutput(fmt.Sprintf(
-		"Updated custom SLC %q. It is active for new sessions.", result.Alias,
+		"Updated custom SLC %q.%s", result.Alias, customSLCOutcomeSuffix(result.Outcome),
 	))
 
 	return nil
+}
+
+func customSLCOutcomeSuffix(outcome deploy.SLCApplyOutcome) string {
+	switch outcome {
+	case deploy.SLCApplyRestarted:
+		return " Database restarted; the language is ready to use."
+	case deploy.SLCApplyStarted:
+		return " Database started; the language is ready to use."
+	case deploy.SLCApplyDeferred:
+		return " It will become available on the next start."
+	case deploy.SLCApplyNone:
+		return ""
+	default:
+		return ""
+	}
 }
 
 func runSLCCustomRemove(cmd *cobra.Command, alias string) error {
@@ -363,6 +395,11 @@ func runSLCCustomRemove(cmd *cobra.Command, alias string) error {
 	if err != nil {
 		return err
 	}
+
+	if commonFlags.OutputJson {
+		return renderSLCCommandJSON(result)
+	}
+
 	if !result.Found {
 		addTerminalOutput(fmt.Sprintf(
 			"No SLC matching %q is installed, so there is nothing to remove.", alias,
@@ -378,8 +415,7 @@ func runSLCCustomRemove(cmd *cobra.Command, alias string) error {
 	return nil
 }
 
-// customSLCConfirmFunc returns nil (pre-approved) when --auto-approve is set; otherwise it
-// refuses non-interactively so scripts never override an SLC silently.
+// Refuses non-interactively so scripts never override an SLC silently.
 //
 //nolint:revive // autoApprove reflects the user's flag, not internal control coupling.
 func customSLCConfirmFunc(cmd *cobra.Command, autoApprove bool) deploy.CustomSLCConfirm {
@@ -392,7 +428,8 @@ func customSLCConfirmFunc(cmd *cobra.Command, autoApprove bool) deploy.CustomSLC
 			return false, errors.New(prompt + "; re-run with --auto-approve to proceed")
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s.\nContinue? [y/N]: ", prompt)
+		// stderr, so an interactive prompt never lands in the middle of --json output.
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s.\nContinue? [y/N]: ", prompt)
 
 		line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
@@ -472,6 +509,7 @@ type slcListJSONItem struct {
 	Alias     string   `json:"alias,omitempty"`
 	Source    string   `json:"source,omitempty"`
 	Installed bool     `json:"installed"`
+	Available *bool    `json:"available,omitempty"`
 }
 
 func renderSLCListJSON(
@@ -514,12 +552,14 @@ func formatSLCListJSON(
 		})
 	}
 	for _, custom := range customs {
+		available := custom.Available
 		items = append(items, slcListJSONItem{
 			Type:      "custom",
 			Language:  custom.Language,
 			Alias:     custom.Alias,
 			Source:    custom.Source,
 			Installed: true,
+			Available: &available,
 		})
 	}
 
@@ -543,35 +583,59 @@ func formatSLCListText(statuses []deploy.SLCStatus, customs []deploy.CustomSLCSt
 	var builder strings.Builder
 	const columnPadding = 2
 	writer := tabwriter.NewWriter(&builder, 0, 0, columnPadding, ' ', 0)
-	if len(statuses) > 0 {
-		_, _ = fmt.Fprintln(writer, "FLAVOR\tALIASES\tVERSION\tINSTALLED")
-		for _, status := range statuses {
-			installed := "no"
-			if status.Installed {
-				installed = "yes"
-			}
-			_, _ = fmt.Fprintf(
-				writer,
-				"%s\t%s\t%s\t%s\n",
-				status.Flavor,
-				strings.Join(status.Aliases, ", "),
-				status.Version,
-				installed,
-			)
-		}
-	}
-	if len(customs) > 0 {
-		if len(statuses) > 0 {
-			_, _ = fmt.Fprintln(writer)
-		}
-		_, _ = fmt.Fprintln(writer, "CUSTOM ALIAS\tLANGUAGE\tSOURCE")
-		for _, custom := range customs {
-			_, _ = fmt.Fprintf(writer, "%s\t%s\t%s\n", custom.Alias, custom.Language, custom.Source)
-		}
-	}
+	writeOfficialSLCRows(writer, statuses)
+	writeCustomSLCRows(writer, customs, len(statuses) > 0)
 	_ = writer.Flush()
 
 	return strings.TrimRight(builder.String(), "\n")
+}
+
+func writeOfficialSLCRows(writer io.Writer, statuses []deploy.SLCStatus) {
+	if len(statuses) == 0 {
+		return
+	}
+
+	_, _ = fmt.Fprintln(writer, "FLAVOR\tALIASES\tVERSION\tINSTALLED")
+	for _, status := range statuses {
+		installed := "no"
+		if status.Installed {
+			installed = "yes"
+		}
+		_, _ = fmt.Fprintf(
+			writer,
+			"%s\t%s\t%s\t%s\n",
+			status.Flavor,
+			strings.Join(status.Aliases, ", "),
+			status.Version,
+			installed,
+		)
+	}
+}
+
+//nolint:revive // afterOfficial reports what was already written, not a control flag.
+func writeCustomSLCRows(
+	writer io.Writer,
+	customs []deploy.CustomSLCStatus,
+	afterOfficial bool,
+) {
+	if len(customs) == 0 {
+		return
+	}
+
+	if afterOfficial {
+		_, _ = fmt.Fprintln(writer)
+	}
+	_, _ = fmt.Fprintln(writer, "CUSTOM ALIAS\tLANGUAGE\tSTATUS\tSOURCE")
+	for _, custom := range customs {
+		status := "pending"
+		if custom.Available {
+			status = "active"
+		}
+		_, _ = fmt.Fprintf(
+			writer, "%s\t%s\t%s\t%s\n",
+			custom.Alias, custom.Language, status, custom.Source,
+		)
+	}
 }
 
 func printSLCInstallResult(result *deploy.SLCInstallResult) {
@@ -685,12 +749,18 @@ func init() {
 	requireDefaultDeploymentCompatibility(slcCustomInstallCmd)
 	requireInitializedDeploymentDir(slcCustomInstallCmd)
 	registerDeploymentDirFlag(slcCustomInstallCmd, commonFlags)
-	slcCustomInstallCmd.Flags().BoolVar(&slcCustomInstallOpts.AutoApprove, "auto-approve", false,
-		"Do not prompt before overriding a built-in alias or replacing a custom SLC")
-	slcCustomInstallCmd.Flags().StringVar(&slcCustomInstallOpts.File, "file", "",
-		"Install the custom SLC from a local container tarball")
-	slcCustomInstallCmd.Flags().StringVar(&slcCustomInstallOpts.URL, "url", "",
-		"Install the custom SLC downloaded from an HTTPS URL")
+	registerOutputFlags(slcCustomInstallCmd, commonFlags)
+	registerVerboseFlag(slcCustomInstallCmd, commonFlags)
+	slcCustomInstallCmd.Flags().BoolVar(&slcCustomInstallOpts.AutoApprove,
+		slcAutoApproveFlagName, false,
+		"Do not prompt before restarting the database, overriding a built-in alias, "+
+			"or replacing a custom SLC")
+	slcCustomInstallCmd.Flags().BoolVar(&slcCustomInstallOpts.NoRestart,
+		slcNoRestartFlagName, false,
+		"Record the custom SLC without restarting; it activates on the next start")
+	slcCustomInstallCmd.Flags().StringVar(&slcCustomInstallOpts.Source,
+		slcCustomSourceFlagName, "",
+		"Container tarball to install: a local path or an HTTPS URL")
 	slcCustomInstallCmd.Flags().StringVar(&slcCustomInstallOpts.Alias, "alias", "",
 		"Alias for the custom SLC (used in CREATE <alias> SCALAR SCRIPT)")
 	slcCustomInstallCmd.Flags().StringVar(&slcCustomInstallOpts.Language, "language", "",
@@ -699,10 +769,16 @@ func init() {
 	requireDefaultDeploymentCompatibility(slcCustomUpdateCmd)
 	requireInitializedDeploymentDir(slcCustomUpdateCmd)
 	registerDeploymentDirFlag(slcCustomUpdateCmd, commonFlags)
-	slcCustomUpdateCmd.Flags().StringVar(&slcCustomUpdateOpts.File, "file", "",
-		"Update the custom SLC from a local container tarball")
-	slcCustomUpdateCmd.Flags().StringVar(&slcCustomUpdateOpts.URL, "url", "",
-		"Update the custom SLC downloaded from an HTTPS URL")
+	registerOutputFlags(slcCustomUpdateCmd, commonFlags)
+	registerVerboseFlag(slcCustomUpdateCmd, commonFlags)
+	slcCustomUpdateCmd.Flags().BoolVar(&slcCustomUpdateOpts.AutoApprove,
+		slcAutoApproveFlagName, false, slcAutoApproveFlagDesc)
+	slcCustomUpdateCmd.Flags().BoolVar(&slcCustomUpdateOpts.NoRestart,
+		slcNoRestartFlagName, false,
+		"Record the update without restarting; it applies on the next start")
+	slcCustomUpdateCmd.Flags().StringVar(&slcCustomUpdateOpts.Source,
+		slcCustomSourceFlagName, "",
+		"Container tarball to update to: a local path or an HTTPS URL")
 	slcCustomUpdateCmd.Flags().StringVar(&slcCustomUpdateOpts.Alias, "alias", "",
 		"Alias of the custom SLC to update")
 	slcCustomUpdateCmd.Flags().StringVar(&slcCustomUpdateOpts.Language, "language", "",
@@ -711,6 +787,7 @@ func init() {
 	requireDefaultDeploymentCompatibility(slcCustomRemoveCmd)
 	requireInitializedDeploymentDir(slcCustomRemoveCmd)
 	registerDeploymentDirFlag(slcCustomRemoveCmd, commonFlags)
+	registerOutputFlags(slcCustomRemoveCmd, commonFlags)
 
 	slcCustomCmd.AddCommand(slcCustomInstallCmd)
 	slcCustomCmd.AddCommand(slcCustomUpdateCmd)

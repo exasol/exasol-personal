@@ -79,6 +79,17 @@ func startPreparedLocalRuntime(
 	return writeLocalRuntimeArtifactsAndWait(ctx, runtime, state, waitTimeoutSeconds)
 }
 
+// Must run after the caller commits its workflow state: that write serialises a copy read
+// before the restart, so an earlier activation would be overwritten.
+func reconcileCustomSLCsAfterStart(ctx context.Context, deployment config.DeploymentDir) {
+	if !isLocalDeployment(deployment) {
+		return
+	}
+	if err := reconcileCustomSLCActivation(ctx, deployment); err != nil {
+		slog.Warn("failed to activate a custom script language container", "error", err)
+	}
+}
+
 func localRunnerVersionCheckArgs(deployment config.DeploymentDir) ([]string, error) {
 	launcherState, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {

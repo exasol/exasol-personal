@@ -234,6 +234,8 @@ func deployFromManifests(
 				return err
 			}
 
+			reconcileCustomSLCsAfterStart(ctx, deployment)
+
 			connectionInstructions, err := getConnectionInstructionsTextUnsafe(ctx, deployment)
 			if err != nil {
 				slog.Error("failed to collect connection instructions")

@@ -14,7 +14,6 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
-	"path"
 	"regexp"
 	"runtime"
 	"sort"
@@ -29,221 +28,457 @@ import (
 )
 
 const (
-	// A custom SLC goes in the default BucketFS bucket so its activation URI matches the
-	// documented Exasol shape.
-	customSLCBucketFS = "bfsdefault"
-	customSLCBucket   = "default"
+	customSLCDirPrefix = "custom-"
+
+	customSLCImageRepo = "exasol-personal/custom-slc"
+
+	customSLCDigestLen = 16
 
 	scriptLanguagesQuery = "SELECT SYSTEM_VALUE FROM EXA_PARAMETERS " +
 		"WHERE PARAMETER_NAME='SCRIPT_LANGUAGES'"
 )
 
-// Activation goes through ALTER SYSTEM, which needs a live database.
 var ErrCustomSLCDatabaseNotRunning = errors.New(
-	"the database must be running for custom SLC operations; run `exasol start` first",
+	"the database must be running to remove a custom SLC; run `exasol start` first",
 )
 
-// customAliasPattern restricts a custom alias to a valid unquoted Exasol identifier (letter
-// first, letters/digits/underscores, max 128), ASCII-only because the alias is also a BucketFS
-// directory name and URI component; this keeps it usable in `CREATE <alias> SCALAR SCRIPT`.
+// ASCII-only because the alias is also a mount directory name and a URI component.
 var customAliasPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,127}$`)
 
-// Exactly one of File or URL must be set.
 type CustomSLCInstallOpts struct {
-	Alias    string
-	Language string
-	File     string
-	URL      string
-}
-
-// A nil value means pre-approved (e.g. --auto-approve).
-type CustomSLCConfirm func(prompt string) (bool, error)
-
-type CustomSLCInstallResult struct {
-	Alias            string
-	Language         string
-	AlreadyInstalled bool
-	Replaced         bool
-}
-
-type CustomSLCUpdateResult struct {
-	Found     bool
-	Unchanged bool
-	Alias     string
-}
-
-type CustomSLCRemoveResult struct {
-	Found bool
-	Alias string
-}
-
-type CustomSLCStatus struct {
 	Alias    string
 	Language string
 	Source   string
 }
 
+type CustomSLCConfirm func(prompt string) (bool, error)
+
+type CustomSLCInstallResult struct {
+	Operation        string          `json:"operation"`
+	Alias            string          `json:"alias"`
+	Language         string          `json:"language,omitempty"`
+	AlreadyInstalled bool            `json:"alreadyInstalled"`
+	Replaced         bool            `json:"replaced"`
+	Changed          bool            `json:"changed"`
+	Outcome          SLCApplyOutcome `json:"outcome"`
+}
+
+type CustomSLCUpdateResult struct {
+	Operation string          `json:"operation"`
+	Alias     string          `json:"alias"`
+	Found     bool            `json:"found"`
+	Unchanged bool            `json:"unchanged"`
+	Changed   bool            `json:"changed"`
+	Outcome   SLCApplyOutcome `json:"outcome"`
+}
+
+type CustomSLCRemoveResult struct {
+	Operation string `json:"operation"`
+	Alias     string `json:"alias"`
+	Found     bool   `json:"found"`
+	Changed   bool   `json:"changed"`
+}
+
+type CustomSLCStatus struct {
+	Alias     string
+	Language  string
+	Source    string
+	Available bool
+}
+
+//nolint:revive // restart is a user-controlled flag (--no-restart), not internal control coupling.
 func InstallCustomSLC(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	opts CustomSLCInstallOpts,
+	verbose bool,
+	restart bool,
 	confirm CustomSLCConfirm,
 ) (*CustomSLCInstallResult, error) {
 	var result *CustomSLCInstallResult
+	var staged *config.InstalledCustomSLC
+
 	err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
 			var err error
-			result, err = installCustomSLCLocked(ctx, deployment, opts, confirm)
+			result, staged, err = stageCustomSLCInstall(ctx, deployment, opts, restart, confirm)
 
 			return err
 		})
+	if err != nil || staged == nil {
+		return result, err
+	}
 
-	return result, err
-}
-
-// Alias collisions are resolved before any download, so a blocked or declined install never
-// fetches the (large) container.
-func installCustomSLCLocked(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	opts CustomSLCInstallOpts,
-	confirm CustomSLCConfirm,
-) (*CustomSLCInstallResult, error) {
-	request, err := validateCustomSLCOpts(opts)
+	outcome, err := applyStagedCustomSLC(ctx, deployment, *staged, verbose)
 	if err != nil {
 		return nil, err
 	}
-	if err := requireCustomSLCPreconditions(ctx, deployment); err != nil {
-		return nil, err
+	result.Outcome = outcome
+
+	slog.Info(
+		"custom script language container installed",
+		"alias", result.Alias,
+		"language", result.Language,
+		"outcome", result.Outcome.String(),
+	)
+
+	return result, nil
+}
+
+// Applying is left to the caller: Start/Stop take the same lock this runs under.
+//
+//nolint:revive // restart is a user-controlled flag (--no-restart), not internal control coupling.
+func stageCustomSLCInstall(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	opts CustomSLCInstallOpts,
+	restart bool,
+	confirm CustomSLCConfirm,
+) (*CustomSLCInstallResult, *config.InstalledCustomSLC, error) {
+	request, err := validateCustomSLCOpts(opts)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := requireCustomSLCPreconditions(deployment); err != nil {
+		return nil, nil, err
 	}
 
 	state, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {
-		return nil, err
-	}
-	entries, err := readScriptLanguages(ctx, deployment)
-	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	customIdx := findInstalledCustomSLC(state.InstalledCustomSLCs, request.alias)
-	replaced := false
-	if customIdx < 0 {
-		if err := confirmOfficialAliasReuse(
-			deployment, state, entries, request.alias, confirm,
-		); err != nil {
-			return nil, err
-		}
-	} else {
-		prompt := fmt.Sprintf(
-			"a custom SLC is already installed under alias %q; installing replaces it",
-			request.alias,
-		)
-		if err := confirmCustom(confirm, prompt); err != nil {
-			return nil, err
-		}
-		replaced = true
+	replaced, err := confirmCustomSLCInstall(ctx, deployment, state, request, confirm)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	tarball, err := acquireCustomTarball(ctx, opts)
+	// Confirmed before fetching, so a declined install never downloads a large archive.
+	if err := confirmRestartIfRunning(ctx, deployment, restart, customRestartConfirm(
+		confirm, "installing a custom SLC restarts the database, dropping open connections",
+	)); err != nil {
+		return nil, nil, err
+	}
+
+	tarball, err := acquireCustomTarball(ctx, deployment, request.source)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer tarball.cleanup()
 
-	if customIdx >= 0 && customSLCUnchanged(
-		state.InstalledCustomSLCs[customIdx], tarball.sha256, request.language,
+	idx := findInstalledCustomSLC(state.InstalledCustomSLCs, request.alias)
+	if idx >= 0 && customSLCUnchanged(
+		state.InstalledCustomSLCs[idx], tarball.sha256, request.language,
 	) {
-		return &CustomSLCInstallResult{Alias: request.alias, AlreadyInstalled: true}, nil
+		return &CustomSLCInstallResult{
+			Operation:        SLCOperationInstall,
+			Alias:            request.alias,
+			AlreadyInstalled: true,
+			Outcome:          SLCApplyNone,
+		}, nil, nil
 	}
 
-	err = applyCustomSLC(
-		ctx, deployment, request.alias, request.language, request.source, tarball, state,
-	)
+	entry, err := recordCustomSLC(deployment, state, request, tarball)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	slog.Info(request.alias + " custom script language container is installed")
+	result := &CustomSLCInstallResult{
+		Operation: SLCOperationInstall,
+		Alias:     request.alias,
+		Language:  string(request.language),
+		Replaced:  replaced,
+		Changed:   true,
+		Outcome:   SLCApplyDeferred,
+	}
+	if !restart {
+		slog.Info(
+			"custom script language container install recorded",
+			"alias", request.alias, "activation", "next_start",
+		)
 
-	return &CustomSLCInstallResult{
-		Alias:    request.alias,
-		Language: string(request.language),
-		Replaced: replaced,
-	}, nil
+		return result, nil, nil
+	}
+
+	return result, &entry, nil
 }
 
 func UpdateCustomSLC(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	opts CustomSLCInstallOpts,
+	verbose bool,
+	restart bool,
+	confirm CustomSLCConfirm,
 ) (*CustomSLCUpdateResult, error) {
 	var result *CustomSLCUpdateResult
+	var staged *config.InstalledCustomSLC
+
 	err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
 			var err error
-			result, err = updateCustomSLCLocked(ctx, deployment, opts)
+			result, staged, err = stageCustomSLCUpdate(ctx, deployment, opts, restart, confirm)
 
 			return err
 		})
+	if err != nil || staged == nil {
+		return result, err
+	}
 
-	return result, err
-}
-
-// A no-op when the new container is byte-identical (same digest).
-func updateCustomSLCLocked(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	opts CustomSLCInstallOpts,
-) (*CustomSLCUpdateResult, error) {
-	alias, err := validateCustomAlias(opts.Alias)
+	outcome, err := applyStagedCustomSLC(ctx, deployment, *staged, verbose)
 	if err != nil {
 		return nil, err
 	}
-	if _, sourceErr := validateCustomSource(opts); sourceErr != nil {
-		return nil, sourceErr
+	result.Outcome = outcome
+
+	slog.Info(
+		"custom script language container updated",
+		"alias", result.Alias,
+		"outcome", result.Outcome.String(),
+	)
+
+	return result, nil
+}
+
+//nolint:revive // restart is a user-controlled flag (--no-restart), not internal control coupling.
+func stageCustomSLCUpdate(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	opts CustomSLCInstallOpts,
+	restart bool,
+	confirm CustomSLCConfirm,
+) (*CustomSLCUpdateResult, *config.InstalledCustomSLC, error) {
+	alias, err := validateCustomAlias(opts.Alias)
+	if err != nil {
+		return nil, nil, err
 	}
-	if err := requireCustomSLCPreconditions(ctx, deployment); err != nil {
-		return nil, err
+	source, err := validateCustomSource(opts.Source)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := requireCustomSLCPreconditions(deployment); err != nil {
+		return nil, nil, err
 	}
 
 	state, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	idx := findInstalledCustomSLC(state.InstalledCustomSLCs, alias)
 	if idx < 0 {
-		return &CustomSLCUpdateResult{Found: false, Alias: alias}, nil
+		return &CustomSLCUpdateResult{
+			Operation: SLCOperationUpdate,
+			Alias:     alias,
+		}, nil, nil
 	}
 
-	// An update keeps the recorded language unless the caller explicitly overrides it.
 	languageInput := opts.Language
 	if strings.TrimSpace(languageInput) == "" {
 		languageInput = state.InstalledCustomSLCs[idx].Language
 	}
 	language, err := customslc.NormalizeLanguage(languageInput)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	tarball, err := acquireCustomTarball(ctx, opts)
+	if err := confirmRestartIfRunning(ctx, deployment, restart, customRestartConfirm(
+		confirm, "updating a custom SLC restarts the database, dropping open connections",
+	)); err != nil {
+		return nil, nil, err
+	}
+
+	tarball, err := acquireCustomTarball(ctx, deployment, source)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer tarball.cleanup()
 
 	if customSLCUnchanged(state.InstalledCustomSLCs[idx], tarball.sha256, language) {
-		return &CustomSLCUpdateResult{Found: true, Unchanged: true, Alias: alias}, nil
+		return &CustomSLCUpdateResult{
+			Operation: SLCOperationUpdate,
+			Alias:     alias,
+			Found:     true,
+			Unchanged: true,
+			Outcome:   SLCApplyNone,
+		}, nil, nil
 	}
 
-	source, _ := validateCustomSource(opts)
-	if err := applyCustomSLC(ctx, deployment, alias, language, source, tarball, state); err != nil {
+	request := customSLCRequest{alias: alias, language: language, source: source}
+	entry, err := recordCustomSLC(deployment, state, request, tarball)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	result := &CustomSLCUpdateResult{
+		Operation: SLCOperationUpdate,
+		Alias:     alias,
+		Found:     true,
+		Changed:   true,
+		Outcome:   SLCApplyDeferred,
+	}
+	if !restart {
+		slog.Info(
+			"custom script language container update recorded",
+			"alias", alias, "activation", "next_start",
+		)
+
+		return result, nil, nil
+	}
+
+	return result, &entry, nil
+}
+
+func recordCustomSLC(
+	deployment config.DeploymentDir,
+	state *config.ExasolPersonalState,
+	request customSLCRequest,
+	tarball acquiredTarball,
+) (config.InstalledCustomSLC, error) {
+	file, err := os.Open(
+		tarball.path,
+	) //nolint:gosec // path is launcher-owned (download temp or user file)
+	if err != nil {
+		return config.InstalledCustomSLC{}, err
+	}
+	defer file.Close()
+
+	if err := customslc.ValidateArchive(file); err != nil {
+		return config.InstalledCustomSLC{}, fmt.Errorf("invalid custom SLC container: %w", err)
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return config.InstalledCustomSLC{}, err
+	}
+
+	entry := config.InstalledCustomSLC{
+		Alias:        request.alias,
+		Language:     string(request.language),
+		Image:        customSLCImage(request.alias, tarball.sha256),
+		Target:       customSLCTarget(request.alias),
+		Package:      customSLCPackageName(request.alias, tarball.sha256),
+		Sha256:       tarball.sha256,
+		Source:       request.source,
+		DisplacedURI: carriedDisplacedURI(state.InstalledCustomSLCs, request.alias),
+	}
+
+	if err := placeCustomSLCPackage(deployment, entry.Package, tarball, file); err != nil {
+		return config.InstalledCustomSLC{}, err
+	}
+
+	superseded := supersededCustomSLCPackage(state.InstalledCustomSLCs, entry)
+	state.InstalledCustomSLCs = upsertInstalledCustomSLC(state.InstalledCustomSLCs, entry)
+	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
+		return config.InstalledCustomSLC{}, err
+	}
+
+	if superseded != "" {
+		if err := removeCustomSLCPackage(deployment, superseded); err != nil {
+			slog.Warn(
+				"failed to remove the superseded custom SLC package; delete it manually if needed",
+				"package", superseded, "error", err,
+			)
+		}
+	}
+
+	return entry, nil
+}
+
+func applyStagedCustomSLC(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	entry config.InstalledCustomSLC,
+	verbose bool,
+) (SLCApplyOutcome, error) {
+	slog.Info(
+		"installing custom script language container",
+		"alias", entry.Alias, "may_take_minutes", true,
+	)
+
+	outcome, err := applySLCChange(ctx, deployment, verbose, true)
+	if err != nil {
+		return 0, fmt.Errorf(
+			"failed to activate custom SLC %s (it is recorded and will be retried on the "+
+				"next start): %w", entry.Alias, err,
+		)
+	}
+
+	if err := verifyCustomSLCApplied(deployment, entry); err != nil {
+		return 0, err
+	}
+
+	return outcome, nil
+}
+
+// The restart runs outside the deployment lock, so this container may have changed meanwhile.
+func verifyCustomSLCApplied(
+	deployment config.DeploymentDir,
+	entry config.InstalledCustomSLC,
+) error {
+	recorded, err := recordedCustomSLC(deployment, entry.Alias)
+	if err != nil {
+		return err
+	}
+	if recorded == nil {
+		return fmt.Errorf(
+			"custom SLC %s was removed by another operation before it could be activated",
+			entry.Alias,
+		)
+	}
+	if recorded.Sha256 != entry.Sha256 || recorded.Language != entry.Language {
+		return fmt.Errorf(
+			"custom SLC %s was replaced by another operation before it could be activated",
+			entry.Alias,
+		)
+	}
+	if !recorded.Activated {
+		return customSLCUnavailableError(deployment, entry)
+	}
+
+	return nil
+}
+
+func recordedCustomSLC(
+	deployment config.DeploymentDir,
+	alias string,
+) (*config.InstalledCustomSLC, error) {
+	state, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
 		return nil, err
 	}
+	idx := findInstalledCustomSLC(state.InstalledCustomSLCs, alias)
+	if idx < 0 {
+		return nil, nil //nolint:nilnil // absence is the answer, not an error
+	}
 
-	slog.Info(alias + " custom script language container is updated")
+	return &state.InstalledCustomSLCs[idx], nil
+}
 
-	return &CustomSLCUpdateResult{Found: true, Alias: alias}, nil
+func customSLCUnavailableReason(state string) string {
+	switch state {
+	case "package-missing":
+		return "its staged container package is missing"
+	case "import-failed":
+		return "its container package could not be imported"
+	case "":
+		return "the deployment has not started with it yet"
+	default:
+		return state
+	}
+}
+
+func customSLCUnavailableError(
+	deployment config.DeploymentDir,
+	entry config.InstalledCustomSLC,
+) error {
+	detail := "the container could not be activated"
+	states, err := readSLCImageStates(deployment)
+	if err == nil && !customSLCImageAvailable(states, entry.Image) {
+		detail = customSLCUnavailableReason(states[entry.Image])
+	}
+
+	return fmt.Errorf(
+		"custom SLC %s is recorded but not active: %s; the database is running without it",
+		entry.Alias, detail,
+	)
 }
 
 func RemoveCustomSLC(
@@ -272,7 +507,7 @@ func removeCustomSLCLocked(
 	if err != nil {
 		return nil, err
 	}
-	if err := requireCustomSLCPreconditions(ctx, deployment); err != nil {
+	if err := requireCustomSLCPreconditions(deployment); err != nil {
 		return nil, err
 	}
 
@@ -282,19 +517,20 @@ func removeCustomSLCLocked(
 	}
 	idx := findInstalledCustomSLC(state.InstalledCustomSLCs, normalized)
 	if idx < 0 {
-		return &CustomSLCRemoveResult{Found: false, Alias: normalized}, nil
+		return &CustomSLCRemoveResult{Operation: SLCOperationRemove, Alias: normalized}, nil
 	}
 	removed := state.InstalledCustomSLCs[idx]
 
-	backend, err := newDeploymentBackendForDeployment(deployment)
-	if err != nil {
-		return nil, err
-	}
-
-	slog.Info("deactivating the " + removed.Alias + " custom script language container")
-	err = deactivateCustomSLC(ctx, deployment, removed.Alias, removed.DisplacedURI)
-	if err != nil {
-		return nil, err
+	if removed.Activated {
+		if !isLocalDeploymentRunning(ctx, deployment) {
+			return nil, ErrCustomSLCDatabaseNotRunning
+		}
+		slog.Info("deactivating custom script language container", "alias", removed.Alias)
+		if err := deactivateCustomSLC(
+			ctx, deployment, removed.Alias, removed.DisplacedURI,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	state.InstalledCustomSLCs = append(
@@ -305,21 +541,135 @@ func removeCustomSLCLocked(
 		return nil, err
 	}
 
-	slog.Info("removing the custom script language container files from the deployment")
-	if err := backend.removeCustomSLCFiles(ctx, customSLCDirOf(removed)); err != nil {
+	if err := removeCustomSLCPackage(deployment, removed.Package); err != nil {
 		slog.Warn(
-			"failed to remove the custom SLC files; delete them manually if needed",
-			"dir", customSLCDirOf(removed), "error", err,
+			"failed to remove the custom SLC package; delete it manually if needed",
+			"package", removed.Package, "error", err,
 		)
 	}
 
-	slog.Info(removed.Alias + " custom script language container is removed")
+	slog.Info(
+		"custom script language container removed",
+		"alias", removed.Alias,
+		"language", removed.Language,
+	)
 
-	return &CustomSLCRemoveResult{Found: true, Alias: removed.Alias}, nil
+	return &CustomSLCRemoveResult{
+		Operation: SLCOperationRemove,
+		Alias:     removed.Alias,
+		Found:     true,
+		Changed:   true,
+	}, nil
 }
 
-// A missing state file is treated as "none installed" so listing works before the deployment
-// is initialized.
+func reconcileCustomSLCActivation(ctx context.Context, deployment config.DeploymentDir) error {
+	state, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return err
+	}
+
+	states, err := readSLCImageStates(deployment)
+	if err != nil {
+		return err
+	}
+
+	pending := make([]int, 0, len(state.InstalledCustomSLCs))
+	for idx, custom := range state.InstalledCustomSLCs {
+		// Reported even when already activated: losing a package is what a user needs told about.
+		if !customSLCImageAvailable(states, custom.Image) {
+			slog.Warn(
+				"custom script language container is unavailable, so its language cannot be "+
+					"used; reinstall it with `exasol slc custom install`",
+				"alias", custom.Alias,
+				"language", custom.Language,
+				"reason", customSLCUnavailableReason(states[custom.Image]),
+			)
+
+			continue
+		}
+		if custom.Activated {
+			continue
+		}
+		pending = append(pending, idx)
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+
+	if err := activatePendingCustomSLCs(ctx, deployment, state, pending); err != nil {
+		return err
+	}
+
+	return config.WriteExasolPersonalState(state, deployment)
+}
+
+func activatePendingCustomSLCs(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	state *config.ExasolPersonalState,
+	pending []int,
+) error {
+	return withLocalDatabase(ctx, deployment, func(database connecttypes.Databaser) error {
+		entries, err := currentScriptLanguages(ctx, database)
+		if err != nil {
+			return err
+		}
+
+		for _, idx := range pending {
+			custom := &state.InstalledCustomSLCs[idx]
+			if existing, ok := customslc.FindAlias(entries, custom.Alias); ok &&
+				customslc.IsBuiltinURI(existing.URI) && custom.DisplacedURI == "" {
+				custom.DisplacedURI = existing.URI
+			}
+			entries = customslc.SetAlias(
+				entries,
+				custom.Alias,
+				customslc.BuildActivationURI(
+					customSLCDir(custom.Alias), customslc.Language(custom.Language),
+				),
+			)
+			custom.Activated = true
+		}
+
+		return applyScriptLanguages(ctx, database, entries, state, pending)
+	})
+}
+
+// A silently-ignored ALTER SYSTEM must fail here, not at the user's first UDF call.
+func applyScriptLanguages(
+	ctx context.Context,
+	database connecttypes.Databaser,
+	entries []customslc.AliasEntry,
+	state *config.ExasolPersonalState,
+	pending []int,
+) error {
+	if err := setScriptLanguages(ctx, database, entries); err != nil {
+		return err
+	}
+	updated, err := currentScriptLanguages(ctx, database)
+	if err != nil {
+		return err
+	}
+	for _, idx := range pending {
+		custom := state.InstalledCustomSLCs[idx]
+		if !custom.Activated {
+			continue
+		}
+		uri := customslc.BuildActivationURI(
+			customSLCDir(custom.Alias), customslc.Language(custom.Language),
+		)
+		if !aliasResolvesTo(updated, custom.Alias, uri) {
+			return fmt.Errorf(
+				"activation did not take effect: alias %q does not resolve to the expected "+
+					"container in SCRIPT_LANGUAGES after ALTER SYSTEM", custom.Alias,
+			)
+		}
+	}
+
+	return nil
+}
+
+// Tolerates a missing state file so listing works before the deployment is initialized.
 func CustomSLCStatuses(deployment config.DeploymentDir) ([]CustomSLCStatus, error) {
 	has, err := config.HasExasolPersonalStateFile(deployment)
 	if err != nil {
@@ -334,19 +684,24 @@ func CustomSLCStatuses(deployment config.DeploymentDir) ([]CustomSLCStatus, erro
 		return nil, err
 	}
 
+	states, err := readSLCImageStates(deployment)
+	if err != nil {
+		return nil, err
+	}
+
 	statuses := make([]CustomSLCStatus, 0, len(state.InstalledCustomSLCs))
 	for _, inst := range state.InstalledCustomSLCs {
 		statuses = append(statuses, CustomSLCStatus{
-			Alias:    inst.Alias,
-			Language: inst.Language,
-			Source:   inst.Source,
+			Alias:     inst.Alias,
+			Language:  inst.Language,
+			Source:    inst.Source,
+			Available: inst.Activated && customSLCImageAvailable(states, inst.Image),
 		})
 	}
 
 	return statuses, nil
 }
 
-// Lets the CLI route remove/update to the custom path by alias ownership.
 func IsCustomSLCAlias(deployment config.DeploymentDir, alias string) (bool, error) {
 	has, err := config.HasExasolPersonalStateFile(deployment)
 	if err != nil {
@@ -379,7 +734,7 @@ func validateCustomSLCOpts(opts CustomSLCInstallOpts) (customSLCRequest, error) 
 	if err != nil {
 		return customSLCRequest{}, err
 	}
-	source, err := validateCustomSource(opts)
+	source, err := validateCustomSource(opts.Source)
 	if err != nil {
 		return customSLCRequest{}, err
 	}
@@ -387,22 +742,43 @@ func validateCustomSLCOpts(opts CustomSLCInstallOpts) (customSLCRequest, error) 
 	return customSLCRequest{alias: alias, language: language, source: source}, nil
 }
 
-func requireCustomSLCPreconditions(ctx context.Context, deployment config.DeploymentDir) error {
+func requireCustomSLCPreconditions(deployment config.DeploymentDir) error {
 	if !isLocalDeployment(deployment) {
 		return ErrSLCNotSupported
 	}
-	if err := requireDeploymentPresent(deployment); err != nil {
-		return err
-	}
-	if !isLocalDeploymentRunning(ctx, deployment) {
-		return ErrCustomSLCDatabaseNotRunning
+
+	return requireDeploymentPresent(deployment)
+}
+
+func confirmCustomSLCInstall(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	state *config.ExasolPersonalState,
+	request customSLCRequest,
+	confirm CustomSLCConfirm,
+) (bool, error) {
+	if findInstalledCustomSLC(state.InstalledCustomSLCs, request.alias) >= 0 {
+		prompt := fmt.Sprintf(
+			"a custom SLC is already installed under alias %q; installing replaces it",
+			request.alias,
+		)
+
+		return true, confirmCustom(confirm, prompt)
 	}
 
-	return nil
+	var entries []customslc.AliasEntry
+	if isLocalDeploymentRunning(ctx, deployment) {
+		read, err := readScriptLanguages(ctx, deployment)
+		if err != nil {
+			return false, err
+		}
+		entries = read
+	}
+
+	return false, confirmOfficialAliasReuse(state, entries, request.alias, confirm)
 }
 
 func confirmOfficialAliasReuse(
-	deployment config.DeploymentDir,
 	state *config.ExasolPersonalState,
 	entries []customslc.AliasEntry,
 	alias string,
@@ -416,7 +792,7 @@ func confirmOfficialAliasReuse(
 		)
 	}
 
-	officialNames := officialAliasNamespace(deployment, entries)
+	officialNames := officialAliasNamespace(entries)
 	if !officialNames[alias] {
 		return nil
 	}
@@ -430,195 +806,66 @@ func confirmOfficialAliasReuse(
 	return confirmCustom(confirm, prompt)
 }
 
-//nolint:revive // arguments carry the resolved install inputs, not internal control flags.
-func applyCustomSLC(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	alias string,
-	language customslc.Language,
-	source string,
-	tarball acquiredTarball,
-	state *config.ExasolPersonalState,
-) error {
-	backend, err := newDeploymentBackendForDeployment(deployment)
-	if err != nil {
-		return err
-	}
-
-	file, err := os.Open(
-		tarball.path,
-	) //nolint:gosec // path is launcher-owned (download temp or user file)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	// Validate the whole archive on the host before writing anything into the deployment, so a
-	// corrupt or non-SLC container is rejected before the database's BucketFS ever sees it.
-	if err := customslc.ValidateArchive(file); err != nil {
-		return fmt.Errorf("invalid custom SLC container: %w", err)
-	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return err
-	}
-
-	var previousDir string
-	var previous *config.InstalledCustomSLC
-	if idx := findInstalledCustomSLC(state.InstalledCustomSLCs, alias); idx >= 0 {
-		previousDir = customSLCDirOf(state.InstalledCustomSLCs[idx])
-		previous = &state.InstalledCustomSLCs[idx]
-	}
-
-	dir := customSLCDir(alias, tarball.sha256)
-	if err := ensureCustomSLCDelivered(
-		ctx, backend, deployment, alias, dir, previousDir, file,
-	); err != nil {
-		return err
-	}
-
-	// Delivered files are left in place on activation failure: the directory is content-addressed,
-	// so it is either unreferenced (a retry re-extracts it) or the one the database now points at
-	// (deleting it would break the live alias).
-	slog.Info("activating the custom script language container")
-	uri := customslc.BuildActivationURI(customSLCBucketFS, customSLCBucket, dir, language)
-	displacedBuiltin, err := activateCustomSLC(ctx, deployment, alias, uri)
-	if err != nil {
-		return err
-	}
-
-	state.InstalledCustomSLCs = upsertInstalledCustomSLC(
-		state.InstalledCustomSLCs,
-		config.InstalledCustomSLC{
-			Alias:        alias,
-			Language:     string(language),
-			BucketPath:   customSLCBucketFS + "/" + customSLCBucket + "/" + dir,
-			Sha256:       tarball.sha256,
-			Source:       source,
-			DisplacedURI: carriedDisplacedURI(previous, displacedBuiltin),
-		},
-	)
-	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
-		return err
-	}
-
-	if previousDir != "" && previousDir != dir {
-		if err := backend.removeCustomSLCFiles(ctx, previousDir); err != nil {
-			slog.Warn(
-				"failed to remove the previous custom SLC files; delete them manually if needed",
-				"dir", previousDir, "error", err,
-			)
-		}
-	}
-
-	return nil
+func customSLCDir(alias string) string {
+	return customSLCDirPrefix + strings.ToLower(alias)
 }
 
-func ensureCustomSLCDelivered(
-	ctx context.Context,
-	backend deploymentBackend,
-	deployment config.DeploymentDir,
-	alias, dir, previousDir string,
-	file io.Reader,
-) error {
-	current, err := readScriptLanguages(ctx, deployment)
-	if err != nil {
-		return err
-	}
-	activeDir := ""
-	if entry, ok := customslc.FindAlias(current, alias); ok {
-		activeDir = customslc.DirFromURI(entry.URI)
-	}
-
-	// Re-delivering a dir that is already recorded or live would overwrite the live container.
-	if dir == previousDir || dir == activeDir {
-		return nil
-	}
-
-	slog.Info("unpacking the custom script language container into the deployment " +
-		"(this may take a few minutes)")
-
-	return backend.deliverCustomSLC(ctx, dir, file)
+func customSLCTarget(alias string) string {
+	return slc.SLCMountRoot + "/" + customSLCDir(alias)
 }
 
-func customSLCDir(alias, digestHex string) string {
-	const digestLen = 16
-
-	digest := digestHex
-	if len(digest) > digestLen {
-		digest = digest[:digestLen]
-	}
-
-	return strings.ToLower(alias) + "-" + digest
+// The digest is what makes changed content a reference the runtime has not imported yet.
+func customSLCImage(alias, digestHex string) string {
+	return customSLCImageRepo + ":" + strings.ToLower(alias) + "-" + shortDigest(digestHex)
 }
 
-func customSLCDirOf(inst config.InstalledCustomSLC) string {
-	if inst.BucketPath != "" {
-		return path.Base(inst.BucketPath)
-	}
-
-	return strings.ToLower(inst.Alias)
+func customSLCPackageName(alias, digestHex string) string {
+	return customSLCDir(alias) + "-" + shortDigest(digestHex) + ".tar.gz"
 }
 
-func carriedDisplacedURI(previous *config.InstalledCustomSLC, displacedBuiltin string) string {
-	if previous != nil {
-		return previous.DisplacedURI
+func shortDigest(digestHex string) string {
+	if len(digestHex) > customSLCDigestLen {
+		return digestHex[:customSLCDigestLen]
 	}
 
-	return displacedBuiltin
+	return digestHex
 }
 
+func carriedDisplacedURI(installed []config.InstalledCustomSLC, alias string) string {
+	if idx := findInstalledCustomSLC(installed, alias); idx >= 0 {
+		return installed[idx].DisplacedURI
+	}
+
+	return ""
+}
+
+func supersededCustomSLCPackage(
+	installed []config.InstalledCustomSLC,
+	entry config.InstalledCustomSLC,
+) string {
+	idx := findInstalledCustomSLC(installed, entry.Alias)
+	if idx < 0 || installed[idx].Package == entry.Package {
+		return ""
+	}
+
+	return installed[idx].Package
+}
+
+// Requires Activated so a recorded-but-failed install is retried, not reported as a no-op.
 func customSLCUnchanged(
 	recorded config.InstalledCustomSLC,
 	digest string,
 	language customslc.Language,
 ) bool {
-	return recorded.Sha256 == digest && recorded.Language == string(language)
+	return recorded.Activated &&
+		recorded.Sha256 == digest &&
+		recorded.Language == string(language)
 }
 
 func aliasResolvesTo(entries []customslc.AliasEntry, alias, uri string) bool {
 	entry, ok := customslc.FindAlias(entries, alias)
 
 	return ok && entry.URI == uri
-}
-
-func activateCustomSLC(
-	ctx context.Context,
-	deployment config.DeploymentDir,
-	alias, uri string,
-) (string, error) {
-	var displaced string
-	err := withLocalDatabase(ctx, deployment, func(database connecttypes.Databaser) error {
-		entries, err := currentScriptLanguages(ctx, database)
-		if err != nil {
-			return err
-		}
-		if existing, ok := customslc.FindAlias(entries, alias); ok &&
-			customslc.IsBuiltinURI(existing.URI) {
-			displaced = existing.URI
-		}
-		if err := setScriptLanguages(
-			ctx, database, customslc.SetAlias(entries, alias, uri),
-		); err != nil {
-			return err
-		}
-
-		// Read back so a silently-ignored ALTER SYSTEM surfaces as an error here rather than
-		// as a confusing "no such language" failure at the user's first UDF call.
-		updated, err := currentScriptLanguages(ctx, database)
-		if err != nil {
-			return err
-		}
-		if !aliasResolvesTo(updated, alias, uri) {
-			return fmt.Errorf(
-				"activation did not take effect: alias %q does not resolve to the expected "+
-					"container in SCRIPT_LANGUAGES after ALTER SYSTEM", alias,
-			)
-		}
-
-		return nil
-	})
-
-	return displaced, err
 }
 
 func deactivateCustomSLC(
@@ -748,38 +995,43 @@ func withLocalDatabase(
 	return callback(database)
 }
 
-// acquiredTarball's cleanup deletes a downloaded tarball but is a no-op for a user-supplied
-// --file, which must never be deleted.
 type acquiredTarball struct {
 	path    string
 	sha256  string
+	staged  bool
 	cleanup func()
 }
 
-func acquireCustomTarball(ctx context.Context, opts CustomSLCInstallOpts) (acquiredTarball, error) {
-	if filePath := strings.TrimSpace(opts.File); filePath != "" {
-		slog.Info("reading the custom script language container", "file", filePath)
-		sha, err := hashFile(filePath)
-		if err != nil {
-			return acquiredTarball{}, err
-		}
-
-		return acquiredTarball{
-			path:   filePath,
-			sha256: sha,
-			cleanup: func() {
-				// A user-supplied --file is not ours to delete.
-			},
-		}, nil
+func acquireCustomTarball(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	source string,
+) (acquiredTarball, error) {
+	if isURLSource(source) {
+		return downloadCustomTarball(ctx, deployment, source)
 	}
 
-	slog.Info("downloading the custom script language container (this may take a few minutes)")
+	slog.Info("reading the custom script language container", "file", source)
+	sha, err := hashFile(source)
+	if err != nil {
+		return acquiredTarball{}, err
+	}
 
-	return downloadCustomTarball(ctx, strings.TrimSpace(opts.URL))
+	return acquiredTarball{
+		path:   source,
+		sha256: sha,
+		cleanup: func() {
+			// A user-supplied file is not ours to delete.
+		},
+	}, nil
 }
 
-func downloadCustomTarball(ctx context.Context, url string) (acquiredTarball, error) {
-	tmp, err := os.CreateTemp("", "custom-slc-*.tar.gz")
+func downloadCustomTarball(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	url string,
+) (acquiredTarball, error) {
+	tmp, err := newCustomSLCStagingFile(deployment)
 	if err != nil {
 		return acquiredTarball{}, err
 	}
@@ -810,6 +1062,11 @@ func downloadCustomTarball(ctx context.Context, url string) (acquiredTarball, er
 		)
 	}
 
+	slog.Info(
+		"downloading the custom script language container (this may take a few minutes)",
+		"size", resp.ContentLength,
+	)
+
 	hasher := sha256.New()
 	if _, err := io.Copy(tmp, io.TeeReader(resp.Body, hasher)); err != nil {
 		remove()
@@ -820,6 +1077,7 @@ func downloadCustomTarball(ctx context.Context, url string) (acquiredTarball, er
 	return acquiredTarball{
 		path:    tmp.Name(),
 		sha256:  hex.EncodeToString(hasher.Sum(nil)),
+		staged:  true,
 		cleanup: remove,
 	}, nil
 }
@@ -833,7 +1091,7 @@ func rejectNonHTTPSRedirect(req *http.Request, _ []*http.Request) error {
 }
 
 func hashFile(filePath string) (string, error) {
-	file, err := os.Open(filePath) //nolint:gosec // path is user-supplied by design (--file)
+	file, err := os.Open(filePath) //nolint:gosec // path is user-supplied by design (--source)
 	if err != nil {
 		return "", err
 	}
@@ -862,26 +1120,44 @@ func validateCustomAlias(raw string) (string, error) {
 	return customslc.NormalizeAlias(trimmed), nil
 }
 
-func validateCustomSource(opts CustomSLCInstallOpts) (string, error) {
-	hasFile := strings.TrimSpace(opts.File) != ""
-	hasURL := strings.TrimSpace(opts.URL) != ""
-	if hasFile == hasURL {
-		return "", errors.New("provide exactly one of --file or --url")
-	}
-	if hasFile {
-		return strings.TrimSpace(opts.File), nil
+func validateCustomSource(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", errors.New(
+			"a custom SLC requires a --source (a container tarball or an https URL)",
+		)
 	}
 
-	rawURL := strings.TrimSpace(opts.URL)
-	parsed, err := neturl.ParseRequestURI(rawURL)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return "", fmt.Errorf("invalid --url %q", rawURL)
-	}
-	if !strings.EqualFold(parsed.Scheme, "https") {
-		return "", errors.New("--url must use https; use --file for local files")
+	scheme := urlScheme(trimmed)
+	if scheme != "" && scheme != "https" {
+		return "", fmt.Errorf(
+			"invalid --source %q: a URL source must use https; pass a path for a local file",
+			trimmed,
+		)
 	}
 
-	return rawURL, nil
+	return trimmed, nil
+}
+
+func isURLSource(source string) bool {
+	return urlScheme(source) != ""
+}
+
+func urlScheme(source string) string {
+	parsed, err := neturl.ParseRequestURI(source)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+
+	return strings.ToLower(parsed.Scheme)
+}
+
+func customRestartConfirm(confirm CustomSLCConfirm, prompt string) ConfirmFunc {
+	if confirm == nil {
+		return nil
+	}
+
+	return func() (bool, error) { return confirm(prompt) }
 }
 
 func confirmCustom(confirm CustomSLCConfirm, prompt string) error {
@@ -899,10 +1175,7 @@ func confirmCustom(confirm CustomSLCConfirm, prompt string) error {
 	return nil
 }
 
-func officialAliasNamespace(
-	_ config.DeploymentDir,
-	entries []customslc.AliasEntry,
-) map[string]bool {
+func officialAliasNamespace(entries []customslc.AliasEntry) map[string]bool {
 	names := make(map[string]bool)
 	for _, alias := range customslc.BuiltinAliases(entries) {
 		names[alias] = true
@@ -976,4 +1249,20 @@ func sortedKeys(set map[string]bool) []string {
 	sort.Strings(keys)
 
 	return keys
+}
+
+// A downloaded container already sits in the staging directory.
+func placeCustomSLCPackage(
+	deployment config.DeploymentDir,
+	name string,
+	tarball acquiredTarball,
+	content io.Reader,
+) error {
+	if tarball.staged {
+		return promoteCustomSLCPackage(deployment, tarball.path, name)
+	}
+
+	slog.Info("staging the custom script language container (this may take a few minutes)")
+
+	return stageCustomSLCPackage(deployment, name, content)
 }
