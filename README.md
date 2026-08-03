@@ -359,6 +359,8 @@ In addition to built-in names and local paths, `exasol install` accepts external
 - **Local directory via URI** — `file:///absolute/path`. The directory is used directly without copying.
 - **Local archive via URI** — `file:///absolute/path/to/preset.tar.gz`. The archive is re-extracted on every run.
 
+Git repositories and archives also accept an optional `#<subpath>` fragment (e.g. `repo.git@v1#infra/aws`) to select a preset from a subdirectory of a monorepo or multi-preset archive.
+
 See [doc/presets.md](doc/presets.md) for the full preset contract, caching behavior, and troubleshooting.
 
 ### Building your own preset

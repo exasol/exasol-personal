@@ -83,6 +83,8 @@ func TestGitSource_CanFetch_RemoteURLs(t *testing.T) {
 		"https://github.com/org/repo.git",
 		"http://github.com/org/repo.git",
 		"git://github.com/org/repo.git",
+		"https://github.com/org/repo.git@main",
+		"git@github.com:org/repo.git@v1.0.0",
 	}
 	for _, url := range trueURLs {
 		if !src.CanFetch(url) {

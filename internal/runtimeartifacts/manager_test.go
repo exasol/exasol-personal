@@ -76,10 +76,11 @@ not-embedded:
 	}
 }
 
-func TestParseSpec_RejectsResourcePathWithoutExtraction(t *testing.T) {
+func TestParseSpec_AllowsResourcePathWithoutExtraction(t *testing.T) {
 	t.Parallel()
 
-	// Given
+	// Given — resource_path selects a subpath inside whatever the source
+	// produces, and is valid regardless of source kind or extract flag.
 	raw := []byte(`
 artifact:
   extract: false
@@ -91,11 +92,121 @@ artifact:
 `)
 
 	// When
-	_, err := ParseSpec(raw)
+	spec, err := ParseSpec(raw)
 	// Then
-	if err == nil ||
-		!strings.Contains(err.Error(), "must not define resource_path without archive extraction") {
-		t.Fatalf("expected resource_path validation error, got %v", err)
+	if err != nil {
+		t.Fatalf("expected resource_path without extraction to be valid, got %v", err)
+	}
+	if got := spec["artifact"].Artifact["linux/amd64"].ResourcePath; got != "tofu" {
+		t.Fatalf("expected resource_path %q, got %q", "tofu", got)
+	}
+}
+
+func TestParseSpec_GitURLWithRefIsRecognisedAsGitSource(t *testing.T) {
+	t.Parallel()
+
+	// Given — an ArtifactSpec.URL for a git source that still carries an @ref
+	// suffix (the shape produced by ResolvePreset when a user passes
+	// `repo.git@v1#subpath`). The spec must classify it as a git source so
+	// sha256 is not required.
+	raw := []byte(`
+preset:
+  extract: false
+  artifact:
+    any:
+      url: https://example.com/repo.git@v1
+`)
+
+	// When
+	spec, err := ParseSpec(raw)
+	// Then
+	if err != nil {
+		t.Fatalf("expected git URL with @ref to be recognised as a git source, got %v", err)
+	}
+	wantURL := "https://example.com/repo.git@v1"
+	if got := spec["preset"].Artifact[anyPlatformKey].URL; got != wantURL {
+		t.Fatalf("expected URL to round-trip verbatim, got %q", got)
+	}
+}
+
+func TestManager_ResolveEntry_HonoursResourcePathWithoutExtraction(t *testing.T) {
+	t.Parallel()
+
+	// Given — a non-extract resource with a resource_path. The manager must
+	// apply the subpath to the artifact path regardless of source kind.
+	cacheDir := t.TempDir()
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: "https://example.com/repo.git", ResourcePath: "infra/aws"},
+		},
+	}
+
+	// When
+	entry, err := manager.resolveEntry("preset", def, def.Artifact[anyPlatformKey])
+	// Then
+	if err != nil {
+		t.Fatalf("expected resolveEntry to succeed, got %v", err)
+	}
+	// The download path is the URL basename; the resolved path must point at
+	// the subdirectory joined onto it.
+	wantSuffix := filepath.Join("repo.git", "infra", "aws")
+	if !strings.HasSuffix(entry.ResolvedPath, wantSuffix) {
+		t.Fatalf("expected ResolvedPath to end with %q, got %q", wantSuffix, entry.ResolvedPath)
+	}
+	if entry.ResourcePath != "infra/aws" {
+		t.Fatalf("expected ResourcePath %q, got %q", "infra/aws", entry.ResourcePath)
+	}
+}
+
+func TestManager_ResolveEntry_RejectsTraversalResourcePathWithoutExtraction(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	cacheDir := t.TempDir()
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: "https://example.com/repo.git", ResourcePath: "../escape"},
+		},
+	}
+
+	// When
+	_, err := manager.resolveEntry("preset", def, def.Artifact[anyPlatformKey])
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "resource_path") {
+		t.Fatalf("expected resource_path traversal error, got %v", err)
+	}
+}
+
+func TestManager_ResolveEntry_DifferentSubpathsProduceDistinctEntries(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	cacheDir := t.TempDir()
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	makeDef := func(subpath string) ResourceDefinition {
+		return ResourceDefinition{
+			Extract: false,
+			Artifact: map[string]ArtifactSpec{
+				anyPlatformKey: {URL: "https://example.com/repo.git", ResourcePath: subpath},
+			},
+		}
+	}
+
+	// When
+	defA := makeDef("infra/aws")
+	defB := makeDef("infra/azure")
+	entryA, errA := manager.resolveEntry("preset", defA, defA.Artifact[anyPlatformKey])
+	entryB, errB := manager.resolveEntry("preset", defB, defB.Artifact[anyPlatformKey])
+	// Then
+	if errA != nil || errB != nil {
+		t.Fatalf("expected both resolveEntry calls to succeed, got %v / %v", errA, errB)
+	}
+	if entryA.Key == entryB.Key {
+		t.Fatalf("expected distinct cache keys for different subpaths, both were %q", entryA.Key)
 	}
 }
 
@@ -1185,6 +1296,56 @@ func TestManager_GetFileDirectoryReturnedDirectly(t *testing.T) {
 	}
 	if path != presetDir {
 		t.Fatalf("expected path %q, got %q", presetDir, path)
+	}
+}
+
+func TestManager_GetFileDirectoryWithResourcePathReturnsSubdirectory(t *testing.T) {
+	t.Parallel()
+
+	// Given — a preset root with a nested subdirectory. The manager must apply
+	// resource_path to the redirect target, not silently return the root.
+	presetDir := t.TempDir()
+	subDir := filepath.Join(presetDir, "infra", "aws")
+	if err := os.MkdirAll(subDir, 0o750); err != nil {
+		t.Fatalf("failed to create sub directory: %v", err)
+	}
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: "file://" + presetDir, ResourcePath: "infra/aws"},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+
+	// When
+	path, err := manager.Get(context.Background(), def, "preset-dir")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if path != subDir {
+		t.Fatalf("expected path %q, got %q", subDir, path)
+	}
+}
+
+func TestManager_GetFileDirectoryRejectsTraversalResourcePath(t *testing.T) {
+	t.Parallel()
+
+	// Given — a resource_path that tries to escape the redirect root.
+	presetDir := t.TempDir()
+	def := ResourceDefinition{
+		Extract: false,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: "file://" + presetDir, ResourcePath: "../escape"},
+		},
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+
+	// When
+	_, err := manager.Get(context.Background(), def, "preset-dir")
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "resource_path") {
+		t.Fatalf("expected resource_path traversal error, got %v", err)
 	}
 }
 

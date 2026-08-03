@@ -122,7 +122,9 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 	if strings.TrimSpace(a.URL) == "" {
 		return fmt.Errorf("resource %q artifact %q must define url", ctx.resourceID, ctx.variant)
 	}
-	if IsGitSourceURL(a.URL) {
+	// ArtifactSpec.URL may carry an @ref suffix; strip it before classification.
+	gitRepoURL, _ := ParseGitURL(a.URL)
+	if IsGitSourceURL(gitRepoURL) {
 		if strings.TrimSpace(a.Sha256) != "" {
 			return fmt.Errorf(
 				"resource %q artifact %q must not define sha256 for a git source"+
@@ -139,13 +141,6 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 				ctx.variant,
 			)
 		}
-	}
-	if !ctx.extract && strings.TrimSpace(a.ResourcePath) != "" {
-		return fmt.Errorf(
-			"resource %q artifact %q must not define resource_path without archive extraction",
-			ctx.resourceID,
-			ctx.variant,
-		)
 	}
 
 	return nil
