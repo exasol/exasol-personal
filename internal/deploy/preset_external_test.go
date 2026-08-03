@@ -4,6 +4,8 @@
 package deploy
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"os"
 	"path/filepath"
@@ -78,4 +80,147 @@ func TestResolvePreset_FileDirectoryMissingManifestReturnsError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "does not contain the expected") {
 		t.Fatalf("expected manifest-missing error, got %v", err)
 	}
+}
+
+func TestResolvePreset_FileDirectoryWithFragmentResolvesSubdirectory(t *testing.T) {
+	t.Parallel()
+
+	// Given — a preset root containing a subdirectory with the manifest.
+	presetRoot := t.TempDir()
+	subDir := filepath.Join(presetRoot, "infra", "aws")
+	if err := os.MkdirAll(subDir, 0o750); err != nil {
+		t.Fatalf("failed to create sub directory: %v", err)
+	}
+	manifestPath := filepath.Join(subDir, presets.InfrastructureManifestFilename)
+	if err := os.WriteFile(manifestPath, []byte("kind: infrastructure"), 0o600); err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	manager := runtimeartifacts.NewResourceManagerForPlatform(
+		runtimeartifacts.ResourceSpec{},
+		t.TempDir(),
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
+	// When
+	path, err := ResolvePreset(
+		context.Background(),
+		manager,
+		"file://"+presetRoot+"#infra/aws",
+		presets.PresetTypeInfrastructure,
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got %v", err)
+	}
+	if path != subDir {
+		t.Fatalf("expected path %q, got %q", subDir, path)
+	}
+}
+
+func TestResolvePreset_FileArchiveWithFragmentResolvesSubdirectory(t *testing.T) {
+	t.Parallel()
+
+	// Given — an archive that contains multiple presets under distinct subpaths.
+	fixtureDir := t.TempDir()
+	archivePath := writePresetTarGz(t, fixtureDir, "presets.tar.gz", map[string]string{
+		"infra/aws/" + presets.InfrastructureManifestFilename:         "name: aws",
+		"infra/azure/" + presets.InfrastructureManifestFilename:       "name: azure",
+		"installation/ubuntu/" + presets.InstallationManifestFilename: "name: ubuntu",
+	})
+
+	manager := runtimeartifacts.NewResourceManagerForPlatform(
+		runtimeartifacts.ResourceSpec{},
+		t.TempDir(),
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
+
+	// When — resolve the "aws" preset via a fragment
+	path, err := ResolvePreset(
+		context.Background(),
+		manager,
+		"file://"+archivePath+"#infra/aws",
+		presets.PresetTypeInfrastructure,
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got %v", err)
+	}
+	if !strings.HasSuffix(path, filepath.Join("infra", "aws")) {
+		t.Fatalf("expected resolved path to end with infra/aws, got %q", path)
+	}
+	if _, err := os.Stat(filepath.Join(path, presets.InfrastructureManifestFilename)); err != nil {
+		t.Fatalf("expected manifest in resolved subdirectory, got %v", err)
+	}
+}
+
+func TestResolvePreset_FileArchiveFragmentPointingAtNonPresetSubdirReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// Given — a subdir exists but lacks the required manifest.
+	fixtureDir := t.TempDir()
+	archivePath := writePresetTarGz(t, fixtureDir, "presets.tar.gz", map[string]string{
+		"infra/aws/README.md": "no manifest here",
+	})
+
+	manager := runtimeartifacts.NewResourceManagerForPlatform(
+		runtimeartifacts.ResourceSpec{},
+		t.TempDir(),
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
+
+	// When
+	_, err := ResolvePreset(
+		context.Background(),
+		manager,
+		"file://"+archivePath+"#infra/aws",
+		presets.PresetTypeInfrastructure,
+	)
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "does not contain the expected") {
+		t.Fatalf("expected manifest-missing error, got %v", err)
+	}
+}
+
+// writePresetTarGz creates a .tar.gz with the given path→content entries and
+// returns the archive path. Only regular-file headers are written; nested
+// paths rely on the extractor creating parent directories on demand.
+func writePresetTarGz(t *testing.T, dir, name string, entries map[string]string) string {
+	t.Helper()
+
+	path := filepath.Join(dir, name)
+	outputFile, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create fixture: %v", err)
+	}
+	gzipWriter := gzip.NewWriter(outputFile)
+	tarWriter := tar.NewWriter(gzipWriter)
+
+	for entryName, content := range entries {
+		if err := tarWriter.WriteHeader(&tar.Header{
+			Name:     entryName,
+			Mode:     0o644,
+			Size:     int64(len(content)),
+			Typeflag: tar.TypeReg,
+		}); err != nil {
+			t.Fatalf("tar header %q: %v", entryName, err)
+		}
+		if _, err := tarWriter.Write([]byte(content)); err != nil {
+			t.Fatalf("tar payload %q: %v", entryName, err)
+		}
+	}
+
+	if err := tarWriter.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	if err := outputFile.Close(); err != nil {
+		t.Fatalf("close file: %v", err)
+	}
+
+	return path
 }

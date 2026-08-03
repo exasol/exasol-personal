@@ -33,7 +33,9 @@ func ResolvePreset(
 	uri string,
 	presetType string,
 ) (string, error) {
-	repoURL, ref := runtimeartifacts.ParseGitURL(uri)
+	cleanURI, subpath := parsePresetURI(uri)
+
+	repoURL, ref := runtimeartifacts.ParseGitURL(cleanURI)
 	if ref != "" && !runtimeartifacts.IsGitSourceURL(repoURL) {
 		return "", fmt.Errorf(
 			"@ref syntax (%q) is only valid on git source URLs;"+
@@ -44,9 +46,9 @@ func ResolvePreset(
 	}
 
 	def := runtimeartifacts.ResourceDefinition{
-		Extract: needsExtraction(uri),
+		Extract: needsExtraction(cleanURI),
 		Artifact: map[string]runtimeartifacts.ArtifactSpec{
-			"any": {URL: uri},
+			"any": {URL: cleanURI, ResourcePath: subpath},
 		},
 	}
 

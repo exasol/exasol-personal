@@ -384,11 +384,7 @@ func (m *Manager) getCacheEntry(
 		return "", err
 	}
 
-	if entry.RedirectPath != "" && !entry.Extract {
-		return entry.RedirectPath, nil
-	}
-
-	return m.cache.absolutePath(entry.ResolvedPath), nil
+	return m.returnPath(entry)
 }
 
 func (m *Manager) writeIndexAfterCleanup(index *cacheIndex) error {
@@ -438,11 +434,7 @@ func (m *Manager) refresh(
 		return "", err
 	}
 
-	if entry.RedirectPath != "" && !entry.Extract {
-		return entry.RedirectPath, nil
-	}
-
-	return m.cache.absolutePath(entry.ResolvedPath), nil
+	return m.returnPath(*entry)
 }
 
 // resolveEntry computes the cache slot for a resource: the cache key, relative
@@ -497,19 +489,11 @@ func (m *Manager) resolveEntry(
 		return cacheIndexEntry{}, err
 	}
 
-	resolvedRelPath := artifactRelPath
-	if def.Extract {
-		resolvedAbsPath, err := extractedResourcePath(
-			filepath.Join(entryPath, extractRelPath),
-			resourcePath,
-		)
-		if err != nil {
-			return cacheIndexEntry{}, err
-		}
-		resolvedRelPath, err = m.cache.relativePath(resolvedAbsPath)
-		if err != nil {
-			return cacheIndexEntry{}, err
-		}
+	resolvedRelPath, err := m.resolveResolvedPath(
+		def, entryPath, artifactAbsPath, artifactRelPath, resourcePath,
+	)
+	if err != nil {
+		return cacheIndexEntry{}, err
 	}
 
 	return cacheIndexEntry{
@@ -549,12 +533,48 @@ func artifactIdentity(
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func extractedResourcePath(extractedRoot, resourcePath string) (string, error) {
-	if strings.TrimSpace(resourcePath) == "" {
-		return extractedRoot, nil
+// returnPath computes the effective path returned to callers of Get. For
+// redirect sources (file:// directories or bare files) the returned path is
+// the redirect itself; when resource_path is set, it selects a subdirectory of
+// the redirect target. For cached artifacts, ResolvedPath already encodes the
+// resource_path suffix (see resolveResolvedPath).
+func (m *Manager) returnPath(entry cacheIndexEntry) (string, error) {
+	if entry.RedirectPath != "" && !entry.Extract {
+		if strings.TrimSpace(entry.ResourcePath) == "" {
+			return entry.RedirectPath, nil
+		}
+
+		return pathWithinRoot(entry.RedirectPath, entry.ResourcePath, "resource_path")
 	}
 
-	return pathWithinRoot(extractedRoot, resourcePath, "resource_path")
+	return m.cache.absolutePath(entry.ResolvedPath), nil
+}
+
+// resolveResolvedPath computes the resolved path returned to callers of Get.
+// The root is the extracted directory for archives that are extracted, and the
+// artifact path itself otherwise. A non-empty resource_path selects a
+// subdirectory within that root, applying uniformly regardless of source kind.
+func (m *Manager) resolveResolvedPath(
+	def ResourceDefinition,
+	entryPath, artifactAbsPath, artifactRelPath, resourcePath string,
+) (string, error) {
+	root := artifactAbsPath
+	if def.Extract {
+		root = filepath.Join(entryPath, extractRelPath)
+	}
+	if strings.TrimSpace(resourcePath) == "" {
+		if def.Extract {
+			return m.cache.relativePath(root)
+		}
+
+		return artifactRelPath, nil
+	}
+	resolvedAbsPath, err := pathWithinRoot(root, resourcePath, "resource_path")
+	if err != nil {
+		return "", err
+	}
+
+	return m.cache.relativePath(resolvedAbsPath)
 }
 
 func normalizeSha256(value string) string {

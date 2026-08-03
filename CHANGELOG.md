@@ -16,6 +16,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   `exasol slc list` now shows custom containers alongside official ones with a status column, and `--json` marks them with a `custom` type and an `available` field.
 
+- External preset URIs now accept an optional `#<subpath>` fragment that selects a subdirectory within the resolved source. This lets a single git repository or archive host multiple presets and picks one via `repo.git@v1#infra/aws`. Supported on git URLs, archive URIs (`.tar.gz`/`.tgz`/`.zip`), and local directories, across `http`/`https`/`file` schemes.
+
 ### Changed
 
 - Documented named deployments, the `exasol slc` command group, and `exasol diag local` in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers UDFs and script language containers, and the Limitations section no longer states that UDFs are unavailable on local deployments.

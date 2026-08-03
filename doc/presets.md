@@ -317,6 +317,39 @@ exasol install git@github.com:org/infra-preset.git@main
 
 **`@ref` syntax** — Refs can be branch names, tag names, or full commit SHAs, appended after the last `@`. For SCP-style `git@` URLs the ref follows the repository path (e.g. `git@github.com:org/repo.git@main`). The `@ref` suffix is only valid on git source URLs; using it on a plain archive URL returns an error.
 
+### Selecting a preset from a subdirectory
+
+External preset URIs accept an optional `#<subpath>` fragment that selects a subdirectory within the resolved source. This is how you point at a preset that lives inside a monorepo of related presets.
+
+```bash
+# Git repository at HEAD, preset in a subdirectory
+exasol install https://github.com/org/presets.git#infrastructure/aws
+
+# Git repository at a tag, combined with a subdirectory
+exasol install https://github.com/org/presets.git@v1.2#infra/aws
+
+# Local archive containing multiple presets
+exasol install file:///tmp/presets.tar.gz#installation/ubuntu
+
+# Remote archive containing multiple presets
+exasol install https://example.com/presets.tar.gz#infra/azure
+```
+
+The fragment is supported on:
+
+- Git repositories (any supported scheme).
+- Remote archives (`http://`, `https://`) ending in `.tar.gz`, `.tgz`, or `.zip`.
+- Local archives (`file://`) ending in `.tar.gz`, `.tgz`, or `.zip`.
+- Local directories (`file://`). Pointing the URI at the subdirectory directly is usually clearer, but the fragment is accepted for symmetry.
+
+When a URI includes both `@ref` and `#subpath`, the ref must come first: `repo.git@v1#subpath`. Path traversal segments (`..`) in the subpath are rejected. Different subpaths on the same repository or archive are cached as distinct entries.
+
+Quote URLs on the command line so the shell does not treat `#` as the start of a comment:
+
+```bash
+exasol install "https://github.com/org/presets.git@v1#infra/aws"
+```
+
 ### Remote archives
 
 An `https://` or `http://` URL ending in a recognised archive extension is treated as a remote archive:
@@ -369,3 +402,4 @@ If the manifest is missing, the launcher reports an error before attempting any 
 | `does not contain the expected ... manifest` | The resolved directory lacks the manifest file | Confirm the repository or archive root contains `infrastructure.yaml` / `installation.yaml` |
 | `resource path must be a directory or a supported archive file` | `file://` URI points to a plain file | Use a directory or `.tar.gz` / `.tgz` / `.zip` archive |
 | `@ref syntax ... is only valid on git source URLs` | `@suffix` appended to a non-git URL | Remove the `@ref` or use a `.git` URL |
+| `resource_path ... must stay within cache entry` | Fragment (or `resource_path`) contains `..` | Remove traversal segments; subpaths must stay inside the resolved source |
