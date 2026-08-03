@@ -86,10 +86,21 @@ def test_deployments_list_reports_named_deployments(
     assert "infrastructure" not in empty_named
 
 
-def test_deployments_list_marks_active_entry_from_current_directory(
+def _set_workflow_state(
+    deployment_dir: Path, workflow_state: dict[str, object]
+) -> None:
+    launcher_state_path = deployment_dir / ".exasolLauncherState.json"
+    state = json.loads(launcher_state_path.read_text())
+    state["currentWorkflowState"] = workflow_state
+    launcher_state_path.write_text(json.dumps(state))
+
+
+def test_deployments_list_reports_running_status_for_deployed_deployment(
     exasol_path: str, tmp_path: Path
 ) -> None:
-    # Given a named deployment
+    # Given a named deployment that has been initialized and is now running
+    # (simulated by writing the running workflow state directly, the same
+    # approach test_reconfiguration.py uses to avoid a real deploy)
     home = tmp_path / "home"
     home.mkdir()
     infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
@@ -106,21 +117,24 @@ def test_deployments_list_marks_active_entry_from_current_directory(
         ],
         env=_env_with_home(home),
     )
+    _set_workflow_state(named_dir, {"running": {}})
 
-    # When deployments list is invoked from inside that deployment directory
+    # When deployments list is invoked with --json
     result = subprocess.run(
         [launcher, "deployments", "list", "--json"],
-        cwd=named_dir,
         env=_env_with_home(home),
         capture_output=True,
         text=True,
         check=True,
     )
 
-    # Then only that entry is marked active
+    # Then the entry reports status "running" and keeps its preset identity
     entries = json.loads(result.stdout)
-    active_entries = [entry["name"] for entry in entries if entry["active"]]
-    assert active_entries == ["staging"]
+    staging = next(entry for entry in entries if entry["name"] == "staging")
+    assert staging["status"] == "running"
+    assert staging["infrastructure"]
+    assert staging["installation"]
+    assert "active" not in staging
 
 
 def test_deployments_list_does_not_accept_deployment_dir_or_deployment(
