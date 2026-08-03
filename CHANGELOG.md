@@ -26,9 +26,9 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol status --deployment demo` targets the named `demo` deployment. `--deployment` and `--deployment-dir` cannot be used together.
 
-- Added `exasol deployments list` to show default and named deployment directories, their status, and which deployment is currently active.
+- Added `exasol deployments list` to show default and named deployment directories and their deployment status (`not_initialized`, `initialized`, `operation_in_progress`, `interrupted`, `deployment_failed`, `stopped`, or `running`), the same status vocabulary as `exasol status`.
 
-  The list helps users distinguish the default deployment from named deployments and spot missing or inactive deployment directories.
+  The list helps users distinguish the default deployment from named deployments and see at a glance which ones are deployed and running.
 
 - Added the `exasol slc` command group (`install`, `list`, `update`, `remove`) to manage official script language containers (SLCs) in local deployments. Local deployments ship without any SLC, so UDFs in a given language only run once its container is installed.
 

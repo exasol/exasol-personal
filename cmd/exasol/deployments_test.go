@@ -4,11 +4,13 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/deploy"
 )
 
 //nolint:paralleltest // t.Chdir and t.Setenv change process state.
@@ -17,7 +19,7 @@ func TestListDeploymentDirectories_EmptyWhenRootMissing(t *testing.T) {
 	setTestHome(t, home)
 	t.Chdir(t.TempDir())
 
-	entries, err := listDeploymentDirectories()
+	entries, err := listDeploymentDirectories(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -36,7 +38,7 @@ func TestListDeploymentDirectories_SortsAlphabeticallyAndIgnoresNonDirectories(t
 	mkdirTest(t, filepath.Join(deploymentsRoot, "prod-aws"))
 	writeTestMarker(t, filepath.Join(deploymentsRoot, "not-a-directory"))
 
-	entries, err := listDeploymentDirectories()
+	entries, err := listDeploymentDirectories(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -56,17 +58,17 @@ func TestListDeploymentDirectories_ReportsNotInitializedForUnrecognizedDirectory
 	deploymentsRoot := filepath.Join(config.LauncherDirPath(home), "deployments")
 	mkdirTest(t, filepath.Join(deploymentsRoot, "empty"))
 
-	entries, err := listDeploymentDirectories()
+	entries, err := listDeploymentDirectories(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if len(entries) != 1 || entries[0].Status != deploymentStatusNotInitialized {
+	if len(entries) != 1 || entries[0].Status != deploy.StatusNotInitialized {
 		t.Fatalf("expected a single not_initialized entry, got: %#v", entries)
 	}
 }
 
 //nolint:paralleltest // t.Chdir and t.Setenv change process state.
-func TestListDeploymentDirectories_ReportsInitializedForLegacyMarkerOnlyDirectory(t *testing.T) {
+func TestListDeploymentDirectories_ReportsNotInitializedForLegacyMarkerOnlyDirectory(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)
 	t.Chdir(t.TempDir())
@@ -75,66 +77,62 @@ func TestListDeploymentDirectories_ReportsInitializedForLegacyMarkerOnlyDirector
 	mkdirTest(t, legacyDir)
 	writeTestMarker(t, filepath.Join(legacyDir, legacyWorkflowStateMarker))
 
-	entries, err := listDeploymentDirectories()
+	// A directory recognized only via the legacy .workflowState.json marker
+	// (no modern state file) has no lifecycle state for deploy.GetStatus to
+	// read, so it is reported as not_initialized.
+	entries, err := listDeploymentDirectories(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if len(entries) != 1 || entries[0].Status != deploymentStatusInitialized {
-		t.Fatalf("expected a single initialized entry, got: %#v", entries)
+	if len(entries) != 1 || entries[0].Status != deploy.StatusNotInitialized {
+		t.Fatalf("expected a single not_initialized entry, got: %#v", entries)
 	}
 }
 
 //nolint:paralleltest // t.Chdir and t.Setenv change process state.
-func TestListDeploymentDirectories_MarksActiveEntryFromCwd(t *testing.T) {
+func TestListDeploymentDirectories_ReportsUnparseableStateFileAsNotInitialized(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)
+	t.Chdir(t.TempDir())
 	deploymentsRoot := filepath.Join(config.LauncherDirPath(home), "deployments")
-	activeDir := filepath.Join(deploymentsRoot, "staging")
-	mkdirTest(t, activeDir)
-	writeTestMarker(t, filepath.Join(activeDir, config.ExasolPersonalStateFileName))
-	mkdirTest(t, filepath.Join(deploymentsRoot, "prod-aws"))
-	t.Chdir(activeDir)
+	corruptDir := filepath.Join(deploymentsRoot, "corrupt")
+	mkdirTest(t, corruptDir)
+	writeTestMarker(t, filepath.Join(corruptDir, config.ExasolPersonalStateFileName))
 
-	entries, err := listDeploymentDirectories()
+	entries, err := listDeploymentDirectories(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-
-	activeCount := 0
-	for _, entry := range entries {
-		if !entry.Active {
-			continue
-		}
-
-		activeCount++
-		if entry.Name != "staging" {
-			t.Fatalf("expected staging to be active, got: %q", entry.Name)
-		}
+	if len(entries) != 1 || entries[0].Status != deploy.StatusNotInitialized {
+		t.Fatalf("expected a single not_initialized entry, got: %#v", entries)
 	}
-	if activeCount != 1 {
-		t.Fatalf("expected exactly one active entry, got: %d", activeCount)
+	if entries[0].Infrastructure != "" || entries[0].Installation != "" {
+		t.Fatalf("expected no preset identity, got: %#v", entries[0])
 	}
 }
 
 //nolint:paralleltest // t.Chdir and t.Setenv change process state.
-func TestListDeploymentDirectories_NoEntryActiveWhenActiveDirOutsideListedTree(t *testing.T) {
+func TestListDeploymentDirectories_ReportsRunningStatusAndPresetIdentity(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)
+	t.Chdir(t.TempDir())
 	deploymentsRoot := filepath.Join(config.LauncherDirPath(home), "deployments")
-	mkdirTest(t, filepath.Join(deploymentsRoot, "staging"))
-	outsideDir := t.TempDir()
-	writeTestMarker(t, filepath.Join(outsideDir, config.ExasolPersonalStateFileName))
-	t.Chdir(outsideDir)
+	runningDir := filepath.Join(deploymentsRoot, "running")
+	mkdirTest(t, runningDir)
+	writeRunningStateWithPresetIdentity(t, runningDir, "name:aws", "name:standard")
 
-	entries, err := listDeploymentDirectories()
+	entries, err := listDeploymentDirectories(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-
-	for _, entry := range entries {
-		if entry.Active {
-			t.Fatalf("expected no entry to be active, got: %#v", entry)
-		}
+	if len(entries) != 1 {
+		t.Fatalf("expected a single entry, got: %#v", entries)
+	}
+	if entries[0].Status != deploy.StatusRunning {
+		t.Fatalf("expected status %q, got %#v", deploy.StatusRunning, entries[0])
+	}
+	if entries[0].Infrastructure != "aws" || entries[0].Installation != "standard" {
+		t.Fatalf("expected preset identity to be displayed, got: %#v", entries[0])
 	}
 }
 
@@ -154,5 +152,24 @@ func mkdirTest(t *testing.T, path string) {
 
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		t.Fatalf("failed to create directory: %v", err)
+	}
+}
+
+func writeRunningStateWithPresetIdentity(
+	t *testing.T,
+	deploymentPath string,
+	infrastructureIdentity string,
+	installationIdentity string,
+) {
+	t.Helper()
+
+	deployment := config.NewDeploymentDir(deploymentPath)
+	state := &config.ExasolPersonalState{
+		InfrastructurePresetIdentity: infrastructureIdentity,
+		InstallationPresetIdentity:   installationIdentity,
+	}
+	err := state.SetWorkflowStateAndWrite(&config.WorkflowStateRunning{}, deployment)
+	if err != nil {
+		t.Fatalf("failed to write running state: %v", err)
 	}
 }
