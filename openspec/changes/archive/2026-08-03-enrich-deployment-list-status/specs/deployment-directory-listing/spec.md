@@ -1,37 +1,24 @@
-# deployment-directory-listing Specification
+## REMOVED Requirements
 
-## Purpose
-Define how `exasol deployments list` enumerates known deployment directories and reports their deployment status and preset identity, so users can discover and manage multiple named deployment directories.
-## Requirements
-### Requirement: CLI SHALL list known deployment directories
-`exasol deployments list` SHALL enumerate the deployment directories under `~/.exasol/personal/deployments/`, including the default deployment directory and every named deployment directory.
+### Requirement: Listing SHALL report initialization status and preset identity
+**Reason**: Superseded by a requirement to report the full deployment lifecycle status instead of a binary initialized/not_initialized check. See the ADDED "Listing SHALL report deployment status and preset identity" requirement below.
+**Migration**: Consumers parsing `status` must accept the full lifecycle vocabulary (`not_initialized`, `initialized`, `operation_in_progress`, `interrupted`, `deployment_failed`, `stopped`, `running`) instead of assuming only `initialized`/`not_initialized`. Consumers that only checked `status == "not_initialized"` need no change; any value other than `not_initialized` still indicates preset identity is present.
 
-#### Scenario: Listing shows the default deployment directory
-- **WHEN** a user runs `exasol deployments list`
-- **AND** `~/.exasol/personal/deployments/default` exists
-- **THEN** the output includes an entry for `default` with its resolved path
+### Requirement: Listing SHALL indicate the currently active deployment directory
+**Reason**: The `active` field indicated CWD-based directory-selection precedence (which directory a flagless command would target), not deployment lifecycle state. This was judged unintuitive and not useful in a command whose purpose is to list every deployment directory at once.
+**Migration**: No replacement field is added. A user who needs to know which directory a flagless command would currently target should run that command directly (e.g. `exasol status`), which reports the resolved deployment directory.
 
-#### Scenario: Listing shows named deployment directories
-- **WHEN** a user runs `exasol deployments list`
-- **AND** one or more named deployment directories exist under `~/.exasol/personal/deployments/`
-- **THEN** the output includes one entry per named deployment directory, with its name and resolved path
+## MODIFIED Requirements
 
-#### Scenario: Listing is empty when no deployment directories exist
-- **WHEN** a user runs `exasol deployments list`
-- **AND** `~/.exasol/personal/deployments/` does not exist or contains no deployment directories
-- **THEN** the command succeeds
-- **AND** the output indicates that no deployment directories exist
+### Requirement: Listing SHALL support JSON output
+`exasol deployments list` SHALL support a `--json` flag that emits the same information as structured JSON instead of human-readable text.
 
-#### Scenario: Non-directory entries are ignored
-- **WHEN** a user runs `exasol deployments list`
-- **AND** `~/.exasol/personal/deployments/` contains a non-directory entry (a file or symlink)
-- **THEN** the output does not include an entry for it
-- **AND** the command does not fail because of it
+#### Scenario: JSON output includes all listed fields
+- **WHEN** a user runs `exasol deployments list --json`
+- **THEN** stdout is valid JSON
+- **AND** each entry includes name, path, status, and preset identity when the status is not `not_initialized`
 
-#### Scenario: Listing is sorted alphabetically by name
-- **WHEN** a user runs `exasol deployments list`
-- **AND** more than one deployment directory exists under `~/.exasol/personal/deployments/`
-- **THEN** the entries appear in alphabetical order by name, regardless of filesystem iteration order
+## ADDED Requirements
 
 ### Requirement: Listing SHALL report deployment status and preset identity
 For each listed deployment directory, `exasol deployments list` SHALL report its deployment lifecycle status using the same status vocabulary as `exasol status` (`not_initialized`, `initialized`, `operation_in_progress`, `interrupted`, `deployment_failed`, `stopped`, `running`), and when that status is not `not_initialized`, its infrastructure and installation preset identity.
@@ -71,11 +58,3 @@ For each listed deployment directory, `exasol deployments list` SHALL report its
 - **AND** a listed deployment directory's status is not `not_initialized` but its preset identity is not yet persisted in its state file
 - **THEN** that entry reports a derived preset identity
 - **AND** the deployment directory's state file is not modified as a result of running `exasol deployments list`
-
-### Requirement: Listing SHALL support JSON output
-`exasol deployments list` SHALL support a `--json` flag that emits the same information as structured JSON instead of human-readable text.
-
-#### Scenario: JSON output includes all listed fields
-- **WHEN** a user runs `exasol deployments list --json`
-- **THEN** stdout is valid JSON
-- **AND** each entry includes name, path, status, and preset identity when the status is not `not_initialized`
