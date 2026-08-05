@@ -22,7 +22,11 @@ tfstate*
 .terraform-providers/
 .terraform/
 __pycache__
-coverage.out
+coverage-unit.out
+coverage-integration.out
+covdata-integration/
+coverage-integration-linux/
+coverage-integration-windows/
 
 # Credentials and secrets
 *.pem
