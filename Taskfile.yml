@@ -59,7 +59,7 @@ tasks:
   # variable messes with path separators and results in incompatible
   # with Windows path.
   build:
-    desc: Build the binary
+    desc: 'Build the binary. COVERAGE=true enables coverage instrumentation.'
     # {{env "GOOS/GOARCH"}}: passes the ambient cross-compile target (if any)
     # through to generate's TARGET_GOOS/TARGET_GOARCH, so its embedded
     # resources are staged for that target rather than just the host.
@@ -70,12 +70,14 @@ tasks:
           TARGET_GOARCH: '{{env "GOARCH"}}'
     vars:
       DEBUG_BUILD: '{{default "false" .DEBUG_BUILD}}'
+      COVERAGE: '{{default "false" .COVERAGE}}'
     env:
       CGO_ENABLED: "0"
     cmds:
       - |
         version=$(git describe --tags --abbrev=0) # First character is "v".
         go build -o {{.BUILD_DIR_NAME}}/{{.BINARY_NAME}} \
+          {{if eq .COVERAGE "true"}}-cover -covermode=atomic {{end}}\
           {{if eq .DEBUG_BUILD "true"}}-gcflags="all=-N -l"{{else}}-trimpath \
           -gcflags=all=-l{{end}} \
           -ldflags "{{if ne .DEBUG_BUILD "true"}}-s -w {{end}}-X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}
@@ -143,8 +145,8 @@ tasks:
       TEST: '{{default "" .TEST}}'
       COVERAGE: '{{default "false" .COVERAGE}}'
     cmds:
-      - go test -v -race{{if eq .COVERAGE "true"}} -coverprofile=coverage.out -covermode=atomic{{end}}{{if .TEST}} -run "{{.TEST}}"{{end}} ./...
-      - '{{if eq .COVERAGE "true"}}go tool cover -func=coverage.out{{end}}'
+      - go test -v -race{{if eq .COVERAGE "true"}} -coverprofile=coverage-unit.out -covermode=atomic{{end}}{{if .TEST}} -run "{{.TEST}}"{{end}} ./...
+      - '{{if eq .COVERAGE "true"}}go tool cover -func=coverage-unit.out{{end}}'
 
   tests-unit-find:
     desc: Find Go unit test names by wildcard on Linux (`task tests-unit-find TEST=*Ready*`)
@@ -157,11 +159,18 @@ tasks:
         go test -json ./... | jq -r 'select(.Action=="run") | .Test'
 
   tests-integration:
-    desc: Run integration tests
+    desc: 'Run integration tests. COVERAGE=true collects Go coverage from the exasol binary.'
     deps: [tests-setup]
     dir: '{{.TESTS_DIR}}'
+    vars:
+      COVERAGE: '{{default "false" .COVERAGE}}'
+      GOCOVERDIR_PATH: '{{.ROOT_PATH}}{{.SEP}}covdata-integration'
+    env:
+      GOCOVERDIR: '{{if eq .COVERAGE "true"}}{{.GOCOVERDIR_PATH}}{{end}}'
     cmds:
+      - '{{if eq .COVERAGE "true"}}rm -rf {{.GOCOVERDIR_PATH}} && mkdir -p {{.GOCOVERDIR_PATH}}{{end}}'
       - poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}integration
+      - '{{if eq .COVERAGE "true"}}go tool covdata textfmt -i={{.GOCOVERDIR_PATH}} -o={{.ROOT_PATH}}{{.SEP}}coverage-integration.out{{end}}'
 
   tests-deployment:
     desc: Run deployment tests (`e.g. task tests-deployment INFRA=aws TEST=test_standard_deployment.py::test_license_session_limit`)
@@ -304,7 +313,11 @@ tasks:
     desc: Clean build artifacts
     cmds:
       - rm -rf {{.BUILD_DIR}}
-      - rm -f coverage.out
+      - rm -f coverage-unit.out
+      - rm -f coverage-integration.out
+      - rm -rf covdata-integration
+      - rm -rf coverage-integration-linux
+      - rm -rf coverage-integration-windows
 
   fmt-golang:
     desc: Format Go code

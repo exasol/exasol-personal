@@ -5,6 +5,13 @@ runs:
   steps:
     - name: Setup Python and Task
       uses: ./.github/actions/setup-python
+    - name: Setup Go
+      uses: ./.github/actions/setup-go
     - name: Run Integration Tests
       shell: bash
-      run: task tests-integration
+      run: task tests-integration COVERAGE=true
+    - name: Upload integration coverage report
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: coverage-integration-${{ runner.os }}
+        path: coverage-integration.out

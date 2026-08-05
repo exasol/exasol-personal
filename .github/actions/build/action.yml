@@ -7,4 +7,4 @@ runs:
       uses: ./.github/actions/setup-go
     - name: Build
       shell: bash
-      run: task build
+      run: task build COVERAGE=true
