@@ -10,15 +10,11 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
-- Fixed `exasol connect` mis-parsing a script definition that follows another `CREATE` statement in the same input. A leading statement such as `CREATE SCHEMA s;` was joined with the statements after it and sent as one, failing with `syntax error ... expecting END_OF_INPUT_`.
-
-  Example: a file containing `CREATE SCHEMA IF NOT EXISTS s;`, `OPEN SCHEMA s;` and a `CREATE ... SCRIPT ... /` definition now runs all three statements instead of failing on line 2.
-
 ### Breaking Changes
 
 - None.
 
-## 2.2.0 - 2026-07-24
+## 2.2.0 - 2026-08-06
 
 ### Added
 
@@ -63,6 +59,10 @@ Notable user-facing changes to Exasol Personal are documented here.
   Example: `exasol connect -f create_udf.sql` no longer fails with `syntax error, unexpected '}'` when the script body contains semicolons.
 
 - Fixed local deployments getting stuck in `operation_in_progress` when a Start or Stop operation failed; the interruption is now recorded so the deployment can be operated on again.
+
+- Fixed `exasol connect` mis-parsing a script definition that follows another `CREATE` statement in the same input. A leading statement such as `CREATE SCHEMA s;` was joined with the statements after it and sent as one, failing with `syntax error ... expecting END_OF_INPUT_`.
+
+  Example: a file containing `CREATE SCHEMA IF NOT EXISTS s;`, `OPEN SCHEMA s;` and a `CREATE ... SCRIPT ... /` definition now runs all three statements instead of failing on line 2.
 
 ### Breaking Changes
 
