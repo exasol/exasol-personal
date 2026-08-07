@@ -39,95 +39,13 @@ func init() {
 	// Install creates (init) and then operates on (deploy) the deployment directory.
 	requireDeploymentFileLogging(installCmd)
 
-	installCmd.Long = strings.TrimRight(installCmd.Long, "\n") +
-		"\n\t" + presetNamesForHelp(presets.PresetTypeInfrastructure,
-		presets.ListEmbeddedInfrastructuresPresets()) +
-		"\n\t" + presetNamesForHelp(presets.PresetTypeInstallation,
-		presets.ListEmbeddedInstallationsPresets())
-
-	if matrix := embeddedPresetCompatibilityMatrix(); matrix != "" {
-		installCmd.Long += "\n\n\t" + strings.ReplaceAll(matrix, "\n", "\n\t")
-	}
+	appendInstallCmdPresetHelp()
 
 	// Run initialization
-	installCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		cmd.SilenceUsage = true
-
-		deployment := commonFlags.Deployment()
-		wasInitialized, err := config.HasExasolPersonalStateFile(deployment)
-		if err != nil {
-			return err
-		}
-		infraVars := collectInfrastructureVariableOverrides(cmd)
-		installVars := collectInstallationVariableOverrides(cmd)
-		infraPreset, err := resolvePresetRef(
-			cmd.Context(),
-			args[0],
-			presets.PresetTypeInfrastructure,
-		)
-		if err != nil {
-			return err
-		}
-		installPreset, err := resolveInstallationPresetRef(cmd.Context(), args, 1, infraPreset)
-		if err != nil {
-			return err
-		}
-
-		if wasInitialized {
-			if err := prepareInitializedInstall(
-				cmd,
-				deployment,
-				infraPreset,
-				installPreset,
-				infraVars,
-				installVars,
-			); err != nil {
-				return fmt.Errorf("initialization failed: %w", err)
-			}
-		} else {
-			if err := deploy.InitDeployment(
-				cmd.Context(),
-				infraPreset,
-				installPreset,
-				infraVars,
-				installVars,
-				deployment,
-				!commonFlags.NoLauncherVersionCheck,
-				CurrentLauncherVersion,
-			); err != nil {
-				return fmt.Errorf("initialization failed: %w", err)
-			}
-		}
-
-		if err := setupDeploymentLogSession(cmd, deployment); err != nil {
-			return err
-		}
-		addTerminalNotice(deploy.EulaNoticeText)
-
-		return nil
-	}
+	installCmd.PreRunE = runInstallPreRun
 
 	// Perform deployment after initialization completes.
-	installCmd.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
-		deployment := commonFlags.Deployment()
-		if err := deploy.Deploy(
-			cmd.Context(),
-			deployment,
-			commonFlags.DeployVerbose,
-			deploy.DeployOptions{
-				UpdateDependencyLockfile: commonFlags.DeployTofuUpdateLockfile,
-			},
-		); err != nil {
-			return fmt.Errorf("deployment failed: %w", err)
-		}
-
-		err := addConnectionInstructionsTerminalOutput(deployment)
-		if err != nil {
-			return fmt.Errorf("failed to print deployment info: %w", err)
-		}
-
-		return nil
-	}
+	installCmd.PersistentPostRunE = runInstallPersistentPostRun
 
 	// Make "install" runnable without subcommands; no-op RunE prevents usage output.
 	// init runs in PreRunE, deploy runs in PersistentPostRunE
@@ -139,6 +57,128 @@ func init() {
 	registerVerboseFlag(installCmd, commonFlags)
 	registerDeployFlags(installCmd, commonFlags)
 	rootCmd.AddCommand(installCmd)
+}
+
+// appendInstallCmdPresetHelp adds the list of embedded presets and their
+// compatibility matrix to the command's long description.
+func appendInstallCmdPresetHelp() {
+	installCmd.Long = strings.TrimRight(installCmd.Long, "\n") +
+		"\n\t" + presetNamesForHelp(presets.PresetTypeInfrastructure,
+		presets.ListEmbeddedInfrastructuresPresets()) +
+		"\n\t" + presetNamesForHelp(presets.PresetTypeInstallation,
+		presets.ListEmbeddedInstallationsPresets())
+
+	if matrix := embeddedPresetCompatibilityMatrix(); matrix != "" {
+		installCmd.Long += "\n\n\t" + strings.ReplaceAll(matrix, "\n", "\n\t")
+	}
+}
+
+func runInstallPreRun(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
+
+	deployment := commonFlags.Deployment()
+	wasInitialized, err := config.HasExasolPersonalStateFile(deployment)
+	if err != nil {
+		return err
+	}
+	infraVars := collectInfrastructureVariableOverrides(cmd)
+	installVars := collectInstallationVariableOverrides(cmd)
+	infraPreset, err := resolvePresetRef(
+		cmd.Context(),
+		args[0],
+		presets.PresetTypeInfrastructure,
+	)
+	if err != nil {
+		return err
+	}
+	installPreset, err := resolveInstallationPresetRef(cmd.Context(), args, 1, infraPreset)
+	if err != nil {
+		return err
+	}
+
+	if err := initializeInstall(
+		cmd,
+		deployment,
+		wasInitialized,
+		infraPreset,
+		installPreset,
+		infraVars,
+		installVars,
+	); err != nil {
+		return err
+	}
+
+	if err := setupDeploymentLogSession(cmd, deployment); err != nil {
+		return err
+	}
+	addTerminalNotice(deploy.EulaNoticeText)
+
+	return nil
+}
+
+// initializeInstall either reconciles an already-initialized deployment with
+// the requested presets, or creates a new deployment from scratch.
+//
+//nolint:revive // wasInitialized reflects on-disk deployment state, not internal control coupling.
+func initializeInstall(
+	cmd *cobra.Command,
+	deployment config.DeploymentDir,
+	wasInitialized bool,
+	infraPreset deploy.PresetRef,
+	installPreset deploy.PresetRef,
+	infraVars map[string]string,
+	installVars map[string]string,
+) error {
+	if wasInitialized {
+		if err := prepareInitializedInstall(
+			cmd,
+			deployment,
+			infraPreset,
+			installPreset,
+			infraVars,
+			installVars,
+		); err != nil {
+			return fmt.Errorf("initialization failed: %w", err)
+		}
+
+		return nil
+	}
+
+	if err := deploy.InitDeployment(
+		cmd.Context(),
+		infraPreset,
+		installPreset,
+		infraVars,
+		installVars,
+		deployment,
+		!commonFlags.NoLauncherVersionCheck,
+		CurrentLauncherVersion,
+	); err != nil {
+		return fmt.Errorf("initialization failed: %w", err)
+	}
+
+	return nil
+}
+
+func runInstallPersistentPostRun(cmd *cobra.Command, _ []string) error {
+	deployment := commonFlags.Deployment()
+	if err := deploy.Deploy(
+		cmd.Context(),
+		deployment,
+		commonFlags.DeployVerbose,
+		deploy.DeployOptions{
+			UpdateDependencyLockfile: commonFlags.DeployTofuUpdateLockfile,
+		},
+	); err != nil {
+		return fmt.Errorf("deployment failed: %w", err)
+	}
+
+	err := addConnectionInstructionsTerminalOutput(deployment)
+	if err != nil {
+		return fmt.Errorf("failed to print deployment info: %w", err)
+	}
+
+	return nil
 }
 
 func prepareInitializedInstall(

@@ -92,41 +92,66 @@ func renderPresetSection(writer io.Writer, header string, presetsList []Preset) 
 
 func renderPresetListText(writer io.Writer, typeFilter string, catalog PresetCatalog) error {
 	filter := normalizePresetTypeFilter(typeFilter)
-	if filter != "" {
-		if _, ok := findPresetTypeHandler(filter); !ok {
-			return fmt.Errorf(
-				"invalid preset type %q (expected one of: %s)",
-				typeFilter,
-				allowedPresetTypes(),
-			)
-		}
+	if err := validateRenderPresetTypeFilter(filter, typeFilter); err != nil {
+		return err
 	}
 
-	wroteAny := false
-	writeSection := func(header string, presetsList []Preset) error {
-		if wroteAny {
-			if _, err := fmt.Fprintln(writer); err != nil {
-				return err
-			}
-		}
-		wroteAny = true
-
-		return renderPresetSection(writer, header, presetsList)
-	}
-
-	for _, h := range presetTypeHandlers {
-		if filter != "" && filter != h.Type {
-			continue
-		}
-		if err := writeSection(h.Header, h.GetFromCatalog(catalog)); err != nil {
-			return err
-		}
+	wroteAny, err := writeFilteredPresetSections(writer, filter, catalog)
+	if err != nil {
+		return err
 	}
 
 	if filter != "" {
 		return nil
 	}
 
+	return writePresetAppendix(writer, wroteAny)
+}
+
+func validateRenderPresetTypeFilter(filter, typeFilter string) error {
+	if filter == "" {
+		return nil
+	}
+	if _, ok := findPresetTypeHandler(filter); !ok {
+		return fmt.Errorf(
+			"invalid preset type %q (expected one of: %s)",
+			typeFilter,
+			allowedPresetTypes(),
+		)
+	}
+
+	return nil
+}
+
+// writeFilteredPresetSections writes one section per preset type handler that
+// matches filter (all of them when filter is empty), separated by blank
+// lines. It reports whether any section was written.
+func writeFilteredPresetSections(
+	writer io.Writer, filter string, catalog PresetCatalog,
+) (bool, error) {
+	wroteAny := false
+
+	for _, handler := range presetTypeHandlers {
+		if filter != "" && filter != handler.Type {
+			continue
+		}
+		if wroteAny {
+			if _, err := fmt.Fprintln(writer); err != nil {
+				return wroteAny, err
+			}
+		}
+		section := handler.GetFromCatalog(catalog)
+		if err := renderPresetSection(writer, handler.Header, section); err != nil {
+			return wroteAny, err
+		}
+		wroteAny = true
+	}
+
+	return wroteAny, nil
+}
+
+//nolint:revive // wroteAny reflects prior output state, not internal control coupling.
+func writePresetAppendix(writer io.Writer, wroteAny bool) error {
 	appendix := embeddedPresetAppendixText()
 	if appendix == "" {
 		return nil
