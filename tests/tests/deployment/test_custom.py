@@ -3,7 +3,6 @@
 
 """Tests using a deployment with custom configuration."""
 
-import logging
 import subprocess
 import textwrap
 from collections.abc import Iterator
@@ -110,24 +109,16 @@ def test_custom_deployment_rejects_small_instance_types(
 
     expected_instance_type = request.getfixturevalue("instance_type")
 
-    try:
+    def deploy_with_undersized_instance_type() -> None:
         _deployment, config = request.getfixturevalue("custom_deployment")
-    except (subprocess.CalledProcessError, RuntimeError):
-        # Expected failure from Terraform or deployment layer - pass
-        logging.info(
-            "Expected deployment failure for instance_type=%s",
-            expected_instance_type,
-        )
-        return
-    except Exception as unexpected:
-        logging.exception(
-            "Unexpected exception occurred for instance_type=%s",
-            expected_instance_type,
-        )
-        pytest.fail(f"Unexpected exception type: {type(unexpected).__name__}")
-    else:
         assert config.instance_type == expected_instance_type
         pytest.fail(f"Deployment should fail for instance_type={config.instance_type}")
+
+    # Deployment is expected to fail (via Terraform or the deployment layer) for
+    # undersized instance types. Any other exception fails the test with its own
+    # traceback; if deployment succeeds instead, `pytest.fail` above fails it too.
+    with pytest.raises((subprocess.CalledProcessError, RuntimeError)):
+        deploy_with_undersized_instance_type()
 
 
 def test_custom_deployment_success(
