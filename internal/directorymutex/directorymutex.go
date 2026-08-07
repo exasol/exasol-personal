@@ -222,36 +222,44 @@ func (m *DirectoryMutex) tryAcquire(mode lockMode) (bool, error) {
 
 	switch mode {
 	case modeExclusive:
-		if marker != nil {
-			return false, errWouldBlock
-		}
-
-		return m.createMarker(exclusiveMarkerName)
+		return m.tryAcquireExclusive(marker)
 	case modeShared:
-		if marker == nil {
-			return m.createMarker(sharedMarkerName(1))
-		}
-		if marker.mode == modeExclusive {
-			return false, errWouldBlock
-		}
-		if marker.mode != modeShared {
-			return false, ErrInvalidMarker
-		}
-
-		nextName := sharedMarkerName(marker.count + 1)
-		nextPath := filepath.Join(m.path, nextName)
-		if err := os.Rename(marker.path, nextPath); err != nil {
-			if os.IsNotExist(err) || os.IsExist(err) {
-				return false, errWouldBlock
-			}
-
-			return false, err
-		}
-
-		return true, nil
+		return m.tryAcquireShared(marker)
 	default:
 		return false, fmt.Errorf("unsupported lock mode: %d", mode)
 	}
+}
+
+func (m *DirectoryMutex) tryAcquireExclusive(marker *markerInfo) (bool, error) {
+	if marker != nil {
+		return false, errWouldBlock
+	}
+
+	return m.createMarker(exclusiveMarkerName)
+}
+
+func (m *DirectoryMutex) tryAcquireShared(marker *markerInfo) (bool, error) {
+	if marker == nil {
+		return m.createMarker(sharedMarkerName(1))
+	}
+	if marker.mode == modeExclusive {
+		return false, errWouldBlock
+	}
+	if marker.mode != modeShared {
+		return false, ErrInvalidMarker
+	}
+
+	nextName := sharedMarkerName(marker.count + 1)
+	nextPath := filepath.Join(m.path, nextName)
+	if err := os.Rename(marker.path, nextPath); err != nil {
+		if os.IsNotExist(err) || os.IsExist(err) {
+			return false, errWouldBlock
+		}
+
+		return false, err
+	}
+
+	return true, nil
 }
 
 func (m *DirectoryMutex) tryRelease(mode lockMode) (bool, error) {
