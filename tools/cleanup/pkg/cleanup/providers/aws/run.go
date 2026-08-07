@@ -42,35 +42,62 @@ func PlanActions(details *DeploymentDetails, typeFilter []ResourceType) ([]Actio
 	if details == nil || len(details.Resources) == 0 {
 		return nil, ErrNoResourcesPlanned
 	}
-	filter := map[ResourceType]struct{}{}
-	for _, t := range typeFilter {
-		filter[t] = struct{}{}
-	}
+	filter := buildTypeFilter(typeFilter)
 	plan := BuildPlan()
 	var actions []Action
 	for _, phase := range plan.Phases {
-		for _, resource := range details.Resources {
-			if !containsType(phase.Types, resource.Ref.Type) {
-				continue
-			}
-			if len(filter) > 0 {
-				if _, ok := filter[resource.Ref.Type]; !ok {
-					continue
-				}
-			}
-			act := Action{Ref: resource.Ref, Op: opForResource(resource), Reason: ""}
-			if resource.Protected {
-				act.Op = OpSkip
-				act.Reason = "protected"
-			}
-			actions = append(actions, act)
-		}
+		actions = append(actions, actionsForPhase(phase, details.Resources, filter)...)
 	}
 	if len(actions) == 0 {
 		return nil, ErrNoResourcesPlanned
 	}
 
 	return actions, nil
+}
+
+func buildTypeFilter(typeFilter []ResourceType) map[ResourceType]struct{} {
+	filter := map[ResourceType]struct{}{}
+	for _, t := range typeFilter {
+		filter[t] = struct{}{}
+	}
+
+	return filter
+}
+
+// actionsForPhase builds the actions for resources belonging to a single phase.
+func actionsForPhase(phase Phase, resources []ResourceMeta, filter map[ResourceType]struct{}) []Action {
+	var actions []Action
+	for _, resource := range resources {
+		if !resourceMatchesPhase(resource, phase, filter) {
+			continue
+		}
+		actions = append(actions, buildAction(resource))
+	}
+
+	return actions
+}
+
+func resourceMatchesPhase(resource ResourceMeta, phase Phase, filter map[ResourceType]struct{}) bool {
+	if !containsType(phase.Types, resource.Ref.Type) {
+		return false
+	}
+	if len(filter) > 0 {
+		if _, ok := filter[resource.Ref.Type]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func buildAction(resource ResourceMeta) Action {
+	act := Action{Ref: resource.Ref, Op: opForResource(resource), Reason: ""}
+	if resource.Protected {
+		act.Op = OpSkip
+		act.Reason = "protected"
+	}
+
+	return act
 }
 
 func containsType(list []ResourceType, t ResourceType) bool {

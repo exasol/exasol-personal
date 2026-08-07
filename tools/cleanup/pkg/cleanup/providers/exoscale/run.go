@@ -36,41 +36,63 @@ func PlanActions(details *DeploymentDetails, typeFilter []ResourceType) ([]Actio
 	if details == nil || len(details.Resources) == 0 {
 		return nil, ErrNoResourcesPlanned
 	}
-	filter := map[ResourceType]struct{}{}
-	for _, t := range typeFilter {
-		filter[t] = struct{}{}
-	}
+	filter := buildTypeFilter(typeFilter)
 	plan := BuildPlan()
 	var actions []Action
 	for _, phase := range plan.Phases {
-		for _, resource := range details.Resources {
-			name, _ := resource.Attr["name"].(string)
-			state, _ := resource.Attr["state"].(string)
-			if !containsType(phase.Types, resource.Ref.Type) {
-				slog.Debug("PlanActions: skipping resource (type not in phase)", "type", resource.Ref.Type, "name", name, "state", state)
-				continue
-			}
-			if len(filter) > 0 {
-				if _, ok := filter[resource.Ref.Type]; !ok {
-					slog.Debug("PlanActions: skipping resource (type filtered)", "type", resource.Ref.Type, "name", name, "state", state)
-					continue
-				}
-			}
-			act := Action{Ref: resource.Ref, Op: opForResource(resource), Reason: ""}
-			if resource.Protected {
-				act.Op = OpSkip
-				act.Reason = "protected"
-				slog.Debug("PlanActions: skipping resource (protected)", "type", resource.Ref.Type, "name", name, "state", state)
-			}
-			slog.Debug("PlanActions: adding action", "type", resource.Ref.Type, "name", name, "state", state, "op", act.Op)
-			actions = append(actions, act)
-		}
+		actions = append(actions, actionsForPhase(phase, details.Resources, filter)...)
 	}
 	if len(actions) == 0 {
 		return nil, ErrNoResourcesPlanned
 	}
 
 	return actions, nil
+}
+
+func buildTypeFilter(typeFilter []ResourceType) map[ResourceType]struct{} {
+	filter := map[ResourceType]struct{}{}
+	for _, t := range typeFilter {
+		filter[t] = struct{}{}
+	}
+
+	return filter
+}
+
+// actionsForPhase builds the actions for resources belonging to a single phase,
+// logging why any resource was skipped.
+func actionsForPhase(phase Phase, resources []ResourceMeta, filter map[ResourceType]struct{}) []Action {
+	var actions []Action
+	for _, resource := range resources {
+		if act, ok := planActionForResource(phase, resource, filter); ok {
+			actions = append(actions, act)
+		}
+	}
+
+	return actions
+}
+
+func planActionForResource(phase Phase, resource ResourceMeta, filter map[ResourceType]struct{}) (Action, bool) {
+	name, _ := resource.Attr["name"].(string)
+	state, _ := resource.Attr["state"].(string)
+	if !containsType(phase.Types, resource.Ref.Type) {
+		slog.Debug("PlanActions: skipping resource (type not in phase)", "type", resource.Ref.Type, "name", name, "state", state)
+		return Action{}, false
+	}
+	if len(filter) > 0 {
+		if _, ok := filter[resource.Ref.Type]; !ok {
+			slog.Debug("PlanActions: skipping resource (type filtered)", "type", resource.Ref.Type, "name", name, "state", state)
+			return Action{}, false
+		}
+	}
+	act := Action{Ref: resource.Ref, Op: opForResource(resource), Reason: ""}
+	if resource.Protected {
+		act.Op = OpSkip
+		act.Reason = "protected"
+		slog.Debug("PlanActions: skipping resource (protected)", "type", resource.Ref.Type, "name", name, "state", state)
+	}
+	slog.Debug("PlanActions: adding action", "type", resource.Ref.Type, "name", name, "state", state, "op", act.Op)
+
+	return act, true
 }
 
 func containsType(list []ResourceType, t ResourceType) bool {
