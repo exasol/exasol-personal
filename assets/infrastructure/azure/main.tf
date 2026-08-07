@@ -141,6 +141,10 @@ resource "azurerm_storage_account" "remote_archive" {
     virtual_network_subnet_ids = [azurerm_subnet.subnet.id]
   }
 
+  identity {
+    type = "SystemAssigned"
+  }
+
   tags = local.common_tags
 }
 
@@ -183,6 +187,10 @@ resource "azurerm_storage_account" "bootstrap_assets" {
   # (see `azurerm_storage_account_sas.bootstrap_assets`). The blobs themselves are
   # non-secret bootstrap scripts. The sensitive `remote_archive` account keeps its
   # strict `network_rules` because nothing uploads to it from outside the VNet.
+
+  identity {
+    type = "SystemAssigned"
+  }
 
   tags = local.common_tags
 }
@@ -314,6 +322,10 @@ resource "azurerm_linux_virtual_machine" "nodes" {
     public_key = tls_private_key.ssh_key.public_key_openssh
   }
 
+  identity {
+    type = "SystemAssigned"
+  }
+
   os_disk {
     name                 = "${local.deployment_id}-${each.key}-os"
     caching              = "ReadWrite"
@@ -341,6 +353,8 @@ resource "azurerm_managed_disk" "data_disks" {
   create_option        = "Empty"
   disk_size_gb         = var.data_volume_size
   tags                 = local.common_tags
+
+  public_network_access_enabled = true
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "data_disks" {
