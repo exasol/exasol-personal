@@ -408,20 +408,11 @@ func CollectDeploymentSummaries(
 				return err
 			}
 			for _, mapping := range out.ResourceTagMappingList {
-				// Primary indicator: Project == exasol-personal
-				projectTag := tagValue(mapping.Tags, "Project")
 				deploymentID := tagValue(mapping.Tags, "Deployment")
-				isModern := projectTag == "exasol-personal"
-				// Legacy deployments: no Project tag
-				if !isModern {
-					if !deploymentIDRegex.MatchString(deploymentID) {
-						continue
-					}
-				} else {
-					// Even for modern, ensure deployment tag matches strict format
-					if !deploymentIDRegex.MatchString(deploymentID) {
-						continue
-					}
+				// Applies to both modern and legacy deployments: ensure the
+				// deployment tag matches the strict format.
+				if !deploymentIDRegex.MatchString(deploymentID) {
+					continue
 				}
 
 				ownerTag := tagValue(mapping.Tags, "Owner")
