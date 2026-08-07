@@ -74,6 +74,8 @@ exasol install local
 
 In a few seconds you'll have a local Exasol instance running. Run `exasol info` at any time to see how to connect, then head to the **Load Sample Data** section to start querying.
 
+To run UDFs locally, install a script language container — see **UDFs and Script Language Containers** below. To run several local databases side by side, see **Deployments and Named Deployments**.
+
 Prefer to run in your own cloud? See the **Deploy to the Cloud** section below.
 
 
@@ -102,9 +104,37 @@ With the launcher installed (see **Install the Launcher** above):
 
    When the deployment process has finished, you will see instructions on how to connect to your Exasol database using a client of your choice. You can also find this information at any time by using `exasol info` in the terminal.
 
-By default, Exasol Personal stores deployment state in `~/.exasol/personal/deployments/default`. If you run a command from an existing deployment directory, Exasol Personal uses that directory instead. Pass `--deployment-dir <path>` to choose a different deployment directory explicitly, or pass `--deployment <name>` (`-d <name>`) to use `~/.exasol/personal/deployments/<name>` — useful for running more than one deployment side by side without picking your own path. `--deployment-dir` and `--deployment` cannot be used together. Deployment names are matched case-sensitively, but may collide on case-insensitive filesystems (the default on macOS and Windows). Use `exasol deployments list` to see every default and named deployment directory, its status, and which one is currently active.
 
-Keep the deployment directory until deployment resources have been destroyed. Deleting the directory does not remove those resources and can make cleanup harder.
+## 🗂️ Deployments and Named Deployments
+
+Each Exasol Personal deployment — local or cloud — keeps its state in a **deployment directory**. This section applies to both deployment types.
+
+By default, Exasol Personal stores deployment state in `~/.exasol/personal/deployments/default`. If you run a command from an existing deployment directory, Exasol Personal uses that directory instead.
+
+To run more than one deployment side by side, give each one a **name** with `--deployment <name>` (`-d <name>`). Named deployments live under `~/.exasol/personal/deployments/<name>`, so you can address them by name from any working directory:
+
+```bash
+exasol install local -d demo             # a local deployment named "demo"
+exasol install aws -d staging            # a cloud deployment named "staging"
+exasol status -d demo                    # check on it from anywhere
+exasol connect -d demo -c "SELECT 1"
+```
+
+Names are matched case-sensitively, but may collide on case-insensitive filesystems (the default on macOS and Windows).
+
+Named deployments are optional — choosing a deployment directory by path still works. Pass `--deployment-dir <path>` to use a directory of your choice. `--deployment-dir` and `--deployment` cannot be used together.
+
+Use `exasol deployments list` to see every default and named deployment directory together with its status, presets, and path:
+
+```bash
+$ exasol deployments list
+default status=running preset=local/ubuntu path=/Users/me/.exasol/personal/deployments/default
+staging status=stopped preset=aws/ubuntu path=/Users/me/.exasol/personal/deployments/staging
+```
+
+The listing covers launcher-managed deployment directories only; deployments selected with an arbitrary `--deployment-dir` path are not included.
+
+Keep a deployment directory until its deployment resources have been destroyed. Deleting the directory does not remove those resources and can make cleanup harder.
 
 An initialized deployment directory is tied to the selected infrastructure and installation presets. Rerun `exasol install <preset>` with the same presets to retry a failed deployment safely, or use `exasol config get`, `exasol config set`, and `exasol config reset` to inspect or change parameters for the existing presets without deleting local state. To switch presets in the same deployment directory, run `exasol destroy --remove` before initializing again, or run `exasol remove` if the deployment resources are already gone.
 
@@ -114,7 +144,7 @@ Runtime tools such as OpenTofu are downloaded on demand and reused from a per-us
 
 To get started quickly, Exasol provides a sample dataset hosted on S3 that you can import using SQL.
 
-You can load it directly by executing this command in your deployment directory (e.g. `~/.exasol/personal/deployments/default` for a default deployment):
+You can load it directly by executing this command in your deployment directory (e.g. `~/.exasol/personal/deployments/default` for a default deployment), or from anywhere by adding `-d <name>` for a named deployment:
 
 ```bash
 exasol connect -f sample.sql
@@ -145,6 +175,29 @@ Exasol infers the table schema directly from the Parquet files, so there's no ne
 | `PRODUCTS` | 1,000,000 | 27.3 MiB |
 | `PRODUCT_REVIEWS` | 1,822,007 | 154.5 MiB |
 
+## 🐍 UDFs and Script Language Containers
+
+User-defined functions (UDFs) run inside a **script language container** (SLC), which provides the language runtime for a script language such as `PYTHON3`, `JAVA`, or `R`.
+
+**Cloud deployments** come with the standard script language containers, so UDFs work out of the box.
+
+**Local deployments** ship without any SLC installed. Install the one you need with `exasol slc`, and UDFs in that language start working:
+
+```bash
+exasol slc list                 # available containers and which are installed
+exasol slc install python3      # enables PYTHON3 / PYTHON312 UDFs
+exasol slc install java         # enables JAVA / JAVA17 UDFs
+exasol slc install r            # enables R / R44 UDFs
+exasol slc update python3       # update an installed container
+exasol slc remove python3
+```
+
+The argument is a language alias as used in `CREATE ... SCRIPT`, matched case-insensitively. `exasol slc list` shows each container's flavor, its aliases, its version, and whether it is installed.
+
+Installing, updating, or removing an SLC restarts the local database so the change takes effect, which drops open connections and aborts running statements. The command asks for confirmation first; pass `--auto-approve` to skip the prompt (required for non-interactive use), or `--no-restart` to record the change and activate it on the next start.
+
+`exasol slc install`, `update`, and `remove` apply to local deployments only.
+
 ## ⏯️ Start and stop Exasol Personal
 
 To save costs, you can temporarily stop Exasol Personal by using the following command:
@@ -162,6 +215,8 @@ exasol start
 The IP addresses of the nodes will change when you restart Exasol Personal. Check the output of the `start` command to know how to connect to the deployment after a restart.
 
 For local deployments, which currently require macOS with at least 8 GB RAM, the launcher manages a local VM runtime and an internal deployment share inside the deployment directory. If you do not configure local VM memory explicitly, it defaults to about 50% of detected host memory. Configured local VM memory must be at least 4096 MB. The initial local database credentials are `sys` / `exasol`. `exasol shell host` opens the local VM shell, and `exasol shell container` opens a shell inside the local database container.
+
+If a local deployment does not behave as expected, `exasol diag local` prints a JSON snapshot of its runtime state — VM status, guest IP, bound host ports, per-port reachability, and database readiness. It is safe to run whether or not the deployment is currently running.
 
 ## 🗑️ Remove Exasol Personal
 
@@ -311,7 +366,7 @@ Where the database runs depends on the deployment type:
 
 Local deployments are intended for development and exploration and do not yet support every feature of a cloud deployment:
 
-- **UDFs** — user-defined functions are not available yet (coming soon).
+- **UDFs** — supported, but no script language container is installed by default. Install one with `exasol slc install <language>` (see **UDFs and Script Language Containers** above); on cloud deployments UDFs work out of the box.
 - **Virtual schemas** — virtual schemas are not available yet (coming soon).
 - **Admin UI** — the Administration UI is not available yet (coming soon).
 - **Multi-node clusters** — a local deployment is a single VM on your machine by design and always runs as a single node.
