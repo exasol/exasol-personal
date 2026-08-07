@@ -112,8 +112,6 @@ def test_custom_deployment_rejects_small_instance_types(
 
     try:
         _deployment, config = request.getfixturevalue("custom_deployment")
-        assert config.instance_type == expected_instance_type
-        pytest.fail(f"Deployment should fail for instance_type={config.instance_type}")
     except (subprocess.CalledProcessError, RuntimeError):
         # Expected failure from Terraform or deployment layer - pass
         logging.info(
@@ -127,6 +125,9 @@ def test_custom_deployment_rejects_small_instance_types(
             expected_instance_type,
         )
         pytest.fail(f"Unexpected exception type: {type(unexpected).__name__}")
+    else:
+        assert config.instance_type == expected_instance_type
+        pytest.fail(f"Deployment should fail for instance_type={config.instance_type}")
 
 
 def test_custom_deployment_success(
