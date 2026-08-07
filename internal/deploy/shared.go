@@ -133,36 +133,63 @@ func PollWithBackoff(
 			return nil
 		}
 
-		logValues := []any{"elapsed_seconds", elapsed, "next_retry_in_seconds", backoff}
-		if !deadline.IsZero() {
-			remaining := int(time.Until(deadline).Seconds())
-			if remaining < 0 {
-				remaining = 0
-			}
-			logValues = append(logValues, "remaining_seconds", remaining)
-		}
-		slog.Info(params.LogPrefix, logValues...)
+		logPollAttempt(params.LogPrefix, elapsed, backoff, deadline)
 
-		// Sleep with backoff, handle cancellation
-		select {
-		case <-ctx.Done():
-			if lastErr != nil {
-				slog.Info(params.LogPrefix+" timeout/cancelled",
-					"elapsed_seconds", elapsed, "last_error", lastErr.Error())
-
-				return lastErr
-			}
-
-			return ctx.Err()
-		case <-time.After(time.Duration(backoff) * time.Second):
+		waitErr := awaitNextPollAttempt(ctx, backoff, elapsed, lastErr, params.LogPrefix)
+		if waitErr != nil {
+			return waitErr
 		}
 
 		elapsed += backoff
-		if backoff < params.MaxBackoff {
-			backoff *= 2
-			if backoff > params.MaxBackoff {
-				backoff = params.MaxBackoff
-			}
-		}
+		backoff = nextBackoff(backoff, params.MaxBackoff)
 	}
+}
+
+func logPollAttempt(logPrefix string, elapsed, backoff int, deadline time.Time) {
+	logValues := []any{"elapsed_seconds", elapsed, "next_retry_in_seconds", backoff}
+	if !deadline.IsZero() {
+		remaining := int(time.Until(deadline).Seconds())
+		if remaining < 0 {
+			remaining = 0
+		}
+		logValues = append(logValues, "remaining_seconds", remaining)
+	}
+	slog.Info(logPrefix, logValues...)
+}
+
+// awaitNextPollAttempt sleeps for backoff, handling cancellation. It returns
+// nil once the backoff interval elapses (meaning polling should continue),
+// or the error PollWithBackoff should return if ctx is done first.
+func awaitNextPollAttempt(
+	ctx context.Context,
+	backoff, elapsed int,
+	lastErr error,
+	logPrefix string,
+) error {
+	select {
+	case <-ctx.Done():
+		if lastErr != nil {
+			slog.Info(logPrefix+" timeout/cancelled",
+				"elapsed_seconds", elapsed, "last_error", lastErr.Error())
+
+			return lastErr
+		}
+
+		return ctx.Err()
+	case <-time.After(time.Duration(backoff) * time.Second):
+		return nil
+	}
+}
+
+func nextBackoff(backoff, maxBackoff int) int {
+	if backoff >= maxBackoff {
+		return backoff
+	}
+
+	backoff *= 2
+	if backoff > maxBackoff {
+		backoff = maxBackoff
+	}
+
+	return backoff
 }

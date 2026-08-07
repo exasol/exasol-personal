@@ -130,52 +130,84 @@ func ResetDeploymentConfiguration(
 	optionNames []string,
 	resetAll bool,
 ) (DeploymentConfiguration, error) {
-	if !resetAll && len(optionNames) == 0 {
-		return DeploymentConfiguration{}, errors.New("provide option names to reset, or pass --all")
-	}
-	if resetAll && len(optionNames) > 0 {
-		return DeploymentConfiguration{}, errors.New("pass either --all or option names, not both")
+	if err := validateResetSelection(optionNames, resetAll); err != nil {
+		return DeploymentConfiguration{}, err
 	}
 
 	err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			exasolState, err := config.ReadExasolPersonalState(deployment)
-			if err != nil {
-				return err
-			}
-			if err := WorkflowStatePermitsConfigure(exasolState); err != nil {
-				return err
-			}
-
-			configuration, err := readDeploymentConfiguration(deployment)
-			if err != nil {
-				return err
-			}
-			if !resetAll {
-				configuration, err = resetSelectedDeploymentConfiguration(
-					configuration,
-					optionNames,
-				)
-				if err != nil {
-					return err
-				}
-			} else {
-				resetAllConfigurationValues(configuration.Infrastructure.Options)
-				resetAllConfigurationValues(configuration.Installation.Options)
-			}
-
-			return writeDeploymentConfiguration(
-				ctx,
-				deployment,
-				exasolState,
-				configuration,
-			)
+			return resetDeploymentConfigurationLocked(ctx, deployment, optionNames, resetAll)
 		})
 	if err != nil {
 		return DeploymentConfiguration{}, err
 	}
 
 	return GetDeploymentConfiguration(ctx, deployment, nil)
+}
+
+// validateResetSelection rejects the two invalid combinations of --all and
+// explicit option names, before any lock is taken.
+//
+//nolint:revive // resetAll mirrors the command-level --all flag.
+func validateResetSelection(optionNames []string, resetAll bool) error {
+	if !resetAll && len(optionNames) == 0 {
+		return errors.New("provide option names to reset, or pass --all")
+	}
+	if resetAll && len(optionNames) > 0 {
+		return errors.New("pass either --all or option names, not both")
+	}
+
+	return nil
+}
+
+func resetDeploymentConfigurationLocked(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	optionNames []string,
+	resetAll bool,
+) error {
+	exasolState, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return err
+	}
+	if err := WorkflowStatePermitsConfigure(exasolState); err != nil {
+		return err
+	}
+
+	configuration, err := readDeploymentConfiguration(deployment)
+	if err != nil {
+		return err
+	}
+	configuration, err = applyConfigurationReset(configuration, optionNames, resetAll)
+	if err != nil {
+		return err
+	}
+
+	return writeDeploymentConfiguration(
+		ctx,
+		deployment,
+		exasolState,
+		configuration,
+	)
+}
+
+// applyConfigurationReset resets either the explicitly selected options or,
+// when resetAll is set, every option in the configuration.
+//
+//nolint:revive // resetAll mirrors the command-level --all flag.
+func applyConfigurationReset(
+	configuration DeploymentConfiguration,
+	optionNames []string,
+	resetAll bool,
+) (DeploymentConfiguration, error) {
+	if resetAll {
+		resetAllConfigurationValues(configuration.Infrastructure.Options)
+		resetAllConfigurationValues(configuration.Installation.Options)
+
+		return configuration, nil
+	}
+
+	return resetSelectedDeploymentConfiguration(configuration, optionNames)
 }
 
 func readDeploymentConfiguration(
@@ -496,7 +528,7 @@ func readInstallationConfigurationValues(
 	deployment config.DeploymentDir,
 	manifest *presets.InstallManifest,
 ) ([]DeploymentConfigValue, error) {
-	if manifest == nil || manifest.Variables == nil || len(manifest.Variables.Vars) == 0 {
+	if !manifestHasInstallationVariables(manifest) {
 		return []DeploymentConfigValue{}, nil
 	}
 
@@ -507,49 +539,73 @@ func readInstallationConfigurationValues(
 
 	values := make([]DeploymentConfigValue, 0, len(manifest.Variables.Vars))
 	for name, def := range manifest.Variables.Vars {
-		name = strings.TrimSpace(name)
-		if name == "" || def == nil || isReservedInstallationVariableName(name) {
-			continue
-		}
-		defaultValue, err := def.DefaultScalar()
+		value, included, err := installationConfigValue(name, def, currentValues)
 		if err != nil {
-			return nil, fmt.Errorf("invalid default for installation variable %q: %w", name, err)
+			return nil, err
 		}
-		effectiveType, err := def.EffectiveType()
-		if err != nil {
-			return nil, fmt.Errorf("invalid definition of installation variable %q: %w", name, err)
+		if included {
+			values = append(values, value)
 		}
-		value := defaultValue
-		if current, ok := currentValues[name]; ok {
-			value = current
-		}
-		rawValue, err := scalarToRawString(value)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"invalid current value for installation variable %q: %w",
-				name,
-				err,
-			)
-		}
-		rawDefault, err := scalarToRawString(defaultValue)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"invalid default value for installation variable %q: %w",
-				name,
-				err,
-			)
-		}
-		values = append(values, DeploymentConfigValue{
-			Name:       name,
-			Type:       installationVariableType(effectiveType),
-			Value:      value,
-			Default:    defaultValue,
-			RawValue:   rawValue,
-			RawDefault: rawDefault,
-		})
 	}
 
 	return values, nil
+}
+
+func manifestHasInstallationVariables(manifest *presets.InstallManifest) bool {
+	return manifest != nil && manifest.Variables != nil && len(manifest.Variables.Vars) > 0
+}
+
+// installationConfigValue builds the DeploymentConfigValue for a single
+// installation variable definition. included is false for names that should
+// be skipped entirely (blank, nil definition, or reserved).
+func installationConfigValue(
+	name string,
+	def *presets.VariableDef,
+	currentValues map[string]any,
+) (DeploymentConfigValue, bool, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || def == nil || isReservedInstallationVariableName(name) {
+		return DeploymentConfigValue{}, false, nil
+	}
+
+	defaultValue, err := def.DefaultScalar()
+	if err != nil {
+		return DeploymentConfigValue{}, false, fmt.Errorf(
+			"invalid default for installation variable %q: %w", name, err,
+		)
+	}
+	effectiveType, err := def.EffectiveType()
+	if err != nil {
+		return DeploymentConfigValue{}, false, fmt.Errorf(
+			"invalid definition of installation variable %q: %w", name, err,
+		)
+	}
+
+	currentValue := defaultValue
+	if current, ok := currentValues[name]; ok {
+		currentValue = current
+	}
+	rawValue, err := scalarToRawString(currentValue)
+	if err != nil {
+		return DeploymentConfigValue{}, false, fmt.Errorf(
+			"invalid current value for installation variable %q: %w", name, err,
+		)
+	}
+	rawDefault, err := scalarToRawString(defaultValue)
+	if err != nil {
+		return DeploymentConfigValue{}, false, fmt.Errorf(
+			"invalid default value for installation variable %q: %w", name, err,
+		)
+	}
+
+	return DeploymentConfigValue{
+		Name:       name,
+		Type:       installationVariableType(effectiveType),
+		Value:      currentValue,
+		Default:    defaultValue,
+		RawValue:   rawValue,
+		RawDefault: rawDefault,
+	}, true, nil
 }
 
 func readCurrentInstallationVariables(
