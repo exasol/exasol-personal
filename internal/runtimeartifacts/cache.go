@@ -258,36 +258,14 @@ func (c *Cache) Clean(ctx context.Context, opts CleanOptions) (CleanSummary, err
 			return err
 		}
 		if opts.Mode == CleanupModePartialDownloads {
-			plan, planErr := c.planPartialDownloadCleanup()
-			summary = plan.summary(opts.DryRun)
-			if planErr != nil || opts.DryRun {
-				return planErr
-			}
+			summary, err = c.cleanPartialDownloads(opts.DryRun)
 
-			return removePartialDownloads(plan)
-		}
-
-		index, _, err := c.readIndex()
-		if err != nil {
-			// If we can't read the cache index, we treat it as empty so we can
-			// still wipe the cache.
-			index = emptyCacheIndex()
-		}
-		plan, err := c.planCleanup(index, cfg, opts)
-		summary = plan.summary()
-		if err == nil && !opts.DryRun {
-			if opts.Mode == CleanupModeAll {
-				err = c.wipeCacheContents(&index)
-			} else {
-				err = c.removeEntries(&index, plan)
-			}
-		}
-		if err != nil || opts.DryRun {
 			return err
 		}
-		index.LastCleanup = c.clock.Now().UTC()
 
-		return c.writeIndex(index)
+		summary, err = c.cleanIndexedEntries(cfg, opts)
+
+		return err
 	})
 
 	return summary, err
@@ -295,6 +273,41 @@ func (c *Cache) Clean(ctx context.Context, opts CleanOptions) (CleanSummary, err
 
 func (c *Cache) Unlock() error {
 	return c.clearLock()
+}
+
+//nolint:revive // dryRun mirrors the command-level --dry-run flag.
+func (c *Cache) cleanPartialDownloads(dryRun bool) (CleanSummary, error) {
+	plan, err := c.planPartialDownloadCleanup()
+	summary := plan.summary(dryRun)
+	if err != nil || dryRun {
+		return summary, err
+	}
+
+	return summary, removePartialDownloads(plan)
+}
+
+func (c *Cache) cleanIndexedEntries(cfg CacheConfig, opts CleanOptions) (CleanSummary, error) {
+	index, _, err := c.readIndex()
+	if err != nil {
+		// If we can't read the cache index, we treat it as empty so we can
+		// still wipe the cache.
+		index = emptyCacheIndex()
+	}
+	plan, err := c.planCleanup(index, cfg, opts)
+	summary := plan.summary()
+	if err == nil && !opts.DryRun {
+		if opts.Mode == CleanupModeAll {
+			err = c.wipeCacheContents(&index)
+		} else {
+			err = c.removeEntries(&index, plan)
+		}
+	}
+	if err != nil || opts.DryRun {
+		return summary, err
+	}
+	index.LastCleanup = c.clock.Now().UTC()
+
+	return summary, c.writeIndex(index)
 }
 
 func (c *Cache) listEntries(index cacheIndex) []CacheEntryInfo {
