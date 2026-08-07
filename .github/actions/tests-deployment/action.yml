@@ -27,17 +27,18 @@ runs:
       uses: ./.github/actions/setup-task
     - name: Install uv (system Python path)
       if: ${{ inputs.system-python == 'true' }}
-      shell: bash
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-    - name: Install Python 3.13 and Poetry via uv (system Python path)
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+    - name: Install Python 3.13 (system Python path)
       if: ${{ inputs.system-python == 'true' }}
       shell: bash
       run: |
         uv python install 3.13
-        uv tool install poetry
         echo "$(dirname "$(uv python find 3.13)")" >> "$GITHUB_PATH"
+    - name: Install Poetry (system Python path)
+      if: ${{ inputs.system-python == 'true' }}
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
+      with:
+        version: "2.4.1"
     - name: Install test dependencies (system Python path)
       if: ${{ inputs.system-python == 'true' }}
       shell: bash
