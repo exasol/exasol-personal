@@ -184,42 +184,13 @@ func Connect(
 		databaseOptFns = append(databaseOptFns, exasol.WithVersionOutput(writers.stderr))
 	}
 
-	database, err := NewExasolConnection(
-		deployment,
-		connectionInfo,
-		opts.Username,
-		opts.Password,
-		opts.InsecureSkipCertValidation,
-		databaseOptFns...,
-	)
+	database, err := connectToDatabase(ctx, deployment, connectionInfo, opts, databaseOptFns)
 	if err != nil {
 		return err
 	}
-
-	dialCtx, cancel := context.WithTimeout(ctx, connectDialTimeout)
-	defer cancel()
-	if err := database.Connect(dialCtx); err != nil {
-		return err
-	}
-
 	defer database.Close()
 
-	printer := printResultTable
-	switch opts.OutputFormat {
-	case OutputFormatTable:
-		printer = printResultTable
-	case OutputFormatCSV:
-		printer = printResultCSV
-	case OutputFormatJSON:
-		printer = newJSONResultPrinter(opts.JSONFormat)
-	default:
-		printer = printResultTable
-	}
-
-	// The interactive preview cap applies only when an interactive shell is
-	// actually started. --command/--file and non-interactive JSON execution
-	// return everything by default, so they behave as non-interactive
-	// (unlimited) unless --max-rows is set explicitly.
+	printer := selectResultPrinter(opts.OutputFormat, opts.JSONFormat)
 	modeDefault := 0
 	if interactiveShell {
 		modeDefault = interactivePreviewMaxRows
@@ -239,25 +210,7 @@ func Connect(
 	}
 
 	processInput := func(input string) error {
-		// The input string is expected to be trimmed of whitespace
-		if input == "" {
-			return nil
-		}
-
-		queryResult, err := database.Exec(ctx, input, maxRows)
-		if err != nil {
-			return err
-		}
-
-		if err := printer(writers.stdout, queryResult); err != nil {
-			return err
-		}
-
-		if queryResult.Truncated() {
-			return printTruncationFooter(writers.stderr, len(queryResult.Rows()))
-		}
-
-		return nil
+		return execStatement(ctx, database, maxRows, printer, writers, input)
 	}
 
 	if nonInteractive {
@@ -273,6 +226,82 @@ func Connect(
 	return RunShellWithOpts(processInput, ShellOpts{
 		ExecuteOnSemicolon: opts.ExecuteOnSemicolon,
 	})
+}
+
+// connectToDatabase establishes the database connection used for the rest of
+// the session and applies the initial dial timeout, which the underlying
+// driver's Open call does not enforce on its own.
+func connectToDatabase(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	connectionInfo *config.ConnectionInfo,
+	opts *Opts,
+	databaseOptFns []exasol.OptFn,
+) (generaltypes.Databaser, error) {
+	database, err := NewExasolConnection(
+		deployment,
+		connectionInfo,
+		opts.Username,
+		opts.Password,
+		opts.InsecureSkipCertValidation,
+		databaseOptFns...,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	dialCtx, cancel := context.WithTimeout(ctx, connectDialTimeout)
+	defer cancel()
+	if err := database.Connect(dialCtx); err != nil {
+		return nil, err
+	}
+
+	return database, nil
+}
+
+// selectResultPrinter picks the printer matching the requested output format,
+// defaulting to the table renderer.
+func selectResultPrinter(format OutputFormat, jsonFormat JSONFormat) resultPrinter {
+	switch format {
+	case OutputFormatTable:
+		return printResultTable
+	case OutputFormatCSV:
+		return printResultCSV
+	case OutputFormatJSON:
+		return newJSONResultPrinter(jsonFormat)
+	default:
+		return printResultTable
+	}
+}
+
+// execStatement runs a single trimmed input statement and prints its result,
+// including the truncation footer when the row cap was hit.
+func execStatement(
+	ctx context.Context,
+	database generaltypes.Databaser,
+	maxRows int,
+	printer resultPrinter,
+	writers connectOutputWriters,
+	input string,
+) error {
+	if input == "" {
+		return nil
+	}
+
+	queryResult, err := database.Exec(ctx, input, maxRows)
+	if err != nil {
+		return err
+	}
+
+	if err := printer(writers.stdout, queryResult); err != nil {
+		return err
+	}
+
+	if queryResult.Truncated() {
+		return printTruncationFooter(writers.stderr, len(queryResult.Rows()))
+	}
+
+	return nil
 }
 
 type connectOutputWriters struct {
