@@ -343,83 +343,7 @@ func workflowStatePermitsStop(
 func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) error {
 	err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			exasolState, err := config.ReadExasolPersonalState(deployment)
-			if err != nil {
-				return err
-			}
-
-			if err = reconcileLocalVMState(ctx, exasolState, deployment); err != nil {
-				return err
-			}
-
-			decision, err := workflowStatePermitsStop(exasolState)
-			if err != nil {
-				return util.LoggedError(err, "run `status` for more information")
-			}
-			if !decision.shouldRun {
-				logLifecycleGuidance(decision.guidance)
-
-				return nil
-			}
-
-			slog.Info("stopping deployment. this may take a few minutes")
-
-			// Set the workflowstate to stop in-progress
-			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
-				Operation: config.StopOperation,
-			}, deployment)
-			if err != nil {
-				slog.Error("failed to set workflow state to in-progress", "error", err.Error())
-			}
-
-			// Register signal handler for catching interruptions and set state
-			// in case of interruption
-			unregister, _ := util.RegisterOnceSignalHandler(func() {
-				slog.Warn("Stop Operation interrupted")
-				_ = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
-					Error:                      "Stop Operation interrupted via signal",
-					InterruptedDuringOperation: config.StopOperation,
-				}, deployment)
-			})
-
-			// Fallback cleanup
-			defer unregister()
-
-			manifest, err := config.ReadInfrastructureManifest(deployment)
-			if err != nil {
-				return err
-			}
-			backend, err := newDeploymentBackend(deployment, manifest)
-			if err != nil {
-				return err
-			}
-
-			var externalCommandOutput io.Writer
-			if verbose {
-				externalCommandOutput = os.Stderr
-			}
-
-			if err := backend.Stop(
-				ctx,
-				externalCommandOutput,
-				externalCommandOutput,
-			); err != nil {
-				unregister()
-
-				return markOperationInterrupted(exasolState, deployment, config.StopOperation, err)
-			}
-
-			// Stop handling interrupts before committing final stopped state
-			unregister()
-
-			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateStopped{}, deployment)
-			if err != nil {
-				slog.Error("failed to set workflow state", "error", err.Error())
-			}
-
-			slog.Info("database is stopped and no longer accepts connections")
-
-			return nil
+			return stopLocked(ctx, deployment, verbose)
 		})
 	if errors.Is(err, ErrDeploymentDirectoryLocked) {
 		slog.Warn(err.Error())
@@ -427,4 +351,99 @@ func Stop(ctx context.Context, deployment config.DeploymentDir, verbose bool) er
 	}
 
 	return err
+}
+
+func stopLocked(ctx context.Context, deployment config.DeploymentDir, verbose bool) error {
+	exasolState, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return err
+	}
+
+	if err := reconcileLocalVMState(ctx, exasolState, deployment); err != nil {
+		return err
+	}
+
+	decision, err := workflowStatePermitsStop(exasolState)
+	if err != nil {
+		return util.LoggedError(err, "run `status` for more information")
+	}
+	if !decision.shouldRun {
+		logLifecycleGuidance(decision.guidance)
+
+		return nil
+	}
+
+	slog.Info("stopping deployment. this may take a few minutes")
+
+	// Set the workflowstate to stop in-progress
+	if err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
+		Operation: config.StopOperation,
+	}, deployment); err != nil {
+		slog.Error("failed to set workflow state to in-progress", "error", err.Error())
+	}
+
+	return runStopBackend(ctx, exasolState, deployment, verbose)
+}
+
+// runStopBackend registers the interruption signal handler, invokes the
+// backend's stop operation, and commits the final stopped state. It is
+// split out from stopLocked so the signal-handler lifetime (registered
+// right before the backend call, unregistered right after) stays scoped
+// to a single, easy-to-audit block.
+//
+//nolint:revive // verbose mirrors the command-level --verbose flag.
+func runStopBackend(
+	ctx context.Context,
+	exasolState *config.ExasolPersonalState,
+	deployment config.DeploymentDir,
+	verbose bool,
+) error {
+	// Register signal handler for catching interruptions and set state
+	// in case of interruption
+	unregister, _ := util.RegisterOnceSignalHandler(func() {
+		slog.Warn("Stop Operation interrupted")
+		_ = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
+			Error:                      "Stop Operation interrupted via signal",
+			InterruptedDuringOperation: config.StopOperation,
+		}, deployment)
+	})
+
+	// Fallback cleanup
+	defer unregister()
+
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return err
+	}
+	backend, err := newDeploymentBackend(deployment, manifest)
+	if err != nil {
+		return err
+	}
+
+	var externalCommandOutput io.Writer
+	if verbose {
+		externalCommandOutput = os.Stderr
+	}
+
+	if err := backend.Stop(
+		ctx,
+		externalCommandOutput,
+		externalCommandOutput,
+	); err != nil {
+		unregister()
+
+		return markOperationInterrupted(exasolState, deployment, config.StopOperation, err)
+	}
+
+	// Stop handling interrupts before committing final stopped state
+	unregister()
+
+	err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateStopped{}, deployment)
+	if err != nil {
+		slog.Error("failed to set workflow state", "error", err.Error())
+	}
+
+	slog.Info("database is stopped and no longer accepts connections")
+
+	return nil
 }
