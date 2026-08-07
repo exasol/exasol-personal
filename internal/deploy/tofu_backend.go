@@ -120,73 +120,88 @@ func (b *tofuBackend) ReadConfiguration() ([]DeploymentConfigValue, error) {
 		return nil, err
 	}
 
-	currentValues := map[string]cty.Value{}
-	tfvarsData, err := os.ReadFile(b.cfg.VarsOutputFile())
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	currentValues, err := b.loadCurrentTofuValues()
+	if err != nil {
 		return nil, err
-	}
-	if err == nil {
-		currentValues, err = tofu.ParseVarsValuesFile(tfvarsData, b.cfg.VarsOutputFile())
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	values := make([]DeploymentConfigValue, 0, len(defaults))
 	for name, variable := range defaults {
-		if variable == nil {
+		value, ok, err := tofuConfigValueForVariable(name, variable, currentValues)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
 			continue
 		}
-		if _, reserved := tofuReservedVariableNames[name]; reserved {
-			continue
-		}
-		value := variable.Value
-		if current, ok := currentValues[name]; ok {
-			value = current
-		}
-		scalar, err := ctyScalarToGoValue(value)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"invalid current value for infrastructure variable %q: %w",
-				name,
-				err,
-			)
-		}
-		defaultScalar, err := ctyScalarToGoValue(variable.Value)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"invalid default value for infrastructure variable %q: %w",
-				name,
-				err,
-			)
-		}
-		rawValue, err := ctyScalarToRawString(value)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"invalid current value for infrastructure variable %q: %w",
-				name,
-				err,
-			)
-		}
-		rawDefault, err := ctyScalarToRawString(variable.Value)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"invalid default value for infrastructure variable %q: %w",
-				name,
-				err,
-			)
-		}
-		values = append(values, DeploymentConfigValue{
-			Name:       name,
-			Type:       tofuVariableType(variable.Type),
-			Value:      scalar,
-			Default:    defaultScalar,
-			RawValue:   rawValue,
-			RawDefault: rawDefault,
-		})
+		values = append(values, value)
 	}
 
 	return values, nil
+}
+
+// tofuConfigValueForVariable resolves a single infrastructure variable's
+// current and default config values. The second return value reports whether
+// the variable is user-facing at all (false for nil entries and reserved
+// names, which callers should skip).
+func tofuConfigValueForVariable(
+	name string,
+	variable *tofu.Variable,
+	currentValues map[string]cty.Value,
+) (DeploymentConfigValue, bool, error) {
+	if variable == nil {
+		return DeploymentConfigValue{}, false, nil
+	}
+	if _, reserved := tofuReservedVariableNames[name]; reserved {
+		return DeploymentConfigValue{}, false, nil
+	}
+
+	value := variable.Value
+	if current, ok := currentValues[name]; ok {
+		value = current
+	}
+
+	scalar, err := ctyScalarToGoValue(value)
+	if err != nil {
+		return DeploymentConfigValue{}, false, fmt.Errorf(
+			"invalid current value for infrastructure variable %q: %w",
+			name,
+			err,
+		)
+	}
+	defaultScalar, err := ctyScalarToGoValue(variable.Value)
+	if err != nil {
+		return DeploymentConfigValue{}, false, fmt.Errorf(
+			"invalid default value for infrastructure variable %q: %w",
+			name,
+			err,
+		)
+	}
+	rawValue, err := ctyScalarToRawString(value)
+	if err != nil {
+		return DeploymentConfigValue{}, false, fmt.Errorf(
+			"invalid current value for infrastructure variable %q: %w",
+			name,
+			err,
+		)
+	}
+	rawDefault, err := ctyScalarToRawString(variable.Value)
+	if err != nil {
+		return DeploymentConfigValue{}, false, fmt.Errorf(
+			"invalid default value for infrastructure variable %q: %w",
+			name,
+			err,
+		)
+	}
+
+	return DeploymentConfigValue{
+		Name:       name,
+		Type:       tofuVariableType(variable.Type),
+		Value:      scalar,
+		Default:    defaultScalar,
+		RawValue:   rawValue,
+		RawDefault: rawDefault,
+	}, true, nil
 }
 
 func (b *tofuBackend) ReadDeploymentConfigVariables() (
@@ -504,6 +519,22 @@ func (b *tofuBackend) Destroy(
 
 func (b *tofuBackend) hasTofu() bool {
 	return b.cfg != nil
+}
+
+// loadCurrentTofuValues reads the deployment's applied tfvars file, returning
+// an empty set (rather than an error) when the deployment has not been
+// configured yet.
+func (b *tofuBackend) loadCurrentTofuValues() (map[string]cty.Value, error) {
+	tfvarsData, err := os.ReadFile(b.cfg.VarsOutputFile())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return map[string]cty.Value{}, nil
+		}
+
+		return nil, err
+	}
+
+	return tofu.ParseVarsValuesFile(tfvarsData, b.cfg.VarsOutputFile())
 }
 
 func (b *tofuBackend) loadDefaults() (map[string]*tofu.Variable, error) {
