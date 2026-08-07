@@ -8,6 +8,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
+- Documented named deployments, the `exasol slc` command group, and `exasol diag local` in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers UDFs and script language containers, and the Limitations section no longer states that UDFs are unavailable on local deployments.
+
 ### Fixed
 
 ### Breaking Changes
