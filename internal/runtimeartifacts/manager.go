@@ -158,44 +158,12 @@ func (m *Manager) Get(
 		return "", err
 	}
 
-	noChecksum := strings.TrimSpace(artifact.Sha256) == ""
-
 	var resolvedPath string
 	err = m.cache.withExclusiveLock(ctx, func() error {
-		index, _, err := m.cache.readIndex()
-		if err != nil {
-			return err
-		}
+		var lockErr error
+		resolvedPath, lockErr = m.resolveUnderLock(ctx, resourceID, artifact, &entry)
 
-		if noChecksum {
-			slog.Info(
-				"re-fetching resource without checksum, result may not be stable",
-				"id",
-				resourceID,
-				"url",
-				artifact.URL,
-			)
-		} else {
-			cachedPath, err := m.getCacheEntry(&index, artifact, entry)
-			if err != nil {
-				return err
-			}
-			if cachedPath != "" {
-				resolvedPath = cachedPath
-				slog.Info("found resource in cache", "id", resourceID, "path", resolvedPath)
-
-				return nil
-			}
-		}
-
-		resolvedPath, err = m.refresh(ctx, resourceID, artifact, &entry, &index)
-		if err != nil {
-			return err
-		}
-
-		slog.Info("fetched resource", "id", resourceID, "path", resolvedPath)
-
-		return nil
+		return lockErr
 	})
 	if err != nil {
 		return "", err
@@ -212,6 +180,50 @@ func (m *Manager) Request(ctx context.Context, resourceID string) (string, error
 	}
 
 	return m.Get(ctx, def, resourceID)
+}
+
+// resolveUnderLock resolves the cached path for an artifact, refreshing it if
+// necessary. It must run under the cache's exclusive lock since it reads and
+// mutates the shared index.
+func (m *Manager) resolveUnderLock(
+	ctx context.Context,
+	resourceID string,
+	artifact ArtifactSpec,
+	entry *cacheIndexEntry,
+) (string, error) {
+	index, _, err := m.cache.readIndex()
+	if err != nil {
+		return "", err
+	}
+
+	if strings.TrimSpace(artifact.Sha256) == "" {
+		slog.Info(
+			"re-fetching resource without checksum, result may not be stable",
+			"id",
+			resourceID,
+			"url",
+			artifact.URL,
+		)
+	} else {
+		cachedPath, err := m.getCacheEntry(&index, artifact, *entry)
+		if err != nil {
+			return "", err
+		}
+		if cachedPath != "" {
+			slog.Info("found resource in cache", "id", resourceID, "path", cachedPath)
+
+			return cachedPath, nil
+		}
+	}
+
+	resolvedPath, err := m.refresh(ctx, resourceID, artifact, entry, &index)
+	if err != nil {
+		return "", err
+	}
+
+	slog.Info("fetched resource", "id", resourceID, "path", resolvedPath)
+
+	return resolvedPath, nil
 }
 
 func (*Manager) identify(ctx context.Context, artifact ArtifactSpec) string {
@@ -237,39 +249,54 @@ func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, entry *cache
 			continue
 		}
 
-		fetchPath := m.cache.absolutePath(entry.ArtifactPath)
+		return m.fetchFromSource(ctx, source, artifact, entry)
+	}
 
-		_ = os.MkdirAll(filepath.Dir(fetchPath), dirPerm)
-		redirectPath, err := source.Fetch(ctx, artifact.URL, fetchPath)
-		if err != nil {
-			return err
-		}
-		if redirectPath != "" {
-			entry.RedirectPath = redirectPath
+	return fmt.Errorf("unsupported resource scheme in %q", artifact.URL)
+}
 
-			return nil
-		}
+func (m *Manager) fetchFromSource(
+	ctx context.Context,
+	source Source,
+	artifact ArtifactSpec,
+	entry *cacheIndexEntry,
+) error {
+	fetchPath := m.cache.absolutePath(entry.ArtifactPath)
 
-		info, err := os.Stat(fetchPath)
-		if err != nil {
-			return err
-		}
-
-		// Only check the checksum for files with a specified sha256.
-		if !info.IsDir() && strings.TrimSpace(artifact.Sha256) != "" {
-			actual, err := sha256OfFile(fetchPath)
-			if err != nil {
-				return err
-			}
-			if actual != artifact.Sha256 {
-				return checksumMismatchError(artifact.Sha256, actual)
-			}
-		}
+	_ = os.MkdirAll(filepath.Dir(fetchPath), dirPerm)
+	redirectPath, err := source.Fetch(ctx, artifact.URL, fetchPath)
+	if err != nil {
+		return err
+	}
+	if redirectPath != "" {
+		entry.RedirectPath = redirectPath
 
 		return nil
 	}
 
-	return fmt.Errorf("unsupported resource scheme in %q", artifact.URL)
+	return verifyFetchedChecksum(fetchPath, artifact.Sha256)
+}
+
+func verifyFetchedChecksum(fetchPath, expectedSha256 string) error {
+	info, err := os.Stat(fetchPath)
+	if err != nil {
+		return err
+	}
+
+	// Only check the checksum for files with a specified sha256.
+	if info.IsDir() || strings.TrimSpace(expectedSha256) == "" {
+		return nil
+	}
+
+	actual, err := sha256OfFile(fetchPath)
+	if err != nil {
+		return err
+	}
+	if actual != expectedSha256 {
+		return checksumMismatchError(expectedSha256, actual)
+	}
+
+	return nil
 }
 
 // resolveEmbedded materializes an embed:true resource from data compiled into
