@@ -224,6 +224,9 @@ func (h *ec2InternetGatewayHandler) Delete(ctx context.Context, ref ResourceRef)
 	return lastErr
 }
 
+// errInvalidVpcEndpointIDNotFound is the AWS error code returned when a VPC endpoint no longer exists.
+const errInvalidVpcEndpointIDNotFound = "InvalidVpcEndpointId.NotFound"
+
 // VPC Endpoint handler: remove route table entries referencing the endpoint, then delete the endpoint.
 type ec2VpcEndpointHandler struct{ client *ec2svc.Client }
 
@@ -237,7 +240,7 @@ func (h *ec2VpcEndpointHandler) Delete(ctx context.Context, ref ResourceRef) err
 	if err != nil {
 		// If not found, treat as success
 		if strings.Contains(err.Error(), "VpcEndpointIdNotFound") ||
-			strings.Contains(err.Error(), "InvalidVpcEndpointId.NotFound") {
+			strings.Contains(err.Error(), errInvalidVpcEndpointIDNotFound) {
 			return nil
 		}
 		return err
@@ -261,7 +264,7 @@ func (h *ec2VpcEndpointHandler) Delete(ctx context.Context, ref ResourceRef) err
 		return nil
 	}
 	// Treat not found as success
-	if strings.Contains(delErr.Error(), "InvalidVpcEndpointId.NotFound") ||
+	if strings.Contains(delErr.Error(), errInvalidVpcEndpointIDNotFound) ||
 		strings.Contains(delErr.Error(), "VpcEndpointIdNotFound") {
 		return nil
 	}
@@ -308,7 +311,7 @@ func (h *ec2VpcEndpointHandler) Delete(ctx context.Context, ref ResourceRef) err
 		VpcEndpointIds: []string{ref.ID},
 	})
 	if retryErr != nil {
-		if strings.Contains(retryErr.Error(), "InvalidVpcEndpointId.NotFound") ||
+		if strings.Contains(retryErr.Error(), errInvalidVpcEndpointIDNotFound) ||
 			strings.Contains(retryErr.Error(), "VpcEndpointIdNotFound") {
 			return nil
 		}

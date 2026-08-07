@@ -411,7 +411,7 @@ func withTimeoutIfMissing(
 		return context.WithTimeout(context.Background(), timeout)
 	}
 	if _, hasDeadline := ctx.Deadline(); hasDeadline {
-		return ctx, func() {}
+		return ctx, func() { /* no-op: caller-provided ctx already owns its own cancellation */ }
 	}
 
 	return context.WithTimeout(ctx, timeout)

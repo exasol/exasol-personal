@@ -24,7 +24,7 @@ const (
 	commandInstall                          = "install"
 )
 
-var deploymentLogCleanup = func() {}
+var deploymentLogCleanup = func() { /* no-op until a log session starts */ }
 
 func requireDeploymentFileLogging(cmd *cobra.Command) {
 	if cmd.Annotations == nil {
@@ -52,7 +52,7 @@ var startDeploymentLogSession = func(
 			"error", err.Error(),
 		)
 
-		return func() {}, nil
+		return func() { /* no-op: logging never started, nothing to clean up */ }, nil
 	}
 
 	file, err := os.OpenFile(
@@ -67,7 +67,7 @@ var startDeploymentLogSession = func(
 			"error", err.Error(),
 		)
 
-		return func() {}, nil
+		return func() { /* no-op: logging never started, nothing to clean up */ }, nil
 	}
 
 	globalDeploymentFileSink.Set(file, slog.LevelDebug)
@@ -88,7 +88,7 @@ var startDeploymentLogSession = func(
 
 func setDeploymentLogCleanup(cleanup func()) {
 	if cleanup == nil {
-		deploymentLogCleanup = func() {}
+		deploymentLogCleanup = func() { /* no-op: cleared, nothing to clean up */ }
 		return
 	}
 
@@ -97,12 +97,12 @@ func setDeploymentLogCleanup(cleanup func()) {
 
 func runDeploymentLogCleanup() {
 	deploymentLogCleanup()
-	deploymentLogCleanup = func() {}
+	deploymentLogCleanup = func() { /* no-op: reset after running so repeated calls are safe */ }
 }
 
 func setupDeploymentLogSession(cmd *cobra.Command, deployment config.DeploymentDir) error {
 	// Default cleanup is always a no-op, so Execute() can always defer cleanup once.
-	setDeploymentLogCleanup(func() {})
+	setDeploymentLogCleanup(func() { /* no-op default */ })
 
 	if !deploymentFileLoggingIsRequired(cmd) {
 		return nil
