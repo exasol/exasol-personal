@@ -35,40 +35,60 @@ func CollectDeploymentSummaries(
 			return nil, fmt.Errorf("failed to list Azure resource groups: %w", err)
 		}
 		for _, group := range page.Value {
-			if group == nil || group.Name == nil {
-				continue
-			}
-			if !matchesDeploymentTags(group.Tags, legacy) {
-				continue
-			}
-			rgLocation := valueOrEmpty(group.Location)
-			if !matchesLocation(location, rgLocation) {
-				continue
-			}
-			owner := tagValue(group.Tags, tagOwner)
-			if !ownerMatchesFilter(owner, ownerFilter) {
-				continue
-			}
-
-			resources, err := listResourcesInGroup(ctx, cl, *group.Name)
+			summary, ok, err := summarizeDeploymentGroup(ctx, cl, group, location, ownerFilter, legacy)
 			if err != nil {
 				return nil, err
 			}
-
-			summaries = append(summaries, DeploymentSummary{
-				ID:        tagValue(group.Tags, tagDeployment),
-				Provider:  ProviderName,
-				Region:    rgLocation,
-				Owner:     ownerOrDash(owner),
-				CreatedAt: parseCreatedAt(tagValue(group.Tags, tagCreatedAt)),
-				State:     deriveState(resources),
-				// Count the resource group itself alongside the resources it holds.
-				Resources: len(resources) + 1,
-			})
+			if ok {
+				summaries = append(summaries, summary)
+			}
 		}
 	}
 
 	return summaries, nil
+}
+
+// summarizeDeploymentGroup builds a DeploymentSummary for a resource group,
+// reporting ok=false when the group doesn't match the deployment/location/owner
+// filters and is not part of the result set.
+func summarizeDeploymentGroup(
+	ctx context.Context,
+	cl *clients,
+	group *armresources.ResourceGroup,
+	location string,
+	ownerFilter string,
+	legacy bool,
+) (DeploymentSummary, bool, error) {
+	if group == nil || group.Name == nil {
+		return DeploymentSummary{}, false, nil
+	}
+	if !matchesDeploymentTags(group.Tags, legacy) {
+		return DeploymentSummary{}, false, nil
+	}
+	rgLocation := valueOrEmpty(group.Location)
+	if !matchesLocation(location, rgLocation) {
+		return DeploymentSummary{}, false, nil
+	}
+	owner := tagValue(group.Tags, tagOwner)
+	if !ownerMatchesFilter(owner, ownerFilter) {
+		return DeploymentSummary{}, false, nil
+	}
+
+	resources, err := listResourcesInGroup(ctx, cl, *group.Name)
+	if err != nil {
+		return DeploymentSummary{}, false, err
+	}
+
+	return DeploymentSummary{
+		ID:        tagValue(group.Tags, tagDeployment),
+		Provider:  ProviderName,
+		Region:    rgLocation,
+		Owner:     ownerOrDash(owner),
+		CreatedAt: parseCreatedAt(tagValue(group.Tags, tagCreatedAt)),
+		State:     deriveState(resources),
+		// Count the resource group itself alongside the resources it holds.
+		Resources: len(resources) + 1,
+	}, true, nil
 }
 
 // CollectDeploymentDetails returns the resource group for a deployment together

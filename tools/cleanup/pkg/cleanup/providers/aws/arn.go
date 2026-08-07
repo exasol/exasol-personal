@@ -21,83 +21,114 @@ func classifyARN(arn string) (ResourceType, string) {
 	service := parts[2]
 	resource := parts[5]
 
-	// Split resource on '/' to get type and id; some resources embed type in prefix.
-	segs := strings.Split(resource, "/")
-	if len(segs) < minSegs {
-		// Some ARNs might use ':' separators; try that.
-		alt := strings.Split(resource, ":")
-		if len(alt) >= minSegs {
-			segs = alt
-		}
-	}
-	rtype := segs[0]
-	rid := segs[len(segs)-1]
+	rtype, rid := splitResourceTypeAndID(resource)
 
-	switch service {
-	case "ec2":
-		switch rtype {
-		case "instance":
-			return ResourceEC2Instance, rid
-		case "volume":
-			return ResourceEBSVolume, rid
-		case "vpc-endpoint":
-			return ResourceVPCEndpoint, rid
-		case "internet-gateway":
-			return ResourceInternetGW, rid
-		case "route-table":
-			return ResourceRouteTable, rid
-		case "security-group":
-			return ResourceSecurityGrp, rid
-		case "subnet":
-			return ResourceSubnet, rid
-		case "vpc":
-			return ResourceVPC, rid
-		case "key-pair":
-			// EC2 key pairs: classify for display and cleanup
-			return ResourceEC2KeyPair, rid
-		default:
-			// fallthrough to synthesized type below
-		}
-	case "s3":
-		// S3 bucket ARNs are of the form arn:aws:s3:::bucket-name
-		// For S3, resource part can be like ':::bucket-name' without type segment
-		if strings.HasPrefix(resource, ":::") {
-			return ResourceS3Bucket, strings.TrimPrefix(resource, ":::")
-		}
-		// Some ARN parsers split arn:aws:s3:::bucket-name into parts where
-		// resource == "bucket-name" and region/account are empty.
-		if resource != "" {
-			return ResourceS3Bucket, resource
-		}
-	case "ssm":
-		// parameter ARNs start with parameter/<full path>
-		if rtype == "parameter" {
-			// Return the full parameter name after the "parameter/" prefix
-			// instead of only the last segment
-			full := strings.TrimPrefix(resource, "parameter/")
-			return ResourceSSMParam, full
-		}
-	case "iam":
-		// Classify common IAM resources for better display
-		switch rtype {
-		case "user":
-			return ResourceType("iam-user"), rid
-		case "role":
-			return ResourceIAMRole, rid
-		case "policy":
-			return ResourceType("iam-policy"), rid
-		case "instance-profile":
-			return ResourceIAMInstProf, rid
-		default:
-			// fallthrough
-		}
-	default:
-		// fallthrough to synthesized type below
+	if resType, id, ok := classifyByService(service, rtype, rid, resource); ok {
+		return resType, id
 	}
+
 	// Fallback: synthesize a display type from service and rtype so UI shows something meaningful
 	if rtype != "" {
 		return ResourceType(service + "-" + rtype), rid
 	}
 
 	return ResourceType(service), rid
+}
+
+// splitResourceTypeAndID splits an ARN resource segment on '/' to get type and
+// id; some resources embed the type in a ':'-separated prefix instead.
+func splitResourceTypeAndID(resource string) (string, string) {
+	segs := strings.Split(resource, "/")
+	if len(segs) < minSegs {
+		alt := strings.Split(resource, ":")
+		if len(alt) >= minSegs {
+			segs = alt
+		}
+	}
+
+	return segs[0], segs[len(segs)-1]
+}
+
+// classifyByService dispatches to the per-service classifier and reports
+// whether the service/type combination was recognized.
+func classifyByService(service, rtype, rid, resource string) (ResourceType, string, bool) {
+	switch service {
+	case "ec2":
+		if resType, ok := classifyEC2Resource(rtype); ok {
+			return resType, rid, true
+		}
+	case "s3":
+		return classifyS3Resource(resource)
+	case "ssm":
+		return classifySSMResource(rtype, resource)
+	case "iam":
+		if resType, ok := classifyIAMResource(rtype); ok {
+			return resType, rid, true
+		}
+	}
+
+	return "", "", false
+}
+
+func classifyEC2Resource(rtype string) (ResourceType, bool) {
+	switch rtype {
+	case "instance":
+		return ResourceEC2Instance, true
+	case "volume":
+		return ResourceEBSVolume, true
+	case "vpc-endpoint":
+		return ResourceVPCEndpoint, true
+	case "internet-gateway":
+		return ResourceInternetGW, true
+	case "route-table":
+		return ResourceRouteTable, true
+	case "security-group":
+		return ResourceSecurityGrp, true
+	case "subnet":
+		return ResourceSubnet, true
+	case "vpc":
+		return ResourceVPC, true
+	case "key-pair":
+		return ResourceEC2KeyPair, true
+	default:
+		return "", false
+	}
+}
+
+// classifyS3Resource handles S3 bucket ARNs, which are of the form
+// arn:aws:s3:::bucket-name and may parse with an empty type segment.
+func classifyS3Resource(resource string) (ResourceType, string, bool) {
+	if strings.HasPrefix(resource, ":::") {
+		return ResourceS3Bucket, strings.TrimPrefix(resource, ":::"), true
+	}
+	if resource != "" {
+		return ResourceS3Bucket, resource, true
+	}
+
+	return "", "", false
+}
+
+// classifySSMResource handles parameter ARNs, returning the full parameter
+// name after the "parameter/" prefix rather than only the last segment.
+func classifySSMResource(rtype, resource string) (ResourceType, string, bool) {
+	if rtype != "parameter" {
+		return "", "", false
+	}
+
+	return ResourceSSMParam, strings.TrimPrefix(resource, "parameter/"), true
+}
+
+func classifyIAMResource(rtype string) (ResourceType, bool) {
+	switch rtype {
+	case "user":
+		return ResourceType("iam-user"), true
+	case "role":
+		return ResourceIAMRole, true
+	case "policy":
+		return ResourceType("iam-policy"), true
+	case "instance-profile":
+		return ResourceIAMInstProf, true
+	default:
+		return "", false
+	}
 }

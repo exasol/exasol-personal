@@ -335,34 +335,56 @@ func (h *ec2RouteTableHandler) Delete(ctx context.Context, ref ResourceRef) erro
 	if err != nil {
 		return err
 	}
-	for _, rt := range out.RouteTables {
-		// Skip main route table (association main=true)
-		for _, assoc := range rt.Associations {
-			if assoc.Main != nil && *assoc.Main {
-				return errors.New("cannot delete main route table: " + ref.ID)
-			}
-			if assoc.RouteTableAssociationId != nil {
-				_, derr := h.client.DisassociateRouteTable(
-					ctx,
-					&ec2svc.DisassociateRouteTableInput{
-						AssociationId: assoc.RouteTableAssociationId,
-					},
-				)
-				if derr != nil {
-					return derr
-				}
-			}
-		}
+	if err := h.disassociateRouteTables(ctx, ref.ID, out.RouteTables); err != nil {
+		return err
 	}
+
 	_, err = h.client.DeleteRouteTable(
 		ctx,
 		&ec2svc.DeleteRouteTableInput{RouteTableId: aws.String(ref.ID)},
 	)
-	if err != nil {
-		if strings.Contains(err.Error(), "InvalidRouteTableID.NotFound") {
-			return nil
+	if err != nil && strings.Contains(err.Error(), "InvalidRouteTableID.NotFound") {
+		return nil
+	}
+
+	return err
+}
+
+// disassociateRouteTables detaches every subnet/gateway association from the
+// given route tables, refusing to touch the main route table.
+func (h *ec2RouteTableHandler) disassociateRouteTables(
+	ctx context.Context,
+	routeTableID string,
+	tables []ec2types.RouteTable,
+) error {
+	for _, rt := range tables {
+		for _, assoc := range rt.Associations {
+			if err := h.disassociateRouteTableAssociation(ctx, routeTableID, assoc); err != nil {
+				return err
+			}
 		}
 	}
+
+	return nil
+}
+
+func (h *ec2RouteTableHandler) disassociateRouteTableAssociation(
+	ctx context.Context,
+	routeTableID string,
+	assoc ec2types.RouteTableAssociation,
+) error {
+	if assoc.Main != nil && *assoc.Main {
+		return errors.New("cannot delete main route table: " + routeTableID)
+	}
+	if assoc.RouteTableAssociationId == nil {
+		return nil
+	}
+	_, err := h.client.DisassociateRouteTable(
+		ctx,
+		&ec2svc.DisassociateRouteTableInput{
+			AssociationId: assoc.RouteTableAssociationId,
+		},
+	)
 
 	return err
 }
