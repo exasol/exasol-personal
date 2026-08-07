@@ -199,6 +199,23 @@ resource "aws_s3_bucket_policy" "bootstrap_assets" {
             "aws:sourceVpce" = aws_vpc_endpoint.s3_gateway.id
           }
         }
+      },
+      {
+        # Access happens over HTTPS via the VPC endpoint above; this blocks
+        # any other transport.
+        Sid       = "DenyInsecureTransport",
+        Effect    = "Deny",
+        Principal = "*",
+        Action    = "s3:*",
+        Resource = [
+          aws_s3_bucket.bootstrap_assets.arn,
+          "${aws_s3_bucket.bootstrap_assets.arn}/*"
+        ],
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
       }
     ]
   })
