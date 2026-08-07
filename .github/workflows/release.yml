@@ -29,10 +29,11 @@ jobs:
 
       - name: Determine previous tag for changelog
         id: prev
+        env:
+          TAG: ${{ inputs.tag }}
+          INPUT_PREV: ${{ inputs.previous_tag }}
         run: |
           set -euo pipefail
-          TAG='${{ inputs.tag }}'
-          INPUT_PREV='${{ inputs.previous_tag }}'
           if [ -n "${INPUT_PREV}" ]; then
             PREV="${INPUT_PREV}"
           else
