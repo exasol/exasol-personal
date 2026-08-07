@@ -109,11 +109,13 @@ jobs:
       - name: Validate Azure location input
         if: ${{ matrix.infra == 'azure' }}
         shell: bash
+        env:
+          SECRET_AZURE_LOCATION: ${{ secrets.AZURE_LOCATION }}
         run: |
           location="${{ vars.AZURE_LOCATION }}"
           source="vars.AZURE_LOCATION"
           if [ -z "${location}" ]; then
-            location="${{ secrets.AZURE_LOCATION }}"
+            location="${SECRET_AZURE_LOCATION}"
             source="secrets.AZURE_LOCATION"
           fi
 
@@ -128,12 +130,15 @@ jobs:
       - name: Setup Exoscale credentials
         if: ${{ matrix.infra == 'exoscale' }}
         shell: bash
+        env:
+          SECRET_EXOSCALE_API_KEY: ${{ secrets.EXOSCALE_API_KEY }}
+          SECRET_EXOSCALE_API_SECRET: ${{ secrets.EXOSCALE_API_SECRET }}
         run: |
-          echo "EXOSCALE_API_KEY=${{ secrets.EXOSCALE_API_KEY }}" >> "$GITHUB_ENV"
-          echo "EXOSCALE_API_SECRET=${{ secrets.EXOSCALE_API_SECRET }}" >> "$GITHUB_ENV"
+          echo "EXOSCALE_API_KEY=${SECRET_EXOSCALE_API_KEY}" >> "$GITHUB_ENV"
+          echo "EXOSCALE_API_SECRET=${SECRET_EXOSCALE_API_SECRET}" >> "$GITHUB_ENV"
           # The Exoscale preset uses an aliased AWS provider for SOS endpoint resources.
-          echo "AWS_ACCESS_KEY_ID=${{ secrets.EXOSCALE_API_KEY }}" >> "$GITHUB_ENV"
-          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.EXOSCALE_API_SECRET }}" >> "$GITHUB_ENV"
+          echo "AWS_ACCESS_KEY_ID=${SECRET_EXOSCALE_API_KEY}" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=${SECRET_EXOSCALE_API_SECRET}" >> "$GITHUB_ENV"
 
       # Doing a second build here again. In theory, we could
       # upload the build artifact from the ci.yml workflow
