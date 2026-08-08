@@ -531,6 +531,57 @@ func TestLocalContainerShellCommand_UsesMountedContainerRootfs(t *testing.T) {
 	}
 }
 
+func TestLocalSSHRemoteUnsafe_MissingDeploymentInfoReturnsError(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+
+	if _, err := localSSHRemoteUnsafe(deployment); err == nil {
+		t.Fatal("expected an error when no deployment info has been persisted")
+	}
+}
+
+func TestLocalSSHRemoteUnsafe_MissingConnectionReturnsError(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := config.WriteDeploymentInfo(deployment.Root(), &config.DeploymentInfo{
+		DeploymentId: "test-deployment",
+	}); err != nil {
+		t.Fatalf("failed to seed deployment info: %v", err)
+	}
+
+	if _, err := localSSHRemoteUnsafe(deployment); err == nil {
+		t.Fatal("expected an error when the deployment has no connection details")
+	}
+}
+
+func TestLocalBackendOpenHostShell_MissingConnectionReturnsErrorWithoutOpeningShell(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	backend := newLocalBackend(deployment, &presets.InfrastructureManifest{}, nil)
+
+	if err := backend.OpenHostShell(context.Background(), ""); err == nil {
+		t.Fatal("expected an error when no deployment info has been persisted")
+	}
+}
+
+func TestLocalBackendOpenCOSShell_MissingConnectionReturnsErrorWithoutOpeningShell(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	backend := newLocalBackend(deployment, &presets.InfrastructureManifest{}, nil)
+
+	if err := backend.OpenCOSShell(context.Background()); err == nil {
+		t.Fatal("expected an error when no deployment info has been persisted")
+	}
+}
+
 func assertConfigValue(
 	t *testing.T,
 	values []DeploymentConfigValue,
