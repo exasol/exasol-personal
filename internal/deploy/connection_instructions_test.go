@@ -5,6 +5,7 @@ package deploy
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -62,6 +63,41 @@ func TestGetConnectionInstructionsTextNotInitializedHandlesMissingDirectory(t *t
 	}
 	assertContains(t, content, "Deployment directory: "+deployment.Root())
 	assertContains(t, content, "Deployment State: not_initialized")
+}
+
+func TestWriteConnectionInstructionsFile_WritesContentToDeploymentRoot(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+
+	// When
+	err := writeConnectionInstructionsFile(deployment, "hello instructions")
+	// Then
+	if err != nil {
+		t.Fatalf("expected write to succeed, got %v", err)
+	}
+	content, readErr := os.ReadFile(deployment.ConnectionInstructionsPath())
+	if readErr != nil {
+		t.Fatalf("failed to read written instructions file: %v", readErr)
+	}
+	if string(content) != "hello instructions" {
+		t.Fatalf("expected written content to match, got %q", content)
+	}
+}
+
+func TestWriteConnectionInstructionsFile_MissingDirectoryReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir() + "/missing")
+
+	// When
+	err := writeConnectionInstructionsFile(deployment, "hello instructions")
+	// Then
+	if err == nil {
+		t.Fatal("expected an error when the deployment directory does not exist")
+	}
 }
 
 func initDeploymentForInfoTest(t *testing.T, deployment config.DeploymentDir) {
