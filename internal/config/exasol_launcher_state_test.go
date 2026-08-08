@@ -226,3 +226,48 @@ func TestWorkflowState(t *testing.T) {
 		}
 	})
 }
+
+func TestHasExasolPersonalStateFile(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing state file", func(t *testing.T) {
+		t.Parallel()
+
+		deployment := NewDeploymentDir(t.TempDir())
+
+		has, err := HasExasolPersonalStateFile(deployment)
+		expectNoErr(t, err)
+		if has {
+			t.Fatal("expected no state file to be reported as absent")
+		}
+	})
+
+	t.Run("existing state file", func(t *testing.T) {
+		t.Parallel()
+
+		deployment := NewDeploymentDir(t.TempDir())
+		exasolState := &ExasolPersonalState{DeploymentVersion: "0.0.0"}
+		expectNoErr(t, WriteExasolPersonalState(exasolState, deployment))
+
+		has, err := HasExasolPersonalStateFile(deployment)
+		expectNoErr(t, err)
+		if !has {
+			t.Fatal("expected an existing state file to be reported as present")
+		}
+	})
+
+	t.Run("path is a directory, not a file", func(t *testing.T) {
+		t.Parallel()
+
+		deployment := NewDeploymentDir(t.TempDir())
+		if err := os.MkdirAll(deployment.ExasolPersonalStatePath(), 0o750); err != nil {
+			t.Fatalf("failed to create directory at state path: %v", err)
+		}
+
+		has, err := HasExasolPersonalStateFile(deployment)
+		expectNoErr(t, err)
+		if has {
+			t.Fatal("expected a directory at the state path to be reported as absent")
+		}
+	})
+}

@@ -29,6 +29,40 @@ lKXb6y8Al2UTdJ3ED+yONdAc7OHg4e3vwJ8R
 	testCertSHA256Fingerprint = "CDEC9FB892603FDC23D7CFCC86A533434B5E16E69E7744E057506F2006BD732E"
 )
 
+func TestParseConnectionPort(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]int{
+		"8563":       8563,
+		"  8563  ":   8563,
+		"":           0,
+		"   ":        0,
+		"not-a-port": 0,
+	}
+	for input, want := range cases {
+		if got := parseConnectionPort(input); got != want {
+			t.Errorf("parseConnectionPort(%q) = %d, want %d", input, got, want)
+		}
+	}
+}
+
+func TestFirstNonEmpty(t *testing.T) {
+	t.Parallel()
+
+	if got := firstNonEmpty("", "  ", "b", "c"); got != "b" {
+		t.Fatalf("expected the first non-blank value, got %q", got)
+	}
+	if got := firstNonEmpty("first", "second"); got != "first" {
+		t.Fatalf("expected the first value to win, got %q", got)
+	}
+	if got := firstNonEmpty("", "  ", ""); got != "" {
+		t.Fatalf("expected an empty string when all values are blank, got %q", got)
+	}
+	if got := firstNonEmpty(); got != "" {
+		t.Fatalf("expected an empty string for no arguments, got %q", got)
+	}
+}
+
 func TestResolveConnectionInfo_UsesNormalizedDeploymentConnection(t *testing.T) {
 	t.Parallel()
 

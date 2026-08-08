@@ -285,3 +285,26 @@ func TestGetDeploymentHostPort_Error_WhenPortOutOfRange(t *testing.T) {
 	_, _, err := nodeDetails.GetDeploymentHostPort()
 	require.Error(t, err)
 }
+
+func TestGetDeploymentInfoFilePath_MissingFile(t *testing.T) {
+	t.Parallel()
+
+	_, exists, err := GetDeploymentInfoFilePath(t.TempDir())
+
+	require.NoError(t, err)
+	require.False(t, exists)
+}
+
+func TestGetDeploymentInfoFilePath_ExistingFile(t *testing.T) {
+	t.Parallel()
+
+	deploymentDir := t.TempDir()
+	expectedPath := filepath.Join(deploymentDir, nodeDetailsFileName)
+	require.NoError(t, os.WriteFile(expectedPath, []byte(`{"deploymentId":"dep-1"}`), 0o600))
+
+	path, exists, err := GetDeploymentInfoFilePath(deploymentDir)
+
+	require.NoError(t, err)
+	require.True(t, exists)
+	require.Equal(t, expectedPath, path)
+}
