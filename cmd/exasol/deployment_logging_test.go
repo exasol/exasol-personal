@@ -14,6 +14,32 @@ import (
 	"github.com/spf13/cobra"
 )
 
+//nolint:paralleltest // modifies the global deploymentLogCleanup hook.
+func TestSetDeploymentLogCleanup_NilInstallsNoopCleanup(t *testing.T) {
+	original := deploymentLogCleanup
+	t.Cleanup(func() { deploymentLogCleanup = original })
+
+	setDeploymentLogCleanup(nil)
+
+	// A no-op cleanup must be safe to call without side effects.
+	deploymentLogCleanup()
+}
+
+//nolint:paralleltest // modifies the global deploymentLogCleanup hook.
+func TestSetDeploymentLogCleanup_InstallsGivenCleanup(t *testing.T) {
+	original := deploymentLogCleanup
+	t.Cleanup(func() { deploymentLogCleanup = original })
+
+	called := false
+	setDeploymentLogCleanup(func() { called = true })
+
+	deploymentLogCleanup()
+
+	if !called {
+		t.Fatal("expected the installed cleanup function to run")
+	}
+}
+
 func TestRequireDeploymentFileLogging(t *testing.T) {
 	t.Parallel()
 

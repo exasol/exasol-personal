@@ -61,6 +61,48 @@ func TestRoutingHandler_DoesNotLeakDebugToTerminal(t *testing.T) {
 	}
 }
 
+func TestRoutingHandler_WithAttrsDelegatesToTerminalHandler(t *testing.T) {
+	t.Parallel()
+
+	terminal := &testTerminalHandler{minLevel: slog.LevelInfo}
+	sink := &deploymentFileSink{}
+	handler := newRoutingHandler(terminal, sink)
+
+	got := handler.WithAttrs([]slog.Attr{slog.String("key", "value")})
+
+	routing, ok := got.(*routingHandler)
+	if !ok {
+		t.Fatalf("expected a *routingHandler, got %T", got)
+	}
+	if routing.terminalHandler != terminal {
+		t.Fatal("expected WithAttrs to delegate to the terminal handler and keep the same sink")
+	}
+	if routing.fileSink != sink {
+		t.Fatal("expected the file sink to be carried over unchanged")
+	}
+}
+
+func TestRoutingHandler_WithGroupDelegatesToTerminalHandler(t *testing.T) {
+	t.Parallel()
+
+	terminal := &testTerminalHandler{minLevel: slog.LevelInfo}
+	sink := &deploymentFileSink{}
+	handler := newRoutingHandler(terminal, sink)
+
+	got := handler.WithGroup("group")
+
+	routing, ok := got.(*routingHandler)
+	if !ok {
+		t.Fatalf("expected a *routingHandler, got %T", got)
+	}
+	if routing.terminalHandler != terminal {
+		t.Fatal("expected WithGroup to delegate to the terminal handler and keep the same sink")
+	}
+	if routing.fileSink != sink {
+		t.Fatal("expected the file sink to be carried over unchanged")
+	}
+}
+
 func TestRoutingHandler_DebugRecordWritesToFileSink(t *testing.T) {
 	t.Parallel()
 

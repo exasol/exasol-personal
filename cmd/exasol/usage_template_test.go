@@ -47,3 +47,41 @@ func TestInfrastructureVariableFlagsTitle_FallsBackWhenLabelUnknown(t *testing.T
 		t.Fatalf("did not expect usage to contain preset label header, got:\n%s", usage)
 	}
 }
+
+// nolint: paralleltest
+func TestInstallationVariableFlagsTitle_IncludesPresetLabel(t *testing.T) {
+	// Do not run in parallel: this test temporarily modifies global installFlagToVarName.
+	oldMap := installFlagToVarName
+	installFlagToVarName = map[string]string{"dummy-install": "dummy_install"}
+	t.Cleanup(func() { installFlagToVarName = oldMap })
+
+	cmd := &cobra.Command{Use: "init"}
+	cmd.Flags().String("dummy-install", "", "dummy install")
+	cmd.Annotations = map[string]string{installPresetLabelAnnotationKey: "ubuntu"}
+	cmd.SetUsageTemplate(customUsageTemplate)
+
+	usage := cmd.UsageString()
+	if !strings.Contains(usage, "Installation variable flags of preset `ubuntu`:") {
+		t.Fatalf("expected usage to contain preset label header, got:\n%s", usage)
+	}
+}
+
+// nolint: paralleltest
+func TestInstallationVariableFlagsTitle_FallsBackWhenLabelUnknown(t *testing.T) {
+	// Do not run in parallel: this test temporarily modifies global installFlagToVarName.
+	oldMap := installFlagToVarName
+	installFlagToVarName = map[string]string{"dummy-install": "dummy_install"}
+	t.Cleanup(func() { installFlagToVarName = oldMap })
+
+	cmd := &cobra.Command{Use: "init"}
+	cmd.Flags().String("dummy-install", "", "dummy install")
+	cmd.SetUsageTemplate(customUsageTemplate)
+
+	usage := cmd.UsageString()
+	if !strings.Contains(usage, "Installation variable flags:") {
+		t.Fatalf("expected usage to contain fallback install flags header, got:\n%s", usage)
+	}
+	if strings.Contains(usage, "Installation variable flags of preset") {
+		t.Fatalf("did not expect usage to contain preset label header, got:\n%s", usage)
+	}
+}
