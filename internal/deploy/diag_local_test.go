@@ -6,12 +6,54 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 )
+
+// TestDiagnoseLocal_NonLocalDeploymentShortCircuitsBeforeRunningAnyBinary
+// exercises the DiagnoseLocal wrapper (lock acquisition + real
+// newResourceManager) while staying on diagnoseLocalUnsafe's non-local
+// short-circuit path, so it never actually resolves or executes the real
+// embedded exasol-local-runner binary.
+func TestDiagnoseLocal_NonLocalDeploymentShortCircuitsBeforeRunningAnyBinary(t *testing.T) {
+	t.Setenv(localAllowUnsupportedEnv, "1")
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o700); err != nil {
+		t.Fatalf("create infrastructure dir failed: %v", err)
+	}
+	writeTestFile(t, deployment.InfrastructureManifestPath(), `
+name: Test Infrastructure
+description: test infrastructure
+backend: tofu
+`)
+
+	diagnostics, err := DiagnoseLocal(context.Background(), deployment)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !diagnostics.PlatformSupported {
+		t.Fatal("expected platform support to bypass via EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM")
+	}
+	if diagnostics.VMRunning != nil {
+		t.Fatalf("expected no VM status check for a non-local deployment, got %+v", diagnostics)
+	}
+}
+
+func TestDiagnoseLocal_NilContextReturnsError(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+
+	_, err := DiagnoseLocal(nil, deployment) //nolint:staticcheck
+	if !errors.Is(err, ErrMissingContext) {
+		t.Fatalf("expected ErrMissingContext, got %v", err)
+	}
+}
 
 func TestDiagnoseLocalUnsafe_UnsupportedPlatform(t *testing.T) {
 	t.Parallel()
@@ -83,7 +125,7 @@ func TestDiagnoseLocalUnsafe_VMRunningReportsPortsAndHealth(t *testing.T) {
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	healthJSON := `{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}`
+	healthJSON := sshReachableDBBlockedHealthJSON
 	manager := writeFakeCombinedRunner(t, `{"running":true}`, healthJSON)
 	writeFakeVMState(t, deployment, "192.168.64.5", 20022, 28563, 0)
 

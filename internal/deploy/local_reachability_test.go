@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
@@ -31,13 +32,25 @@ const runnerZipEntryName = "launcher"
 // ResourceSpec.
 const exasolLocalRunnerResourceID = "exasol-local-runner"
 
+// sshReachableDBBlockedHealthJSON is a health-check response where the SSH
+// port is reachable but the database port is blocked: the network path is
+// fine, so this is never classified as a network-wide reachability problem.
+const sshReachableDBBlockedHealthJSON = `{"ports":` +
+	`{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}`
+
+// allPortsBlockedHealthJSON is a health-check response where every port is
+// blocked, the case classifyLocalReachability treats as a network-wide
+// reachability problem.
+const allPortsBlockedHealthJSON = `{"ports":` +
+	`{"ssh":{"state":"blocked"},"db":{"state":"blocked"}}}`
+
 func TestClassifyLocalReachability_AllPortsBlocked(t *testing.T) {
 	t.Parallel()
 	skipOnWindows(t)
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	blockedJSON := `{"ports":{"ssh":{"state":"blocked"},"db":{"state":"blocked"}}}`
+	blockedJSON := allPortsBlockedHealthJSON
 	manager := writeFakeCombinedRunner(t, "", blockedJSON)
 	localRuntime := localruntime.New(deployment, manager)
 
@@ -58,7 +71,7 @@ func TestClassifyLocalReachability_OnlyDatabasePortBlocked(t *testing.T) {
 	// network path itself is fine; the problem is database-specific.
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	mixedJSON := `{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}`
+	mixedJSON := sshReachableDBBlockedHealthJSON
 	manager := writeFakeCombinedRunner(t, "", mixedJSON)
 	localRuntime := localruntime.New(deployment, manager)
 
@@ -104,6 +117,89 @@ func TestClassifyLocalReachability_HealthCheckUnavailableIsNoop(t *testing.T) {
 	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no-op when health-check is unavailable, got %v", err)
 	}
+}
+
+func TestLocalReachabilityError_ErrorAndUnwrap(t *testing.T) {
+	t.Parallel()
+
+	err := &localReachabilityError{}
+
+	if err.Error() != localReachabilityMessage {
+		t.Fatalf("expected the fixed reachability message, got %q", err.Error())
+	}
+	if !errors.Is(err, ErrLocalReachability) {
+		t.Fatal("expected Unwrap to expose ErrLocalReachability")
+	}
+}
+
+func TestDiagnoseLocalFailure_NilErrorIsNoop(t *testing.T) {
+	t.Parallel()
+
+	deployment := newLocalTestDeployment(t)
+	localRuntime := localruntime.New(deployment, nil)
+
+	if err := diagnoseLocalFailure(context.Background(), localRuntime, nil); err != nil {
+		t.Fatalf("expected nil error to stay nil, got %v", err)
+	}
+}
+
+// nolint: paralleltest // avoids concurrent extract+exec of the fake runner (ETXTBSY flakes).
+func TestDiagnoseLocalFailure_ReclassifiesWhenAllPortsBlocked(t *testing.T) {
+	skipOnWindows(t)
+
+	deployment := newLocalTestDeployment(t)
+	ensureLocalRuntimeWorkDir(t, deployment)
+	blockedJSON := allPortsBlockedHealthJSON
+	manager := writeFakeCombinedRunner(t, "", blockedJSON)
+	localRuntime := localruntime.New(deployment, manager)
+	originalErr := errors.New("original failure")
+
+	err := diagnoseLocalFailure(context.Background(), localRuntime, originalErr)
+
+	if !errors.Is(err, ErrLocalReachability) {
+		t.Fatalf("expected the error to be reclassified as a reachability error, got %v", err)
+	}
+}
+
+// nolint: paralleltest // avoids concurrent extract+exec of the fake runner (ETXTBSY flakes).
+func TestDiagnoseLocalFailure_KeepsOriginalErrorWhenReachable(t *testing.T) {
+	skipOnWindows(t)
+
+	deployment := newLocalTestDeployment(t)
+	ensureLocalRuntimeWorkDir(t, deployment)
+	reachableJSON := sshReachableDBBlockedHealthJSON
+	manager := writeFakeCombinedRunner(t, "", reachableJSON)
+	localRuntime := localruntime.New(deployment, manager)
+	originalErr := errors.New("original failure")
+
+	err := diagnoseLocalFailure(context.Background(), localRuntime, originalErr)
+
+	if !errors.Is(err, originalErr) {
+		t.Fatalf("expected the original error to be preserved, got %v", err)
+	}
+}
+
+// localRunnerResolvesOnThisPlatform reports whether the embedded
+// exasol-local-runner artifact declares support for the current GOOS/GOARCH,
+// checked dynamically against assets/resources/resources.yaml. Tests use
+// this instead of hardcoding darwin/arm64 so they keep covering the right
+// branch as more platforms gain local-backend support.
+func localRunnerResolvesOnThisPlatform(t *testing.T) bool {
+	t.Helper()
+
+	spec, err := runtimeartifacts.ParseSpec(resources.ResourcesYAML)
+	if err != nil {
+		t.Fatalf("failed to parse embedded resource spec: %v", err)
+	}
+
+	def, ok := spec[exasolLocalRunnerResourceID]
+	if !ok {
+		t.Fatalf("expected an %q entry in the embedded resource spec", exasolLocalRunnerResourceID)
+	}
+
+	_, resolveErr := def.Resolve(runtime.GOOS, runtime.GOARCH)
+
+	return resolveErr == nil
 }
 
 func skipOnWindows(t *testing.T) {
