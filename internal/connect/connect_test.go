@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	generaltypes "github.com/exasol/exasol-personal/internal/connect/types"
@@ -99,6 +100,159 @@ func (s stubQueryResult) RowsAffected() int64 {
 
 func (s stubQueryResult) Truncated() bool {
 	return s.truncated
+}
+
+func TestPrintExitHint_WritesShellExitInstructions(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	if err := printExitHint(&out); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if out.String() != "Type \"exit\" to exit the shell\n" {
+		t.Fatalf("unexpected output: %q", out.String())
+	}
+}
+
+func TestConnectWriters_DefaultsNilStreamsToDiscard(t *testing.T) {
+	t.Parallel()
+
+	writers := connectWriters(&Opts{})
+	if writers.stdout != io.Discard || writers.stderr != io.Discard {
+		t.Fatalf("expected nil streams to default to io.Discard, got %+v", writers)
+	}
+}
+
+func TestConnectWriters_PreservesProvidedStreams(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	writers := connectWriters(&Opts{Stdout: &stdout, Stderr: &stderr})
+	if writers.stdout != &stdout || writers.stderr != &stderr {
+		t.Fatalf("expected the provided streams to be preserved, got %+v", writers)
+	}
+}
+
+func TestSelectResultPrinter_PicksPrinterByFormat(t *testing.T) {
+	t.Parallel()
+
+	result := stubQueryResult{columnNames: []string{"ID"}, rows: [][]string{{"1"}}}
+
+	var csvOut bytes.Buffer
+	if err := selectResultPrinter(OutputFormatCSV, JSONFormatPretty)(&csvOut, result); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if csvOut.String() != "ID\n1\n" {
+		t.Fatalf("expected CSV output for OutputFormatCSV, got %q", csvOut.String())
+	}
+
+	var tableOut bytes.Buffer
+	err := selectResultPrinter(OutputFormatTable, JSONFormatPretty)(&tableOut, result)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !strings.Contains(tableOut.String(), "ID") {
+		t.Fatalf("expected a table rendering for OutputFormatTable, got %q", tableOut.String())
+	}
+
+	var defaultOut bytes.Buffer
+	err = selectResultPrinter(OutputFormat("bogus"), JSONFormatPretty)(&defaultOut, result)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !strings.Contains(defaultOut.String(), "ID") {
+		t.Fatalf("expected an unknown format to fall back to the table renderer, got %q",
+			defaultOut.String())
+	}
+}
+
+func TestExecStatement_BlankInputIsNoop(t *testing.T) {
+	t.Parallel()
+
+	database := &stubDatabase{}
+	writers := connectOutputWriters{stdout: io.Discard, stderr: io.Discard}
+
+	err := execStatement(context.Background(), database, 0, printResultCSV, writers, "")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(database.queries) != 0 {
+		t.Fatalf("expected no query to be executed for blank input, got %v", database.queries)
+	}
+}
+
+func TestExecStatement_RunsQueryAndPrintsResult(t *testing.T) {
+	t.Parallel()
+
+	database := &stubDatabase{results: []stubExecResult{
+		{result: stubQueryResult{columnNames: []string{"ID"}, rows: [][]string{{"1"}}}},
+	}}
+	var stdout bytes.Buffer
+	writers := connectOutputWriters{stdout: &stdout, stderr: io.Discard}
+
+	err := execStatement(context.Background(), database, 10, printResultCSV, writers, "SELECT 1")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if stdout.String() != "ID\n1\n" {
+		t.Fatalf("expected the CSV result to be printed, got %q", stdout.String())
+	}
+	if len(database.queries) != 1 || database.queries[0] != "SELECT 1" ||
+		database.maxRows[0] != 10 {
+		t.Fatalf("expected the statement to be executed with the given max rows, got %+v", database)
+	}
+}
+
+func TestExecStatement_PrintsTruncationFooterWhenTruncated(t *testing.T) {
+	t.Parallel()
+
+	database := &stubDatabase{results: []stubExecResult{
+		{result: stubQueryResult{
+			columnNames: []string{"ID"},
+			rows:        [][]string{{"1"}},
+			truncated:   true,
+		}},
+	}}
+	var stdout, stderr bytes.Buffer
+	writers := connectOutputWriters{stdout: &stdout, stderr: &stderr}
+
+	err := execStatement(context.Background(), database, 1, printResultCSV, writers, "SELECT 1")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !strings.Contains(stderr.String(), "truncated") {
+		t.Fatalf("expected a truncation footer on stderr, got %q", stderr.String())
+	}
+}
+
+func TestExecStatement_PropagatesExecError(t *testing.T) {
+	t.Parallel()
+
+	execErr := errors.New("boom")
+	database := &stubDatabase{results: []stubExecResult{{err: execErr}}}
+	writers := connectOutputWriters{stdout: io.Discard, stderr: io.Discard}
+
+	err := execStatement(context.Background(), database, 0, printResultCSV, writers, "SELECT 1")
+	if !errors.Is(err, execErr) {
+		t.Fatalf("expected the exec error to propagate, got %v", err)
+	}
+}
+
+func TestRenderedJSONSQLError_ErrorAndUnwrap(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("underlying failure")
+	wrapped := renderedJSONSQLError{cause: cause}
+
+	if wrapped.Error() != cause.Error() {
+		t.Fatalf("expected Error() to mirror the cause, got %q", wrapped.Error())
+	}
+	if !errors.Is(wrapped, cause) {
+		t.Fatal("expected Unwrap to expose the underlying cause")
+	}
+	if !wrapped.SuppressCLIError() {
+		t.Fatal("expected SuppressCLIError to always be true")
+	}
 }
 
 func TestPrintResultJSON(t *testing.T) {
@@ -364,6 +518,19 @@ func TestResolveNonInteractiveSQL(t *testing.T) {
 		require.False(t, nonInteractive)
 		require.Empty(t, sql)
 	})
+}
+
+func TestResolveNonInteractiveSQL_CommandBypassesRealStdin(t *testing.T) {
+	t.Parallel()
+
+	// opts.Command short-circuits before resolveNonInteractiveSQL ever reads
+	// os.Stdin or calls util.IsInteractiveStdin, so this is deterministic
+	// regardless of this process's actual stdin.
+	sql, nonInteractive, err := resolveNonInteractiveSQL(&Opts{Command: "SELECT 1"})
+
+	require.NoError(t, err)
+	require.True(t, nonInteractive)
+	require.Equal(t, "SELECT 1", sql)
 }
 
 type stubDatabase struct {

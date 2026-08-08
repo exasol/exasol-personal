@@ -6,6 +6,8 @@ package connect
 import (
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -51,6 +53,26 @@ func (mp *mockInputsProcessor) failOnInput(input string, err error) {
 }
 
 // nolint: revive
+func TestGetHistoryFilePath_ResolvesUnderUserCacheDir(t *testing.T) {
+	t.Parallel()
+
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		t.Skipf("no user cache dir available in this environment: %v", err)
+	}
+
+	path, err := getHistoryFilePath()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if filepath.Dir(path) != cacheDir {
+		t.Fatalf("expected the history file to live under %q, got %q", cacheDir, path)
+	}
+	if filepath.Base(path) != "exasol_history" {
+		t.Fatalf("expected the history file name to be exasol_history, got %q", filepath.Base(path))
+	}
+}
+
 func TestRunShell(t *testing.T) {
 	t.Parallel()
 
@@ -122,7 +144,11 @@ func TestRunShell(t *testing.T) {
 				t.Helper()
 
 				require.ErrorIs(t, err, errTest)
-				require.Equal(t, []string{"OPEN SCHEMA dummy  \nSELECT * FROM Dual"}, mocks.inputsProcessor.inputs)
+				require.Equal(
+					t,
+					[]string{"OPEN SCHEMA dummy  \nSELECT * FROM Dual"},
+					mocks.inputsProcessor.inputs,
+				)
 			},
 		},
 		{
