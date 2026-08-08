@@ -5,6 +5,7 @@ package deploy
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -74,6 +75,47 @@ func TestResolveDeploymentPresetIdentity_DerivesForOldStyleDeploymentWithoutWrit
 	}
 	if state.InfrastructurePresetIdentity != "" || state.InstallationPresetIdentity != "" {
 		t.Fatal("expected ResolveDeploymentPresetIdentity not to persist the derived identity")
+	}
+}
+
+func TestPresetIdentityOf_NameBasedRef(t *testing.T) {
+	t.Parallel()
+
+	// Then: a name-based ref with surrounding whitespace resolves to a trimmed name-based identity.
+	if got := presetIdentityOf(PresetRef{Name: " aws "}); got != "name:aws" {
+		t.Fatalf("expected a trimmed name identity, got %q", got)
+	}
+}
+
+func TestPresetIdentityOf_PathBasedRefIsAbsoluteAndCleaned(t *testing.T) {
+	t.Parallel()
+
+	// Given a path-based preset ref with a non-canonical path.
+	dir := t.TempDir()
+
+	// When its identity is computed.
+	got := presetIdentityOf(PresetRef{Path: dir + "/./"})
+	// Then it returns an absolute, cleaned path-based identity.
+	want := "path:" + filepath.Clean(dir)
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestPresetIdentityDisplay_StripsKnownPrefixes(t *testing.T) {
+	t.Parallel()
+
+	// Given identities with name/path prefixes and one with no known prefix.
+	cases := map[string]string{
+		"name:aws":         "aws",
+		"path:/tmp/custom": "/tmp/custom",
+		"unknown-format":   "unknown-format",
+	}
+	for identity, want := range cases {
+		// Then: known prefixes are stripped and unknown identities pass through unchanged.
+		if got := presetIdentityDisplay(identity); got != want {
+			t.Errorf("presetIdentityDisplay(%q) = %q, want %q", identity, got, want)
+		}
 	}
 }
 
