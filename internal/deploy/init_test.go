@@ -247,3 +247,150 @@ func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {
 		t.Fatalf("expected ErrDeploymentDirectoryNotEmpty, got: %v", err)
 	}
 }
+
+func TestResolveInfrastructureInfo_ResolvesKnownPreset(t *testing.T) {
+	t.Parallel()
+
+	// When
+	info, err := ResolveInfrastructureInfo(presets.DefaultInfrastructure)
+	// Then
+	if err != nil {
+		t.Fatalf("expected the default infrastructure preset to resolve, got %v", err)
+	}
+	if info.Name == "" {
+		t.Fatal("expected a non-empty infrastructure name")
+	}
+}
+
+func TestResolveInfrastructureInfo_UnknownPresetReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// Then: an unknown preset name surfaces as an error.
+	if _, err := ResolveInfrastructureInfo("does-not-exist"); err == nil {
+		t.Fatal("expected an error for an unknown infrastructure preset")
+	}
+}
+
+func TestValidatePresetDir_MissingDirReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// When
+	err := validatePresetDir(filepath.Join(t.TempDir(), "missing"), "infrastructure.yaml")
+	// Then
+	if err == nil {
+		t.Fatal("expected an error for a missing preset directory")
+	}
+}
+
+func TestValidatePresetDir_NotADirectoryReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	filePath := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
+		t.Fatalf("failed to write file fixture: %v", err)
+	}
+
+	// Then: a preset path that is a file, not a directory, is rejected.
+	if err := validatePresetDir(filePath, "infrastructure.yaml"); err == nil {
+		t.Fatal("expected an error when the preset path is not a directory")
+	}
+}
+
+func TestValidatePresetDir_MissingRequiredFileReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	dir := t.TempDir()
+
+	// Then: a directory missing the required manifest file is rejected.
+	if err := validatePresetDir(dir, "infrastructure.yaml"); err == nil {
+		t.Fatal("expected an error when the required file is missing")
+	}
+}
+
+func TestValidatePresetDir_ValidDirectorySucceeds(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "infrastructure.yaml"), `
+name: Test Infrastructure
+description: test infrastructure
+backend: local
+`)
+
+	// Then: a directory containing the required manifest file passes validation.
+	if err := validatePresetDir(dir, "infrastructure.yaml"); err != nil {
+		t.Fatalf("expected a valid preset directory to pass validation, got %v", err)
+	}
+}
+
+func TestPresetLabel(t *testing.T) {
+	t.Parallel()
+
+	// Then: a named preset is labeled by its name.
+	if got := presetLabel(PresetRef{Name: "aws"}); got != "aws" {
+		t.Fatalf("expected the preset name, got %q", got)
+	}
+	// Then: a path-based preset is labeled by its path.
+	if got := presetLabel(PresetRef{Path: "/tmp/custom"}); got != "/tmp/custom" {
+		t.Fatalf("expected the preset path, got %q", got)
+	}
+}
+
+func TestValidateInfrastructurePreset_PathBasedPreset(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "infrastructure.yaml"), `
+name: Test Infrastructure
+description: test infrastructure
+backend: local
+`)
+
+	// Then: a valid path-based infrastructure preset passes validation.
+	if err := validateInfrastructurePreset(PresetRef{Path: dir}); err != nil {
+		t.Fatalf("expected a valid path-based preset to pass validation, got %v", err)
+	}
+}
+
+func TestValidateInfrastructurePreset_UnknownNameReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// When
+	err := validateInfrastructurePreset(PresetRef{Name: "does-not-exist"})
+	// Then
+	if err == nil {
+		t.Fatal("expected an error for an unknown infrastructure preset name")
+	}
+}
+
+func TestValidateInstallationPreset_PathBasedPreset(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "installation.yaml"), `
+name: Test Installation
+description: test installation
+install: []
+`)
+
+	// Then: a valid path-based installation preset passes validation.
+	if err := validateInstallationPreset(PresetRef{Path: dir}); err != nil {
+		t.Fatalf("expected a valid path-based preset to pass validation, got %v", err)
+	}
+}
+
+func TestValidateInstallationPreset_UnknownNameReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// When
+	err := validateInstallationPreset(PresetRef{Name: "does-not-exist"})
+	// Then
+	if err == nil {
+		t.Fatal("expected an error for an unknown installation preset name")
+	}
+}
