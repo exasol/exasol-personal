@@ -4,6 +4,9 @@
 package presets
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -76,5 +79,73 @@ func TestBuiltInCloudPresetsEmitAdminUIMetadata(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReadInfrastructureManifestFromDir_MissingFileReturnsWrappedError(t *testing.T) {
+	t.Parallel()
+
+	// Given / When
+	_, err := ReadInfrastructureManifestFromDir(t.TempDir())
+	// Then
+	if err == nil {
+		t.Fatal("expected an error for a missing manifest file")
+	}
+}
+
+func TestReadInfrastructureManifestFromDir_ParsesRealManifestFile(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	dir := t.TempDir()
+	manifestYAML := "name: Test Infra\ndescription: test infra\nbackend: local\n"
+	path := filepath.Join(dir, InfrastructureManifestFilename)
+	if err := os.WriteFile(path, []byte(manifestYAML), 0o600); err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	// When
+	manifest, err := ReadInfrastructureManifestFromDir(dir)
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if manifest.Name != "Test Infra" {
+		t.Fatalf("expected manifest name to be parsed, got %q", manifest.Name)
+	}
+}
+
+func TestParseInfrastructureManifest_RejectsMissingName(t *testing.T) {
+	t.Parallel()
+
+	// Given / When
+	_, err := parseInfrastructureManifest([]byte("description: test infra\n"))
+
+	// Then
+	if !errors.Is(err, ErrMissingName) {
+		t.Fatalf("expected ErrMissingName, got %v", err)
+	}
+}
+
+func TestParseInfrastructureManifest_RejectsMissingDescription(t *testing.T) {
+	t.Parallel()
+
+	// Given / When
+	_, err := parseInfrastructureManifest([]byte("name: Test\n"))
+
+	// Then
+	if !errors.Is(err, ErrMissingDescription) {
+		t.Fatalf("expected ErrMissingDescription, got %v", err)
+	}
+}
+
+func TestReadInfrastructureManifest_UnknownPresetReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// Given / When
+	_, err := ReadInfrastructureManifest("does-not-exist")
+	// Then
+	if err == nil {
+		t.Fatal("expected an error for an unknown infrastructure preset")
 	}
 }
