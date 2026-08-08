@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -133,6 +134,70 @@ func TestListDeploymentDirectories_ReportsRunningStatusAndPresetIdentity(t *test
 	}
 	if entries[0].Infrastructure != "aws" || entries[0].Installation != "standard" {
 		t.Fatalf("expected preset identity to be displayed, got: %#v", entries[0])
+	}
+}
+
+func TestDeploymentListEntryText_IncludesPresetWhenPresent(t *testing.T) {
+	t.Parallel()
+
+	entry := deploymentListEntry{
+		Name:           "prod",
+		Path:           "/deployments/prod",
+		Status:         deploy.StatusRunning,
+		Infrastructure: "aws",
+		Installation:   "standard",
+	}
+
+	got := deploymentListEntryText(entry)
+	want := "prod status=running preset=aws/standard path=/deployments/prod"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestDeploymentListEntryText_OmitsPresetWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	entry := deploymentListEntry{
+		Name:   "empty",
+		Path:   "/deployments/empty",
+		Status: deploy.StatusNotInitialized,
+	}
+
+	got := deploymentListEntryText(entry)
+	want := "empty status=not_initialized path=/deployments/empty"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestRenderDeploymentsListText_ReportsNoDeploymentsWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	var out strings.Builder
+	if err := renderDeploymentsListText(&out, nil); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if out.String() != "No deployment directories found.\n" {
+		t.Fatalf("expected the empty-state message, got %q", out.String())
+	}
+}
+
+func TestRenderDeploymentsListText_RendersOneLinePerEntry(t *testing.T) {
+	t.Parallel()
+
+	entries := []deploymentListEntry{
+		{Name: "a", Path: "/a", Status: deploy.StatusRunning},
+		{Name: "b", Path: "/b", Status: deploy.StatusStopped},
+	}
+
+	var out strings.Builder
+	if err := renderDeploymentsListText(&out, entries); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	want := "a status=running path=/a\nb status=stopped path=/b\n"
+	if out.String() != want {
+		t.Fatalf("expected %q, got %q", want, out.String())
 	}
 }
 

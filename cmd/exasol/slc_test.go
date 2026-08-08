@@ -11,6 +11,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/exasol/exasol-personal/internal/util"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -81,6 +82,63 @@ func hasSubcommand(parent *cobra.Command, name string) bool {
 	return false
 }
 
+func TestSLCConfirmFunc_AutoApproveReturnsNilConfirmFunc(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{Use: "slc"}
+	if slcConfirmFunc(cmd, true, "install") != nil {
+		t.Fatal("expected --auto-approve to bypass confirmation entirely")
+	}
+}
+
+func TestSLCConfirmFunc_NonInteractiveStdinRefusesWithGuidance(t *testing.T) {
+	t.Parallel()
+
+	if util.IsInteractiveStdin() {
+		t.Skip("this process's stdin is a terminal; the non-interactive path isn't reachable here")
+	}
+
+	cmd := &cobra.Command{Use: "slc"}
+	var stderr bytes.Buffer
+	cmd.SetErr(&stderr)
+
+	fn := slcConfirmFunc(cmd, false, "install")
+	if fn == nil {
+		t.Fatal("expected a non-nil confirm func when --auto-approve is not set")
+	}
+
+	confirmed, err := fn()
+	if confirmed {
+		t.Fatal("expected non-interactive stdin to never auto-confirm")
+	}
+	if err == nil || !strings.Contains(err.Error(), "--auto-approve") {
+		t.Fatalf("expected guidance to use --auto-approve, got %v", err)
+	}
+}
+
+//nolint:paralleltest // mutates shared terminal message queues
+func TestQueueSLCListJSON_QueuesFormattedJSON(t *testing.T) {
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+
+	statuses := []deploy.SLCStatus{{Flavor: "python-3.12"}}
+	var customs []deploy.CustomSLCStatus
+	if err := queueSLCListJSON(statuses, customs); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	writeTerminalMessages(terminalConfig{stdout: &stdout, stderr: &stderr, showCallsToAction: true})
+
+	want, err := formatSLCListJSON(statuses, customs)
+	if err != nil {
+		t.Fatalf("failed to compute expected JSON: %v", err)
+	}
+	if strings.TrimSpace(stdout.String()) != want {
+		t.Fatalf("expected queued JSON output %q, got %q", want, stdout.String())
+	}
+}
+
 func TestRenderSLCListTextNoneAvailable(t *testing.T) {
 	t.Parallel()
 
@@ -116,6 +174,46 @@ func TestRenderSLCListTextQueuesPrimaryOutput(t *testing.T) {
 	}
 	if stderr.String() != "" {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+func TestFormatSLCListTextRendersFlavorAliasVersionAndInstalledColumns(t *testing.T) {
+	t.Parallel()
+
+	output := formatSLCListText([]deploy.SLCStatus{
+		{
+			Flavor:    "python-3.12",
+			Aliases:   []string{"PYTHON3", "PYTHON312"},
+			Version:   "11.2.0",
+			Installed: true,
+		},
+		{
+			Flavor:    "java-17",
+			Aliases:   []string{"JAVA", "JAVA17"},
+			Version:   "11.2.0",
+			Installed: false,
+		},
+	}, nil)
+
+	if !strings.Contains(output, "FLAVOR") || !strings.Contains(output, "INSTALLED") {
+		t.Fatalf("expected a header row, got %q", output)
+	}
+	if !strings.Contains(output, "python-3.12") || !strings.Contains(output, "PYTHON3, PYTHON312") {
+		t.Fatalf("expected installed python row, got %q", output)
+	}
+	if !strings.Contains(output, "java-17") {
+		t.Fatalf("expected java row, got %q", output)
+	}
+
+	lines := strings.Split(output, "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected a header plus one line per SLC, got %d lines: %q", len(lines), output)
+	}
+	if !strings.HasSuffix(strings.TrimRight(lines[1], " \t"), "yes") {
+		t.Fatalf("expected installed python row to end in yes, got %q", lines[1])
+	}
+	if !strings.HasSuffix(strings.TrimRight(lines[2], " \t"), "no") {
+		t.Fatalf("expected non-installed java row to end in no, got %q", lines[2])
 	}
 }
 
@@ -210,6 +308,141 @@ func TestRenderSLCCommandJSONQueuesParseablePrimaryOutput(t *testing.T) {
 	}
 	if decoded["outcome"] != "deferred" {
 		t.Fatalf("unexpected outcome: %v", decoded["outcome"])
+	}
+}
+
+//nolint:paralleltest // mutates shared terminal message queues
+func TestPrintSLCInstallResultDescribesOutcomeAndReplacement(t *testing.T) {
+	cases := map[string]struct {
+		result   *deploy.SLCInstallResult
+		wantText []string
+	}{
+		"fresh install, deferred activation": {
+			result: &deploy.SLCInstallResult{
+				Entry:   config.InstalledSLC{Flavor: "python-3.12", Aliases: []string{"PYTHON3"}},
+				Outcome: deploy.SLCApplyDeferred,
+			},
+			wantText: []string{"Installed python-3.12", "next start"},
+		},
+		"replacing an existing flavor, database restarted": {
+			result: &deploy.SLCInstallResult{
+				Entry:    config.InstalledSLC{Flavor: "python-3.12", Aliases: []string{"PYTHON3"}},
+				Replaced: true,
+				Outcome:  deploy.SLCApplyRestarted,
+			},
+			wantText: []string{"Updated python-3.12", "restarted"},
+		},
+		"database started to apply the change": {
+			result: &deploy.SLCInstallResult{
+				Entry:   config.InstalledSLC{Flavor: "python-3.12", Aliases: []string{"PYTHON3"}},
+				Outcome: deploy.SLCApplyStarted,
+			},
+			wantText: []string{"Installed python-3.12", "started"},
+		},
+	}
+
+	for name, testCase := range cases {
+		//nolint:paralleltest // mutates shared terminal message queues
+		t.Run(name, func(t *testing.T) {
+			resetTerminalMessages()
+			defer resetTerminalMessages()
+
+			printSLCInstallResult(testCase.result)
+
+			stdout := bytes.Buffer{}
+			writeTerminalMessages(terminalConfig{stdout: &stdout, showCallsToAction: true})
+			for _, want := range testCase.wantText {
+				if !strings.Contains(stdout.String(), want) {
+					t.Fatalf("expected output to contain %q, got %q", want, stdout.String())
+				}
+			}
+		})
+	}
+}
+
+//nolint:paralleltest // mutates shared terminal message queues
+func TestPrintSLCUpdateResultDescribesFlavorChangeAndOutcome(t *testing.T) {
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+
+	printSLCUpdateResult(&deploy.SLCUpdateResult{
+		Entry:       &config.InstalledSLC{Flavor: "python-3.13"},
+		FromFlavor:  "python-3.12",
+		FromVersion: "11.1.0",
+		Outcome:     deploy.SLCApplyRestarted,
+	})
+
+	stdout := bytes.Buffer{}
+	writeTerminalMessages(terminalConfig{stdout: &stdout, showCallsToAction: true})
+
+	if !strings.Contains(stdout.String(), "Updated python-3.12 to python-3.13") {
+		t.Fatalf("expected flavor transition in output, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "restarted") {
+		t.Fatalf("expected restart outcome in output, got %q", stdout.String())
+	}
+}
+
+//nolint:paralleltest // mutates shared terminal message queues
+func TestPrintSLCUpdateResultDescribesStoppedDatabaseStarted(t *testing.T) {
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+
+	printSLCUpdateResult(&deploy.SLCUpdateResult{
+		Entry:   &config.InstalledSLC{Flavor: "python-3.12"},
+		Outcome: deploy.SLCApplyStarted,
+	})
+
+	stdout := bytes.Buffer{}
+	writeTerminalMessages(terminalConfig{stdout: &stdout, showCallsToAction: true})
+
+	if !strings.Contains(stdout.String(), "Updated python-3.12") {
+		t.Fatalf("expected update message, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "started") {
+		t.Fatalf("expected started outcome in output, got %q", stdout.String())
+	}
+}
+
+//nolint:paralleltest // mutates shared terminal message queues
+func TestPrintSLCRemoveResultDescribesOutcome(t *testing.T) {
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+
+	printSLCRemoveResult(&deploy.SLCRemoveResult{
+		Entry:   &config.InstalledSLC{Flavor: "python-3.12"},
+		Outcome: deploy.SLCApplyDeferred,
+	})
+
+	stdout := bytes.Buffer{}
+	writeTerminalMessages(terminalConfig{stdout: &stdout, showCallsToAction: true})
+
+	if !strings.Contains(stdout.String(), "Removed python-3.12") {
+		t.Fatalf("expected removal message, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "next start") {
+		t.Fatalf("expected deferred-activation wording, got %q", stdout.String())
+	}
+}
+
+//nolint:paralleltest // mutates shared terminal message queues
+func TestPrintSLCRemoveResultDescribesDatabaseRestarted(t *testing.T) {
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+
+	printSLCRemoveResult(&deploy.SLCRemoveResult{
+		Entry:   &config.InstalledSLC{Flavor: "python-3.12"},
+		Outcome: deploy.SLCApplyRestarted,
+	})
+
+	stdout := bytes.Buffer{}
+	writeTerminalMessages(terminalConfig{stdout: &stdout, showCallsToAction: true})
+
+	if !strings.Contains(stdout.String(), "Removed python-3.12") {
+		t.Fatalf("expected removal message, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "restarted") {
+		t.Fatalf("expected restarted wording, got %q", stdout.String())
 	}
 }
 

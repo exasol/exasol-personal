@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,6 +13,34 @@ import (
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
+
+func TestFormatConfigurationScalar(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		value any
+		want  string
+	}{
+		"string":      {value: "hello", want: "hello"},
+		"bool":        {value: true, want: "true"},
+		"int":         {value: 42, want: "42"},
+		"int64":       {value: int64(42), want: "42"},
+		"float64":     {value: 3.5, want: "3.5"},
+		"json.Number": {value: json.Number("7"), want: "7"},
+		"nil":         {value: nil, want: ""},
+		"unsupported": {value: []string{"x"}, want: "[x]"},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := formatConfigurationScalar(testCase.value); got != testCase.want {
+				t.Errorf("formatConfigurationScalar(%v) = %q, want %q",
+					testCase.value, got, testCase.want)
+			}
+		})
+	}
+}
 
 func TestConfigCommandsDeclareDeploymentPreRunRequirements(t *testing.T) {
 	t.Parallel()

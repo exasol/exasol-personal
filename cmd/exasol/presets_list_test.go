@@ -6,10 +6,46 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/presets"
 )
+
+func TestValidateRenderPresetTypeFilter_EmptyFilterIsValid(t *testing.T) {
+	t.Parallel()
+
+	if err := validateRenderPresetTypeFilter("", ""); err != nil {
+		t.Fatalf("expected no error for an empty filter, got %v", err)
+	}
+}
+
+func TestValidateRenderPresetTypeFilter_KnownTypeIsValid(t *testing.T) {
+	t.Parallel()
+
+	err := validateRenderPresetTypeFilter(
+		presets.PresetTypeInfrastructure, presets.PresetTypeInfrastructure,
+	)
+	if err != nil {
+		t.Fatalf("expected no error for a known preset type, got %v", err)
+	}
+}
+
+func TestValidateRenderPresetTypeFilter_UnknownTypeListsAllowedTypes(t *testing.T) {
+	t.Parallel()
+
+	err := validateRenderPresetTypeFilter("bogus", "bogus")
+	if err == nil {
+		t.Fatal("expected an error for an unknown preset type")
+	}
+	if !strings.Contains(err.Error(), "bogus") {
+		t.Fatalf("expected the invalid type to be echoed back, got %v", err)
+	}
+	if !strings.Contains(err.Error(), presets.PresetTypeInfrastructure) ||
+		!strings.Contains(err.Error(), presets.PresetTypeInstallation) {
+		t.Fatalf("expected the allowed types to be listed, got %v", err)
+	}
+}
 
 func TestFilterPresetCatalog_All(t *testing.T) {
 	t.Parallel()

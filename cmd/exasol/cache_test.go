@@ -164,6 +164,41 @@ func TestCacheCleanRejectsMultipleCleanupSelectors(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // modifies global clean option state.
+func TestSelectedCacheCleanupMode(t *testing.T) {
+	oldOpts := cacheCleanOpts
+	t.Cleanup(func() {
+		cacheCleanOpts = oldOpts
+	})
+
+	cacheCleanOpts = struct {
+		Invalid          bool
+		All              bool
+		PartialDownloads bool
+		DryRun           bool
+	}{Invalid: true}
+	if got := selectedCacheCleanupMode(); got != runtimeartifacts.CleanupModeInvalid {
+		t.Fatalf("expected CleanupModeInvalid, got %v", got)
+	}
+
+	cacheCleanOpts.Invalid = false
+	cacheCleanOpts.All = true
+	if got := selectedCacheCleanupMode(); got != runtimeartifacts.CleanupModeAll {
+		t.Fatalf("expected CleanupModeAll, got %v", got)
+	}
+
+	cacheCleanOpts.All = false
+	cacheCleanOpts.PartialDownloads = true
+	if got := selectedCacheCleanupMode(); got != runtimeartifacts.CleanupModePartialDownloads {
+		t.Fatalf("expected CleanupModePartialDownloads, got %v", got)
+	}
+
+	cacheCleanOpts.PartialDownloads = false
+	if got := selectedCacheCleanupMode(); got != runtimeartifacts.CleanupModeStale {
+		t.Fatalf("expected the default CleanupModeStale, got %v", got)
+	}
+}
+
 func TestCacheUnlockHelpWarnsAboutActiveLauncherProcesses(t *testing.T) {
 	t.Parallel()
 
