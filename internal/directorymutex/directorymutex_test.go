@@ -273,6 +273,82 @@ func TestClearLockRemovesMarker(t *testing.T) {
 	}
 }
 
+func TestWrapAcquireError_WrapsContextDeadlineExceeded(t *testing.T) {
+	t.Parallel()
+
+	err := wrapAcquireError(context.DeadlineExceeded)
+
+	if !errors.Is(err, ErrAcquireTimeout) {
+		t.Fatalf("expected ErrAcquireTimeout, got %v", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected the original deadline error to remain unwrappable, got %v", err)
+	}
+}
+
+func TestWrapAcquireError_PassesThroughOtherErrors(t *testing.T) {
+	t.Parallel()
+
+	original := errors.New("some other failure")
+
+	if got := wrapAcquireError(original); !errors.Is(got, original) {
+		t.Fatalf("expected the original error to pass through unchanged, got %v", got)
+	}
+}
+
+func TestWithTimeoutIfMissing_CreatesTimeoutForNilContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := withTimeoutIfMissing(nil, time.Second) //nolint:staticcheck
+	defer cancel()
+
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		t.Fatal("expected a deadline to be applied for a nil context")
+	}
+}
+
+func TestWithTimeoutIfMissing_PreservesExistingDeadline(t *testing.T) {
+	t.Parallel()
+
+	original, originalCancel := context.WithTimeout(context.Background(), time.Minute)
+	defer originalCancel()
+
+	ctx, cancel := withTimeoutIfMissing(original, time.Second)
+	defer cancel()
+
+	if ctx != original {
+		t.Fatal("expected the caller-provided context with a deadline to be reused as-is")
+	}
+}
+
+func TestWithTimeoutIfMissing_AppliesTimeoutWhenContextHasNoDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := withTimeoutIfMissing(context.Background(), time.Second)
+	defer cancel()
+
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		t.Fatal("expected a deadline to be applied when the context has none")
+	}
+}
+
+func TestClearLockWithoutMarkerIsNoop(t *testing.T) {
+	t.Parallel()
+
+	// Given a mutex whose directory has never been locked
+	dir := t.TempDir()
+	mutex, err := New(dir)
+	if err != nil {
+		t.Fatalf("new mutex: %v", err)
+	}
+
+	// When force-clearing the lock
+	// Then it succeeds without error, since there is nothing to remove
+	if err := mutex.ClearLock(); err != nil {
+		t.Fatalf("expected clearing an absent lock to be a no-op, got %v", err)
+	}
+}
+
 // nolint: paralleltest
 func TestSharedLockStressLeavesUnlocked(t *testing.T) {
 	t.Skip("Flaky. With 'invalid marker' error. Somebody fix it")
