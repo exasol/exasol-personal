@@ -4,9 +4,11 @@
 package deploy
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
@@ -51,5 +53,17 @@ func TestBuildInstallTasks_PreservesRemoteAndLocalSteps(t *testing.T) {
 	if got := tasks[1].LocalCommand.Command; len(got) != 2 || got[0] != "echo" ||
 		got[1] != "hello" {
 		t.Fatalf("unexpected local command: %#v", got)
+	}
+}
+
+func TestRunInstallSteps_NoStepsIsNoop(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	manifest := &presets.InstallManifest{Install: presets.InstallSteps{}}
+
+	err := runInstallSteps(context.Background(), deployment, manifest, nil, nil)
+	if err != nil {
+		t.Fatalf("expected an install manifest with no steps to be a no-op, got %v", err)
 	}
 }
