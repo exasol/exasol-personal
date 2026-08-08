@@ -374,6 +374,161 @@ func TestCacheCleanAllWipesCacheContentsAndResetsMetadata(t *testing.T) {
 	}
 }
 
+func TestCacheListReturnsEntriesSortedByID(t *testing.T) {
+	t.Parallel()
+
+	cache := newTestCache(t, testNow())
+	index := emptyCacheIndex()
+	now := testNow()
+	seedCacheEntry(t, cache, &index, "zeta", "zeta-payload", checksumString("zeta-payload"), now)
+	seedCacheEntry(t, cache, &index, "alpha", "alpha-payload", checksumString("alpha-payload"), now)
+	writeTestIndex(t, cache, index)
+
+	entries, err := cache.List(context.Background())
+	if err != nil {
+		t.Fatalf("expected list to succeed, got %v", err)
+	}
+
+	if len(entries) != 2 || entries[0].ID != "alpha" || entries[1].ID != "zeta" {
+		t.Fatalf("expected entries sorted by id, got %+v", entries)
+	}
+	if entries[0].SizeBytes != int64(len("alpha-payload")) {
+		t.Fatalf("expected entry size to match artifact content, got %+v", entries[0])
+	}
+}
+
+func TestCacheListReturnsEmptyOnFreshCacheWithoutError(t *testing.T) {
+	t.Parallel()
+
+	cache := newTestCache(t, testNow())
+
+	entries, err := cache.List(context.Background())
+	if err != nil {
+		t.Fatalf("expected list on a fresh cache to succeed, got %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected no entries, got %+v", entries)
+	}
+	if _, err := os.Stat(cache.configPath); err != nil {
+		t.Fatalf("expected list to create the cache config as a side effect, got %v", err)
+	}
+}
+
+func TestCacheListPropagatesLockContentionError(t *testing.T) {
+	t.Parallel()
+
+	cache := newTestCache(t, testNow())
+	if err := os.MkdirAll(cache.Root(), dirPerm); err != nil {
+		t.Fatalf("failed to create cache root: %v", err)
+	}
+	mutex, err := directorymutex.New(cache.Root())
+	if err != nil {
+		t.Fatalf("failed to create mutex: %v", err)
+	}
+	if err := mutex.AcquireExclusive(context.Background()); err != nil {
+		t.Fatalf("failed to acquire mutex: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = mutex.ReleaseExclusive(context.Background())
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	_, err = cache.List(ctx)
+
+	if !errors.Is(err, ErrCacheLocked) {
+		t.Fatalf("expected cache locked error, got %v", err)
+	}
+}
+
+func TestCacheCleanPartialDownloadsRemovesStagedFilesButKeepsIndexedArtifacts(t *testing.T) {
+	t.Parallel()
+
+	cache := newTestCache(t, testNow())
+	index := emptyCacheIndex()
+	keptSum := checksumString("payload")
+	kept := seedCacheEntry(t, cache, &index, "kept", "payload", keptSum, testNow())
+	writeTestIndex(t, cache, index)
+
+	staged := filepath.Join(cache.downloadsRoot(), "download-123456")
+	if err := os.MkdirAll(staged, dirPerm); err != nil {
+		t.Fatalf("failed to create staged download directory: %v", err)
+	}
+	stagedFile := filepath.Join(staged, "payload.tmp")
+	if err := os.WriteFile(stagedFile, []byte("partial-content"), filePerm); err != nil {
+		t.Fatalf("failed to write staged partial download: %v", err)
+	}
+
+	opts := CleanOptions{Mode: CleanupModePartialDownloads}
+	summary, err := cache.Clean(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("expected partial-download clean to succeed, got %v", err)
+	}
+
+	if summary.Mode != CleanupModePartialDownloads || summary.RemovedEntries != 1 {
+		t.Fatalf("unexpected partial-download cleanup summary: %+v", summary)
+	}
+	if summary.RemovedBytes != int64(len("partial-content")) {
+		t.Fatalf("expected removed bytes to match staged file size, got %d", summary.RemovedBytes)
+	}
+	if _, err := os.Stat(staged); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected staged partial download to be removed, got %v", err)
+	}
+	if _, err := os.Stat(cache.absolutePath(kept.EntryPath)); err != nil {
+		t.Fatalf("expected indexed artifact to be untouched, got %v", err)
+	}
+	read, _, err := cache.readIndex()
+	if err != nil {
+		t.Fatalf("failed to read index: %v", err)
+	}
+	if _, ok := read.Entries["kept"]; !ok {
+		t.Fatal("expected indexed artifact metadata to remain after partial-download cleanup")
+	}
+}
+
+func TestCacheCleanPartialDownloadsDryRunPreservesStagedFiles(t *testing.T) {
+	t.Parallel()
+
+	cache := newTestCache(t, testNow())
+	staged := filepath.Join(cache.downloadsRoot(), "download-abcdef")
+	if err := os.MkdirAll(staged, dirPerm); err != nil {
+		t.Fatalf("failed to create staged download directory: %v", err)
+	}
+	stagedFile := filepath.Join(staged, "payload.tmp")
+	if err := os.WriteFile(stagedFile, []byte("partial"), filePerm); err != nil {
+		t.Fatalf("failed to write staged file: %v", err)
+	}
+
+	summary, err := cache.Clean(context.Background(), CleanOptions{
+		Mode:   CleanupModePartialDownloads,
+		DryRun: true,
+	})
+	if err != nil {
+		t.Fatalf("expected dry-run partial-download clean to succeed, got %v", err)
+	}
+	if !summary.DryRun || summary.RemovedEntries != 1 {
+		t.Fatalf("unexpected dry-run summary: %+v", summary)
+	}
+	if _, err := os.Stat(staged); err != nil {
+		t.Fatalf("expected dry-run to keep the staged download, got %v", err)
+	}
+}
+
+func TestCacheCleanPartialDownloadsIsNoopWhenNoneAreStaged(t *testing.T) {
+	t.Parallel()
+
+	cache := newTestCache(t, testNow())
+
+	opts := CleanOptions{Mode: CleanupModePartialDownloads}
+	summary, err := cache.Clean(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("expected clean to succeed on a cache that never staged downloads, got %v", err)
+	}
+	if summary.RemovedEntries != 0 || summary.RemovedBytes != 0 {
+		t.Fatalf("expected empty summary, got %+v", summary)
+	}
+}
+
 func TestCacheDiagnoseReportsChecksumMismatchAndUnexpectedPaths(t *testing.T) {
 	t.Parallel()
 
