@@ -363,3 +363,181 @@ func holdShared(mutex *DirectoryMutex, acquired chan<- struct{}, release <-chan 
 
 	return nil
 }
+
+func TestWithExclusiveRunsCallbackWhileHeldAndReleasesAfter(t *testing.T) {
+	t.Parallel()
+
+	// Given a fresh mutex
+	mutex, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("new mutex: %v", err)
+	}
+
+	// When running a callback under WithExclusive
+	var statusDuringCallback Status
+	callbackErr := mutex.WithExclusive(context.Background(), nil, func(any) error {
+		statusDuringCallback, err = mutex.Status()
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	// Then the lock was held during the callback and released after
+	if callbackErr != nil {
+		t.Fatalf("expected WithExclusive to succeed, got %v", callbackErr)
+	}
+	if !statusDuringCallback.Locked || statusDuringCallback.Mode != modeExclusiveString {
+		t.Fatalf("expected an exclusive lock during the callback, got %+v", statusDuringCallback)
+	}
+	statusAfter, err := mutex.Status()
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if statusAfter.Locked {
+		t.Fatalf("expected the lock to be released after WithExclusive, got %+v", statusAfter)
+	}
+}
+
+func TestWithSharedRunsCallbackWhileHeldAndReleasesAfter(t *testing.T) {
+	t.Parallel()
+
+	// Given a fresh mutex
+	mutex, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("new mutex: %v", err)
+	}
+
+	// When running a callback under WithShared
+	var statusDuringCallback Status
+	callbackErr := mutex.WithShared(context.Background(), nil, func(any) error {
+		statusDuringCallback, err = mutex.Status()
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	// Then the lock was held (shared) during the callback and released after
+	if callbackErr != nil {
+		t.Fatalf("expected WithShared to succeed, got %v", callbackErr)
+	}
+	if !statusDuringCallback.Locked || statusDuringCallback.Mode != modeSharedString {
+		t.Fatalf("expected a shared lock during the callback, got %+v", statusDuringCallback)
+	}
+	statusAfter, err := mutex.Status()
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if statusAfter.Locked {
+		t.Fatalf("expected the lock to be released after WithShared, got %+v", statusAfter)
+	}
+}
+
+func TestWithExclusivePropagatesCallbackErrorAndStillReleases(t *testing.T) {
+	t.Parallel()
+
+	// Given a fresh mutex
+	mutex, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("new mutex: %v", err)
+	}
+	callbackErr := errors.New("callback failed")
+
+	// When the callback itself fails
+	returnedErr := mutex.WithExclusive(context.Background(), nil, func(any) error {
+		return callbackErr
+	})
+
+	// Then the callback's error is returned and the lock is still released
+	if !errors.Is(returnedErr, callbackErr) {
+		t.Fatalf("expected the callback error to propagate, got %v", returnedErr)
+	}
+	status, err := mutex.Status()
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if status.Locked {
+		t.Fatalf("expected the lock to be released even after a callback error, got %+v", status)
+	}
+}
+
+func TestWithExclusiveDoesNotRunCallbackWhenAcquireFails(t *testing.T) {
+	t.Parallel()
+
+	// Given an exclusive lock already held by someone else
+	dir := t.TempDir()
+	mutex, err := New(dir)
+	if err != nil {
+		t.Fatalf("new mutex: %v", err)
+	}
+	acquired := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- holdExclusive(mutex, acquired, release)
+	}()
+	<-acquired
+	defer func() {
+		close(release)
+		<-done
+	}()
+
+	// When WithExclusive is attempted with an already-expired context
+	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	defer cancel()
+	<-ctx.Done()
+
+	callbackRan := false
+	err = mutex.WithExclusive(ctx, nil, func(any) error {
+		callbackRan = true
+
+		return nil
+	})
+
+	// Then the callback never runs and the acquire error is returned
+	if err == nil {
+		t.Fatal("expected an acquire error, got nil")
+	}
+	if callbackRan {
+		t.Fatal("expected the callback not to run when the lock could not be acquired")
+	}
+}
+
+func TestCallWithPanicSafetyErrorReturnsFunctionResult(t *testing.T) {
+	t.Parallel()
+
+	// Given a function that returns an error normally
+	wantErr := errors.New("boom")
+
+	// When calling it through callWithPanicSafetyError
+	gotErr := callWithPanicSafetyError(func(any) error {
+		return wantErr
+	}, nil)
+
+	// Then its return value passes through unchanged
+	if !errors.Is(gotErr, wantErr) {
+		t.Fatalf("expected %v, got %v", wantErr, gotErr)
+	}
+}
+
+func TestCallWithPanicSafetyErrorRePanicsRatherThanSwallowing(t *testing.T) {
+	t.Parallel()
+
+	// Then the panic propagates to the caller instead of being swallowed
+	defer func() {
+		recovered := recover()
+		if recovered != "boom" {
+			t.Fatalf("expected the panic to propagate with value %q, got %v", "boom", recovered)
+		}
+	}()
+
+	// When calling a function that panics through callWithPanicSafetyError
+	_ = callWithPanicSafetyError(func(any) error {
+		panic("boom")
+	}, nil)
+
+	t.Fatal("expected callWithPanicSafetyError to re-panic before reaching this point")
+}
