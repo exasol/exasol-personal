@@ -109,18 +109,61 @@ func (h *ec2VolumeHandler) Delete(ctx context.Context, ref ResourceRef) error {
 	return err
 }
 
+// deleteRouteInputFor builds the DeleteRoute input addressing the route's
+// destination, reporting false when the route has no destination we can target.
+func deleteRouteInputFor(
+	routeTableID *string,
+	route ec2types.Route,
+) (*ec2svc.DeleteRouteInput, bool) {
+	input := &ec2svc.DeleteRouteInput{RouteTableId: routeTableID}
+	switch {
+	case route.DestinationCidrBlock != nil:
+		input.DestinationCidrBlock = route.DestinationCidrBlock
+	case route.DestinationIpv6CidrBlock != nil:
+		input.DestinationIpv6CidrBlock = route.DestinationIpv6CidrBlock
+	case route.DestinationPrefixListId != nil:
+		input.DestinationPrefixListId = route.DestinationPrefixListId
+	default:
+		return nil, false
+	}
+
+	return input, true
+}
+
 type ec2InternetGatewayHandler struct{ client *ec2svc.Client }
 
 func (h *ec2InternetGatewayHandler) Delete(ctx context.Context, ref ResourceRef) error {
-	// Describe attachments to detach
-	out, err := h.client.DescribeInternetGateways(
-		ctx,
-		&ec2svc.DescribeInternetGatewaysInput{InternetGatewayIds: []string{ref.ID}},
-	)
+	vpcs, err := h.attachedVPCs(ctx, ref.ID)
 	if err != nil {
 		return err
 	}
-	// Track VPCs to clean up routes referencing the IGW
+	// Proactively delete routes targeting IGW before detaching,
+	// as some accounts block detachment while routes exist
+	if err := h.deleteRoutesReferencingGateway(ctx, ref.ID, vpcs); err != nil {
+		return err
+	}
+	if err := h.detachFromVPCs(ctx, ref.ID, vpcs); err != nil {
+		return err
+	}
+	h.waitForGatewayDetachment(ctx, ref.ID)
+	// (routes were removed before detach)
+
+	return h.retryDeleteInternetGateway(ctx, ref.ID)
+}
+
+// attachedVPCs describes the gateway attachments and returns the VPCs whose
+// routes reference the IGW and from which it has to be detached.
+func (h *ec2InternetGatewayHandler) attachedVPCs(
+	ctx context.Context,
+	gatewayID string,
+) ([]string, error) {
+	out, err := h.client.DescribeInternetGateways(
+		ctx,
+		&ec2svc.DescribeInternetGatewaysInput{InternetGatewayIds: []string{gatewayID}},
+	)
+	if err != nil {
+		return nil, err
+	}
 	var vpcs []string
 	for _, gw := range out.InternetGateways {
 		for _, att := range gw.Attachments {
@@ -129,8 +172,17 @@ func (h *ec2InternetGatewayHandler) Delete(ctx context.Context, ref ResourceRef)
 			}
 		}
 	}
-	// Proactively delete routes targeting IGW before detaching,
-	// as some accounts block detachment while routes exist
+
+	return vpcs, nil
+}
+
+// deleteRoutesReferencingGateway removes routes targeting the IGW from every
+// route table of the given VPCs.
+func (h *ec2InternetGatewayHandler) deleteRoutesReferencingGateway(
+	ctx context.Context,
+	gatewayID string,
+	vpcs []string,
+) error {
 	for _, vpcID := range vpcs {
 		rtOut, rErr := h.client.DescribeRouteTables(ctx, &ec2svc.DescribeRouteTablesInput{
 			Filters: []ec2types.Filter{{Name: aws.String("vpc-id"), Values: []string{vpcID}}},
@@ -138,81 +190,127 @@ func (h *ec2InternetGatewayHandler) Delete(ctx context.Context, ref ResourceRef)
 		if rErr != nil {
 			return rErr
 		}
-		for _, rt := range rtOut.RouteTables {
-			for _, route := range rt.Routes {
-				if route.GatewayId != nil && *route.GatewayId == ref.ID && rt.RouteTableId != nil {
-					input := &ec2svc.DeleteRouteInput{RouteTableId: rt.RouteTableId}
-					switch {
-					case route.DestinationCidrBlock != nil:
-						input.DestinationCidrBlock = route.DestinationCidrBlock
-					case route.DestinationIpv6CidrBlock != nil:
-						input.DestinationIpv6CidrBlock = route.DestinationIpv6CidrBlock
-					case route.DestinationPrefixListId != nil:
-						input.DestinationPrefixListId = route.DestinationPrefixListId
-					default:
-						continue
-					}
-					if _, drErr := h.client.DeleteRoute(ctx, input); drErr != nil {
-						return drErr
-					}
-				}
+		if err := h.deleteGatewayRoutes(ctx, gatewayID, rtOut.RouteTables); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// deleteGatewayRoutes deletes every route of the given tables whose target is
+// the IGW.
+func (h *ec2InternetGatewayHandler) deleteGatewayRoutes(
+	ctx context.Context,
+	gatewayID string,
+	tables []ec2types.RouteTable,
+) error {
+	for _, rt := range tables {
+		for _, route := range rt.Routes {
+			if route.GatewayId == nil || *route.GatewayId != gatewayID || rt.RouteTableId == nil {
+				continue
+			}
+			input, ok := deleteRouteInputFor(rt.RouteTableId, route)
+			if !ok {
+				continue
+			}
+			if _, drErr := h.client.DeleteRoute(ctx, input); drErr != nil {
+				return drErr
 			}
 		}
 	}
-	// Now detach IGW from each VPC
+
+	return nil
+}
+
+// detachFromVPCs detaches the IGW from each VPC it is attached to.
+func (h *ec2InternetGatewayHandler) detachFromVPCs(
+	ctx context.Context,
+	gatewayID string,
+	vpcs []string,
+) error {
 	for _, vpcID := range vpcs {
-		// Retry detachment as it may fail if there are still network interfaces being released
-		var detachErr error
-		for i := 0; i < 10; i++ {
-			_, detachErr = h.client.DetachInternetGateway(
-				ctx,
-				&ec2svc.DetachInternetGatewayInput{
-					InternetGatewayId: aws.String(ref.ID),
-					VpcId:             aws.String(vpcID),
-				},
-			)
-			if detachErr == nil {
-				break
-			}
-			if !strings.Contains(detachErr.Error(), "DependencyViolation") {
-				return detachErr
-			}
-			time.Sleep(2 * time.Second)
+		if err := h.detachFromVPC(ctx, gatewayID, vpcID); err != nil {
+			return err
 		}
-		if detachErr != nil {
+	}
+
+	return nil
+}
+
+// detachFromVPC retries detachment as it may fail if there are still network
+// interfaces being released.
+func (h *ec2InternetGatewayHandler) detachFromVPC(
+	ctx context.Context,
+	gatewayID string,
+	vpcID string,
+) error {
+	var detachErr error
+	for i := 0; i < 10; i++ {
+		_, detachErr = h.client.DetachInternetGateway(
+			ctx,
+			&ec2svc.DetachInternetGatewayInput{
+				InternetGatewayId: aws.String(gatewayID),
+				VpcId:             aws.String(vpcID),
+			},
+		)
+		if detachErr == nil {
+			break
+		}
+		if !strings.Contains(detachErr.Error(), "DependencyViolation") {
 			return detachErr
 		}
+		time.Sleep(2 * time.Second)
 	}
-	// Wait briefly until attachments reflect detachment
+
+	return detachErr
+}
+
+// waitForGatewayDetachment waits briefly until attachments reflect detachment.
+func (h *ec2InternetGatewayHandler) waitForGatewayDetachment(
+	ctx context.Context,
+	gatewayID string,
+) {
 	for range 5 {
 		time.Sleep(1 * time.Second)
 		check, cErr := h.client.DescribeInternetGateways(
 			ctx,
-			&ec2svc.DescribeInternetGatewaysInput{InternetGatewayIds: []string{ref.ID}},
+			&ec2svc.DescribeInternetGatewaysInput{InternetGatewayIds: []string{gatewayID}},
 		)
 		if cErr != nil {
 			break
 		}
-		allDetached := true
-		for _, gw := range check.InternetGateways {
-			for _, att := range gw.Attachments {
-				if att.State == ec2types.AttachmentStatusAttached {
-					allDetached = false
-					break
-				}
-			}
-		}
-		if allDetached {
+		if allAttachmentsDetached(check.InternetGateways) {
 			break
 		}
 	}
-	// (routes were removed before detach)
-	// Retry delete IGW a few times to overcome eventual consistency
+}
+
+// allAttachmentsDetached reports whether none of the gateways still has an
+// attached attachment.
+func allAttachmentsDetached(gateways []ec2types.InternetGateway) bool {
+	for _, gw := range gateways {
+		for _, att := range gw.Attachments {
+			if att.State == ec2types.AttachmentStatusAttached {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// retryDeleteInternetGateway retries the delete a few times to overcome
+// eventual consistency.
+func (h *ec2InternetGatewayHandler) retryDeleteInternetGateway(
+	ctx context.Context,
+	gatewayID string,
+) error {
 	var lastErr error
 	for range igwDeleteRetries {
 		_, derr := h.client.DeleteInternetGateway(
 			ctx,
-			&ec2svc.DeleteInternetGatewayInput{InternetGatewayId: aws.String(ref.ID)},
+			&ec2svc.DeleteInternetGatewayInput{InternetGatewayId: aws.String(gatewayID)},
 		)
 		if derr == nil {
 			return nil
@@ -234,38 +332,20 @@ func (h *ec2VpcEndpointHandler) Delete(ctx context.Context, ref ResourceRef) err
 	// For gateway endpoints (e.g., S3), routes reference the endpoint id in route.GatewayId.
 	// Clean any routes in the VPC that target this endpoint id.
 	// First, find the VPC of the endpoint to scope route tables.
-	desc, err := h.client.DescribeVpcEndpoints(ctx, &ec2svc.DescribeVpcEndpointsInput{
-		VpcEndpointIds: []string{ref.ID},
-	})
+	vpcID, missing, err := h.endpointVPC(ctx, ref.ID)
 	if err != nil {
-		// If not found, treat as success
-		if strings.Contains(err.Error(), "VpcEndpointIdNotFound") ||
-			strings.Contains(err.Error(), errInvalidVpcEndpointIDNotFound) {
-			return nil
-		}
 		return err
 	}
-	var vpcID string
-	for _, ep := range desc.VpcEndpoints {
-		if ep.VpcId != nil {
-			vpcID = *ep.VpcId
-			break
-		}
+	if missing {
+		return nil
 	}
 	// Try deleting the endpoint first. For gateway endpoints (S3) AWS manages
 	// the route table entries and will remove them when the endpoint is deleted.
 	// Deleting the endpoint first avoids errors like
 	// "cannot remove VPC endpoint route ..." when attempting to delete routes
 	// manually.
-	_, delErr := h.client.DeleteVpcEndpoints(ctx, &ec2svc.DeleteVpcEndpointsInput{
-		VpcEndpointIds: []string{ref.ID},
-	})
+	delErr := h.deleteEndpoint(ctx, ref.ID)
 	if delErr == nil {
-		return nil
-	}
-	// Treat not found as success
-	if strings.Contains(delErr.Error(), errInvalidVpcEndpointIDNotFound) ||
-		strings.Contains(delErr.Error(), "VpcEndpointIdNotFound") {
 		return nil
 	}
 
@@ -273,53 +353,111 @@ func (h *ec2VpcEndpointHandler) Delete(ctx context.Context, ref ResourceRef) err
 	// lingering route table entries referencing the endpoint, then retry
 	// deletion. Some accounts may allow manual route removal as a fallback.
 	if vpcID != "" {
-		rtOut, rErr := h.client.DescribeRouteTables(ctx, &ec2svc.DescribeRouteTablesInput{
-			Filters: []ec2types.Filter{{Name: aws.String("vpc-id"), Values: []string{vpcID}}},
-		})
-		if rErr == nil {
-			for _, rt := range rtOut.RouteTables {
-				for _, route := range rt.Routes {
-					if route.GatewayId != nil && *route.GatewayId == ref.ID && rt.RouteTableId != nil {
-						input := &ec2svc.DeleteRouteInput{RouteTableId: rt.RouteTableId}
-						switch {
-						case route.DestinationCidrBlock != nil:
-							input.DestinationCidrBlock = route.DestinationCidrBlock
-						case route.DestinationIpv6CidrBlock != nil:
-							input.DestinationIpv6CidrBlock = route.DestinationIpv6CidrBlock
-						case route.DestinationPrefixListId != nil:
-							input.DestinationPrefixListId = route.DestinationPrefixListId
-						default:
-							continue
-						}
-						if _, drErr := h.client.DeleteRoute(ctx, input); drErr != nil {
-							// If AWS rejects manual route deletion for endpoint-managed
-							// routes, ignore and continue; we'll retry endpoint delete
-							// below.
-							if strings.Contains(drErr.Error(), "cannot remove VPC endpoint route") {
-								continue
-							}
-							return drErr
-						}
-					}
-				}
+		if rErr := h.removeRoutesReferencingEndpoint(ctx, ref.ID, vpcID); rErr != nil {
+			return rErr
+		}
+	}
+
+	// Retry deleting the endpoint once after attempting manual route cleanup.
+	// Prefer returning the original delete error if retry failed too.
+	if h.deleteEndpoint(ctx, ref.ID) != nil {
+		return delErr
+	}
+
+	return nil
+}
+
+// isVpcEndpointNotFound reports whether the error says the endpoint is gone,
+// which cleanup treats as success.
+func isVpcEndpointNotFound(err error) bool {
+	return strings.Contains(err.Error(), errInvalidVpcEndpointIDNotFound) ||
+		strings.Contains(err.Error(), "VpcEndpointIdNotFound")
+}
+
+// endpointVPC returns the VPC of the endpoint used to scope route tables, and
+// reports missing when the endpoint no longer exists.
+func (h *ec2VpcEndpointHandler) endpointVPC(
+	ctx context.Context,
+	endpointID string,
+) (vpcID string, missing bool, err error) {
+	desc, err := h.client.DescribeVpcEndpoints(ctx, &ec2svc.DescribeVpcEndpointsInput{
+		VpcEndpointIds: []string{endpointID},
+	})
+	if err != nil {
+		// If not found, treat as success
+		if isVpcEndpointNotFound(err) {
+			return "", true, nil
+		}
+		return "", false, err
+	}
+	for _, ep := range desc.VpcEndpoints {
+		if ep.VpcId != nil {
+			return *ep.VpcId, false, nil
+		}
+	}
+
+	return "", false, nil
+}
+
+// deleteEndpoint deletes the endpoint, treating not found as success.
+func (h *ec2VpcEndpointHandler) deleteEndpoint(ctx context.Context, endpointID string) error {
+	_, err := h.client.DeleteVpcEndpoints(ctx, &ec2svc.DeleteVpcEndpointsInput{
+		VpcEndpointIds: []string{endpointID},
+	})
+	if err != nil && isVpcEndpointNotFound(err) {
+		return nil
+	}
+
+	return err
+}
+
+// removeRoutesReferencingEndpoint deletes lingering route table entries in the
+// VPC that target the endpoint. Route tables that cannot be described are
+// skipped so the caller can still retry the endpoint deletion.
+func (h *ec2VpcEndpointHandler) removeRoutesReferencingEndpoint(
+	ctx context.Context,
+	endpointID string,
+	vpcID string,
+) error {
+	rtOut, rErr := h.client.DescribeRouteTables(ctx, &ec2svc.DescribeRouteTablesInput{
+		Filters: []ec2types.Filter{{Name: aws.String("vpc-id"), Values: []string{vpcID}}},
+	})
+	if rErr != nil {
+		return nil
+	}
+	for _, rt := range rtOut.RouteTables {
+		for _, route := range rt.Routes {
+			if route.GatewayId == nil || *route.GatewayId != endpointID || rt.RouteTableId == nil {
+				continue
+			}
+			if err := h.removeRouteToEndpoint(ctx, rt.RouteTableId, route); err != nil {
+				return err
 			}
 		}
 	}
 
-	// Retry deleting the endpoint once after attempting manual route cleanup
-	_, retryErr := h.client.DeleteVpcEndpoints(ctx, &ec2svc.DeleteVpcEndpointsInput{
-		VpcEndpointIds: []string{ref.ID},
-	})
-	if retryErr != nil {
-		if strings.Contains(retryErr.Error(), errInvalidVpcEndpointIDNotFound) ||
-			strings.Contains(retryErr.Error(), "VpcEndpointIdNotFound") {
+	return nil
+}
+
+// removeRouteToEndpoint deletes a single route targeting the endpoint.
+func (h *ec2VpcEndpointHandler) removeRouteToEndpoint(
+	ctx context.Context,
+	routeTableID *string,
+	route ec2types.Route,
+) error {
+	input, ok := deleteRouteInputFor(routeTableID, route)
+	if !ok {
+		return nil
+	}
+	if _, drErr := h.client.DeleteRoute(ctx, input); drErr != nil {
+		// If AWS rejects manual route deletion for endpoint-managed
+		// routes, ignore and continue; we'll retry endpoint delete
+		// below.
+		if strings.Contains(drErr.Error(), "cannot remove VPC endpoint route") {
 			return nil
 		}
-	}
 
-	// Prefer returning the original delete error if retry failed too.
-	if retryErr != nil {
-		return delErr
+		return drErr
 	}
 
 	return nil
@@ -509,81 +647,101 @@ type s3BucketHandler struct{ client *s3svc.Client }
 
 func (h *s3BucketHandler) Delete(ctx context.Context, ref ResourceRef) error {
 	bucket := ref.ID
+
 	// Try to delete all object versions first (handles versioned buckets)
-	// List object versions
+	if err := h.deleteObjectVersions(ctx, bucket); err != nil {
+		return err
+	}
+	// Non-versioned objects
+	if err := h.deleteCurrentObjects(ctx, bucket); err != nil {
+		return err
+	}
+
+	return h.deleteBucketItself(ctx, bucket)
+}
+
+// deleteObjectVersions empties a versioned bucket by batch-deleting every
+// object version and delete marker. A list failure is treated as "nothing to
+// delete here" so Delete still proceeds to the other cleanup phases.
+func (h *s3BucketHandler) deleteObjectVersions(ctx context.Context, bucket string) error {
 	listVers, err := h.client.ListObjectVersions(
 		ctx,
 		&s3svc.ListObjectVersionsInput{Bucket: aws.String(bucket)},
 	)
-	// nolint:nestif // nested flow is acceptable for batch deletions
-	if err == nil {
-		// Collect all keys + versionIds including delete markers
-		toDelete := make([]s3types.ObjectIdentifier, 0)
-		for _, v := range listVers.Versions {
-			if v.Key != nil && v.VersionId != nil {
-				toDelete = append(
-					toDelete,
-					s3types.ObjectIdentifier{Key: v.Key, VersionId: v.VersionId},
-				)
-			}
-		}
-		for _, d := range listVers.DeleteMarkers {
-			if d.Key != nil && d.VersionId != nil {
-				toDelete = append(
-					toDelete,
-					s3types.ObjectIdentifier{Key: d.Key, VersionId: d.VersionId},
-				)
-			}
-		}
-		if len(toDelete) > 0 {
-			// batch delete in chunks of 1000 per AWS limits
-			for item := 0; item < len(toDelete); item += s3BatchDeleteSize {
-				end := item + s3BatchDeleteSize
-				if end > len(toDelete) {
-					end = len(toDelete)
-				}
-				_, derr := h.client.DeleteObjects(ctx, &s3svc.DeleteObjectsInput{
-					Bucket: aws.String(bucket),
-					Delete: &s3types.Delete{Objects: toDelete[item:end], Quiet: aws.Bool(true)},
-				})
-				if derr != nil {
-					return derr
-				}
-			}
-		}
-	}
-	// Non-versioned objects
-	list, err := h.client.ListObjectsV2(ctx, &s3svc.ListObjectsV2Input{Bucket: aws.String(bucket)})
-	// nolint:nestif // nested flow is acceptable for batch deletions
-	if err == nil {
-		objs := make([]s3types.ObjectIdentifier, 0)
-		for _, o := range list.Contents {
-			if o.Key != nil {
-				objs = append(objs, s3types.ObjectIdentifier{Key: o.Key})
-			}
-		}
-		if len(objs) > 0 {
-			for item := 0; item < len(objs); item += s3BatchDeleteSize {
-				end := item + s3BatchDeleteSize
-				if end > len(objs) {
-					end = len(objs)
-				}
-				_, derr := h.client.DeleteObjects(ctx, &s3svc.DeleteObjectsInput{
-					Bucket: aws.String(bucket),
-					Delete: &s3types.Delete{Objects: objs[item:end], Quiet: aws.Bool(true)},
-				})
-				if derr != nil {
-					return derr
-				}
-			}
-		}
-	}
-	// Attempt bucket delete
-	_, err = h.client.DeleteBucket(ctx, &s3svc.DeleteBucketInput{Bucket: aws.String(bucket)})
 	if err != nil {
-		if strings.Contains(err.Error(), "NoSuchBucket") {
-			return nil
+		return nil
+	}
+
+	// Collect all keys + versionIds including delete markers
+	toDelete := make([]s3types.ObjectIdentifier, 0)
+	for _, v := range listVers.Versions {
+		if v.Key != nil && v.VersionId != nil {
+			toDelete = append(
+				toDelete,
+				s3types.ObjectIdentifier{Key: v.Key, VersionId: v.VersionId},
+			)
 		}
+	}
+	for _, d := range listVers.DeleteMarkers {
+		if d.Key != nil && d.VersionId != nil {
+			toDelete = append(
+				toDelete,
+				s3types.ObjectIdentifier{Key: d.Key, VersionId: d.VersionId},
+			)
+		}
+	}
+
+	return h.batchDeleteObjects(ctx, bucket, toDelete)
+}
+
+// deleteCurrentObjects empties a non-versioned bucket's current objects. A
+// list failure is treated as "nothing to delete here" so Delete still
+// proceeds to the bucket-delete phase.
+func (h *s3BucketHandler) deleteCurrentObjects(ctx context.Context, bucket string) error {
+	list, err := h.client.ListObjectsV2(ctx, &s3svc.ListObjectsV2Input{Bucket: aws.String(bucket)})
+	if err != nil {
+		return nil
+	}
+
+	objs := make([]s3types.ObjectIdentifier, 0)
+	for _, o := range list.Contents {
+		if o.Key != nil {
+			objs = append(objs, s3types.ObjectIdentifier{Key: o.Key})
+		}
+	}
+
+	return h.batchDeleteObjects(ctx, bucket, objs)
+}
+
+// batchDeleteObjects deletes the given objects in chunks of s3BatchDeleteSize
+// per AWS's DeleteObjects limit.
+func (h *s3BucketHandler) batchDeleteObjects(
+	ctx context.Context,
+	bucket string,
+	objects []s3types.ObjectIdentifier,
+) error {
+	for item := 0; item < len(objects); item += s3BatchDeleteSize {
+		end := item + s3BatchDeleteSize
+		if end > len(objects) {
+			end = len(objects)
+		}
+		_, derr := h.client.DeleteObjects(ctx, &s3svc.DeleteObjectsInput{
+			Bucket: aws.String(bucket),
+			Delete: &s3types.Delete{Objects: objects[item:end], Quiet: aws.Bool(true)},
+		})
+		if derr != nil {
+			return derr
+		}
+	}
+
+	return nil
+}
+
+// deleteBucketItself deletes the bucket, treating NoSuchBucket as success.
+func (h *s3BucketHandler) deleteBucketItself(ctx context.Context, bucket string) error {
+	_, err := h.client.DeleteBucket(ctx, &s3svc.DeleteBucketInput{Bucket: aws.String(bucket)})
+	if err != nil && strings.Contains(err.Error(), "NoSuchBucket") {
+		return nil
 	}
 
 	return err
