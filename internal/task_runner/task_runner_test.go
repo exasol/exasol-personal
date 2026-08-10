@@ -102,121 +102,138 @@ func TestRunRemoteScript(t *testing.T) {
 	t.Parallel()
 	slog.SetLogLoggerLevel(slog.LevelInfo)
 
-	type testArgs struct {
+	testCases := []struct {
+		name     string
 		parallel bool
-	}
-
-	testCases := []testArgs{
-		{
-			parallel: true,
-		},
-		{
-			parallel: false,
-		},
+	}{
+		{name: "parallel", parallel: true},
+		{name: "sequential", parallel: false},
 	}
 
 	for _, testCase := range testCases {
-		localCommandRunner := mocks.NewLocalCommandRunnerMock()
-		remoteScriptRunner := mocks.NewRemoteScriptRunnerMock()
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			runRemoteScriptAndVerifyOrdering(t, testCase.parallel)
+		})
+	}
+}
 
-		nodeLookupMock := mocks.NewNodeLookupMock(mocks.NewNodeLookupDirectory(5))
+//nolint:revive // parallel selects which table-driven test case runs, not internal control coupling.
+func runRemoteScriptAndVerifyOrdering(t *testing.T, parallel bool) {
+	t.Helper()
 
-		taskRunner := task_runner.NewTaskRunner(
-			localCommandRunner,
-			remoteScriptRunner,
-			nodeLookupMock,
-		)
+	localCommandRunner := mocks.NewLocalCommandRunnerMock()
+	remoteScriptRunner := mocks.NewRemoteScriptRunnerMock()
 
-		fakeDeploymentDir := t.TempDir()
-		scriptFilePath := filepath.Join(fakeDeploymentDir, "script.sh")
-		mocks.NewUniqueFile(scriptFilePath)
-		deployment := config.NewDeploymentDir(fakeDeploymentDir)
+	nodeLookupMock := mocks.NewNodeLookupMock(mocks.NewNodeLookupDirectory(5))
 
-		tasks := []config.Task{
-			{
-				RemoteExec: &presets.RemoteExecTask{
-					Description:       "test task",
-					Filename:          scriptFilePath,
-					ExecuteInParallel: testCase.parallel,
-					Node:              "*",
-				},
+	taskRunner := task_runner.NewTaskRunner(
+		localCommandRunner,
+		remoteScriptRunner,
+		nodeLookupMock,
+	)
+
+	fakeDeploymentDir := t.TempDir()
+	scriptFilePath := filepath.Join(fakeDeploymentDir, "script.sh")
+	mocks.NewUniqueFile(scriptFilePath)
+	deployment := config.NewDeploymentDir(fakeDeploymentDir)
+
+	tasks := []config.Task{
+		{
+			RemoteExec: &presets.RemoteExecTask{
+				Description:       "test task",
+				Filename:          scriptFilePath,
+				ExecuteInParallel: parallel,
+				Node:              "*",
 			},
-		}
+		},
+	}
 
-		slog.Debug("pre availableNodes", "nodes", nodeLookupMock.Directory)
-		err := taskRunner.RunTasks(t.Context(), tasks, deployment, nil, nil)
+	slog.Debug("pre availableNodes", "nodes", nodeLookupMock.Directory)
+	err := taskRunner.RunTasks(t.Context(), tasks, deployment, nil, nil)
 
-		require.NoError(t, err, "RunTasks should succeed")
+	require.NoError(t, err, "RunTasks should succeed")
 
-		require.Len(
-			t,
-			remoteScriptRunner.RunScriptCalls, len(nodeLookupMock.Directory),
-			"expected script to run on all nodes",
-		)
+	require.Len(
+		t,
+		remoteScriptRunner.RunScriptCalls, len(nodeLookupMock.Directory),
+		"expected script to run on all nodes",
+	)
 
-		startStopMap := map[int64]string{}
+	startStopMap := matchCallsToNodes(
+		t, nodeLookupMock.Directory, remoteScriptRunner.RunScriptCalls,
+	)
 
-		availableNodes := make([]task_runner.RunScriptNode, len(nodeLookupMock.Directory))
+	err = verifyStartStopOrdering(startStopMap)
+	if parallel {
+		require.ErrorIs(t, err, errInterleavedTasks)
+	} else {
+		require.NoError(t, err)
+	}
+}
 
-		for idx, node := range nodeLookupMock.Directory {
-			connectionOptions := *node.ConnectionOptions
-			availableNodes[idx] = task_runner.RunScriptNode{
-				Name:              node.Name,
-				ConnectionOptions: &connectionOptions,
-			}
-		}
+// matchCallsToNodes pairs each recorded RunScript call with the node it targeted
+// (by connection host) and returns a map of each call's start/stop timestamp to
+// whether it marks a "start" or "stop". It fails the test if any node was not
+// matched to exactly one call.
+func matchCallsToNodes(
+	t *testing.T,
+	nodes []task_runner.RunScriptNode,
+	calls []mocks.RemoteScriptRunnerMockRunScriptCall,
+) map[int64]string {
+	t.Helper()
 
-		slog.Debug("post availableNodes", "nodes", nodeLookupMock.Directory)
+	availableNodes := make([]task_runner.RunScriptNode, len(nodes))
 
-		slog.Debug("availableNodes", "nodes", availableNodes)
-		for _, call := range remoteScriptRunner.RunScriptCalls {
-			for idx, node := range availableNodes {
-				if node.ConnectionOptions.Host == call.ConnectionOptions.Host {
-					availableNodes = append(availableNodes[0:idx], availableNodes[idx+1:]...)
-					startStopMap[call.Start.UnixMicro()] = "start"
-					startStopMap[call.Stop.UnixMicro()] = "stop"
-				}
-			}
-		}
-
-		// All nodes should have been matched above and filtered out.
-		require.Empty(t, availableNodes, "found unmatched nodes")
-
-		startStopMapKeys := []int64{}
-		for key := range startStopMap {
-			startStopMapKeys = append(startStopMapKeys, key)
-		}
-
-		slices.Sort(startStopMapKeys)
-
-		errInterleavedTasks := errors.New("tasks were interleaved")
-		tasksNotInterleaved := func() error {
-			for idx, key := range startStopMapKeys {
-				if idx%2 == 0 {
-					if startStopMap[key] != "start" {
-						return errInterleavedTasks
-					}
-				} else {
-					if startStopMap[key] != "stop" {
-						return errInterleavedTasks
-					}
-				}
-			}
-
-			return nil
-		}
-
-		if testCase.parallel {
-			require.ErrorIs(
-				t,
-				tasksNotInterleaved(),
-				errInterleavedTasks,
-			)
-		} else {
-			require.NoError(
-				t,
-				tasksNotInterleaved(),
-			)
+	for idx, node := range nodes {
+		connectionOptions := *node.ConnectionOptions
+		availableNodes[idx] = task_runner.RunScriptNode{
+			Name:              node.Name,
+			ConnectionOptions: &connectionOptions,
 		}
 	}
+
+	startStopMap := map[int64]string{}
+
+	for _, call := range calls {
+		for idx, node := range availableNodes {
+			if node.ConnectionOptions.Host != call.ConnectionOptions.Host {
+				continue
+			}
+
+			availableNodes = append(availableNodes[0:idx], availableNodes[idx+1:]...)
+			startStopMap[call.Start.UnixMicro()] = "start"
+			startStopMap[call.Stop.UnixMicro()] = "stop"
+		}
+	}
+
+	require.Empty(t, availableNodes, "found unmatched nodes")
+
+	return startStopMap
+}
+
+var errInterleavedTasks = errors.New("tasks were interleaved")
+
+// verifyStartStopOrdering checks that sorted timestamps alternate strictly
+// between "start" and "stop", which only holds when tasks ran sequentially.
+func verifyStartStopOrdering(startStopMap map[int64]string) error {
+	startStopMapKeys := make([]int64, 0, len(startStopMap))
+	for key := range startStopMap {
+		startStopMapKeys = append(startStopMapKeys, key)
+	}
+
+	slices.Sort(startStopMapKeys)
+
+	for idx, key := range startStopMapKeys {
+		want := "start"
+		if idx%2 != 0 {
+			want = "stop"
+		}
+
+		if startStopMap[key] != want {
+			return errInterleavedTasks
+		}
+	}
+
+	return nil
 }

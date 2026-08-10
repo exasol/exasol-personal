@@ -51,11 +51,7 @@ func (w *regexLogger) Write(data []byte) (int, error) {
 			tmpCount, err := w.lineBuffer.Write(data)
 			count += tmpCount
 
-			if err != nil {
-				return count, err
-			}
-
-			break
+			return count, err
 		}
 
 		tmpCount, err := w.lineBuffer.Write(data[:idx+1])
@@ -65,30 +61,7 @@ func (w *regexLogger) Write(data []byte) (int, error) {
 			return count, err
 		}
 
-		for _, pattern := range w.patterns {
-			matches := pattern.CompiledRegex.FindSubmatch(w.lineBuffer.Bytes())
-			if matches != nil {
-				// Replace placeholders in message with captured groups
-				// $0 = full match, $1 = first group, $2 = second group, etc.
-				logMsg := []byte(pattern.Message)
-				for i, match := range matches {
-					placeholder := "$" + string(rune('0'+i))
-					matchStr := string(bytes.TrimRight(match, "\n\r"))
-					logMsg = bytes.ReplaceAll(logMsg, []byte(placeholder), []byte(matchStr))
-				}
-
-				// Add node prefix if set
-				if w.nodePrefix != "" {
-					logMsg = append([]byte(w.nodePrefix), logMsg...)
-				}
-
-				if pattern.LogAsError {
-					slog.Error(string(logMsg))
-				} else {
-					slog.Info(string(logMsg))
-				}
-			}
-		}
+		w.logMatchingPatterns()
 
 		w.lineBuffer.Reset()
 		data = data[idx+1:]
@@ -97,6 +70,40 @@ func (w *regexLogger) Write(data []byte) (int, error) {
 			panic("expected remaining bytes to decrease")
 		}
 	}
+}
 
-	return count, nil
+// logMatchingPatterns runs every pattern against the current line buffer and
+// logs a message for each one that matches.
+func (w *regexLogger) logMatchingPatterns() {
+	for _, pattern := range w.patterns {
+		matches := pattern.CompiledRegex.FindSubmatch(w.lineBuffer.Bytes())
+		if matches == nil {
+			continue
+		}
+
+		w.logMatch(pattern, matches)
+	}
+}
+
+// logMatch renders a pattern's message template against the captured groups
+// and emits it at the configured log level.
+func (w *regexLogger) logMatch(pattern *presets.RegexLog, matches [][]byte) {
+	// Replace placeholders in message with captured groups
+	// $0 = full match, $1 = first group, $2 = second group, etc.
+	logMsg := []byte(pattern.Message)
+	for i, match := range matches {
+		placeholder := "$" + string(rune('0'+i))
+		matchStr := string(bytes.TrimRight(match, "\n\r"))
+		logMsg = bytes.ReplaceAll(logMsg, []byte(placeholder), []byte(matchStr))
+	}
+
+	if w.nodePrefix != "" {
+		logMsg = append([]byte(w.nodePrefix), logMsg...)
+	}
+
+	if pattern.LogAsError {
+		slog.Error(string(logMsg))
+	} else {
+		slog.Info(string(logMsg))
+	}
 }
