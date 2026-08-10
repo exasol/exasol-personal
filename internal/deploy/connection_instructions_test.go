@@ -69,13 +69,14 @@ func initDeploymentForInfoTest(t *testing.T, deployment config.DeploymentDir) {
 
 	err := InitDeployment(
 		context.Background(),
-		PresetRef{Name: presets.DefaultInfrastructure},
-		PresetRef{Name: presets.DefaultInstallation},
-		map[string]string{},
-		map[string]string{},
 		deployment,
-		false,
-		"0.0.0",
+		InitOptions{
+			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
+			InstallationPreset:   PresetRef{Name: presets.DefaultInstallation},
+			InfraVars:            map[string]string{},
+			InstallVars:          map[string]string{},
+			CurrentVersion:       "0.0.0",
+		},
 	)
 	if err != nil {
 		t.Fatalf("failed to initialize deployment: %v", err)

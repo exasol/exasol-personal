@@ -27,13 +27,14 @@ func TestEnsureDeploymentPresetIdentityMatches_RejectsDifferentPreset(t *testing
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := InitDeployment(
 		context.Background(),
-		PresetRef{Name: presets.DefaultInfrastructure},
-		PresetRef{Name: presets.DefaultInstallation},
-		map[string]string{},
-		map[string]string{},
 		deployment,
-		false,
-		"0.0.0",
+		InitOptions{
+			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
+			InstallationPreset:   PresetRef{Name: presets.DefaultInstallation},
+			InfraVars:            map[string]string{},
+			InstallVars:          map[string]string{},
+			CurrentVersion:       "0.0.0",
+		},
 	); err != nil {
 		t.Fatalf("initial init failed: %v", err)
 	}
@@ -58,13 +59,14 @@ func TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles(t *te
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := InitDeployment(
 		context.Background(),
-		PresetRef{Name: presets.DefaultInfrastructure},
-		PresetRef{Name: presets.DefaultInstallation},
-		map[string]string{"cluster_size": "2"},
-		map[string]string{},
 		deployment,
-		false,
-		"0.0.0",
+		InitOptions{
+			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
+			InstallationPreset:   PresetRef{Name: presets.DefaultInstallation},
+			InfraVars:            map[string]string{"cluster_size": "2"},
+			InstallVars:          map[string]string{},
+			CurrentVersion:       "0.0.0",
+		},
 	); err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
@@ -119,13 +121,14 @@ func TestSetDeploymentConfiguration_PreservesDeploymentCreatedAt(t *testing.T) {
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := InitDeployment(
 		context.Background(),
-		PresetRef{Name: presets.DefaultInfrastructure},
-		PresetRef{Name: presets.DefaultInstallation},
-		map[string]string{"cluster_size": "2"},
-		map[string]string{},
 		deployment,
-		false,
-		"0.0.0",
+		InitOptions{
+			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
+			InstallationPreset:   PresetRef{Name: presets.DefaultInstallation},
+			InfraVars:            map[string]string{"cluster_size": "2"},
+			InstallVars:          map[string]string{},
+			CurrentVersion:       "0.0.0",
+		},
 	); err != nil {
 		t.Fatalf("init failed: %v", err)
 	}

@@ -66,35 +66,65 @@ var (
 	)
 )
 
+// InitOptions bundles the preset selection, variable overrides, and version-check
+// metadata needed to initialize a deployment directory.
+type InitOptions struct {
+	InfrastructurePreset PresetRef
+	InstallationPreset   PresetRef
+	InfraVars            map[string]string
+	InstallVars          map[string]string
+	VersionCheckEnabled  bool
+	CurrentVersion       string
+}
+
 // InitDeployment initializes a new deployment directory by extracting presets and
 // creating the variables file based on the infrastructure manifest.
-//
-//nolint:revive // versionCheckEnabled is a user-controlled flag, not internal control coupling
 func InitDeployment(
 	ctx context.Context,
-	infrastructurePreset PresetRef,
-	installationPreset PresetRef,
-	infraVars map[string]string,
-	installVars map[string]string,
 	deployment config.DeploymentDir,
-	versionCheckEnabled bool,
-	currentVersion string,
+	options InitOptions,
 ) error {
 	// Do an initial update version check if permitted
-	if versionCheckEnabled {
-		_, _, _ = CheckLatestVersionUpdate(ctx, currentVersion, deployment)
+	if options.VersionCheckEnabled {
+		_, _, _ = CheckLatestVersionUpdate(ctx, options.CurrentVersion, deployment)
 	}
 
-	// Proactively validate the preset selection to produce friendly errors.
-	slog.Info("validating presets")
-	if err := ValidatePresetSelection(infrastructurePreset, installationPreset); err != nil {
+	if err := validateInitRequest(ctx, deployment, options); err != nil {
 		return err
 	}
-	infrastructureManifest, err := readInfrastructureManifestFromPreset(infrastructurePreset)
+
+	if err := ensureDeploymentDirReady(deployment); err != nil {
+		return err
+	}
+
+	// Lock the deployment directory with exclusive access
+	return withDeploymentExclusiveLock(ctx, deployment,
+		func(deployment config.DeploymentDir) error {
+			return initializeDeploymentLocked(ctx, deployment, options)
+		})
+}
+
+// validateInitRequest proactively validates the preset selection and target
+// environment to produce friendly errors before any state is mutated.
+func validateInitRequest(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	options InitOptions,
+) error {
+	slog.Info("validating presets")
+	if err := ValidatePresetSelection(
+		options.InfrastructurePreset,
+		options.InstallationPreset,
+	); err != nil {
+		return err
+	}
+	infrastructureManifest, err := readInfrastructureManifestFromPreset(
+		options.InfrastructurePreset,
+	)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to load infrastructure preset %q: %w",
-			presetLabel(infrastructurePreset),
+			presetLabel(options.InfrastructurePreset),
 			err,
 		)
 	}
@@ -105,12 +135,16 @@ func InitDeployment(
 	if err := backend.ValidateEnvironment(); err != nil {
 		return err
 	}
-	if err := validateLocalInitMemory(ctx, infrastructureManifest, infraVars); err != nil {
-		return err
-	}
 
-	// Init only creates fresh deployment state. Existing deployment orchestration
-	// belongs to the command layer.
+	return validateLocalInitMemory(ctx, infrastructureManifest, options.InfraVars)
+}
+
+// ensureDeploymentDirReady makes sure the deployment directory has no prior
+// exasol-personal state and exists as an empty directory.
+//
+// Init only creates fresh deployment state. Existing deployment orchestration
+// belongs to the command layer.
+func ensureDeploymentDirReady(deployment config.DeploymentDir) error {
 	initialized, err := config.HasExasolPersonalStateFile(deployment)
 	if err != nil {
 		slog.Error("failed to check deployment directory initialization")
@@ -120,85 +154,86 @@ func InitDeployment(
 		return ErrDeploymentDirectoryNotEmpty
 	}
 
-	// Make sure the directory exists and is empty
-	if err = util.EnsureDir(deployment.Root()); err != nil {
+	if err := util.EnsureDir(deployment.Root()); err != nil {
 		return err
 	}
 
-	if err = ensureDirectoryIsEmpty(deployment); err != nil {
+	return ensureDirectoryIsEmpty(deployment)
+}
+
+func initializeDeploymentLocked(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	options InitOptions,
+) error {
+	deploymentId, err := GenerateDeploymentId()
+	if err != nil {
+		return fmt.Errorf("failed to generate deployment id: %w", err)
+	}
+	clusterIdentity := ComputeClusterIdentity(
+		deploymentId,
+		options.InfrastructurePreset,
+		options.InstallationPreset,
+	)
+
+	// Copy the presets into the deployment directory
+	if err := extractPresets(
+		options.InfrastructurePreset,
+		options.InstallationPreset,
+		deployment,
+	); err != nil {
 		return err
 	}
 
-	// Lock the deployment directory with exclusive access
-	return withDeploymentExclusiveLock(ctx, deployment,
-		func(deployment config.DeploymentDir) error {
-			deploymentId, err := GenerateDeploymentId()
-			if err != nil {
-				return fmt.Errorf("failed to generate deployment id: %w", err)
-			}
-			clusterIdentity := ComputeClusterIdentity(
-				deploymentId,
-				infrastructurePreset,
-				installationPreset,
-			)
+	slog.Debug("Initializing deployment state")
+	exasolState := newInitializedState(
+		options.VersionCheckEnabled,
+		options.CurrentVersion,
+		deploymentId,
+		clusterIdentity,
+		time.Now().UTC(),
+		options.InfrastructurePreset,
+		options.InstallationPreset,
+	)
+	infraManifest, _, err := readExtractedManifests(deployment)
+	if err != nil {
+		return err
+	}
+	backend, err := newDeploymentBackend(deployment, infraManifest)
+	if err != nil {
+		return err
+	}
+	if err := backend.SetupWorkspace(ctx); err != nil {
+		return err
+	}
+	if err := writeDeploymentConfiguration(
+		ctx,
+		deployment,
+		exasolState,
+		newDeploymentConfigurationFromRaw(options.InfraVars, options.InstallVars),
+	); err != nil {
+		return err
+	}
 
-			// Copy the presets into the deployment directory
-			err = extractPresets(infrastructurePreset, installationPreset, deployment)
-			if err != nil {
-				return err
-			}
+	if err := exasolState.SetWorkflowStateAndWrite(
+		&config.WorkflowStateInitialized{},
+		deployment,
+	); err != nil {
+		return err
+	}
+	if err := config.WriteDeploymentVersionMarker(deployment, options.CurrentVersion); err != nil {
+		return err
+	}
 
-			slog.Debug("Initializing deployment state")
-			exasolState := newInitializedState(
-				versionCheckEnabled,
-				currentVersion,
-				deploymentId,
-				clusterIdentity,
-				time.Now().UTC(),
-				infrastructurePreset,
-				installationPreset,
-			)
-			infraManifest, _, err := readExtractedManifests(deployment)
-			if err != nil {
-				return err
-			}
-			backend, err := newDeploymentBackend(deployment, infraManifest)
-			if err != nil {
-				return err
-			}
-			if err := backend.SetupWorkspace(ctx); err != nil {
-				return err
-			}
-			if err := writeDeploymentConfiguration(
-				ctx,
-				deployment,
-				exasolState,
-				newDeploymentConfigurationFromRaw(infraVars, installVars),
-			); err != nil {
-				return err
-			}
+	slog.Info(
+		"successfully initialized deployment",
+		"infrastructure",
+		presetLabel(options.InfrastructurePreset),
+		"installation",
+		presetLabel(options.InstallationPreset),
+	)
 
-			err = exasolState.SetWorkflowStateAndWrite(
-				&config.WorkflowStateInitialized{},
-				deployment,
-			)
-			if err != nil {
-				return err
-			}
-			if err := config.WriteDeploymentVersionMarker(deployment, currentVersion); err != nil {
-				return err
-			}
-
-			slog.Info(
-				"successfully initialized deployment",
-				"infrastructure",
-				presetLabel(infrastructurePreset),
-				"installation",
-				presetLabel(installationPreset),
-			)
-
-			return nil
-		})
+	return nil
 }
 
 // extractPresets writes infrastructure, installation,

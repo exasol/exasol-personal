@@ -35,15 +35,9 @@ func writeInstallationVariablesFile(
 		return nil
 	}
 
-	// Resolve and validate output path (must stay within installDir).
-	outPath := filepath.Join(installDir, filepath.Clean(outputRel))
-	installDirClean := filepath.Clean(installDir)
-	if !strings.HasPrefix(outPath, installDirClean+string(os.PathSeparator)) &&
-		outPath != installDirClean {
-		return fmt.Errorf(
-			"installation variables outputFile escapes installation directory: %q",
-			outputRel,
-		)
+	outPath, err := resolveInstallationVariablesOutputPath(installDir, outputRel)
+	if err != nil {
+		return err
 	}
 
 	resolved := map[string]any{}
@@ -53,7 +47,35 @@ func writeInstallationVariablesFile(
 	// Host-side scheduled checks reuse the same endpoint selection as launcher checks.
 	resolved["version_check_url"] = versionCheckURL
 
-	// Apply defaults from manifest.
+	if err := applyInstallationVariableDefaults(resolved, spec); err != nil {
+		return err
+	}
+	if err := applyInstallationVariableOverrides(resolved, spec, overrides); err != nil {
+		return err
+	}
+
+	return writeResolvedInstallationVariables(outPath, resolved)
+}
+
+// resolveInstallationVariablesOutputPath resolves the manifest-declared output path
+// and validates it stays within installDir.
+func resolveInstallationVariablesOutputPath(installDir, outputRel string) (string, error) {
+	outPath := filepath.Join(installDir, filepath.Clean(outputRel))
+	installDirClean := filepath.Clean(installDir)
+	if !strings.HasPrefix(outPath, installDirClean+string(os.PathSeparator)) &&
+		outPath != installDirClean {
+		return "", fmt.Errorf(
+			"installation variables outputFile escapes installation directory: %q",
+			outputRel,
+		)
+	}
+
+	return outPath, nil
+}
+
+// applyInstallationVariableDefaults fills resolved with the manifest-declared defaults,
+// skipping launcher-governed keys that must not be overridden by presets.
+func applyInstallationVariableDefaults(resolved map[string]any, spec *presets.Variables) error {
 	for name, def := range spec.Vars {
 		name = strings.TrimSpace(name)
 		if name == "" || def == nil {
@@ -70,7 +92,16 @@ func writeInstallationVariablesFile(
 		resolved[name] = value
 	}
 
-	// Apply CLI overrides.
+	return nil
+}
+
+// applyInstallationVariableOverrides layers CLI-provided overrides on top of resolved,
+// skipping launcher-governed and unknown variable names.
+func applyInstallationVariableOverrides(
+	resolved map[string]any,
+	spec *presets.Variables,
+	overrides map[string]string,
+) error {
 	for name, raw := range overrides {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -96,6 +127,10 @@ func writeInstallationVariablesFile(
 		resolved[name] = val
 	}
 
+	return nil
+}
+
+func writeResolvedInstallationVariables(outPath string, resolved map[string]any) error {
 	if err := os.MkdirAll(filepath.Dir(outPath), installVariablesFolderPermissions); err != nil {
 		return fmt.Errorf("failed to create installation variables output directory: %w", err)
 	}

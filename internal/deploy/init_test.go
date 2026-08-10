@@ -27,27 +27,41 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	// When the deployment is intialized
 	err := InitDeployment(
 		context.Background(),
-		PresetRef{Name: presets.DefaultInfrastructure},
-		PresetRef{Name: presets.DefaultInstallation},
-		map[string]string{"cluster_size": "2"},
-		map[string]string{},
 		deployment,
-		false,
-		"0.0.0",
+		InitOptions{
+			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
+			InstallationPreset:   PresetRef{Name: presets.DefaultInstallation},
+			InfraVars:            map[string]string{"cluster_size": "2"},
+			InstallVars:          map[string]string{},
+			CurrentVersion:       "0.0.0",
+		},
 	)
 	if err != nil {
 		t.Fatalf("InitDeployment failed: %v", err)
 	}
 
-	// Then: workflow state exists and is readable
+	assertInitializedDeploymentState(t, deployment, "0.0.0")
+	assertTfVarsFile(t, deployment)
+	assertInstallationVariablesFile(t, deployment)
+}
+
+// assertInitializedDeploymentState asserts that the persisted workflow state,
+// preset identities, and version marker reflect a freshly initialized deployment.
+func assertInitializedDeploymentState(
+	t *testing.T,
+	deployment config.DeploymentDir,
+	wantVersion string,
+) {
+	t.Helper()
+
 	state, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {
 		t.Fatalf("expected workflow state to be readable, got error: %v", err)
 	}
-	if state.DeploymentVersion != "0.0.0" {
+	if state.DeploymentVersion != wantVersion {
 		t.Fatalf(
 			"expected deployment version to be persisted as %q, got %q",
-			"0.0.0",
+			wantVersion,
 			state.DeploymentVersion,
 		)
 	}
@@ -74,8 +88,8 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	} else if !ok {
 		t.Fatalf("expected deployment version marker %q to exist",
 			config.DeploymentVersionMarkerFileName)
-	} else if ver != "0.0.0" {
-		t.Fatalf("expected deployment version marker to be %q, got %q", "0.0.0", ver)
+	} else if ver != wantVersion {
+		t.Fatalf("expected deployment version marker to be %q, got %q", wantVersion, ver)
 	}
 	workflowState, err := state.GetWorkflowState()
 	if err != nil {
@@ -84,8 +98,13 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	if _, ok := workflowState.(*config.WorkflowStateInitialized); !ok {
 		t.Fatalf("expected Initialized workflow state, got %T", workflowState)
 	}
+}
 
-	// Then: tfvars file exists at default path (per manifest)
+// assertTfVarsFile asserts that the tfvars file exists at the manifest-defined
+// default path and contains the expected cluster and preset directory values.
+func assertTfVarsFile(t *testing.T, deployment config.DeploymentDir) {
+	t.Helper()
+
 	tfvarsPath := filepath.Join(deployment.InfrastructureDir(), tofu.DefaultVarsOutput)
 	data, err := os.ReadFile(tfvarsPath)
 	if err != nil {
@@ -133,8 +152,13 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 	if filepath.IsAbs(installDir) {
 		t.Fatalf("expected installation_preset_dir to stay relative, got %q", installDir)
 	}
+}
 
-	// Then: installation variables file exists at the manifest-defined path.
+// assertInstallationVariablesFile asserts that the installation variables file
+// exists at the manifest-defined path and carries the launcher-governed keys.
+func assertInstallationVariablesFile(t *testing.T, deployment config.DeploymentDir) {
+	t.Helper()
+
 	const installationVarsRelPath = "files/etc/exasol_launcher/installation.json"
 
 	installVarsPath := filepath.Join(
@@ -171,13 +195,14 @@ func TestInitDeployment_CreatesDeploymentDir(t *testing.T) {
 	// When
 	err := InitDeployment(
 		context.Background(),
-		PresetRef{Name: presets.DefaultInfrastructure},
-		PresetRef{Name: presets.DefaultInstallation},
-		map[string]string{},
-		map[string]string{},
 		deployment,
-		false,
-		"",
+		InitOptions{
+			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
+			InstallationPreset:   PresetRef{Name: presets.DefaultInstallation},
+			InfraVars:            map[string]string{},
+			InstallVars:          map[string]string{},
+			CurrentVersion:       "",
+		},
 	)
 	// Then
 	if err != nil {
@@ -230,13 +255,14 @@ func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {
 	// When
 	err := InitDeployment(
 		context.Background(),
-		PresetRef{Name: presets.DefaultInfrastructure},
-		PresetRef{Name: presets.DefaultInstallation},
-		map[string]string{},
-		map[string]string{},
 		deployment,
-		false,
-		"",
+		InitOptions{
+			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
+			InstallationPreset:   PresetRef{Name: presets.DefaultInstallation},
+			InfraVars:            map[string]string{},
+			InstallVars:          map[string]string{},
+			CurrentVersion:       "",
+		},
 	)
 
 	// Then

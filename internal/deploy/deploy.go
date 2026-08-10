@@ -120,7 +120,6 @@ func WorkflowStatePermitsDeploy(
 	return newBlockedStateError(deployment, ErrUnexpectedDeploymentStatus)
 }
 
-//
 //nolint:revive
 func deployFromManifests(
 	ctx context.Context,
@@ -130,126 +129,160 @@ func deployFromManifests(
 ) error {
 	return withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			exasolState, err := config.ReadExasolPersonalState(deployment)
-			if err != nil {
-				slog.Error("failed to read exasol personal state")
-				return err
-			}
-
-			if err := WorkflowStatePermitsDeploy(exasolState, deployment); err != nil {
-				return err
-			}
-
-			// Set the workflowstate to deployment in-progress
-			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
-				Operation: config.DeployOperation,
-			}, deployment)
-			if err != nil {
-				slog.Error("failed to set workflow state to in-progress", "error", err.Error())
-			}
-
-			// Register signal handler for catching interruptions and set state
-			// in case of interruption
-			unregister, _ := util.RegisterOnceSignalHandler(func() {
-				slog.Warn("Deployment interrupted")
-				err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
-					Error:                      "Deployment interrupted via signal",
-					InterruptedDuringOperation: config.DeployOperation,
-				}, deployment)
-				if err != nil {
-					slog.Error("failed to set workflow state to in-progress", "error", err.Error())
-				}
-			})
-
-			// Fallback cleanup
-			defer unregister()
-
-			// Manifest-driven execution
-			infrastructureManifest, err := config.ReadInfrastructureManifest(deployment)
-			if err != nil {
-				return err
-			}
-			backend, err := newDeploymentBackend(deployment, infrastructureManifest)
-			if err != nil {
-				return err
-			}
-
-			installManifest, err := config.ReadInstallManifest(deployment)
-			if err != nil {
-				return err
-			}
-
-			var externalCommandOutput io.Writer
-			if verbose {
-				externalCommandOutput = os.Stderr
-			}
-
-			if err := backend.Deploy(
-				ctx,
-				externalCommandOutput,
-				externalCommandOutput,
-				options,
-			); err != nil {
-				unregister()
-
-				deployErr := appendDeployFailureHint(deployment, err)
-				if stateErr := exasolState.SetWorkflowStateAndWrite(
-					&config.WorkflowStateDeploymentFailed{
-						Error: deployErr.Error(),
-					},
-					deployment,
-				); stateErr != nil {
-					slog.Warn("failed to persist deployment failure state", "error", stateErr)
-				}
-
-				return deployErr
-			}
-
-			// Installation phase (remoteExec tasks)
-			if err := runInstallSteps(ctx, deployment, installManifest,
-				externalCommandOutput, externalCommandOutput); err != nil {
-				unregister()
-				deployErr := appendDeployFailureHint(deployment, err)
-				if stateErr := exasolState.SetWorkflowStateAndWrite(
-					&config.WorkflowStateDeploymentFailed{
-						Error: deployErr.Error(),
-					},
-					deployment,
-				); stateErr != nil {
-					slog.Warn("failed to persist deployment failure state", "error", stateErr)
-				}
-
-				return deployErr
-			}
-
-			// Stop handling interrupts before committing success state
-			unregister()
-
-			err = exasolState.SetWorkflowStateAndWrite(
-				&config.WorkflowStateRunning{},
-				deployment,
-			)
-			if err != nil {
-				slog.Error("failed to write workflow state")
-				return err
-			}
-
-			reconcileCustomSLCsAfterStart(ctx, deployment)
-
-			connectionInstructions, err := getConnectionInstructionsTextUnsafe(ctx, deployment)
-			if err != nil {
-				slog.Error("failed to collect connection instructions")
-				return err
-			}
-			if err := writeConnectionInstructionsFile(deployment, connectionInstructions); err != nil {
-				slog.Error("failed to write connection instructions")
-				return err
-			}
-
-			slog.Info("Completed deploying")
-
-			return nil
+			return deployLocked(ctx, deployment, verbose, options)
 		})
+}
+
+func deployLocked(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	verbose bool,
+	options DeployOptions,
+) error {
+	exasolState, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		slog.Error("failed to read exasol personal state")
+		return err
+	}
+
+	if err := WorkflowStatePermitsDeploy(exasolState, deployment); err != nil {
+		return err
+	}
+
+	// Set the workflowstate to deployment in-progress
+	if err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
+		Operation: config.DeployOperation,
+	}, deployment); err != nil {
+		slog.Error("failed to set workflow state to in-progress", "error", err.Error())
+	}
+
+	return runDeployBackend(ctx, exasolState, deployment, verbose, options)
+}
+
+// runDeployBackend registers the interruption signal handler, runs the
+// manifest-driven deploy and installation phases, and commits the final
+// state. It is split out from deployLocked so the signal-handler lifetime
+// (registered right before the backend calls, unregistered right after)
+// stays scoped to a single, easy-to-audit block.
+//
+//nolint:revive // verbose mirrors the command-level --verbose flag.
+func runDeployBackend(
+	ctx context.Context,
+	exasolState *config.ExasolPersonalState,
+	deployment config.DeploymentDir,
+	verbose bool,
+	options DeployOptions,
+) error {
+	// Register signal handler for catching interruptions and set state
+	// in case of interruption
+	unregister, _ := util.RegisterOnceSignalHandler(func() {
+		slog.Warn("Deployment interrupted")
+		if err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
+			Error:                      "Deployment interrupted via signal",
+			InterruptedDuringOperation: config.DeployOperation,
+		}, deployment); err != nil {
+			slog.Error("failed to set workflow state to in-progress", "error", err.Error())
+		}
+	})
+
+	// Fallback cleanup
+	defer unregister()
+
+	// Manifest-driven execution
+	infrastructureManifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return err
+	}
+	backend, err := newDeploymentBackend(deployment, infrastructureManifest)
+	if err != nil {
+		return err
+	}
+
+	installManifest, err := config.ReadInstallManifest(deployment)
+	if err != nil {
+		return err
+	}
+
+	var externalCommandOutput io.Writer
+	if verbose {
+		externalCommandOutput = os.Stderr
+	}
+
+	if err := backend.Deploy(
+		ctx,
+		externalCommandOutput,
+		externalCommandOutput,
+		options,
+	); err != nil {
+		unregister()
+
+		return recordDeployFailure(exasolState, deployment, err)
+	}
+
+	// Installation phase (remoteExec tasks)
+	if err := runInstallSteps(ctx, deployment, installManifest,
+		externalCommandOutput, externalCommandOutput); err != nil {
+		unregister()
+
+		return recordDeployFailure(exasolState, deployment, err)
+	}
+
+	// Stop handling interrupts before committing success state
+	unregister()
+
+	return finalizeSuccessfulDeploy(ctx, exasolState, deployment)
+}
+
+// recordDeployFailure appends diagnostic hints to err and persists the
+// deployment-failed workflow state before returning the enriched error.
+func recordDeployFailure(
+	exasolState *config.ExasolPersonalState,
+	deployment config.DeploymentDir,
+	err error,
+) error {
+	deployErr := appendDeployFailureHint(deployment, err)
+	if stateErr := exasolState.SetWorkflowStateAndWrite(
+		&config.WorkflowStateDeploymentFailed{
+			Error: deployErr.Error(),
+		},
+		deployment,
+	); stateErr != nil {
+		slog.Warn("failed to persist deployment failure state", "error", stateErr)
+	}
+
+	return deployErr
+}
+
+// finalizeSuccessfulDeploy commits the running workflow state and writes the
+// connection instructions after a successful deploy and installation phase.
+func finalizeSuccessfulDeploy(
+	ctx context.Context,
+	exasolState *config.ExasolPersonalState,
+	deployment config.DeploymentDir,
+) error {
+	if err := exasolState.SetWorkflowStateAndWrite(
+		&config.WorkflowStateRunning{},
+		deployment,
+	); err != nil {
+		slog.Error("failed to write workflow state")
+		return err
+	}
+
+	reconcileCustomSLCsAfterStart(ctx, deployment)
+
+	connectionInstructions, err := getConnectionInstructionsTextUnsafe(ctx, deployment)
+	if err != nil {
+		slog.Error("failed to collect connection instructions")
+		return err
+	}
+	if err := writeConnectionInstructionsFile(deployment, connectionInstructions); err != nil {
+		slog.Error("failed to write connection instructions")
+		return err
+	}
+
+	slog.Info("Completed deploying")
+
+	return nil
 }
 
 type nodeLookupImpl struct {
