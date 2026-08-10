@@ -842,30 +842,7 @@ func writeTarGzMultiFixture(
 	}
 	sort.Strings(keys)
 	for _, entryName := range keys {
-		entry := entries[entryName]
-		if entry.IsDir || strings.HasSuffix(entryName, "/") {
-			if err := tarWriter.WriteHeader(&tar.Header{
-				Name:     entryName,
-				Mode:     entry.Mode,
-				Typeflag: tar.TypeDir,
-			}); err != nil {
-				t.Fatalf("failed to write tar directory header: %v", err)
-			}
-
-			continue
-		}
-
-		if err := tarWriter.WriteHeader(&tar.Header{
-			Name:     entryName,
-			Mode:     entry.Mode,
-			Size:     int64(len(entry.Content)),
-			Typeflag: tar.TypeReg,
-		}); err != nil {
-			t.Fatalf("failed to write tar header: %v", err)
-		}
-		if _, err := tarWriter.Write([]byte(entry.Content)); err != nil {
-			t.Fatalf("failed to write tar payload: %v", err)
-		}
+		writeTarGzFixtureEntry(t, tarWriter, entryName, entries[entryName])
 	}
 	if err := tarWriter.Close(); err != nil {
 		t.Fatalf("failed to close tar writer: %v", err)
@@ -878,6 +855,39 @@ func writeTarGzMultiFixture(
 	}
 
 	return path
+}
+
+func writeTarGzFixtureEntry(
+	t *testing.T,
+	tarWriter *tar.Writer,
+	entryName string,
+	entry tarFixtureEntry,
+) {
+	t.Helper()
+
+	if entry.IsDir || strings.HasSuffix(entryName, "/") {
+		if err := tarWriter.WriteHeader(&tar.Header{
+			Name:     entryName,
+			Mode:     entry.Mode,
+			Typeflag: tar.TypeDir,
+		}); err != nil {
+			t.Fatalf("failed to write tar directory header: %v", err)
+		}
+
+		return
+	}
+
+	if err := tarWriter.WriteHeader(&tar.Header{
+		Name:     entryName,
+		Mode:     entry.Mode,
+		Size:     int64(len(entry.Content)),
+		Typeflag: tar.TypeReg,
+	}); err != nil {
+		t.Fatalf("failed to write tar header: %v", err)
+	}
+	if _, err := tarWriter.Write([]byte(entry.Content)); err != nil {
+		t.Fatalf("failed to write tar payload: %v", err)
+	}
 }
 
 func writeZipFixture(t *testing.T, dir, name string, entries map[string]string) string {
