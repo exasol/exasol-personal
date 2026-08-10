@@ -31,58 +31,13 @@ func (*ZipExtractor) Extract(srcPath, dstPath string) error {
 
 	extracted := false
 	for _, zipEntry := range zipReader.File {
-		cleanName := filepath.Clean(filepath.FromSlash(zipEntry.Name))
-		if cleanName == "." || cleanName == ".." ||
-			strings.HasPrefix(cleanName, ".."+string(filepath.Separator)) ||
-			filepath.IsAbs(cleanName) {
-			return fmt.Errorf(
-				"refusing to extract archive entry %q outside %s",
-				zipEntry.Name,
-				dstPath,
-			)
+		ok, err := extractZipEntry(zipEntry, dstPath)
+		if err != nil {
+			return err
 		}
-
-		targetPath := filepath.Join(dstPath, cleanName)
-		mode := zipEntry.Mode().Perm()
-		if mode == 0 {
-			mode = 0o644
-		}
-
-		if zipEntry.FileInfo().IsDir() {
-			if err := os.MkdirAll(targetPath, mode); err != nil {
-				return err
-			}
+		if ok {
 			extracted = true
-
-			continue
 		}
-
-		if err := os.MkdirAll(filepath.Dir(targetPath), dirPerm); err != nil {
-			return err
-		}
-
-		entryReader, err := zipEntry.Open()
-		if err != nil {
-			return err
-		}
-
-		out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
-		if err != nil {
-			_ = entryReader.Close()
-			return err
-		}
-		// #nosec G110 -- archive contents are trusted runtime artifacts.
-		if _, err := io.Copy(out, entryReader); err != nil {
-			_ = entryReader.Close()
-			_ = out.Close()
-
-			return err
-		}
-		_ = entryReader.Close()
-		if err := out.Close(); err != nil {
-			return err
-		}
-		extracted = true
 	}
 
 	if !extracted {
@@ -90,4 +45,74 @@ func (*ZipExtractor) Extract(srcPath, dstPath string) error {
 	}
 
 	return nil
+}
+
+// extractZipEntry extracts a single zip entry under dstPath and reports
+// whether it produced an extractable file or directory.
+func extractZipEntry(zipEntry *zip.File, dstPath string) (bool, error) {
+	targetPath, err := sanitizeZipEntryPath(dstPath, zipEntry.Name)
+	if err != nil {
+		return false, err
+	}
+
+	mode := zipEntry.Mode().Perm()
+	if mode == 0 {
+		mode = 0o644
+	}
+
+	if zipEntry.FileInfo().IsDir() {
+		if err := os.MkdirAll(targetPath, mode); err != nil {
+			return false, err
+		}
+
+		return true, nil
+	}
+
+	if err := writeZipRegularFile(zipEntry, targetPath, mode); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func sanitizeZipEntryPath(dstPath, name string) (string, error) {
+	cleanName := filepath.Clean(filepath.FromSlash(name))
+	if cleanName == "." || cleanName == ".." ||
+		strings.HasPrefix(cleanName, ".."+string(filepath.Separator)) ||
+		filepath.IsAbs(cleanName) {
+		return "", fmt.Errorf(
+			"refusing to extract archive entry %q outside %s",
+			name,
+			dstPath,
+		)
+	}
+
+	return filepath.Join(dstPath, cleanName), nil
+}
+
+func writeZipRegularFile(zipEntry *zip.File, targetPath string, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(targetPath), dirPerm); err != nil {
+		return err
+	}
+
+	entryReader, err := zipEntry.Open()
+	if err != nil {
+		return err
+	}
+
+	out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		_ = entryReader.Close()
+		return err
+	}
+	// #nosec G110 -- archive contents are trusted runtime artifacts.
+	if _, err := io.Copy(out, entryReader); err != nil {
+		_ = entryReader.Close()
+		_ = out.Close()
+
+		return err
+	}
+	_ = entryReader.Close()
+
+	return out.Close()
 }

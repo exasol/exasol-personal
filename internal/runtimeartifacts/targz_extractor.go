@@ -6,6 +6,7 @@ package runtimeartifacts
 import (
 	"archive/tar"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -40,59 +41,19 @@ func (*TarGzExtractor) Extract(srcPath, dstPath string) error {
 	extracted := false
 	for {
 		hdr, err := tarReader.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return err
 		}
 
-		cleanName := filepath.Clean(filepath.FromSlash(hdr.Name))
-		if cleanName == "." || cleanName == ".." ||
-			strings.HasPrefix(cleanName, ".."+string(filepath.Separator)) ||
-			filepath.IsAbs(cleanName) {
-			return fmt.Errorf(
-				"refusing to extract archive entry %q outside %s",
-				hdr.Name,
-				dstPath,
-			)
+		ok, err := extractTarEntry(tarReader, hdr, dstPath)
+		if err != nil {
+			return err
 		}
-
-		targetPath := filepath.Join(dstPath, cleanName)
-		mode := os.FileMode(hdr.Mode).Perm()
-
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, mode); err != nil {
-				return err
-			}
-			if err := os.Chmod(targetPath, mode); err != nil {
-				return err
-			}
+		if ok {
 			extracted = true
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(targetPath), dirPerm); err != nil {
-				return err
-			}
-
-			out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
-			if err != nil {
-				return err
-			}
-			// #nosec G110 -- archive contents are trusted runtime artifacts.
-			if _, err := io.Copy(out, tarReader); err != nil {
-				_ = out.Close()
-				return err
-			}
-			if err := out.Close(); err != nil {
-				return err
-			}
-			if err := os.Chmod(targetPath, mode); err != nil {
-				return err
-			}
-			extracted = true
-		default:
-			continue
 		}
 	}
 
@@ -101,4 +62,71 @@ func (*TarGzExtractor) Extract(srcPath, dstPath string) error {
 	}
 
 	return nil
+}
+
+// extractTarEntry extracts a single tar entry under dstPath and reports
+// whether it produced an extractable file or directory.
+func extractTarEntry(tarReader *tar.Reader, hdr *tar.Header, dstPath string) (bool, error) {
+	targetPath, err := sanitizeTarEntryPath(dstPath, hdr.Name)
+	if err != nil {
+		return false, err
+	}
+
+	mode := os.FileMode(hdr.Mode).Perm()
+
+	switch hdr.Typeflag {
+	case tar.TypeDir:
+		if err := os.MkdirAll(targetPath, mode); err != nil {
+			return false, err
+		}
+		if err := os.Chmod(targetPath, mode); err != nil {
+			return false, err
+		}
+
+		return true, nil
+	case tar.TypeReg:
+		if err := writeTarRegularFile(tarReader, targetPath, mode); err != nil {
+			return false, err
+		}
+
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+func sanitizeTarEntryPath(dstPath, name string) (string, error) {
+	cleanName := filepath.Clean(filepath.FromSlash(name))
+	if cleanName == "." || cleanName == ".." ||
+		strings.HasPrefix(cleanName, ".."+string(filepath.Separator)) ||
+		filepath.IsAbs(cleanName) {
+		return "", fmt.Errorf(
+			"refusing to extract archive entry %q outside %s",
+			name,
+			dstPath,
+		)
+	}
+
+	return filepath.Join(dstPath, cleanName), nil
+}
+
+func writeTarRegularFile(tarReader *tar.Reader, targetPath string, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(targetPath), dirPerm); err != nil {
+		return err
+	}
+
+	out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	// #nosec G110 -- archive contents are trusted runtime artifacts.
+	if _, err := io.Copy(out, tarReader); err != nil {
+		_ = out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+
+	return os.Chmod(targetPath, mode)
 }

@@ -177,42 +177,63 @@ func getRefName(
 	}
 
 	if ref == "" {
-		// Resolve remote HEAD to the actual default branch so the clone
-		// produces a proper branch checkout with remote-tracking refs.
-		for _, r := range remoteRefs {
-			if r.Name() == plumbing.HEAD && r.Type() == plumbing.SymbolicReference {
-				target := r.Target()
-				for _, br := range remoteRefs {
-					if br.Name() == target {
-						return target, br.Hash(), nil
-					}
-				}
-
-				return "", plumbing.ZeroHash, fmt.Errorf(
-					"remote HEAD points to %q which does not exist in %s",
-					target,
-					repoURL,
-				)
-			}
-		}
-
-		return "", plumbing.ZeroHash, fmt.Errorf("no HEAD reference found for %s", repoURL)
+		return resolveHeadRef(remoteRefs, repoURL)
 	}
 
 	if isFullCommitSHA(ref) {
-		targetHash := plumbing.NewHash(ref)
-		for _, r := range remoteRefs {
-			if r.Type() == plumbing.SymbolicReference {
-				continue
-			}
-			if r.Hash() == targetHash {
-				return r.Name(), targetHash, nil
-			}
-		}
-		// No named ref points to this SHA; full-depth clone required.
-		return "", targetHash, nil
+		return resolveCommitSHARef(remoteRefs, ref)
 	}
 
+	return resolveNamedRef(remoteRefs, ref, repoURL)
+}
+
+// resolveHeadRef resolves remote HEAD to the actual default branch so the
+// clone produces a proper branch checkout with remote-tracking refs.
+func resolveHeadRef(
+	remoteRefs []*plumbing.Reference,
+	repoURL string,
+) (plumbing.ReferenceName, plumbing.Hash, error) {
+	for _, r := range remoteRefs {
+		if r.Name() == plumbing.HEAD && r.Type() == plumbing.SymbolicReference {
+			target := r.Target()
+			for _, br := range remoteRefs {
+				if br.Name() == target {
+					return target, br.Hash(), nil
+				}
+			}
+
+			return "", plumbing.ZeroHash, fmt.Errorf(
+				"remote HEAD points to %q which does not exist in %s",
+				target,
+				repoURL,
+			)
+		}
+	}
+
+	return "", plumbing.ZeroHash, fmt.Errorf("no HEAD reference found for %s", repoURL)
+}
+
+func resolveCommitSHARef(
+	remoteRefs []*plumbing.Reference,
+	ref string,
+) (plumbing.ReferenceName, plumbing.Hash, error) {
+	targetHash := plumbing.NewHash(ref)
+	for _, r := range remoteRefs {
+		if r.Type() == plumbing.SymbolicReference {
+			continue
+		}
+		if r.Hash() == targetHash {
+			return r.Name(), targetHash, nil
+		}
+	}
+	// No named ref points to this SHA; full-depth clone required.
+	return "", targetHash, nil
+}
+
+func resolveNamedRef(
+	remoteRefs []*plumbing.Reference,
+	ref, repoURL string,
+) (plumbing.ReferenceName, plumbing.Hash, error) {
 	for _, r := range remoteRefs {
 		if r.Type() == plumbing.SymbolicReference {
 			continue
