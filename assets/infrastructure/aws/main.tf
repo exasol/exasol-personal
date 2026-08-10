@@ -162,6 +162,31 @@ resource "aws_s3_bucket" "remote_archive_volume" {
   }
 }
 
+resource "aws_s3_bucket_policy" "remote_archive_volume" {
+  count  = var.s3_archive_enabled ? 1 : 0
+  bucket = aws_s3_bucket.remote_archive_volume[0].id
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "DenyInsecureTransport",
+        Effect    = "Deny",
+        Principal = "*",
+        Action    = "s3:*",
+        Resource = [
+          aws_s3_bucket.remote_archive_volume[0].arn,
+          "${aws_s3_bucket.remote_archive_volume[0].arn}/*"
+        ],
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_s3_bucket" "bootstrap_assets" {
   bucket = local.bootstrap_assets_bucket_id
 
@@ -177,10 +202,14 @@ resource "aws_s3_bucket" "bootstrap_assets" {
 resource "aws_s3_bucket_public_access_block" "bootstrap_assets" {
   bucket = aws_s3_bucket.bootstrap_assets.id
 
+  # The bucket policy below grants anonymous reads only via a
+  # Condition on aws:sourceVpce, which AWS's Block Public Access
+  # evaluator recognizes as restricting — so it is not treated as a
+  # public grant and attaching it does not require loosening these.
   block_public_acls       = true
   ignore_public_acls      = true
-  block_public_policy     = false
-  restrict_public_buckets = false
+  block_public_policy     = true
+  restrict_public_buckets = true
 }
 
 resource "aws_s3_bucket_policy" "bootstrap_assets" {

@@ -354,7 +354,11 @@ resource "azurerm_managed_disk" "data_disks" {
   disk_size_gb         = var.data_volume_size
   tags                 = local.common_tags
 
-  public_network_access_enabled = true
+  # This disk is only ever attached to a VM over Azure's internal storage
+  # fabric (see azurerm_virtual_machine_data_disk_attachment below); it is
+  # never imported/exported via the direct-upload data-plane endpoint that
+  # this flag controls.
+  public_network_access_enabled = false
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "data_disks" {

@@ -50,6 +50,13 @@ resource "aws_s3_bucket" "remote_archive_volume" {
   force_destroy = true
 }
 
+# Unlike the AWS and STACKIT presets, this bucket (and bootstrap_assets below)
+# has no bucket policy denying non-HTTPS transport: Exoscale SOS validates
+# bucket policies against its own, undocumented IAM v3 policy spec rather than
+# AWS's bucket-policy grammar, so AWS-style policies are rejected outright.
+# Transport is still HTTPS-only in practice, since every access to these
+# buckets goes through the hardcoded https:// SOS endpoint (see sos_endpoint
+# above and cloudinit.tf) rather than through a policy-level restriction.
 resource "aws_s3_bucket" "bootstrap_assets" {
   provider = aws.sos
   bucket   = local.bootstrap_assets_bucket_id
