@@ -25,7 +25,7 @@ log_step_info "Preparing system..."
 
 log_substep_info "Downloading c4 ...${c4_version}"
 
-if ! curl -fsSL -O "https://x-up.s3.amazonaws.com/releases/c4/linux/x86_64/${c4_version}/c4"; then
+if ! curl -fsSL --proto '=https' -O "https://x-up.s3.amazonaws.com/releases/c4/linux/x86_64/${c4_version}/c4"; then
   log_error "Failed to download c4 binary from remote server"
   exit 1
 fi
