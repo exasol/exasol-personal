@@ -135,56 +135,104 @@ func findStatementTerminator(sql string, from int) (terminator, bool) {
 	return findSemicolonTerminator(sql, from)
 }
 
+// quoteCommentState tracks which quoted-string or comment span the scanner is
+// currently inside, so ';' terminators found inside them are ignored.
+type quoteCommentState struct {
+	inSingleQuotes bool
+	inDoubleQuotes bool
+	inLineComment  bool
+	inBlockComment bool
+}
+
 func findSemicolonTerminator(sql string, from int) (terminator, bool) {
-	var inSingleQuotes, inDoubleQuotes, inLineComment, inBlockComment bool
+	var state quoteCommentState
 
 	for charIndex := from; charIndex < len(sql); charIndex++ {
 		switch {
-		case inLineComment:
-			if sql[charIndex] == '\n' {
-				inLineComment = false
-			}
-		case inBlockComment:
-			if sql[charIndex] == '*' && charIndex+1 < len(sql) && sql[charIndex+1] == '/' {
-				inBlockComment = false
-				charIndex++
-			}
-		case inSingleQuotes:
-			if sql[charIndex] == '\'' && charIndex+1 < len(sql) && sql[charIndex+1] == '\'' {
-				charIndex++
-			} else if sql[charIndex] == '\'' {
-				inSingleQuotes = false
-			}
-		case inDoubleQuotes:
-			if sql[charIndex] == '"' && charIndex+1 < len(sql) && sql[charIndex+1] == '"' {
-				charIndex++
-			} else if sql[charIndex] == '"' {
-				inDoubleQuotes = false
-			}
+		case state.inLineComment:
+			charIndex += consumeLineComment(&state, sql, charIndex)
+		case state.inBlockComment:
+			charIndex += consumeBlockComment(&state, sql, charIndex)
+		case state.inSingleQuotes:
+			charIndex += consumeSingleQuote(&state, sql, charIndex)
+		case state.inDoubleQuotes:
+			charIndex += consumeDoubleQuote(&state, sql, charIndex)
 		default:
-			switch sql[charIndex] {
-			case '\'':
-				inSingleQuotes = true
-			case '"':
-				inDoubleQuotes = true
-			case '-':
-				if charIndex+1 < len(sql) && sql[charIndex+1] == '-' {
-					inLineComment = true
-					charIndex++
-				}
-			case '/':
-				if charIndex+1 < len(sql) && sql[charIndex+1] == '*' {
-					inBlockComment = true
-					charIndex++
-				}
-			case ';':
-				return terminator{statementEnd: charIndex, nextStart: charIndex + 1}, true
-			default:
+			term, found, skip := consumeDefault(&state, sql, charIndex)
+			if found {
+				return term, true
 			}
+			charIndex += skip
 		}
 	}
 
 	return terminator{}, false
+}
+
+func consumeLineComment(state *quoteCommentState, sql string, charIndex int) int {
+	if sql[charIndex] == '\n' {
+		state.inLineComment = false
+	}
+
+	return 0
+}
+
+func consumeBlockComment(state *quoteCommentState, sql string, charIndex int) int {
+	if sql[charIndex] == '*' && charIndex+1 < len(sql) && sql[charIndex+1] == '/' {
+		state.inBlockComment = false
+
+		return 1
+	}
+
+	return 0
+}
+
+func consumeSingleQuote(state *quoteCommentState, sql string, charIndex int) int {
+	if sql[charIndex] == '\'' && charIndex+1 < len(sql) && sql[charIndex+1] == '\'' {
+		return 1
+	}
+	if sql[charIndex] == '\'' {
+		state.inSingleQuotes = false
+	}
+
+	return 0
+}
+
+func consumeDoubleQuote(state *quoteCommentState, sql string, charIndex int) int {
+	if sql[charIndex] == '"' && charIndex+1 < len(sql) && sql[charIndex+1] == '"' {
+		return 1
+	}
+	if sql[charIndex] == '"' {
+		state.inDoubleQuotes = false
+	}
+
+	return 0
+}
+
+func consumeDefault(state *quoteCommentState, sql string, charIndex int) (terminator, bool, int) {
+	switch sql[charIndex] {
+	case '\'':
+		state.inSingleQuotes = true
+	case '"':
+		state.inDoubleQuotes = true
+	case '-':
+		if charIndex+1 < len(sql) && sql[charIndex+1] == '-' {
+			state.inLineComment = true
+
+			return terminator{}, false, 1
+		}
+	case '/':
+		if charIndex+1 < len(sql) && sql[charIndex+1] == '*' {
+			state.inBlockComment = true
+
+			return terminator{}, false, 1
+		}
+	case ';':
+		return terminator{statementEnd: charIndex, nextStart: charIndex + 1}, true, 0
+	default:
+	}
+
+	return terminator{}, false, 0
 }
 
 // SCRIPT and FUNCTION bodies may contain ';', so they terminate on '/' instead.
