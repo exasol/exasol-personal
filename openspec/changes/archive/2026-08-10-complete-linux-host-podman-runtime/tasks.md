@@ -25,4 +25,4 @@
 
 - [x] 5.1 Document Linux Podman prerequisites, platform resource behavior, the local preset change, and the user-visible compatibility change
 - [x] 5.2 Run strict OpenSpec validation, repository unit tests, lint, and build
-- [ ] 5.3 Smoke-test install, status, SQL connectivity, SLC restart persistence, stop/start, and removal with the default Linux `local` deployment
+- [x] 5.3 Smoke-test install, status, SQL connectivity, SLC restart persistence, stop/start, and removal with the default Linux `local` deployment
