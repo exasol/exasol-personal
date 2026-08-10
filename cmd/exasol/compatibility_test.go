@@ -174,39 +174,35 @@ func TestDeploymentCompatibilityRules_MinorBaselineAndNeverNewerThanLauncher(t *
 
 	// Given: test cases spanning the contract space: allowed versions, too-new deployments,
 	// and deployments that are too old for the declared minimum.
+	// wantReason is nil for cases that are expected to be allowed.
 	testCases := []struct {
 		name              string
 		deploymentVersion string
 		launcherVersion   string
-		allowed           bool
-		reason            deploymentcompatibility.Reason
+		wantReason        *deploymentcompatibility.Reason
 	}{
 		{
 			name:              "allows same minor at patch 0",
 			deploymentVersion: "1.2.0",
 			launcherVersion:   "1.2.5",
-			allowed:           true,
 		},
 		{
 			name:              "rejects deployment newer patch than launcher",
 			deploymentVersion: "1.2.7",
 			launcherVersion:   "1.2.5",
-			allowed:           false,
-			reason:            deploymentcompatibility.ReasonDeploymentNewerThanLauncher,
+			wantReason:        reasonPtr(deploymentcompatibility.ReasonDeploymentNewerThanLauncher),
 		},
 		{
 			name:              "rejects deployment newer minor than launcher",
 			deploymentVersion: "1.3.0",
 			launcherVersion:   "1.2.5",
-			allowed:           false,
-			reason:            deploymentcompatibility.ReasonDeploymentNewerThanLauncher,
+			wantReason:        reasonPtr(deploymentcompatibility.ReasonDeploymentNewerThanLauncher),
 		},
 		{
 			name:              "rejects deployment older than minimum minor",
 			deploymentVersion: "1.1.9",
 			launcherVersion:   "1.2.5",
-			allowed:           false,
-			reason:            deploymentcompatibility.ReasonDeploymentTooOld,
+			wantReason:        reasonPtr(deploymentcompatibility.ReasonDeploymentTooOld),
 		},
 	}
 
@@ -222,30 +218,43 @@ func TestDeploymentCompatibilityRules_MinorBaselineAndNeverNewerThanLauncher(t *
 			)
 
 			// Then: the result matches the rule expectations.
-			if res.Allowed != testcase.allowed {
-				t.Fatalf(
-					"expected allowed=%v, got allowed=%v (err=%v)",
-					testcase.allowed,
-					res.Allowed,
-					res.Err,
-				)
-			}
-			if testcase.allowed {
-				if res.Err != nil {
-					t.Fatalf("expected nil error when allowed, got: %v", res.Err)
-				}
-
-				return
-			}
-
-			var inc *deploymentcompatibility.IncompatibleError
-			if !errors.As(res.Err, &inc) {
-				t.Fatalf("expected IncompatibleError, got %T: %v", res.Err, res.Err)
-			}
-			if inc.Reason != testcase.reason {
-				t.Fatalf("expected reason %q, got %q", testcase.reason, inc.Reason)
-			}
+			assertDeploymentCompatibilityResult(t, res, testcase.wantReason)
 		})
+	}
+}
+
+func reasonPtr(reason deploymentcompatibility.Reason) *deploymentcompatibility.Reason {
+	return &reason
+}
+
+// assertDeploymentCompatibilityResult checks a compatibility result against the expected
+// outcome. A nil wantReason means the result must be allowed with no error; otherwise the
+// result must be an IncompatibleError with that reason.
+func assertDeploymentCompatibilityResult(
+	t *testing.T,
+	res deploymentcompatibility.Result,
+	wantReason *deploymentcompatibility.Reason,
+) {
+	t.Helper()
+
+	wantAllowed := wantReason == nil
+	if res.Allowed != wantAllowed {
+		t.Fatalf("expected allowed=%v, got allowed=%v (err=%v)", wantAllowed, res.Allowed, res.Err)
+	}
+	if wantAllowed {
+		if res.Err != nil {
+			t.Fatalf("expected nil error when allowed, got: %v", res.Err)
+		}
+
+		return
+	}
+
+	var inc *deploymentcompatibility.IncompatibleError
+	if !errors.As(res.Err, &inc) {
+		t.Fatalf("expected IncompatibleError, got %T: %v", res.Err, res.Err)
+	}
+	if inc.Reason != *wantReason {
+		t.Fatalf("expected reason %q, got %q", *wantReason, inc.Reason)
 	}
 }
 
