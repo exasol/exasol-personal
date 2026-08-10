@@ -151,41 +151,38 @@ func loadCleanupShowResult(
 	return result, nil
 }
 
+func firstResourceAttr(attr map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if v, ok := attr[key]; ok {
+			return fmt.Sprintf("%v", v)
+		}
+	}
+
+	return "-"
+}
+
+func resourceShowRow(resource shared.ResourceMeta) []string {
+	owner := resource.Tags["Owner"]
+	if owner == "" {
+		owner = "-"
+	}
+
+	return []string{
+		string(resource.Ref.Type),
+		resource.Ref.ID,
+		owner,
+		firstResourceAttr(resource.Attr, "launchTime", "createTime", "lastModified"),
+		firstResourceAttr(resource.Attr, "state"),
+		resource.Ref.ARN,
+	}
+}
+
 func renderCleanupShowResult(cmd *cobra.Command, resolved cleanupResolved, details *shared.DeploymentDetails) {
 	renderResolved(cmd.OutOrStdout(), resolved)
 	renderTypesFilter(cmd.OutOrStdout(), cleanupShowOpts.Types)
 	rows := make([][]string, 0, len(details.Resources))
 	for _, resource := range details.Resources {
-		owner := resource.Tags["Owner"]
-		if owner == "" {
-			owner = "-"
-		}
-		when := "-"
-		if v, ok := resource.Attr["launchTime"]; ok {
-			when = fmt.Sprintf("%v", v)
-		}
-		if when == "-" {
-			if v, ok := resource.Attr["createTime"]; ok {
-				when = fmt.Sprintf("%v", v)
-			}
-		}
-		if when == "-" {
-			if v, ok := resource.Attr["lastModified"]; ok {
-				when = fmt.Sprintf("%v", v)
-			}
-		}
-		state := "-"
-		if v, ok := resource.Attr["state"]; ok {
-			state = fmt.Sprintf("%v", v)
-		}
-		rows = append(rows, []string{
-			string(resource.Ref.Type),
-			resource.Ref.ID,
-			owner,
-			when,
-			state,
-			resource.Ref.ARN,
-		})
+		rows = append(rows, resourceShowRow(resource))
 	}
 	if len(rows) > 0 {
 		renderTable(

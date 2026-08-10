@@ -91,6 +91,41 @@ func temporaryObjectStorageCredentialsGroupName(now time.Time) string {
 	return name[:stackitTempBucketCredsMaxNameLength]
 }
 
+func s3ObjectIdentifiers(contents []s3types.Object) []s3types.ObjectIdentifier {
+	objects := make([]s3types.ObjectIdentifier, 0, len(contents))
+	for _, object := range contents {
+		if object.Key != nil {
+			objects = append(objects, s3types.ObjectIdentifier{Key: object.Key})
+		}
+	}
+
+	return objects
+}
+
+func deleteObjectStorageObjects(
+	ctx context.Context,
+	client *s3.Client,
+	bucket string,
+	objects []s3types.ObjectIdentifier,
+) error {
+	for start := 0; start < len(objects); start += s3BatchDeleteSize {
+		end := start + s3BatchDeleteSize
+		if end > len(objects) {
+			end = len(objects)
+		}
+
+		_, err := client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+			Bucket: awssdk.String(bucket),
+			Delete: &s3types.Delete{Objects: objects[start:end], Quiet: awssdk.Bool(true)},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to delete bucket objects: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func emptyObjectStorageBucket(ctx context.Context, client *s3.Client, bucket string) error {
 	continuationToken := (*string)(nil)
 	for {
@@ -107,26 +142,8 @@ func emptyObjectStorageBucket(ctx context.Context, client *s3.Client, bucket str
 			return fmt.Errorf("failed to list bucket objects: %w", err)
 		}
 
-		objects := make([]s3types.ObjectIdentifier, 0, len(listResp.Contents))
-		for _, object := range listResp.Contents {
-			if object.Key != nil {
-				objects = append(objects, s3types.ObjectIdentifier{Key: object.Key})
-			}
-		}
-
-		for start := 0; start < len(objects); start += s3BatchDeleteSize {
-			end := start + s3BatchDeleteSize
-			if end > len(objects) {
-				end = len(objects)
-			}
-
-			_, err := client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
-				Bucket: awssdk.String(bucket),
-				Delete: &s3types.Delete{Objects: objects[start:end], Quiet: awssdk.Bool(true)},
-			})
-			if err != nil {
-				return fmt.Errorf("failed to delete bucket objects: %w", err)
-			}
+		if err := deleteObjectStorageObjects(ctx, client, bucket, s3ObjectIdentifiers(listResp.Contents)); err != nil {
+			return err
 		}
 
 		if !awssdk.ToBool(listResp.IsTruncated) || listResp.NextContinuationToken == nil {
