@@ -180,7 +180,14 @@ tasks:
       INFRA: '{{default "aws" .INFRA}}'
       TEST: '{{default "" .TEST}}'
       STACKIT_PROJECT_ID: '{{default "" .STACKIT_PROJECT_ID}}'
+      GOCOVERDIR_PATH: '{{.ROOT_PATH}}{{.SEP}}covdata-deployment'
+    env:
+      # The exasol binary is always built with COVERAGE=true in CI; without
+      # GOCOVERDIR it prints a warning on every invocation that pollutes
+      # stdout and breaks tests asserting exact output.
+      GOCOVERDIR: '{{.GOCOVERDIR_PATH}}'
     cmds:
+      - rm -rf {{.GOCOVERDIR_PATH}} && mkdir -p {{.GOCOVERDIR_PATH}}
       - |
         poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{if .STACKIT_PROJECT_ID}}--stackit-project-id={{.STACKIT_PROJECT_ID}}{{end}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment{{if .TEST}}{{.SEP}}{{.TEST}}{{end}}
 
@@ -191,7 +198,12 @@ tasks:
     vars:
       INFRA: '{{default "aws" .INFRA}}'
       STACKIT_PROJECT_ID: '{{default "" .STACKIT_PROJECT_ID}}'
+      GOCOVERDIR_PATH: '{{.ROOT_PATH}}{{.SEP}}covdata-deployment'
+    env:
+      # See tests-deployment: avoids the GOCOVERDIR-not-set warning leaking into test output.
+      GOCOVERDIR: '{{.GOCOVERDIR_PATH}}'
     cmds:
+      - rm -rf {{.GOCOVERDIR_PATH}} && mkdir -p {{.GOCOVERDIR_PATH}}
       - |
         poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{if .STACKIT_PROJECT_ID}}--stackit-project-id={{.STACKIT_PROJECT_ID}}{{end}} -m "infrastructure_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
 
@@ -202,7 +214,12 @@ tasks:
     vars:
       INFRA: '{{default "aws" .INFRA}}'
       STACKIT_PROJECT_ID: '{{default "" .STACKIT_PROJECT_ID}}'
+      GOCOVERDIR_PATH: '{{.ROOT_PATH}}{{.SEP}}covdata-deployment'
+    env:
+      # See tests-deployment: avoids the GOCOVERDIR-not-set warning leaking into test output.
+      GOCOVERDIR: '{{.GOCOVERDIR_PATH}}'
     cmds:
+      - rm -rf {{.GOCOVERDIR_PATH}} && mkdir -p {{.GOCOVERDIR_PATH}}
       - |
         poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{if .STACKIT_PROJECT_ID}}--stackit-project-id={{.STACKIT_PROJECT_ID}}{{end}} -m "installation_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
 
@@ -210,7 +227,13 @@ tasks:
     desc: Run local VM deployment tests (macOS Apple Silicon only)
     deps: [tests-setup]
     dir: '{{.TESTS_DIR}}'
+    vars:
+      GOCOVERDIR_PATH: '{{.ROOT_PATH}}{{.SEP}}covdata-deployment'
+    env:
+      # See tests-deployment: avoids the GOCOVERDIR-not-set warning leaking into test output.
+      GOCOVERDIR: '{{.GOCOVERDIR_PATH}}'
     cmds:
+      - rm -rf {{.GOCOVERDIR_PATH}} && mkdir -p {{.GOCOVERDIR_PATH}}
       - poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra=local -m "local_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment
 
   lint-ruff:
