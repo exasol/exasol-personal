@@ -296,6 +296,70 @@ func CollectDeploymentSummaries(
 
 // Helper functions
 
+type deploymentAccumulator struct {
+	owner           string
+	earliest        *time.Time
+	hasInstances    bool
+	hasActive       bool
+	hasProvisioning bool
+	hasStopped      bool
+}
+
+func (acc *deploymentAccumulator) observe(meta ResourceMeta) {
+	if acc.owner == "" {
+		acc.owner = firstNonEmpty(meta.Tags["Owner"], meta.Tags["owner"])
+	}
+
+	if meta.Ref.Type == ResourceServer {
+		acc.observeServer(meta)
+	}
+
+	if createdAt, ok := meta.Attr["createdAt"].(time.Time); ok && !createdAt.IsZero() {
+		acc.earliest = preferEarlierTime(acc.earliest, createdAt)
+	}
+}
+
+func (acc *deploymentAccumulator) observeServer(meta ResourceMeta) {
+	acc.hasInstances = true
+
+	state, ok := meta.Attr["state"].(string)
+	if !ok {
+		return
+	}
+
+	switch state {
+	case StateActive:
+		acc.hasActive = true
+	case StateProvisioning:
+		acc.hasProvisioning = true
+	case StateStopped:
+		acc.hasStopped = true
+	}
+}
+
+func deploymentState(acc deploymentAccumulator, resourceCount int) string {
+	if !acc.hasInstances {
+		if resourceCount > 0 {
+			return "orphaned"
+		}
+
+		return StateUnknown
+	}
+
+	switch {
+	case acc.hasActive:
+		return StateActive
+	case acc.hasProvisioning:
+		return StateProvisioning
+	case acc.hasStopped:
+		return StateStopped
+	case resourceCount > 0:
+		return StateTerminated
+	default:
+		return StateUnknown
+	}
+}
+
 func summarizeDeploymentResources(
 	deploymentID string,
 	region string,
@@ -311,56 +375,17 @@ func summarizeDeploymentResources(
 		Resources: len(resources),
 	}
 
-	var earliest *time.Time
-	hasInstances := false
-	hasActive := false
-	hasProvisioning := false
-	hasStopped := false
-
+	acc := deploymentAccumulator{}
 	for _, meta := range resources {
-		if summary.Owner == "" {
-			if owner := firstNonEmpty(meta.Tags["Owner"], meta.Tags["owner"]); owner != "" {
-				summary.Owner = owner
-			}
-		}
-
-		if meta.Ref.Type == ResourceServer {
-			hasInstances = true
-			if state, ok := meta.Attr["state"].(string); ok {
-				switch state {
-				case StateActive:
-					hasActive = true
-				case StateProvisioning:
-					hasProvisioning = true
-				case StateStopped:
-					hasStopped = true
-				}
-			}
-		}
-
-		if createdAt, ok := meta.Attr["createdAt"].(time.Time); ok && !createdAt.IsZero() {
-			earliest = preferEarlierTime(earliest, createdAt)
-		}
+		acc.observe(meta)
 	}
 
-	if earliest != nil {
-		summary.CreatedAt = *earliest
+	if acc.earliest != nil {
+		summary.CreatedAt = *acc.earliest
 	}
 
-	if hasInstances {
-		switch {
-		case hasActive:
-			summary.State = StateActive
-		case hasProvisioning:
-			summary.State = StateProvisioning
-		case hasStopped:
-			summary.State = StateStopped
-		case summary.Resources > 0:
-			summary.State = StateTerminated
-		}
-	} else if summary.Resources > 0 {
-		summary.State = "orphaned"
-	}
+	summary.Owner = acc.owner
+	summary.State = deploymentState(acc, summary.Resources)
 
 	if summary.Owner == "" {
 		summary.Owner = "-"
