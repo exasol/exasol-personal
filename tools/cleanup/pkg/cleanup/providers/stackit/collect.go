@@ -90,151 +90,314 @@ func CollectResources(ctx context.Context, projectId, region string, deploymentI
 		return nil, err
 	}
 
+	servers, err := collectServers(ctx, iaasClient, projectId, region, deploymentId)
+	if err != nil {
+		return nil, err
+	}
+	resources = append(resources, servers...)
+
+	volumes, err := collectVolumes(ctx, iaasClient, projectId, region, deploymentId)
+	if err != nil {
+		return nil, err
+	}
+	resources = append(resources, volumes...)
+
+	networks, err := collectNetworks(ctx, iaasClient, projectId, region, deploymentId)
+	if err != nil {
+		return nil, err
+	}
+	resources = append(resources, networks...)
+
+	securityGroups, err := collectSecurityGroups(ctx, iaasClient, projectId, region, deploymentId)
+	if err != nil {
+		return nil, err
+	}
+	resources = append(resources, securityGroups...)
+
+	publicIPs, err := collectPublicIPs(ctx, iaasClient, projectId, region, deploymentId)
+	if err != nil {
+		return nil, err
+	}
+	resources = append(resources, publicIPs...)
+
+	buckets, err := collectBuckets(ctx, objectStorageClient, projectId, region, deploymentId)
+	if err != nil {
+		return nil, err
+	}
+	resources = append(resources, buckets...)
+
+	accessKeys, err := collectAccessKeys(ctx, objectStorageClient, projectId, region, deploymentId)
+	if err != nil {
+		return nil, err
+	}
+	resources = append(resources, accessKeys...)
+
+	credentialsGroups, err := collectCredentialsGroups(ctx, objectStorageClient, projectId, region, deploymentId)
+	if err != nil {
+		return nil, err
+	}
+	resources = append(resources, credentialsGroups...)
+
+	return resources, nil
+}
+
+func collectServers(
+	ctx context.Context,
+	iaasClient *iaas.APIClient,
+	projectId, region string,
+	deploymentId *string,
+) ([]ResourceMeta, error) {
 	serversResp, err := iaasClient.DefaultAPI.ListServers(ctx, projectId, region).Execute()
 	if err != nil {
 		slog.Debug("list servers failed", "error", err)
-	} else {
-		for _, server := range serversResp.GetItems() {
-			meta, err := ResourceMetaFromServer(server, projectId, region)
-			if err != nil {
-				return nil, err
-			}
 
-			if isDeployment(meta, deploymentId) {
-				resources = append(resources, *meta)
-			}
+		return nil, nil
+	}
+
+	resources := []ResourceMeta{}
+	for _, server := range serversResp.GetItems() {
+		meta, err := ResourceMetaFromServer(server, projectId, region)
+		if err != nil {
+			return nil, err
+		}
+
+		if isDeployment(meta, deploymentId) {
+			resources = append(resources, *meta)
 		}
 	}
 
+	return resources, nil
+}
+
+func collectVolumes(
+	ctx context.Context,
+	iaasClient *iaas.APIClient,
+	projectId, region string,
+	deploymentId *string,
+) ([]ResourceMeta, error) {
 	volumesResp, err := iaasClient.DefaultAPI.ListVolumes(ctx, projectId, region).Execute()
 	if err != nil {
 		slog.Debug("list volumes failed", "error", err)
-	} else {
-		for _, vol := range volumesResp.GetItems() {
-			meta, err := ResourceMetaFromVolume(vol, projectId, region)
-			if err != nil {
-				return nil, err
-			}
 
-			if isDeployment(meta, deploymentId) {
-				resources = append(resources, *meta)
-			}
+		return nil, nil
+	}
+
+	resources := []ResourceMeta{}
+	for _, vol := range volumesResp.GetItems() {
+		meta, err := ResourceMetaFromVolume(vol, projectId, region)
+		if err != nil {
+			return nil, err
+		}
+
+		if isDeployment(meta, deploymentId) {
+			resources = append(resources, *meta)
 		}
 	}
 
+	return resources, nil
+}
+
+// collectNetworks also collects the network interfaces of every listed network,
+// so that the network listing is only requested once.
+func collectNetworks(
+	ctx context.Context,
+	iaasClient *iaas.APIClient,
+	projectId, region string,
+	deploymentId *string,
+) ([]ResourceMeta, error) {
 	networksResp, err := iaasClient.DefaultAPI.ListNetworks(ctx, projectId, region).Execute()
 	if err != nil {
 		slog.Debug("list private networks failed", "error", err)
-	} else {
-		for _, net := range networksResp.GetItems() {
-			meta, err := ResourceMetaFromNetwork(net, projectId, region)
-			if err != nil {
-				return nil, err
-			}
 
-			if isDeployment(meta, deploymentId) {
-				resources = append(resources, *meta)
-			}
+		return nil, nil
+	}
+
+	resources := []ResourceMeta{}
+	for _, net := range networksResp.GetItems() {
+		meta, err := ResourceMetaFromNetwork(net, projectId, region)
+		if err != nil {
+			return nil, err
 		}
 
-		for _, net := range networksResp.GetItems() {
-			nicsResp, err := iaasClient.DefaultAPI.ListNics(ctx, projectId, region, net.GetId()).Execute()
-			if err != nil {
-				slog.Debug("list network interfaces failed", "network_id", net.GetId(), "error", err)
-				continue
-			}
-
-			for _, nic := range nicsResp.GetItems() {
-				meta, err := ResourceMetaFromNIC(nic, projectId, region)
-				if err != nil {
-					return nil, err
-				}
-
-				if isDeployment(meta, deploymentId) {
-					resources = append(resources, *meta)
-				}
-			}
+		if isDeployment(meta, deploymentId) {
+			resources = append(resources, *meta)
 		}
 	}
 
+	for _, net := range networksResp.GetItems() {
+		nics, err := collectNetworkInterfaces(ctx, iaasClient, projectId, region, net.GetId(), deploymentId)
+		if err != nil {
+			return nil, err
+		}
+		resources = append(resources, nics...)
+	}
+
+	return resources, nil
+}
+
+func collectNetworkInterfaces(
+	ctx context.Context,
+	iaasClient *iaas.APIClient,
+	projectId, region, networkId string,
+	deploymentId *string,
+) ([]ResourceMeta, error) {
+	nicsResp, err := iaasClient.DefaultAPI.ListNics(ctx, projectId, region, networkId).Execute()
+	if err != nil {
+		slog.Debug("list network interfaces failed", "network_id", networkId, "error", err)
+
+		return nil, nil
+	}
+
+	resources := []ResourceMeta{}
+	for _, nic := range nicsResp.GetItems() {
+		meta, err := ResourceMetaFromNIC(nic, projectId, region)
+		if err != nil {
+			return nil, err
+		}
+
+		if isDeployment(meta, deploymentId) {
+			resources = append(resources, *meta)
+		}
+	}
+
+	return resources, nil
+}
+
+func collectSecurityGroups(
+	ctx context.Context,
+	iaasClient *iaas.APIClient,
+	projectId, region string,
+	deploymentId *string,
+) ([]ResourceMeta, error) {
 	securityGroupsResp, err := iaasClient.DefaultAPI.ListSecurityGroups(ctx, projectId, region).Execute()
 	if err != nil {
 		slog.Debug("list security groups failed", "error", err)
-	} else {
-		for _, sg := range securityGroupsResp.GetItems() {
-			meta, err := ResourceMetaFromSecurityGroup(sg, projectId, region)
-			if err != nil {
-				return nil, err
-			}
 
-			if isDeployment(meta, deploymentId) {
-				resources = append(resources, *meta)
-			}
+		return nil, nil
+	}
+
+	resources := []ResourceMeta{}
+	for _, sg := range securityGroupsResp.GetItems() {
+		meta, err := ResourceMetaFromSecurityGroup(sg, projectId, region)
+		if err != nil {
+			return nil, err
+		}
+
+		if isDeployment(meta, deploymentId) {
+			resources = append(resources, *meta)
 		}
 	}
 
+	return resources, nil
+}
+
+func collectPublicIPs(
+	ctx context.Context,
+	iaasClient *iaas.APIClient,
+	projectId, region string,
+	deploymentId *string,
+) ([]ResourceMeta, error) {
 	publicIPsResp, err := iaasClient.DefaultAPI.ListPublicIPs(ctx, projectId, region).Execute()
 	if err != nil {
 		slog.Debug("list public IPs failed", "error", err)
-	} else {
-		for _, publicIP := range publicIPsResp.GetItems() {
-			meta, err := ResourceMetaFromPublicIP(publicIP, projectId, region)
-			if err != nil {
-				return nil, err
-			}
 
-			if isDeployment(meta, deploymentId) {
-				resources = append(resources, *meta)
-			}
+		return nil, nil
+	}
+
+	resources := []ResourceMeta{}
+	for _, publicIP := range publicIPsResp.GetItems() {
+		meta, err := ResourceMetaFromPublicIP(publicIP, projectId, region)
+		if err != nil {
+			return nil, err
+		}
+
+		if isDeployment(meta, deploymentId) {
+			resources = append(resources, *meta)
 		}
 	}
 
-	// Discover buckets by name pattern
+	return resources, nil
+}
+
+// collectBuckets discovers buckets by name pattern
+func collectBuckets(
+	ctx context.Context,
+	objectStorageClient *objectstorage.APIClient,
+	projectId, region string,
+	deploymentId *string,
+) ([]ResourceMeta, error) {
 	bucketsResp, err := objectStorageClient.DefaultAPI.ListBuckets(ctx, projectId, region).Execute()
 	if err != nil {
 		slog.Debug("list object storage buckets failed", "error", err)
-	} else {
-		for _, bucket := range bucketsResp.GetBuckets() {
-			meta, err := ResourceMetaFromBucket(bucket, projectId, region)
-			if err != nil {
-				return nil, err
-			}
 
-			if isDeployment(meta, deploymentId) {
-				resources = append(resources, *meta)
-			}
+		return nil, nil
+	}
+
+	resources := []ResourceMeta{}
+	for _, bucket := range bucketsResp.GetBuckets() {
+		meta, err := ResourceMetaFromBucket(bucket, projectId, region)
+		if err != nil {
+			return nil, err
+		}
+
+		if isDeployment(meta, deploymentId) {
+			resources = append(resources, *meta)
 		}
 	}
 
+	return resources, nil
+}
+
+func collectAccessKeys(
+	ctx context.Context,
+	objectStorageClient *objectstorage.APIClient,
+	projectId, region string,
+	deploymentId *string,
+) ([]ResourceMeta, error) {
 	credsResp, err := objectStorageClient.DefaultAPI.ListAccessKeys(ctx, projectId, region).Execute()
 	if err != nil {
 		slog.Debug("list object storage credentials failed", "error", err)
-	} else {
-		for _, cred := range credsResp.GetAccessKeys() {
-			meta, err := ResourceMetaFromAccessKey(cred, projectId, region)
-			if err != nil {
-				return nil, err
-			}
 
-			if isDeployment(meta, deploymentId) {
-				resources = append(resources, *meta)
-			}
+		return nil, nil
+	}
+
+	resources := []ResourceMeta{}
+	for _, cred := range credsResp.GetAccessKeys() {
+		meta, err := ResourceMetaFromAccessKey(cred, projectId, region)
+		if err != nil {
+			return nil, err
+		}
+
+		if isDeployment(meta, deploymentId) {
+			resources = append(resources, *meta)
 		}
 	}
 
+	return resources, nil
+}
+
+func collectCredentialsGroups(
+	ctx context.Context,
+	objectStorageClient *objectstorage.APIClient,
+	projectId, region string,
+	deploymentId *string,
+) ([]ResourceMeta, error) {
 	cgResp, err := objectStorageClient.DefaultAPI.ListCredentialsGroups(ctx, projectId, region).Execute()
 	if err != nil {
 		slog.Debug("list object storage credentials group failed", "error", err)
-	} else {
-		for _, cg := range cgResp.GetCredentialsGroups() {
-			meta, err := ResourceMetaFromCredentialsGroup(cg, projectId, region)
-			if err != nil {
-				return nil, err
-			}
 
-			if isDeployment(meta, deploymentId) {
-				resources = append(resources, *meta)
-			}
+		return nil, nil
+	}
+
+	resources := []ResourceMeta{}
+	for _, cg := range cgResp.GetCredentialsGroups() {
+		meta, err := ResourceMetaFromCredentialsGroup(cg, projectId, region)
+		if err != nil {
+			return nil, err
+		}
+
+		if isDeployment(meta, deploymentId) {
+			resources = append(resources, *meta)
 		}
 	}
 
