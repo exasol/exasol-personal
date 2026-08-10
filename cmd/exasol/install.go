@@ -146,13 +146,15 @@ func initializeInstall(
 
 	if err := deploy.InitDeployment(
 		cmd.Context(),
-		infraPreset,
-		installPreset,
-		infraVars,
-		installVars,
 		deployment,
-		!commonFlags.NoLauncherVersionCheck,
-		CurrentLauncherVersion,
+		deploy.InitOptions{
+			InfrastructurePreset: infraPreset,
+			InstallationPreset:   installPreset,
+			InfraVars:            infraVars,
+			InstallVars:          installVars,
+			VersionCheckEnabled:  !commonFlags.NoLauncherVersionCheck,
+			CurrentVersion:       CurrentLauncherVersion,
+		},
 	); err != nil {
 		return fmt.Errorf("initialization failed: %w", err)
 	}

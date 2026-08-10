@@ -178,13 +178,15 @@ func runInitForFreshDeployment(
 ) error {
 	err := deploy.InitDeployment(
 		cmd.Context(),
-		infraPreset,
-		installPreset,
-		infraVars,
-		installVars,
 		deployment,
-		!commonFlags.NoLauncherVersionCheck,
-		CurrentLauncherVersion,
+		deploy.InitOptions{
+			InfrastructurePreset: infraPreset,
+			InstallationPreset:   installPreset,
+			InfraVars:            infraVars,
+			InstallVars:          installVars,
+			VersionCheckEnabled:  !commonFlags.NoLauncherVersionCheck,
+			CurrentVersion:       CurrentLauncherVersion,
+		},
 	)
 	if err != nil {
 		return err

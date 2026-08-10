@@ -168,7 +168,6 @@ func markOperationInterrupted(
 	return operationErr
 }
 
-//
 //nolint:revive
 func Start(
 	ctx context.Context,
@@ -178,101 +177,7 @@ func Start(
 ) error {
 	err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			exasolState, err := config.ReadExasolPersonalState(deployment)
-			if err != nil {
-				return err
-			}
-
-			if err := reconcileLocalVMState(ctx, exasolState, deployment); err != nil {
-				return err
-			}
-
-			decision, err := workflowStatePermitsStart(ctx, exasolState, deployment)
-			if err != nil {
-				return util.LoggedError(err, "run `status` for more information")
-			}
-			if !decision.shouldRun {
-				logLifecycleGuidance(decision.guidance)
-				if decision.showConnectionInstructions {
-					return nil
-				}
-
-				return ErrLifecycleActionSkipped
-			}
-
-			slog.Info("starting deployment. this may take a few minutes")
-
-			// Set the workflowstate to start operation in-progress
-			err = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
-				Operation: config.StartOperation,
-			}, deployment)
-			if err != nil {
-				slog.Error("failed to set workflow state to in-progress", "error", err.Error())
-			}
-
-			// Register signal handler for catching interruptions and set state
-			// in case of interruption
-			unregister, _ := util.RegisterOnceSignalHandler(func() {
-				slog.Warn("Start Operation interrupted")
-				_ = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
-					Error:                      "Start Operation interrupted via signal",
-					InterruptedDuringOperation: config.StartOperation,
-				}, deployment)
-			})
-
-			// Fallback cleanup
-			defer unregister()
-
-			manifest, err := config.ReadInfrastructureManifest(deployment)
-			if err != nil {
-				return err
-			}
-			backend, err := newDeploymentBackend(deployment, manifest)
-			if err != nil {
-				return err
-			}
-
-			var externalCommandOutput io.Writer
-			if verbose {
-				externalCommandOutput = os.Stderr
-			}
-
-			if err := backend.Start(
-				ctx,
-				externalCommandOutput,
-				externalCommandOutput,
-				waitTimeoutSeconds,
-			); err != nil {
-				unregister()
-
-				return markOperationInterrupted(exasolState, deployment, config.StartOperation, err)
-			}
-
-			// Stop handling interrupts before committing final running state
-			unregister()
-
-			err = exasolState.SetWorkflowStateAndWrite(
-				&config.WorkflowStateRunning{}, deployment,
-			)
-			if err != nil {
-				slog.Error("failed to set workflow state", "error", err.Error())
-			}
-
-			reconcileCustomSLCsAfterStart(ctx, deployment)
-
-			slog.Info("database is ready to accept connections")
-
-			slog.Warn(
-				"parameters such as instance IP, DNS name may have changed. " +
-					"Printing the connection instructions",
-			)
-
-			connectionInstructions, err := getConnectionInstructionsTextUnsafe(ctx, deployment)
-			if err != nil {
-				return err
-			}
-
-			return writeConnectionInstructionsFile(deployment, connectionInstructions)
+			return startLocked(ctx, deployment, verbose, waitTimeoutSeconds)
 		})
 	if errors.Is(err, ErrDeploymentDirectoryLocked) {
 		slog.Warn(err.Error())
@@ -280,6 +185,124 @@ func Start(
 	}
 
 	return err
+}
+
+func startLocked(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	verbose bool,
+	waitTimeoutSeconds int,
+) error {
+	exasolState, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return err
+	}
+
+	if err := reconcileLocalVMState(ctx, exasolState, deployment); err != nil {
+		return err
+	}
+
+	decision, err := workflowStatePermitsStart(ctx, exasolState, deployment)
+	if err != nil {
+		return util.LoggedError(err, "run `status` for more information")
+	}
+	if !decision.shouldRun {
+		logLifecycleGuidance(decision.guidance)
+		if decision.showConnectionInstructions {
+			return nil
+		}
+
+		return ErrLifecycleActionSkipped
+	}
+
+	slog.Info("starting deployment. this may take a few minutes")
+
+	// Set the workflowstate to start operation in-progress
+	if err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
+		Operation: config.StartOperation,
+	}, deployment); err != nil {
+		slog.Error("failed to set workflow state to in-progress", "error", err.Error())
+	}
+
+	return runStartBackend(ctx, exasolState, deployment, verbose, waitTimeoutSeconds)
+}
+
+// runStartBackend registers the interruption signal handler, invokes the
+// backend's start operation, and commits the final running state. It is
+// split out from startLocked so the signal-handler lifetime (registered
+// right before the backend call, unregistered right after) stays scoped
+// to a single, easy-to-audit block.
+//
+//nolint:revive // verbose mirrors the command-level --verbose flag.
+func runStartBackend(
+	ctx context.Context,
+	exasolState *config.ExasolPersonalState,
+	deployment config.DeploymentDir,
+	verbose bool,
+	waitTimeoutSeconds int,
+) error {
+	// Register signal handler for catching interruptions and set state
+	// in case of interruption
+	unregister, _ := util.RegisterOnceSignalHandler(func() {
+		slog.Warn("Start Operation interrupted")
+		_ = exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
+			Error:                      "Start Operation interrupted via signal",
+			InterruptedDuringOperation: config.StartOperation,
+		}, deployment)
+	})
+
+	// Fallback cleanup
+	defer unregister()
+
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return err
+	}
+	backend, err := newDeploymentBackend(deployment, manifest)
+	if err != nil {
+		return err
+	}
+
+	var externalCommandOutput io.Writer
+	if verbose {
+		externalCommandOutput = os.Stderr
+	}
+
+	if err := backend.Start(
+		ctx,
+		externalCommandOutput,
+		externalCommandOutput,
+		waitTimeoutSeconds,
+	); err != nil {
+		unregister()
+
+		return markOperationInterrupted(exasolState, deployment, config.StartOperation, err)
+	}
+
+	// Stop handling interrupts before committing final running state
+	unregister()
+
+	if err := exasolState.SetWorkflowStateAndWrite(
+		&config.WorkflowStateRunning{}, deployment,
+	); err != nil {
+		slog.Error("failed to set workflow state", "error", err.Error())
+	}
+
+	reconcileCustomSLCsAfterStart(ctx, deployment)
+
+	slog.Info("database is ready to accept connections")
+
+	slog.Warn(
+		"parameters such as instance IP, DNS name may have changed. " +
+			"Printing the connection instructions",
+	)
+
+	connectionInstructions, err := getConnectionInstructionsTextUnsafe(ctx, deployment)
+	if err != nil {
+		return err
+	}
+
+	return writeConnectionInstructionsFile(deployment, connectionInstructions)
 }
 
 func workflowStatePermitsStop(

@@ -58,13 +58,14 @@ install: []
 	// When
 	err := InitDeployment(
 		context.Background(),
-		PresetRef{Path: infrastructureDir},
-		PresetRef{Path: installationDir},
-		map[string]string{},
-		map[string]string{},
 		config.NewDeploymentDir(deploymentDir),
-		false,
-		"0.0.0",
+		InitOptions{
+			InfrastructurePreset: PresetRef{Path: infrastructureDir},
+			InstallationPreset:   PresetRef{Path: installationDir},
+			InfraVars:            map[string]string{},
+			InstallVars:          map[string]string{},
+			CurrentVersion:       "0.0.0",
+		},
 	)
 
 	// Then
@@ -99,13 +100,14 @@ func TestInitDeployment_RejectsUnsupportedLocalPlatformBeforeMutation(t *testing
 	// When
 	err := InitDeployment(
 		context.Background(),
-		PresetRef{Name: "local"},
-		PresetRef{Name: "local"},
-		map[string]string{},
-		map[string]string{},
 		config.NewDeploymentDir(deploymentDir),
-		false,
-		"0.0.0",
+		InitOptions{
+			InfrastructurePreset: PresetRef{Name: "local"},
+			InstallationPreset:   PresetRef{Name: "local"},
+			InfraVars:            map[string]string{},
+			InstallVars:          map[string]string{},
+			CurrentVersion:       "0.0.0",
+		},
 	)
 
 	// Then

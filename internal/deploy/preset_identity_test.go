@@ -83,13 +83,14 @@ func initializedDeploymentOrFail(t *testing.T) config.DeploymentDir {
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := InitDeployment(
 		context.Background(),
-		PresetRef{Name: presets.DefaultInfrastructure},
-		PresetRef{Name: presets.DefaultInstallation},
-		map[string]string{},
-		map[string]string{},
 		deployment,
-		false,
-		"0.0.0",
+		InitOptions{
+			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
+			InstallationPreset:   PresetRef{Name: presets.DefaultInstallation},
+			InfraVars:            map[string]string{},
+			InstallVars:          map[string]string{},
+			CurrentVersion:       "0.0.0",
+		},
 	); err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
