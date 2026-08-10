@@ -273,49 +273,54 @@ func (m *DirectoryMutex) tryRelease(mode lockMode) (bool, error) {
 
 	switch mode {
 	case modeExclusive:
-		if marker.mode != modeExclusive {
-			return false, ErrLockStateChanged
-		}
-		if err := os.Remove(marker.path); err != nil {
-			if os.IsNotExist(err) {
-				return false, errWouldBlock
-			}
-
-			return false, err
-		}
-
-		return true, nil
+		return m.tryReleaseExclusive(marker)
 	case modeShared:
-		if marker.mode != modeShared {
-			return false, ErrLockStateChanged
-		}
-
-		if marker.count == 1 {
-			if err := os.Remove(marker.path); err != nil {
-				if os.IsNotExist(err) {
-					return false, errWouldBlock
-				}
-
-				return false, err
-			}
-
-			return true, nil
-		}
-
-		nextName := sharedMarkerName(marker.count - 1)
-		nextPath := filepath.Join(m.path, nextName)
-		if err := os.Rename(marker.path, nextPath); err != nil {
-			if os.IsNotExist(err) || os.IsExist(err) {
-				return false, errWouldBlock
-			}
-
-			return false, err
-		}
-
-		return true, nil
+		return m.tryReleaseShared(marker)
 	default:
 		return false, fmt.Errorf("unsupported lock mode: %d", mode)
 	}
+}
+
+func (*DirectoryMutex) tryReleaseExclusive(marker *markerInfo) (bool, error) {
+	if marker.mode != modeExclusive {
+		return false, ErrLockStateChanged
+	}
+
+	return removeMarkerFile(marker.path)
+}
+
+func (m *DirectoryMutex) tryReleaseShared(marker *markerInfo) (bool, error) {
+	if marker.mode != modeShared {
+		return false, ErrLockStateChanged
+	}
+
+	if marker.count == 1 {
+		return removeMarkerFile(marker.path)
+	}
+
+	nextName := sharedMarkerName(marker.count - 1)
+	nextPath := filepath.Join(m.path, nextName)
+	if err := os.Rename(marker.path, nextPath); err != nil {
+		if os.IsNotExist(err) || os.IsExist(err) {
+			return false, errWouldBlock
+		}
+
+		return false, err
+	}
+
+	return true, nil
+}
+
+func removeMarkerFile(path string) (bool, error) {
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, errWouldBlock
+		}
+
+		return false, err
+	}
+
+	return true, nil
 }
 
 func (m *DirectoryMutex) createMarker(name string) (bool, error) {

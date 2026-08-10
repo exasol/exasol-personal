@@ -300,20 +300,7 @@ func TestSharedLockStressLeavesUnlocked(t *testing.T) {
 		go func() {
 			defer waitGroup.Done()
 			<-start
-
-			for range iterations {
-				ctx, cancel := context.WithTimeout(context.Background(), acquireTimeout)
-				err := mutex.AcquireShared(ctx)
-				cancel()
-				if err != nil {
-					errCh <- err
-					return
-				}
-				if err := mutex.ReleaseShared(context.Background()); err != nil {
-					errCh <- err
-					return
-				}
-			}
+			acquireReleaseSharedRepeatedly(mutex, iterations, acquireTimeout, errCh)
 		}()
 	}
 	close(start)
@@ -333,6 +320,27 @@ func TestSharedLockStressLeavesUnlocked(t *testing.T) {
 	}
 	if status.Locked {
 		t.Fatalf("expected unlocked status, got %+v", status)
+	}
+}
+
+func acquireReleaseSharedRepeatedly(
+	mutex *DirectoryMutex,
+	iterations int,
+	acquireTimeout time.Duration,
+	errCh chan<- error,
+) {
+	for range iterations {
+		ctx, cancel := context.WithTimeout(context.Background(), acquireTimeout)
+		err := mutex.AcquireShared(ctx)
+		cancel()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		if err := mutex.ReleaseShared(context.Background()); err != nil {
+			errCh <- err
+			return
+		}
 	}
 }
 
