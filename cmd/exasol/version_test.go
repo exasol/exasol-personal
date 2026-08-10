@@ -100,16 +100,8 @@ func TestFormatLatestVersionText_ReportsNewerEqualAndOlderVersions(t *testing.T)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			for _, expected := range test.expected {
-				if !strings.Contains(actual, expected) {
-					t.Fatalf("expected output to contain %q, got %q", expected, actual)
-				}
-			}
-			for _, unexpected := range test.unexpected {
-				if strings.Contains(actual, unexpected) {
-					t.Fatalf("expected output to not contain %q, got %q", unexpected, actual)
-				}
-			}
+			assertContainsAll(t, actual, test.expected)
+			assertContainsNone(t, actual, test.unexpected)
 		})
 	}
 }
@@ -156,6 +148,26 @@ func TestVersionCmdQueuesPrimaryOutputForTerminalFlush(t *testing.T) {
 	}
 	if stderr.String() != "" {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+func assertContainsAll(t *testing.T, actual string, expected []string) {
+	t.Helper()
+
+	for _, e := range expected {
+		if !strings.Contains(actual, e) {
+			t.Fatalf("expected output to contain %q, got %q", e, actual)
+		}
+	}
+}
+
+func assertContainsNone(t *testing.T, actual string, unexpected []string) {
+	t.Helper()
+
+	for _, u := range unexpected {
+		if strings.Contains(actual, u) {
+			t.Fatalf("expected output to not contain %q, got %q", u, actual)
+		}
 	}
 }
 

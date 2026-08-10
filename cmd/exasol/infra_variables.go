@@ -168,55 +168,85 @@ func registerInfrastructureVariableFlags(
 		if cmd == nil {
 			continue
 		}
-		if cmd.Annotations == nil {
-			cmd.Annotations = map[string]string{}
-		}
-		cmd.Annotations[infraPresetLabelAnnotationKey] = label
-
-		for name, variable := range vars {
-			if strings.TrimSpace(variable.Name) != "" {
-				name = variable.Name
-			}
-
-			flagName := strings.ReplaceAll(name, "_", "-")
-			if cmd.Flags().Lookup(flagName) != nil || cmd.InheritedFlags().Lookup(flagName) != nil {
-				return fmt.Errorf(
-					"infrastructure variable flag name conflict: "+
-						"--%s is already defined (preset: %s)",
-					flagName,
-					label,
-				)
-			}
-
-			usage := strings.TrimSpace(variable.Description)
-			if strings.TrimSpace(usage) == "" {
-				usage = "Infrastructure variable"
-			}
-			if strings.TrimSpace(variable.DefaultDisplay) != "" {
-				usage += fmt.Sprintf(" (default: %s)", variable.DefaultDisplay)
-			}
-			if variable.Required {
-				usage += " (required)"
-			}
-
-			switch variable.Type {
-			case deploy.ConfigVariableTypeBool:
-				cmd.Flags().Bool(flagName, false, usage)
-			case deploy.ConfigVariableTypeNumber:
-				cmd.Flags().Var(&numberFlag{}, flagName, usage)
-			case deploy.ConfigVariableTypeString:
-				cmd.Flags().String(flagName, "", usage)
-			default:
-				cmd.Flags().String(flagName, "", usage)
-			}
-			if f := cmd.Flags().Lookup(flagName); f != nil {
-				f.DefValue = ""
-			}
-			infraFlagToVarName[flagName] = name
+		if err := registerInfrastructureVariableFlagsForCommand(cmd, vars, label); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+func registerInfrastructureVariableFlagsForCommand(
+	cmd *cobra.Command,
+	vars map[string]deploy.ConfigVariableDefinition,
+	label string,
+) error {
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[infraPresetLabelAnnotationKey] = label
+
+	for name, variable := range vars {
+		if strings.TrimSpace(variable.Name) != "" {
+			name = variable.Name
+		}
+		if err := registerInfrastructureVariableFlag(cmd, name, variable, label); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func registerInfrastructureVariableFlag(
+	cmd *cobra.Command,
+	name string,
+	variable deploy.ConfigVariableDefinition,
+	label string,
+) error {
+	flagName := strings.ReplaceAll(name, "_", "-")
+	if cmd.Flags().Lookup(flagName) != nil || cmd.InheritedFlags().Lookup(flagName) != nil {
+		return fmt.Errorf(
+			"infrastructure variable flag name conflict: "+
+				"--%s is already defined (preset: %s)",
+			flagName,
+			label,
+		)
+	}
+
+	usage := infrastructureVariableFlagUsage(variable)
+
+	switch variable.Type {
+	case deploy.ConfigVariableTypeBool:
+		cmd.Flags().Bool(flagName, false, usage)
+	case deploy.ConfigVariableTypeNumber:
+		cmd.Flags().Var(&numberFlag{}, flagName, usage)
+	case deploy.ConfigVariableTypeString:
+		cmd.Flags().String(flagName, "", usage)
+	default:
+		cmd.Flags().String(flagName, "", usage)
+	}
+	if f := cmd.Flags().Lookup(flagName); f != nil {
+		f.DefValue = ""
+	}
+	infraFlagToVarName[flagName] = name
+
+	return nil
+}
+
+func infrastructureVariableFlagUsage(variable deploy.ConfigVariableDefinition) string {
+	usage := strings.TrimSpace(variable.Description)
+	if strings.TrimSpace(usage) == "" {
+		usage = "Infrastructure variable"
+	}
+	if strings.TrimSpace(variable.DefaultDisplay) != "" {
+		usage += fmt.Sprintf(" (default: %s)", variable.DefaultDisplay)
+	}
+	if variable.Required {
+		usage += " (required)"
+	}
+
+	return usage
 }
 
 func resolveInfrastructureVariablesFromDeployment(

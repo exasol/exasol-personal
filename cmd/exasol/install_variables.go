@@ -111,54 +111,84 @@ func registerInstallationVariableFlags(
 		if cmd == nil {
 			continue
 		}
-		if cmd.Annotations == nil {
-			cmd.Annotations = map[string]string{}
-		}
-		cmd.Annotations[installPresetLabelAnnotationKey] = label
-
-		for name, def := range vars {
-			if def == nil {
-				continue
-			}
-
-			flagName := strings.ReplaceAll(name, "_", "-")
-			if cmd.Flags().Lookup(flagName) != nil || cmd.InheritedFlags().Lookup(flagName) != nil {
-				return fmt.Errorf(
-					"installation variable flag name conflict: "+
-						"--%s is already defined (preset: %s)",
-					flagName,
-					label,
-				)
-			}
-
-			usage := strings.TrimSpace(def.Description)
-			if usage == "" {
-				usage = "Installation variable"
-			}
-			if def.Default != nil {
-				usage += fmt.Sprintf(" (default: %v)", def.Default)
-			}
-
-			effectiveType, err := def.EffectiveType()
-			if err != nil {
-				return fmt.Errorf("invalid definition of installation variable %q: %w", name, err)
-			}
-			switch effectiveType {
-			case "bool":
-				cmd.Flags().Bool(flagName, false, usage)
-			case "number":
-				cmd.Flags().Var(&numberFlag{}, flagName, usage)
-			default:
-				cmd.Flags().String(flagName, "", usage)
-			}
-			if f := cmd.Flags().Lookup(flagName); f != nil {
-				f.DefValue = ""
-			}
-			installFlagToVarName[flagName] = name
+		if err := registerInstallationVariableFlagsForCommand(cmd, vars, label); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+func registerInstallationVariableFlagsForCommand(
+	cmd *cobra.Command,
+	vars map[string]*presets.VariableDef,
+	label string,
+) error {
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[installPresetLabelAnnotationKey] = label
+
+	for name, def := range vars {
+		if def == nil {
+			continue
+		}
+		if err := registerInstallationVariableFlag(cmd, name, def, label); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func registerInstallationVariableFlag(
+	cmd *cobra.Command,
+	name string,
+	def *presets.VariableDef,
+	label string,
+) error {
+	flagName := strings.ReplaceAll(name, "_", "-")
+	if cmd.Flags().Lookup(flagName) != nil || cmd.InheritedFlags().Lookup(flagName) != nil {
+		return fmt.Errorf(
+			"installation variable flag name conflict: "+
+				"--%s is already defined (preset: %s)",
+			flagName,
+			label,
+		)
+	}
+
+	usage := installationVariableFlagUsage(def)
+
+	effectiveType, err := def.EffectiveType()
+	if err != nil {
+		return fmt.Errorf("invalid definition of installation variable %q: %w", name, err)
+	}
+	switch effectiveType {
+	case "bool":
+		cmd.Flags().Bool(flagName, false, usage)
+	case "number":
+		cmd.Flags().Var(&numberFlag{}, flagName, usage)
+	default:
+		cmd.Flags().String(flagName, "", usage)
+	}
+	if f := cmd.Flags().Lookup(flagName); f != nil {
+		f.DefValue = ""
+	}
+	installFlagToVarName[flagName] = name
+
+	return nil
+}
+
+func installationVariableFlagUsage(def *presets.VariableDef) string {
+	usage := strings.TrimSpace(def.Description)
+	if usage == "" {
+		usage = "Installation variable"
+	}
+	if def.Default != nil {
+		usage += fmt.Sprintf(" (default: %v)", def.Default)
+	}
+
+	return usage
 }
 
 func resolveInstallationVariablesFromDeployment(
