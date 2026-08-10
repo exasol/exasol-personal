@@ -198,6 +198,21 @@ resource "minio_s3_bucket_anonymous_access" "bootstrap_assets" {
             "aws:SourceIp" = local.bootstrap_source_cidrs
           }
         }
+      },
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          "urn:sgws:s3:::${minio_s3_bucket.bootstrap_assets.bucket}",
+          "urn:sgws:s3:::${minio_s3_bucket.bootstrap_assets.bucket}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
       }
     ]
   })
