@@ -64,6 +64,9 @@ func TestPodmanInstallStart_ReusesExistingDatabaseConfiguration(t *testing.T) {
 	// Given
 	install, startConfig, fixture := newPodmanInstallFixture(t)
 	writeTestFile(t, filepath.Join(startConfig.DataDir, "exasol.conf"), "existing")
+	for _, relativePath := range nanoTLSFiles {
+		writeTestFile(t, filepath.Join(startConfig.DataDir, relativePath), "existing TLS")
+	}
 
 	// When
 	err := install.Start(context.Background(), nil, nil, startConfig)
@@ -83,6 +86,19 @@ func TestPodmanInstallStart_ReusesExistingDatabaseConfiguration(t *testing.T) {
 	}
 	if strings.Contains(commands[3], "<params=") {
 		t.Fatalf("expected first-start params to be omitted, got %q", commands[3])
+	}
+	for _, relativePath := range nanoTLSFiles {
+		content, readErr := os.ReadFile(
+			filepath.Join(startConfig.DataDir, relativePath),
+		) //nolint:gosec // test-owned path
+		if readErr != nil || string(content) != "existing TLS" {
+			t.Fatalf(
+				"expected existing TLS file %s to be preserved, got %q, %v",
+				relativePath,
+				content,
+				readErr,
+			)
+		}
 	}
 }
 
@@ -710,7 +726,10 @@ case "$command" in
       printf 'Loaded image: docker.io/exasol/nano:test\n'
     fi
     ;;
-  info|ps|logs|pull|import|tag|run|rm|rmi)
+  rm)
+    rm -f "$scenario_dir/running" "$scenario_dir/existing"
+    ;;
+  info|ps|logs|pull|import|tag|run|rmi|stop)
     ;;
   *)
     printf 'unexpected fake Podman command: %s\n' "$command" >&2
