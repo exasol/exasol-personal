@@ -182,31 +182,31 @@ func TestPodmanInstallStart_StopsAfterCommandFailure(t *testing.T) {
 			name:             "load",
 			failedCommand:    "load",
 			expectedError:    "failed to load Nano image",
-			expectedCommands: 2,
+			expectedCommands: 6,
 		},
 		{
 			name:             "tag",
 			failedCommand:    "tag",
 			expectedError:    "failed to tag Nano image",
-			expectedCommands: 3,
+			expectedCommands: 7,
 		},
 		{
 			name:             "run",
 			failedCommand:    "run",
 			expectedError:    "failed to start Nano container",
-			expectedCommands: 4,
+			expectedCommands: 8,
 		},
 		{
 			name:             "unparseable load output",
 			loadOutput:       "Loaded something else\n",
 			expectedError:    "could not determine the image reference",
-			expectedCommands: 2,
+			expectedCommands: 6,
 		},
 		{
 			name:             "multiple loaded images",
 			loadOutput:       "Loaded image: first:test\nLoaded image: second:test\n",
 			expectedError:    "multiple Nano images",
-			expectedCommands: 2,
+			expectedCommands: 6,
 		},
 	}
 
@@ -235,6 +235,48 @@ func TestPodmanInstallStart_StopsAfterCommandFailure(t *testing.T) {
 				t.Fatalf("expected %d commands, got %#v", test.expectedCommands, commands)
 			}
 		})
+	}
+}
+
+func TestPodmanInstallStart_AttemptsAllDiagnosticsWithoutReplacingFailure(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "fail"), "run")
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "fail-diagnostics"), "enabled")
+	var outErr bytes.Buffer
+
+	// When
+	err := install.Start(context.Background(), nil, &outErr, startConfig)
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "failed to start Nano container") {
+		t.Fatalf("expected original startup failure, got %v", err)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	expectedTail := []string{
+		"<podman><info>",
+		"<podman><ps><-a>",
+		"<podman><container><inspect><" + testContainerName + ">",
+		"<podman><logs><" + testContainerName + ">",
+	}
+	if len(commands) < len(expectedTail) {
+		t.Fatalf("expected diagnostic commands, got %#v", commands)
+	}
+	for index, expected := range expectedTail {
+		actual := commands[len(commands)-len(expectedTail)+index]
+		if actual != expected {
+			t.Fatalf("expected diagnostic command %q, got %q", expected, actual)
+		}
+	}
+	if failures := strings.Count(outErr.String(), "diagnostic command failed"); failures != 4 {
+		t.Fatalf(
+			"expected four best-effort diagnostic failures, got %d in %q",
+			failures,
+			outErr.String(),
+		)
 	}
 }
 
@@ -345,7 +387,7 @@ func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanI
 	install := NewPodmanInstall(
 		deployment,
 		manager,
-		[]string{scriptPath, logPath, scenarioDir},
+		[]string{"/bin/sh", scriptPath, logPath, scenarioDir},
 	)
 	startConfig := StartConfig{
 		ContainerDBPort: 28563,
@@ -431,6 +473,20 @@ if [ -f "$scenario_dir/fail" ] && [ "$(cat "$scenario_dir/fail")" = "$command" ]
   printf 'fake %s failure\n' "$command" >&2
   exit 42
 fi
+if [ -f "$scenario_dir/fail-diagnostics" ]; then
+  case "$command" in
+    info|ps|logs)
+      printf 'fake diagnostic failure\n' >&2
+      exit 43
+      ;;
+    container)
+      if [ "$3" = "inspect" ] && [ "$4" != "--format" ]; then
+        printf 'fake diagnostic failure\n' >&2
+        exit 43
+      fi
+      ;;
+  esac
+fi
 
 case "$command" in
   container)
@@ -461,7 +517,7 @@ case "$command" in
       printf 'Loaded image: docker.io/exasol/nano:test\n'
     fi
     ;;
-  tag|run|rm)
+  info|ps|logs|tag|run|rm)
     ;;
   *)
     printf 'unexpected fake Podman command: %s\n' "$command" >&2
