@@ -116,6 +116,7 @@ func (install *PodmanInstall) Start(
 	if err != nil {
 		return err
 	}
+	install.pruneUnreferencedSLCImages(ctx, outErr, startConfig.SLCs)
 
 	args := []string{
 		"run", "-d", "--replace",

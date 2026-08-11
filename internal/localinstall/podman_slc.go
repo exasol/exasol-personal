@@ -17,6 +17,7 @@ import (
 
 const (
 	slcImportLabel        = "com.exasol.slc.imported=true"
+	officialSLCRepository = "exasol/script-language-container"
 	slcStatusPresent      = "present"
 	slcStatusPulled       = "pulled"
 	slcStatusImported     = "imported"
@@ -182,4 +183,99 @@ func writeSLCStatusAtomically(path string, statuses []slcImageStatus) error {
 	}
 
 	return nil
+}
+
+func (install *PodmanInstall) pruneUnreferencedSLCImages(
+	ctx context.Context,
+	outErr io.Writer,
+	desiredSLCs []SLCConfig,
+) {
+	if desiredSLCs == nil {
+		return
+	}
+
+	desired := make(map[string]struct{}, len(desiredSLCs))
+	for _, slc := range desiredSLCs {
+		desired[normalizeSLCImageRef(slc.Image)] = struct{}{}
+	}
+
+	candidates := make(map[string]struct{})
+	allImages, err := install.runPodmanOutput(
+		ctx, nil, outErr, "images", "--format", "{{.Repository}}:{{.Tag}}",
+	)
+	if err != nil {
+		writeSLCPruneWarning(outErr, "failed to list Podman images", err)
+	} else {
+		for image := range strings.FieldsSeq(allImages) {
+			if isUntaggedImage(image) || slcImageRepository(image) != officialSLCRepository {
+				continue
+			}
+			candidates[image] = struct{}{}
+		}
+	}
+
+	importedImages, err := install.runPodmanOutput(
+		ctx,
+		nil,
+		outErr,
+		"images",
+		"--filter",
+		"label="+slcImportLabel,
+		"--format",
+		"{{.Repository}}:{{.Tag}}",
+	)
+	if err != nil {
+		writeSLCPruneWarning(outErr, "failed to list imported SLC images", err)
+	} else {
+		for image := range strings.FieldsSeq(importedImages) {
+			if !isUntaggedImage(image) {
+				candidates[image] = struct{}{}
+			}
+		}
+	}
+
+	for image := range candidates {
+		if _, referenced := desired[normalizeSLCImageRef(image)]; referenced {
+			continue
+		}
+		if err := install.runPodman(ctx, nil, outErr, "rmi", image); err != nil {
+			writeSLCPruneWarning(outErr, "failed to remove unreferenced SLC image "+image, err)
+		}
+	}
+}
+
+func normalizeSLCImageRef(reference string) string {
+	normalized := strings.TrimSpace(reference)
+	normalized = strings.TrimPrefix(normalized, "docker.io/")
+	normalized = strings.TrimPrefix(normalized, "localhost/")
+	lastSlash := strings.LastIndex(normalized, "/")
+	lastColon := strings.LastIndex(normalized, ":")
+	if lastColon <= lastSlash {
+		normalized += ":latest"
+	}
+
+	return normalized
+}
+
+func slcImageRepository(reference string) string {
+	normalized := normalizeSLCImageRef(reference)
+	lastSlash := strings.LastIndex(normalized, "/")
+	lastColon := strings.LastIndex(normalized, ":")
+	if lastColon > lastSlash {
+		return normalized[:lastColon]
+	}
+
+	return normalized
+}
+
+func isUntaggedImage(reference string) bool {
+	normalized := strings.TrimSpace(reference)
+	return normalized == "" || strings.HasSuffix(normalized, ":<none>") ||
+		strings.HasPrefix(normalized, "<none>:")
+}
+
+func writeSLCPruneWarning(outErr io.Writer, message string, err error) {
+	if outErr != nil {
+		_, _ = fmt.Fprintf(outErr, "Warning: %s: %v\n", message, err)
+	}
 }
