@@ -1,8 +1,5 @@
-# local-runtime-boundaries Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change refactor-local-runtime-boundaries. Update Purpose after archive.
-## Requirements
 ### Requirement: Local runtime implementation is isolated
 The system SHALL keep macOS VM mechanics and Linux host mechanics outside the deployment workflow package.
 
@@ -44,28 +41,6 @@ The system SHALL support local shell commands by delegating to the selected runt
 - **WHEN** the selected local runtime cannot provide the requested shell
 - **THEN** the command returns that runtime's explicit unsupported error
 
-### Requirement: Existing deployment metadata remains readable
-The system SHALL preserve compatibility with existing deployment metadata that still contains node-derived details.
-
-#### Scenario: Existing local metadata contains nodes
-- **WHEN** the launcher reads an existing local `deployment.json` that contains `nodes`
-- **THEN** connection, status, and shell behavior continue to work where the required connection metadata can be resolved
-
-#### Scenario: Existing cloud metadata contains nodes
-- **WHEN** the launcher reads a cloud `deployment.json` that contains `nodes`
-- **THEN** node-derived SSH and connection behavior remains unchanged
-
-### Requirement: Local runtime selection is centralized
-The system SHALL use one platform-selection policy for backend creation, status reconciliation, SLC restart decisions, connection diagnostics, and local diagnostics.
-
-#### Scenario: Supported platform is selected
-- **WHEN** the host is macOS Apple Silicon, Linux AMD64, or Linux ARM64
-- **THEN** every local workflow selects the same corresponding VM or host runtime
-
-#### Scenario: Unsupported platform is selected
-- **WHEN** the host is any other operating-system and architecture pair
-- **THEN** every local workflow rejects it consistently
-
 ### Requirement: Launcher startup state is translated once
 The system SHALL translate launcher version-check state, installed SLC state, service ports, initialization parameters, deployment paths, and runtime artifact paths into runtime-neutral installation settings through shared policy.
 
@@ -80,4 +55,3 @@ The system SHALL translate launcher version-check state, installed SLC state, se
 #### Scenario: Installation receives a materialized artifact
 - **WHEN** a runtime materializes an image or custom package for installation
 - **THEN** installation receives paired host and runtime paths without inferring the mapping
-
