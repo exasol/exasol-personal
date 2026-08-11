@@ -8,11 +8,12 @@ import (
 )
 
 type StartConfig struct {
-	ContainerDBPort int
-	DataDir         string
-	InitParams      []string
-	VersionCheck    VersionCheckConfig
-	SLCs            []SLCConfig
+	ContainerDBPort      int
+	DataDir              string
+	InitParams           []string
+	VersionCheck         VersionCheckConfig
+	SLCs                 []SLCConfig
+	LegacyContainerNames []string
 }
 
 type VersionCheckConfig struct {

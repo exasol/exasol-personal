@@ -729,6 +729,12 @@ case "$command" in
     operation=$3
     case "$operation" in
       exists)
+		if [ -f "$scenario_dir/legacy-name" ]; then
+		  if [ "$(cat "$scenario_dir/legacy-name")" = "$4" ]; then
+		    exit 0
+		  fi
+		  exit 1
+		fi
         if [ ! -f "$scenario_dir/running" ] && [ ! -f "$scenario_dir/existing" ]; then
           exit 1
         fi
@@ -776,6 +782,10 @@ case "$command" in
       cp -R "$scenario_dir/cp-source/." "$4"
     fi
     ;;
+  rename)
+	rm -f "$scenario_dir/legacy-name"
+	: > "$scenario_dir/existing"
+	;;
   info|ps|logs|pull|import|tag|run|rmi)
     ;;
   *)
