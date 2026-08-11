@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/version_check"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 )
 
 const (
@@ -24,13 +24,18 @@ const (
 )
 
 func TestLocalRunnerVersionCheckArgs_PassesLauncherVersionCheckSettings(t *testing.T) {
+	t.Parallel()
+
 	// Given
-	deployment := newTestDeploymentWithVersionCheckState(t, true, localTestClusterIdentity)
 	const expectedURL = "https://example.test/v1/version-check"
-	t.Setenv(version_check.VersionCheckURLEnvVar, expectedURL)
+	versionCheck := localinstall.VersionCheckConfig{
+		Enabled:  true,
+		URL:      expectedURL,
+		Identity: localTestClusterIdentity,
+	}
 
 	// When
-	args, err := localRunnerVersionCheckArgs(deployment)
+	args, err := localRunnerVersionCheckArgs(versionCheck)
 	// Then
 	if err != nil {
 		t.Fatalf("expected version-check args, got %v", err)
@@ -51,10 +56,8 @@ func TestLocalRunnerVersionCheckArgs_DisablesRunnerWhenLauncherVersionCheckDisab
 	t.Parallel()
 
 	// Given
-	deployment := newTestDeploymentWithVersionCheckState(t, false, "")
-
 	// When
-	args, err := localRunnerVersionCheckArgs(deployment)
+	args, err := localRunnerVersionCheckArgs(localinstall.VersionCheckConfig{})
 	// Then
 	if err != nil {
 		t.Fatalf("expected disabled version-check args, got %v", err)
@@ -90,21 +93,12 @@ func newTestDeploymentWithVersionCheckState(
 func TestLocalRunnerSlcArgsFromState(t *testing.T) {
 	t.Parallel()
 
-	deployment := config.NewDeploymentDir(t.TempDir())
-	state := &config.ExasolPersonalState{
-		InstalledSLCs: []config.InstalledSLC{
-			{Flavor: "python-3.12", Image: "docker.io/x:pytag", Target: "/exa/slc/python-3.12"},
-			{Flavor: "java-17", Image: "docker.io/x:javatag", Target: "/exa/slc/java-17"},
-		},
-	}
-	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
-		t.Fatalf("failed to write state: %v", err)
+	slcs := []localinstall.SLCConfig{
+		{Image: "docker.io/x:pytag", Target: "/exa/slc/python-3.12"},
+		{Image: "docker.io/x:javatag", Target: "/exa/slc/java-17"},
 	}
 
-	args, err := localRunnerSlcArgs(deployment)
-	if err != nil {
-		t.Fatalf("localRunnerSlcArgs error: %v", err)
-	}
+	args := localRunnerSlcArgs(slcs)
 
 	want := []string{
 		"--slc", "docker.io/x:pytag=/exa/slc/python-3.12",
@@ -124,29 +118,18 @@ func TestLocalRunnerSlcArgsIncludesCustomMountAndPackage(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	state := &config.ExasolPersonalState{
-		DeploymentVersion: "0.0.0",
-		InstalledSLCs: []config.InstalledSLC{
-			{Flavor: "python-3.12", Image: "img:py", Target: "/exa/slc/py"},
-		},
-		InstalledCustomSLCs: []config.InstalledCustomSLC{{
-			Alias:   "MYPY3",
+	slcs := []localinstall.SLCConfig{
+		{Image: "img:py", Target: "/exa/slc/py"},
+		{
 			Image:   "custom:mypy3-abc",
 			Target:  "/exa/slc/custom-mypy3",
 			Package: "custom-mypy3-abc.tar.gz",
-		}},
-	}
-	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
-		t.Fatalf("failed to write state: %v", err)
+		},
 	}
 
 	// When
-	args, err := localRunnerSlcArgs(deployment)
+	args := localRunnerSlcArgs(slcs)
 	// Then
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 
 	want := []string{
 		"--slc", "img:py=/exa/slc/py",
@@ -162,23 +145,13 @@ func TestLocalRunnerSlcArgsOmitsPackageForOfficialSLCs(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	state := &config.ExasolPersonalState{
-		DeploymentVersion: "0.0.0",
-		InstalledSLCs: []config.InstalledSLC{
-			{Flavor: "python-3.12", Image: "img:py", Target: "/exa/slc/py"},
-		},
-	}
-	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
-		t.Fatalf("failed to write state: %v", err)
+	slcs := []localinstall.SLCConfig{
+		{Image: "img:py", Target: "/exa/slc/py"},
 	}
 
 	// When
-	args, err := localRunnerSlcArgs(deployment)
+	args := localRunnerSlcArgs(slcs)
 	// Then
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 	for _, arg := range args {
 		if arg == "--slc-package" {
 			t.Fatalf("official SLCs must not be import-delivered: %v", args)

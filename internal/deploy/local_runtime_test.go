@@ -14,6 +14,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/version_check"
 )
 
 const (
@@ -22,6 +23,78 @@ const (
 	localTestDatabasePort     = 28563
 	localTestSSHForwardedPort = 20022
 )
+
+func TestToLocalRuntimeConfig_TranslatesPortableStartupState(t *testing.T) {
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	state := &config.ExasolPersonalState{
+		ClusterIdentity:     localTestClusterIdentity,
+		VersionCheckEnabled: true,
+		InstalledSLCs: []config.InstalledSLC{{
+			Image:  "docker.io/exasol/script-language-container:python",
+			Target: "/exa/slc/python",
+		}},
+		InstalledCustomSLCs: []config.InstalledCustomSLC{{
+			Image:   "localhost/custom:sha256",
+			Target:  "/exa/slc/custom",
+			Package: "custom.tar.gz",
+		}},
+	}
+	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
+		t.Fatalf("failed to write deployment state: %v", err)
+	}
+	const expectedURL = "https://version-check.example.test"
+	t.Setenv(version_check.VersionCheckURLEnvVar, expectedURL)
+
+	// When
+	actual, err := toLocalRuntimeConfig(deployment, localRuntimeConfig{
+		ports:      "db:28563",
+		cpuCount:   4,
+		memoryMB:   8192,
+		dataSizeGB: 50,
+	})
+	// Then
+	if err != nil {
+		t.Fatalf("expected startup state translation to succeed: %v", err)
+	}
+	if actual.Ports != "db:28563" || actual.CPUCount != 4 ||
+		actual.MemoryMB != 8192 || actual.DataSizeGB != 50 {
+		t.Fatalf("unexpected runtime settings: %#v", actual)
+	}
+	if !actual.VersionCheck.Enabled || actual.VersionCheck.URL != expectedURL ||
+		actual.VersionCheck.Identity != localTestClusterIdentity ||
+		actual.VersionCheck.OperatingSystem == "" {
+		t.Fatalf("unexpected version-check settings: %#v", actual.VersionCheck)
+	}
+	if len(actual.SLCs) != 2 {
+		t.Fatalf("expected official and custom SLCs, got %#v", actual.SLCs)
+	}
+	if actual.SLCs[0].Package != "" || actual.SLCs[1].Package != "custom.tar.gz" {
+		t.Fatalf("unexpected SLC package translation: %#v", actual.SLCs)
+	}
+}
+
+func TestToLocalRuntimeConfig_PreservesAuthoritativeEmptySLCSet(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := config.WriteExasolPersonalState(
+		&config.ExasolPersonalState{}, deployment,
+	); err != nil {
+		t.Fatalf("failed to write deployment state: %v", err)
+	}
+
+	// When
+	actual, err := toLocalRuntimeConfig(deployment, localRuntimeConfig{})
+	// Then
+	if err != nil {
+		t.Fatalf("expected startup state translation to succeed: %v", err)
+	}
+	if actual.SLCs == nil || len(actual.SLCs) != 0 {
+		t.Fatalf("expected authoritative non-nil empty SLC set, got %#v", actual.SLCs)
+	}
+}
 
 func TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets(t *testing.T) {
 	t.Parallel()
