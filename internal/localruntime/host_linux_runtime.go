@@ -20,12 +20,8 @@ import (
 )
 
 const (
-	nanoDBPort        = 8563
-	nanoShmSize       = "512mb"
-	nanoPIDsLimit     = "-1"
-	nanoSecurityOpt   = "unmask=ALL"
-	nanoRestartPolicy = "always"
-	nanoDataDirName   = "exa"
+	nanoDBPort      = 8563
+	nanoDataDirName = "exa"
 )
 
 var nanoInitParams = []string{"maxConnectionsLicenseLimit=20"}
@@ -85,7 +81,7 @@ func (runtime *LinuxHostRuntime) Start(
 	if err := install.Start(ctx, out, outErr, startConfig); err != nil {
 		return err
 	}
-	runtime.endpoint = &RuntimeEndpoint{DBPort: startConfig.HostDBPort}
+	runtime.endpoint = &RuntimeEndpoint{DBPort: startConfig.ContainerDBPort}
 
 	return nil
 }
@@ -144,13 +140,8 @@ func (runtime *LinuxHostRuntime) podmanStartConfig(
 	}
 
 	return localinstall.StartConfig{
-		HostDBPort:      hostDBPort,
-		ContainerDBPort: nanoDBPort,
+		ContainerDBPort: hostDBPort,
 		DataDir:         filepath.Join(runtime.paths.WorkDir, nanoDataDirName),
-		ShmSize:         nanoShmSize,
-		PIDsLimit:       nanoPIDsLimit,
-		SecurityOpt:     nanoSecurityOpt,
-		RestartPolicy:   nanoRestartPolicy,
 		InitParams:      append([]string(nil), nanoInitParams...),
 	}, nil
 }
