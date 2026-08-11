@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -44,7 +43,9 @@ func (install *PodmanInstall) materializeSLCs(
 	slcs []SLCConfig,
 ) ([]SLCConfig, error) {
 	if slcs == nil {
-		if err := os.Remove(install.slcStatusPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := install.environment.RemoveFile(
+			ctx, install.slcStatusPath.RuntimePath,
+		); err != nil {
 			return nil, fmt.Errorf("failed to remove stale SLC status report: %w", err)
 		}
 
@@ -65,7 +66,9 @@ func (install *PodmanInstall) materializeSLCs(
 			available = append(available, slc)
 		}
 	}
-	if err := writeSLCStatusAtomically(install.slcStatusPath, statuses); err != nil {
+	if err := install.writeSLCStatusAtomically(
+		ctx, install.slcStatusPath.RuntimePath, statuses,
+	); err != nil {
 		return nil, err
 	}
 
@@ -99,14 +102,14 @@ func (install *PodmanInstall) materializeSLC(
 	if !ok {
 		return false, slcStatusMissing, nil
 	}
-	if _, err := os.Stat(packagePath); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, slcStatusMissing, nil
-		}
-
+	packageExists, err := install.environment.PathExists(ctx, packagePath.RuntimePath)
+	if err != nil {
 		return false, "", fmt.Errorf(
-			"failed to inspect custom SLC package %s: %w", packagePath, err,
+			"failed to inspect custom SLC package %s: %w", packagePath.RuntimePath, err,
 		)
+	}
+	if !packageExists {
+		return false, slcStatusMissing, nil
 	}
 	if err := install.runPodman(
 		ctx,
@@ -115,7 +118,7 @@ func (install *PodmanInstall) materializeSLC(
 		"import",
 		"--change",
 		"LABEL "+slcImportLabel,
-		packagePath,
+		packagePath.RuntimePath,
 		slc.Image,
 	); err != nil {
 		install.writePodmanDiagnostics(ctx, outErr, containerName)
@@ -144,41 +147,30 @@ func (install *PodmanInstall) imageExists(
 	return false, fmt.Errorf("failed to find SLC image %s: %w", image, err)
 }
 
-func (install *PodmanInstall) slcPackagePath(packageName string) (string, bool) {
+func (install *PodmanInstall) slcPackagePath(packageName string) (RuntimePath, bool) {
 	if packageName == "" || packageName != filepath.Base(packageName) || packageName == "." {
-		return "", false
+		return RuntimePath{}, false
 	}
 
-	return filepath.Join(install.slcStagingDir, packageName), true
+	return RuntimePath{
+		HostPath:    filepath.Join(install.slcStagingDir.HostPath, packageName),
+		RuntimePath: filepath.Join(install.slcStagingDir.RuntimePath, packageName),
+	}, true
 }
 
-func writeSLCStatusAtomically(path string, statuses []slcImageStatus) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, slcStatusDirMode); err != nil {
-		return fmt.Errorf("failed to create SLC status directory: %w", err)
-	}
-	temporary, err := os.CreateTemp(dir, ".slc-status-*.tmp")
+func (install *PodmanInstall) writeSLCStatusAtomically(
+	ctx context.Context,
+	path string,
+	statuses []slcImageStatus,
+) error {
+	data, err := json.Marshal(slcStatusReport{SLC: statuses})
 	if err != nil {
-		return fmt.Errorf("failed to create temporary SLC status report: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	defer func() { _ = os.Remove(temporaryPath) }()
-
-	encoder := json.NewEncoder(temporary)
-	if err := encoder.Encode(slcStatusReport{SLC: statuses}); err != nil {
-		_ = temporary.Close()
-
 		return fmt.Errorf("failed to encode SLC status report: %w", err)
 	}
-	if err := temporary.Chmod(slcStatusFileMode); err != nil {
-		_ = temporary.Close()
-
-		return fmt.Errorf("failed to set SLC status report permissions: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("failed to close SLC status report: %w", err)
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
+	data = append(data, '\n')
+	if err := install.environment.WriteFileAtomically(
+		ctx, path, data, slcStatusDirMode, slcStatusFileMode,
+	); err != nil {
 		return fmt.Errorf("failed to replace SLC status report: %w", err)
 	}
 

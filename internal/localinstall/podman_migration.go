@@ -6,10 +6,8 @@ package localinstall
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 )
 
@@ -35,7 +33,7 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 		return false, nil
 	}
 
-	populated, err := directoryHasEntries(dataDir)
+	populated, err := install.directoryHasEntries(ctx, dataDir)
 	if err != nil {
 		return false, err
 	}
@@ -58,10 +56,11 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 			),
 		)
 	}
-	if err := os.MkdirAll(filepath.Dir(dataDir), dataDirMode); err != nil {
+	if err := install.environment.MkdirAll(ctx, filepath.Dir(dataDir), dataDirMode); err != nil {
 		return false, fmt.Errorf("failed to prepare Nano migration directory: %w", err)
 	}
-	stagingDir, err := os.MkdirTemp(
+	stagingDir, err := install.environment.MkdirTemp(
+		ctx,
 		filepath.Dir(dataDir), "."+filepath.Base(dataDir)+".overlay-migration-*",
 	)
 	if err != nil {
@@ -78,7 +77,7 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 		containerName+":/exa/.",
 		stagingDir,
 	); err != nil {
-		_ = os.RemoveAll(stagingDir)
+		_ = install.environment.RemoveAll(ctx, stagingDir)
 
 		return false, fmt.Errorf(
 			"failed to copy legacy Nano data from %s:/exa; the stopped container "+
@@ -90,7 +89,7 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 		)
 	}
 
-	stagedData, err := directoryHasEntries(stagingDir)
+	stagedData, err := install.directoryHasEntries(ctx, stagingDir)
 	if err != nil {
 		return false, fmt.Errorf(
 			"failed to inspect copied Nano data in %s; the legacy container and "+
@@ -100,7 +99,7 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 		)
 	}
 	if stagedData {
-		if err := installOverlayDataAtomically(dataDir, stagingDir); err != nil {
+		if err := install.installOverlayDataAtomically(ctx, dataDir, stagingDir); err != nil {
 			return false, fmt.Errorf(
 				"failed to install migrated Nano data from %s; the legacy container "+
 					"and staging directory were retained: %w",
@@ -108,7 +107,7 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 				err,
 			)
 		}
-	} else if err := os.Remove(stagingDir); err != nil {
+	} else if err := install.environment.RemoveDir(ctx, stagingDir); err != nil {
 		return false, fmt.Errorf("failed to remove empty Nano migration staging directory: %w", err)
 	}
 
@@ -162,30 +161,23 @@ func (install *PodmanInstall) containerHasDataMount(
 	return false, nil
 }
 
-func directoryHasEntries(path string) (bool, error) {
-	directory, err := os.Open(path) //nolint:gosec // launcher-owned deployment path
+func (install *PodmanInstall) directoryHasEntries(
+	ctx context.Context,
+	path string,
+) (bool, error) {
+	populated, err := install.environment.DirectoryHasEntries(ctx, path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-
 		return false, fmt.Errorf("failed to inspect directory %s: %w", path, err)
 	}
-	defer func() { _ = directory.Close() }()
 
-	_, err = directory.Readdirnames(1)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, io.EOF) {
-		return false, nil
-	}
-
-	return false, fmt.Errorf("failed to inspect directory %s: %w", path, err)
+	return populated, nil
 }
 
-func installOverlayDataAtomically(dataDir, stagingDir string) error {
-	populated, err := directoryHasEntries(dataDir)
+func (install *PodmanInstall) installOverlayDataAtomically(
+	ctx context.Context,
+	dataDir, stagingDir string,
+) error {
+	populated, err := install.directoryHasEntries(ctx, dataDir)
 	if err != nil {
 		return err
 	}
@@ -194,11 +186,11 @@ func installOverlayDataAtomically(dataDir, stagingDir string) error {
 			"persistent Nano data directory %s became populated during migration", dataDir,
 		)
 	}
-	if err := os.Remove(dataDir); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := install.environment.RemoveDir(ctx, dataDir); err != nil {
 		return fmt.Errorf("failed to remove empty Nano data directory %s: %w", dataDir, err)
 	}
-	if err := os.Rename(stagingDir, dataDir); err != nil {
-		if mkdirErr := os.MkdirAll(dataDir, dataDirMode); mkdirErr != nil {
+	if err := install.environment.Rename(ctx, stagingDir, dataDir); err != nil {
+		if mkdirErr := install.environment.MkdirAll(ctx, dataDir, dataDirMode); mkdirErr != nil {
 			return fmt.Errorf(
 				"failed to atomically install Nano data: %w "+
 					"(also failed to recreate %s: %w)",

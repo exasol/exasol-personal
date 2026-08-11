@@ -40,10 +40,10 @@ const (
 
 type PodmanInstall struct {
 	deployment    config.DeploymentDir
-	manager       *runtimeartifacts.Manager
-	runtimeExec   []string
-	slcStagingDir string
-	slcStatusPath string
+	environment   ExecutionEnvironment
+	resolveImage  func(context.Context) (RuntimePath, error)
+	slcStagingDir RuntimePath
+	slcStatusPath RuntimePath
 }
 
 func NewPodmanInstall(
@@ -53,10 +53,42 @@ func NewPodmanInstall(
 	slcStagingDir string,
 	slcStatusPath string,
 ) *PodmanInstall {
+	directEnvironment := NewDirectExecutionEnvironment(runtimeExec)
+	resolveImage := func(ctx context.Context) (RuntimePath, error) {
+		if override := strings.TrimSpace(os.Getenv(nanoImageOverridePathEnv)); override != "" {
+			return IdentityRuntimePath(override), nil
+		}
+		if manager == nil {
+			return RuntimePath{}, errors.New("nano runtime artifact manager is required")
+		}
+		path, err := manager.Request(ctx, exasolNanoImageResourceID)
+		if err != nil {
+			return RuntimePath{}, err
+		}
+
+		return IdentityRuntimePath(path), nil
+	}
+
+	return NewPodmanInstallWithEnvironment(
+		deployment,
+		directEnvironment,
+		resolveImage,
+		IdentityRuntimePath(slcStagingDir),
+		IdentityRuntimePath(slcStatusPath),
+	)
+}
+
+func NewPodmanInstallWithEnvironment(
+	deployment config.DeploymentDir,
+	environment ExecutionEnvironment,
+	resolveImage func(context.Context) (RuntimePath, error),
+	slcStagingDir RuntimePath,
+	slcStatusPath RuntimePath,
+) *PodmanInstall {
 	return &PodmanInstall{
 		deployment:    deployment,
-		manager:       manager,
-		runtimeExec:   runtimeExec,
+		environment:   environment,
+		resolveImage:  resolveImage,
 		slcStagingDir: slcStagingDir,
 		slcStatusPath: slcStatusPath,
 	}
@@ -101,15 +133,15 @@ func (install *PodmanInstall) Start(
 		return nil
 	}
 
-	if err := os.MkdirAll(startConfig.DataDir, dataDirMode); err != nil {
+	if err := install.environment.MkdirAll(ctx, startConfig.DataDir, dataDirMode); err != nil {
 		return fmt.Errorf("failed to create Nano data directory %s: %w", startConfig.DataDir, err)
 	}
-	freshDeployment, err := isFreshDeployment(startConfig.DataDir)
+	freshDeployment, err := install.isFreshDeployment(ctx, startConfig.DataDir)
 	if err != nil {
 		return err
 	}
 	if freshDeployment {
-		if err := removeStaleNanoTLSFiles(startConfig.DataDir); err != nil {
+		if err := install.removeStaleNanoTLSFiles(ctx, startConfig.DataDir); err != nil {
 			return err
 		}
 	}
@@ -120,10 +152,12 @@ func (install *PodmanInstall) Start(
 			ctx, outErr, containerName, fmt.Errorf("failed to resolve Nano image: %w", err),
 		)
 	}
-	loadOutput, err := install.runPodmanOutput(ctx, out, outErr, "load", "-i", imagePath)
+	loadOutput, err := install.runPodmanOutput(
+		ctx, out, outErr, "load", "-i", imagePath.RuntimePath,
+	)
 	if err != nil {
 		return install.failureWithDiagnostics(ctx, outErr, containerName,
-			fmt.Errorf("failed to load Nano image %s: %w", imagePath, err))
+			fmt.Errorf("failed to load Nano image %s: %w", imagePath.RuntimePath, err))
 	}
 	loadedImage, err := parseLoadedImage(loadOutput)
 	if err != nil {
@@ -283,10 +317,10 @@ func (install *PodmanInstall) validateStartConfig(startConfig StartConfig) error
 		}
 	}
 	if startConfig.SLCs != nil {
-		if strings.TrimSpace(install.slcStatusPath) == "" {
+		if strings.TrimSpace(install.slcStatusPath.RuntimePath) == "" {
 			return errors.New("SLC status path is required for SLC-aware startup")
 		}
-		if strings.TrimSpace(install.slcStagingDir) == "" {
+		if strings.TrimSpace(install.slcStagingDir.RuntimePath) == "" {
 			return errors.New("SLC staging directory is required for SLC-aware startup")
 		}
 	}
@@ -318,17 +352,17 @@ func clamp(value, minimum, maximum int) int {
 	return min(max(value, minimum), maximum)
 }
 
-func isFreshDeployment(dataDir string) (bool, error) {
+func (install *PodmanInstall) isFreshDeployment(
+	ctx context.Context,
+	dataDir string,
+) (bool, error) {
 	configPath := filepath.Join(dataDir, "exasol.conf")
-	_, err := os.Stat(configPath)
-	if err == nil {
-		return false, nil
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return true, nil
+	exists, err := install.environment.PathExists(ctx, configPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to inspect Nano configuration %s: %w", configPath, err)
 	}
 
-	return false, fmt.Errorf("failed to inspect Nano configuration %s: %w", configPath, err)
+	return !exists, nil
 }
 
 func parseLoadedImage(output string) (string, error) {
@@ -429,15 +463,19 @@ func (install *PodmanInstall) containerExists(
 	return false, fmt.Errorf("failed to find Nano container %s: %w", containerName, err)
 }
 
-func (install *PodmanInstall) resolveImagePath(ctx context.Context) (string, error) {
-	if override := strings.TrimSpace(os.Getenv(nanoImageOverridePathEnv)); override != "" {
-		return override, nil
+func (install *PodmanInstall) resolveImagePath(ctx context.Context) (RuntimePath, error) {
+	if install.resolveImage == nil {
+		return RuntimePath{}, errors.New("nano runtime artifact resolver is required")
 	}
-	if install.manager == nil {
-		return "", errors.New("nano runtime artifact manager is required")
+	path, err := install.resolveImage(ctx)
+	if err != nil {
+		return RuntimePath{}, err
+	}
+	if strings.TrimSpace(path.RuntimePath) == "" {
+		return RuntimePath{}, errors.New("nano runtime artifact path is required")
 	}
 
-	return install.manager.Request(ctx, exasolNanoImageResourceID)
+	return path, nil
 }
 
 func (install *PodmanInstall) runPodman(
@@ -445,11 +483,7 @@ func (install *PodmanInstall) runPodman(
 	out, outErr io.Writer,
 	arg ...string,
 ) error {
-	cmd := install.command(ctx, "podman", arg...)
-	cmd.Stdout = out
-	cmd.Stderr = outErr
-
-	return cmd.Run()
+	return install.environment.Run(ctx, nil, out, outErr, append([]string{"podman"}, arg...)...)
 }
 
 func (install *PodmanInstall) runPodmanOutput(
@@ -457,27 +491,17 @@ func (install *PodmanInstall) runPodmanOutput(
 	out, outErr io.Writer,
 	arg ...string,
 ) (string, error) {
-	cmd := install.command(ctx, "podman", arg...)
 	var stdout bytes.Buffer
 	if out == nil {
-		cmd.Stdout = &stdout
+		out = &stdout
 	} else {
-		cmd.Stdout = io.MultiWriter(out, &stdout)
+		out = io.MultiWriter(out, &stdout)
 	}
-	cmd.Stderr = outErr
-
-	err := cmd.Run()
+	err := install.environment.Run(
+		ctx, nil, out, outErr, append([]string{"podman"}, arg...)...,
+	)
 
 	return stdout.String(), err
-}
-
-func (install *PodmanInstall) command(ctx context.Context, name string, arg ...string) *exec.Cmd {
-	cmdLine := make([]string, 0, len(install.runtimeExec)+len(arg)+1)
-	cmdLine = append(cmdLine, install.runtimeExec...)
-	cmdLine = append(cmdLine, name)
-	cmdLine = append(cmdLine, arg...)
-
-	return exec.CommandContext(ctx, cmdLine[0], cmdLine[1:]...)
 }
 
 func getContainerName(deployment config.DeploymentDir) (string, error) {

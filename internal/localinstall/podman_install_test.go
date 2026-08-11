@@ -57,6 +57,32 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 	}
 }
 
+func TestPodmanInstallStart_LoadsNanoFromRuntimePath(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	const runtimeImagePath = "/mnt/host/runtime-artifacts/nano.tar"
+	install.resolveImage = func(context.Context) (RuntimePath, error) {
+		return RuntimePath{
+			HostPath:    fixture.imagePath,
+			RuntimePath: runtimeImagePath,
+		}, nil
+	}
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected mapped Nano image start to succeed, got %v", err)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	if got, want := commands[1], "<podman><load><-i><"+runtimeImagePath+">"; got != want {
+		t.Fatalf("load command = %q, want %q", got, want)
+	}
+}
+
 func TestPodmanInstallStart_ReusesExistingDatabaseConfiguration(t *testing.T) {
 	t.Parallel()
 	skipPodmanInstallTestOnWindows(t)
@@ -173,7 +199,7 @@ func TestPodmanInstallStart_ReturnsWhenContainerAlreadyRunning(t *testing.T) {
 	// Given
 	install, startConfig, fixture := newPodmanInstallFixture(t)
 	writeTestFile(t, filepath.Join(fixture.scenarioDir, "running"), testContainerName+"\n")
-	install.manager = nil
+	install.resolveImage = nil
 
 	// When
 	err := install.Start(context.Background(), nil, nil, startConfig)
@@ -421,14 +447,14 @@ func TestPodmanInstallStart_RejectsInvalidConfigurationBeforePodman(t *testing.T
 			name: "SLC status path",
 			mutate: func(install *PodmanInstall, config *StartConfig) {
 				config.SLCs = []SLCConfig{}
-				install.slcStatusPath = " "
+				install.slcStatusPath.RuntimePath = " "
 			},
 		},
 		{
 			name: "SLC staging directory",
 			mutate: func(install *PodmanInstall, config *StartConfig) {
 				config.SLCs = []SLCConfig{}
-				install.slcStagingDir = " "
+				install.slcStagingDir.RuntimePath = " "
 			},
 		},
 	}
