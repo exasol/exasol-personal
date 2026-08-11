@@ -1,0 +1,402 @@
+// Copyright 2026 Exasol AG
+// SPDX-License-Identifier: MIT
+
+package localinstall
+
+import (
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+)
+
+const (
+	testDeploymentID       = "podman-install-test"
+	testContainerName      = "exasol-db-" + testDeploymentID
+	testLoadedImage        = "docker.io/exasol/nano:test"
+	testTaggedImage        = "localhost/" + testContainerName + ":latest"
+	testExecutableFileMode = 0o700
+)
+
+func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	var out, outErr bytes.Buffer
+
+	// When
+	err := install.Start(context.Background(), &out, &outErr, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected fresh start to succeed, got %v", err)
+	}
+	if info, statErr := os.Stat(startConfig.DataDir); statErr != nil || !info.IsDir() {
+		t.Fatalf("expected persistent data directory, got info=%v error=%v", info, statErr)
+	}
+	assertCommandLog(t, fixture.logPath, []string{
+		"<podman><ps><--format><{{.Names}}>",
+		"<podman><load><-i><" + fixture.imagePath + ">",
+		"<podman><tag><" + testLoadedImage + "><" + testTaggedImage + ">",
+		"<podman><run><-d><--replace><--name><" + testContainerName + ">" +
+			"<--shm-size=512mb><--pids-limit=-1><--security-opt><unmask=ALL>" +
+			"<--restart><always><-p><28563:8563><-v><" + startConfig.DataDir + ":/exa:Z>" +
+			"<" + testTaggedImage + "><init><params=maxConnectionsLicenseLimit=20>",
+	})
+	if !strings.Contains(out.String(), loadedImagePrefix+" "+testLoadedImage) {
+		t.Fatalf("expected load output to be forwarded, got %q", out.String())
+	}
+}
+
+func TestPodmanInstallStart_ReusesExistingDatabaseConfiguration(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	writeTestFile(t, filepath.Join(startConfig.DataDir, "exasol.conf"), "existing")
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected existing database start to succeed, got %v", err)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	if len(commands) != 4 {
+		t.Fatalf("expected four Podman commands, got %#v", commands)
+	}
+	if !strings.HasSuffix(commands[3], "<"+testTaggedImage+"><init>") {
+		t.Fatalf("expected existing database to run init without params, got %q", commands[3])
+	}
+	if strings.Contains(commands[3], "<params=") {
+		t.Fatalf("expected first-start params to be omitted, got %q", commands[3])
+	}
+}
+
+func TestPodmanInstallStart_ReturnsWhenContainerAlreadyRunning(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "running"), testContainerName+"\n")
+	install.manager = nil
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected already-running start to succeed, got %v", err)
+	}
+	assertCommandLog(t, fixture.logPath, []string{
+		"<podman><ps><--format><{{.Names}}>",
+	})
+	if _, statErr := os.Stat(startConfig.DataDir); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no data-directory work for running container, got %v", statErr)
+	}
+}
+
+func TestPodmanInstallStart_StopsAfterCommandFailure(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	tests := []struct {
+		name             string
+		failedCommand    string
+		loadOutput       string
+		expectedError    string
+		expectedCommands int
+	}{
+		{
+			name:             "load",
+			failedCommand:    "load",
+			expectedError:    "failed to load Nano image",
+			expectedCommands: 2,
+		},
+		{
+			name:             "tag",
+			failedCommand:    "tag",
+			expectedError:    "failed to tag Nano image",
+			expectedCommands: 3,
+		},
+		{
+			name:             "run",
+			failedCommand:    "run",
+			expectedError:    "failed to start Nano container",
+			expectedCommands: 4,
+		},
+		{
+			name:             "unparseable load output",
+			loadOutput:       "Loaded something else\n",
+			expectedError:    "could not determine the image reference",
+			expectedCommands: 2,
+		},
+		{
+			name:             "multiple loaded images",
+			loadOutput:       "Loaded image: first:test\nLoaded image: second:test\n",
+			expectedError:    "multiple Nano images",
+			expectedCommands: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given
+			install, startConfig, fixture := newPodmanInstallFixture(t)
+			if test.failedCommand != "" {
+				writeTestFile(t, filepath.Join(fixture.scenarioDir, "fail"), test.failedCommand)
+			}
+			if test.loadOutput != "" {
+				writeTestFile(t, filepath.Join(fixture.scenarioDir, "load-output"), test.loadOutput)
+			}
+
+			// When
+			err := install.Start(context.Background(), nil, nil, startConfig)
+
+			// Then
+			if err == nil || !strings.Contains(err.Error(), test.expectedError) {
+				t.Fatalf("expected error containing %q, got %v", test.expectedError, err)
+			}
+			commands := readCommandLog(t, fixture.logPath)
+			if len(commands) != test.expectedCommands {
+				t.Fatalf("expected %d commands, got %#v", test.expectedCommands, commands)
+			}
+		})
+	}
+}
+
+func TestPodmanInstallStart_RejectsInvalidConfigurationBeforePodman(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	tests := []struct {
+		name   string
+		mutate func(*StartConfig)
+	}{
+		{name: "host port", mutate: func(config *StartConfig) { config.HostDBPort = 0 }},
+		{
+			name:   "container port",
+			mutate: func(config *StartConfig) { config.ContainerDBPort = 65536 },
+		},
+		{name: "data directory", mutate: func(config *StartConfig) { config.DataDir = " " }},
+		{name: "shared memory", mutate: func(config *StartConfig) { config.ShmSize = "" }},
+		{name: "PID limit", mutate: func(config *StartConfig) { config.PIDsLimit = "" }},
+		{name: "security option", mutate: func(config *StartConfig) { config.SecurityOpt = "" }},
+		{name: "restart policy", mutate: func(config *StartConfig) { config.RestartPolicy = "" }},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given
+			install, startConfig, fixture := newPodmanInstallFixture(t)
+			test.mutate(&startConfig)
+
+			// When
+			err := install.Start(context.Background(), nil, nil, startConfig)
+
+			// Then
+			if err == nil {
+				t.Fatal("expected invalid configuration error, got nil")
+			}
+			if commands := readCommandLog(t, fixture.logPath); len(commands) != 0 {
+				t.Fatalf("expected no Podman commands, got %#v", commands)
+			}
+		})
+	}
+}
+
+func TestPodmanInstallStop_RemovesContainerIdempotently(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, _, fixture := newPodmanInstallFixture(t)
+
+	// When
+	err := install.Stop(context.Background(), nil, nil)
+	// Then
+	if err != nil {
+		t.Fatalf("expected stop to succeed, got %v", err)
+	}
+	assertCommandLog(t, fixture.logPath, []string{
+		"<podman><rm><--force><--ignore><" + testContainerName + ">",
+	})
+}
+
+type podmanInstallFixture struct {
+	logPath     string
+	scenarioDir string
+	imagePath   string
+}
+
+func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanInstallFixture) {
+	t.Helper()
+
+	root := t.TempDir()
+	deployment := config.NewDeploymentDir(filepath.Join(root, "deployment"))
+	if err := os.MkdirAll(deployment.Root(), 0o750); err != nil {
+		t.Fatalf("failed to create deployment directory: %v", err)
+	}
+	state := &config.ExasolPersonalState{DeploymentId: testDeploymentID}
+	if err := state.SetWorkflowStateAndWrite(
+		&config.WorkflowStateInitialized{},
+		deployment,
+	); err != nil {
+		t.Fatalf("failed to write deployment state: %v", err)
+	}
+	scenarioDir := filepath.Join(root, "scenario")
+	if err := os.MkdirAll(scenarioDir, 0o750); err != nil {
+		t.Fatalf("failed to create fake Podman scenario: %v", err)
+	}
+	scriptPath := filepath.Join(root, "fake-podman.sh")
+	if err := os.WriteFile(
+		scriptPath,
+		[]byte(fakePodmanScript),
+		testExecutableFileMode,
+	); err != nil {
+		t.Fatalf("failed to write fake Podman executable: %v", err)
+	}
+	logPath := filepath.Join(root, "podman.log")
+	imagePath := filepath.Join(root, "nano-image.tar")
+	writeTestFile(t, imagePath, "image")
+	manager := runtimeartifacts.NewResourceManagerForPlatform(
+		runtimeartifacts.ResourceSpec{
+			exasolNanoImageResourceID: {
+				Artifact: map[string]runtimeartifacts.ArtifactSpec{
+					"any": {URL: imagePath},
+				},
+			},
+		},
+		filepath.Join(root, "cache"),
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
+
+	install := NewPodmanInstall(
+		deployment,
+		manager,
+		[]string{scriptPath, logPath, scenarioDir},
+	)
+	startConfig := StartConfig{
+		HostDBPort:      28563,
+		ContainerDBPort: 8563,
+		DataDir:         filepath.Join(root, "runtime", "exa"),
+		ShmSize:         "512mb",
+		PIDsLimit:       "-1",
+		SecurityOpt:     "unmask=ALL",
+		RestartPolicy:   "always",
+		InitParams:      []string{"maxConnectionsLicenseLimit=20"},
+	}
+	fixture := podmanInstallFixture{
+		logPath:     logPath,
+		scenarioDir: scenarioDir,
+		imagePath:   imagePath,
+	}
+
+	return install, startConfig, fixture
+}
+
+func readCommandLog(t *testing.T, path string) []string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatalf("failed to read fake Podman command log: %v", err)
+	}
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		return nil
+	}
+
+	return strings.Split(trimmed, "\n")
+}
+
+func assertCommandLog(t *testing.T, path string, expected []string) {
+	t.Helper()
+
+	actual := readCommandLog(t, path)
+	if len(actual) != len(expected) {
+		t.Fatalf("expected command log %#v, got %#v", expected, actual)
+	}
+	for index := range expected {
+		if actual[index] != expected[index] {
+			t.Fatalf("expected command %d to be %q, got %q", index, expected[index], actual[index])
+		}
+	}
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatalf("failed to create test file directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+}
+
+func skipPodmanInstallTestOnWindows(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Podman executable is a POSIX shell script")
+	}
+}
+
+const fakePodmanScript = `#!/bin/sh
+set -eu
+
+log_path=$1
+scenario_dir=$2
+shift 2
+
+for argument in "$@"; do
+  printf '<%s>' "$argument" >> "$log_path"
+done
+printf '\n' >> "$log_path"
+
+if [ "$1" != "podman" ]; then
+  exit 90
+fi
+command=$2
+if [ -f "$scenario_dir/fail" ] && [ "$(cat "$scenario_dir/fail")" = "$command" ]; then
+  printf 'fake %s failure\n' "$command" >&2
+  exit 42
+fi
+
+case "$command" in
+  ps)
+    if [ -f "$scenario_dir/running" ]; then
+      cat "$scenario_dir/running"
+    fi
+    ;;
+  load)
+    if [ -f "$scenario_dir/load-output" ]; then
+      cat "$scenario_dir/load-output"
+    else
+      printf 'Loaded image: docker.io/exasol/nano:test\n'
+    fi
+    ;;
+  tag|run|rm)
+    ;;
+  *)
+    printf 'unexpected fake Podman command: %s\n' "$command" >&2
+    exit 91
+    ;;
+esac
+`
