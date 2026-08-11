@@ -26,6 +26,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 	"github.com/exasol/exasol-personal/internal/util"
+	"github.com/exasol/exasol-personal/internal/version_check"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -142,10 +143,6 @@ func (runtime *MacVMRuntime) Deployment() config.DeploymentDir {
 	return runtime.deployment
 }
 
-func (runtime *MacVMRuntime) Paths() Paths {
-	return runtime.paths
-}
-
 // VM sizing (CPU/memory/data disk) is not a Prepare concern: it's passed
 // directly as RunCommand args for "start".
 func (runtime *MacVMRuntime) Prepare(ctx context.Context, out, outErr io.Writer) error {
@@ -166,17 +163,86 @@ func (runtime *MacVMRuntime) Prepare(ctx context.Context, out, outErr io.Writer)
 	return runtime.initializeVMIfNeeded(ctx, runnerPath, out, outErr)
 }
 
-func (runtime *MacVMRuntime) RunCommand(
+func (runtime *MacVMRuntime) Start(
 	ctx context.Context,
-	args []string,
 	out, outErr io.Writer,
+	runtimeConfig VMConfig,
 ) error {
+	if err := os.Remove(runtime.paths.StatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to remove stale local VM state: %w", err)
+	}
+
+	args := []string{"start"}
+	versionCheckArgs, err := localRunnerVersionCheckArgs(runtime.Deployment())
+	if err != nil {
+		return err
+	}
+	args = append(args, versionCheckArgs...)
+	slcArgs, err := localRunnerSlcArgs(runtime.Deployment())
+	if err != nil {
+		return err
+	}
+	args = append(args, slcArgs...)
+	if runtimeConfig.Ports != "" {
+		args = append(args, "--ports", runtimeConfig.Ports)
+	}
+	args = append(args,
+		strconv.Itoa(runtimeConfig.CPUCount),
+		strconv.Itoa(runtimeConfig.MemoryMB),
+		strconv.Itoa(runtimeConfig.DataSizeGB),
+	)
+
 	runnerPath, err := runtime.resolveRunnerPath(ctx)
 	if err != nil {
 		return err
 	}
 
 	return runtime.runnerCommand(ctx, runnerPath, args, out, outErr)
+}
+
+func localRunnerVersionCheckArgs(deployment config.DeploymentDir) ([]string, error) {
+	launcherState, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read local version-check settings: %w", err)
+	}
+
+	if !launcherState.VersionCheckEnabled {
+		return []string{"--version-check-enabled=false"}, nil
+	}
+
+	clusterIdentity := strings.TrimSpace(launcherState.ClusterIdentity)
+	if clusterIdentity == "" {
+		return nil, errors.New("deployment state is missing cluster identity")
+	}
+
+	return []string{
+		"--version-check-enabled=true",
+		"--version-check-url", version_check.GetVersionCheckURL(),
+		"--version-check-identity", clusterIdentity,
+	}, nil
+}
+
+// A custom SLC also names its staged package, because it exists on no registry.
+func localRunnerSlcArgs(deployment config.DeploymentDir) ([]string, error) {
+	state, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read installed SLCs: %w", err)
+	}
+
+	const argsPerSLC = 4
+	total := len(state.InstalledSLCs) + len(state.InstalledCustomSLCs)
+	args := make([]string, 0, total*argsPerSLC)
+	for _, installed := range state.InstalledSLCs {
+		args = append(args, "--slc", installed.Image+"="+installed.Target)
+	}
+	for _, custom := range state.InstalledCustomSLCs {
+		args = append(args,
+			"--slc", custom.Image+"="+custom.Target,
+			"--slc-package", custom.Image+"="+custom.Package,
+		)
+	}
+
+	return args, nil
 }
 
 func (runtime *MacVMRuntime) ReadState() (*State, error) {

@@ -472,39 +472,6 @@ func TestStop_InvokesResolvedRunnerStop(t *testing.T) {
 }
 
 //nolint:paralleltest // serial package; see note at top of file
-func TestRunCommand_InvokesResolvedRunnerWithArgs(t *testing.T) {
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("fake local runner script is POSIX-only")
-	}
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewMacVMRuntime(deployment, nil)
-	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
-	}
-	runnerScript := "#!/bin/sh\nprintf '%s\\n' \"$*\"\n"
-	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime = NewMacVMRuntime(deployment, manager)
-	var out bytes.Buffer
-
-	// When
-	err := localRuntime.RunCommand(
-		context.Background(),
-		[]string{"start", "--ports", "auto"},
-		&out,
-		nil,
-	)
-	// Then
-	if err != nil {
-		t.Fatalf("expected RunCommand to succeed, got %v", err)
-	}
-	if strings.TrimSpace(out.String()) != "start --ports auto" {
-		t.Fatalf("expected args to be passed through to the resolved runner, got %q", out.String())
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
 func TestDestroy_StopsRunningVMBeforeRemoving(t *testing.T) {
 	if runtime.GOOS == windowsGOOS {
 		t.Skip("fake local runner script is POSIX-only")

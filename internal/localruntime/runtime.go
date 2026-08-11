@@ -25,6 +25,7 @@ type VMStatus struct {
 type Runtime interface {
 	Deployment() config.DeploymentDir
 	Prepare(ctx context.Context, out, outErr io.Writer) error
+	Start(ctx context.Context, out, outErr io.Writer, runtimeConfig VMConfig) error
 	Stop(ctx context.Context, out, outErr io.Writer) error
 	Status(ctx context.Context) (*VMStatus, error)
 	Destroy(ctx context.Context, out, outErr io.Writer) error
@@ -34,8 +35,6 @@ type Runtime interface {
 type VMRuntime interface {
 	Runtime
 
-	Paths() Paths
-	RunCommand(ctx context.Context, args []string, out, outErr io.Writer) error
 	ReadState() (*State, error)
 	HealthCheck(ctx context.Context) (*HealthCheckResult, error)
 }

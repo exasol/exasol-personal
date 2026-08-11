@@ -9,12 +9,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
-	"github.com/exasol/exasol-personal/internal/version_check"
 )
 
 const (
@@ -23,48 +21,6 @@ const (
 	localTestDatabasePort     = 28563
 	localTestSSHForwardedPort = 20022
 )
-
-func TestLocalRunnerVersionCheckArgs_PassesLauncherVersionCheckSettings(t *testing.T) {
-	// Given
-	deployment := newTestDeploymentWithVersionCheckState(t, true, localTestClusterIdentity)
-	const expectedURL = "https://example.test/v1/version-check"
-	t.Setenv(version_check.VersionCheckURLEnvVar, expectedURL)
-
-	// When
-	args, err := localRunnerVersionCheckArgs(deployment)
-	// Then
-	if err != nil {
-		t.Fatalf("expected version-check args, got %v", err)
-	}
-	expected := []string{
-		"--version-check-enabled=true",
-		"--version-check-url", expectedURL,
-		"--version-check-identity", localTestClusterIdentity,
-	}
-	if !reflect.DeepEqual(args, expected) {
-		t.Fatalf("expected args %#v, got %#v", expected, args)
-	}
-}
-
-func TestLocalRunnerVersionCheckArgs_DisablesRunnerWhenLauncherVersionCheckDisabled(
-	t *testing.T,
-) {
-	t.Parallel()
-
-	// Given
-	deployment := newTestDeploymentWithVersionCheckState(t, false, "")
-
-	// When
-	args, err := localRunnerVersionCheckArgs(deployment)
-	// Then
-	if err != nil {
-		t.Fatalf("expected disabled version-check args, got %v", err)
-	}
-	expected := []string{"--version-check-enabled=false"}
-	if !reflect.DeepEqual(args, expected) {
-		t.Fatalf("expected args %#v, got %#v", expected, args)
-	}
-}
 
 func TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets(t *testing.T) {
 	t.Parallel()

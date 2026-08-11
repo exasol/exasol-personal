@@ -16,7 +16,6 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
-	"github.com/exasol/exasol-personal/internal/version_check"
 )
 
 // Internal escape hatch for fake local-runner integration tests.
@@ -24,7 +23,7 @@ const localSkipDatabaseWaitEnv = "EXASOL_LOCAL_SKIP_DB_WAIT"
 
 func startLocalRuntime(
 	ctx context.Context,
-	runtime localruntime.VMRuntime,
+	runtime localruntime.Runtime,
 	runtimeConfig localRuntimeConfig,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
@@ -38,46 +37,27 @@ func startLocalRuntime(
 
 func startPreparedLocalRuntime(
 	ctx context.Context,
-	runtime localruntime.VMRuntime,
+	runtime localruntime.Runtime,
 	runtimeConfig localRuntimeConfig,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
-	paths := runtime.Paths()
-	if err := os.Remove(paths.StatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("failed to remove stale local VM state: %w", err)
-	}
-
 	localConfig := toLocalRuntimeConfig(runtimeConfig)
-	startArgs := []string{"start"}
-	versionCheckArgs, err := localRunnerVersionCheckArgs(runtime.Deployment())
-	if err != nil {
-		return err
-	}
-	startArgs = append(startArgs, versionCheckArgs...)
-	slcArgs, err := localRunnerSlcArgs(runtime.Deployment())
-	if err != nil {
-		return err
-	}
-	startArgs = append(startArgs, slcArgs...)
-	if localConfig.Ports != "" {
-		startArgs = append(startArgs, "--ports", localConfig.Ports)
-	}
-	startArgs = append(startArgs,
-		strconv.Itoa(localConfig.CPUCount),
-		strconv.Itoa(localConfig.MemoryMB),
-		strconv.Itoa(localConfig.DataSizeGB),
-	)
-	if err := runtime.RunCommand(ctx, startArgs, out, outErr); err != nil {
+	if err := runtime.Start(ctx, out, outErr, localConfig); err != nil {
 		return diagnoseLocalFailure(ctx, runtime, err)
 	}
 
-	state, err := runtime.ReadState()
-	if err != nil {
-		return err
-	}
+	switch vmRuntime := runtime.(type) {
+	case localruntime.VMRuntime:
+		state, err := vmRuntime.ReadState()
+		if err != nil {
+			return err
+		}
 
-	return writeLocalRuntimeArtifactsAndWait(ctx, runtime, state, waitTimeoutSeconds)
+		return writeLocalRuntimeArtifactsAndWait(ctx, vmRuntime, state, waitTimeoutSeconds)
+	default:
+		return nil
+	}
 }
 
 // Must run after the caller commits its workflow state: that write serialises a copy read
@@ -89,28 +69,6 @@ func reconcileCustomSLCsAfterStart(ctx context.Context, deployment config.Deploy
 	if err := reconcileCustomSLCActivation(ctx, deployment); err != nil {
 		slog.Warn("failed to activate a custom script language container", "error", err)
 	}
-}
-
-func localRunnerVersionCheckArgs(deployment config.DeploymentDir) ([]string, error) {
-	launcherState, err := config.ReadExasolPersonalState(deployment)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read local version-check settings: %w", err)
-	}
-
-	if !launcherState.VersionCheckEnabled {
-		return []string{"--version-check-enabled=false"}, nil
-	}
-
-	clusterIdentity := strings.TrimSpace(launcherState.ClusterIdentity)
-	if clusterIdentity == "" {
-		return nil, errors.New("deployment state is missing cluster identity")
-	}
-
-	return []string{
-		"--version-check-enabled=true",
-		"--version-check-url", version_check.GetVersionCheckURL(),
-		"--version-check-identity", clusterIdentity,
-	}, nil
 }
 
 // reconcileLocalVMState corrects a stale WorkflowStateRunning caused by an unclean
@@ -177,7 +135,7 @@ func isLocalDeployment(deployment config.DeploymentDir) bool {
 
 func stopLocalRuntime(
 	ctx context.Context,
-	runtime localruntime.VMRuntime,
+	runtime localruntime.Runtime,
 	out, outErr io.Writer,
 ) error {
 	if err := runtime.Stop(ctx, out, outErr); err != nil {
@@ -189,7 +147,7 @@ func stopLocalRuntime(
 
 func destroyLocalRuntime(
 	ctx context.Context,
-	runtime localruntime.VMRuntime,
+	runtime localruntime.Runtime,
 	out, outErr io.Writer,
 ) error {
 	if err := runtime.Destroy(ctx, out, outErr); err != nil {
