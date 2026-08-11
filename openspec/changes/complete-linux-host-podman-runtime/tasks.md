@@ -2,7 +2,7 @@
 
 - [x] 1.1 Simplify the Podman start configuration, publish the configured database port to Nano's fixed internal port, and internalize Podman constants
 - [x] 1.2 Add runtime-neutral version-check and SLC startup options with shared launcher-state translation and distinct nil versus empty SLC semantics
-- [ ] 1.3 Extend the shared install interface with exact deployment-container status and focused tests
+- [x] 1.3 Extend the shared install interface with exact deployment-container status and focused tests
 
 ## 2. Podman Startup Parity
 

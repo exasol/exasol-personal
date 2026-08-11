@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -138,6 +139,22 @@ func (install *PodmanInstall) Stop(ctx context.Context, out, outErr io.Writer) e
 	return nil
 }
 
+func (install *PodmanInstall) Status(
+	ctx context.Context,
+	_, outErr io.Writer,
+) (*InstallStatus, error) {
+	containerName, err := getContainerName(install.deployment)
+	if err != nil {
+		return nil, err
+	}
+	running, err := install.containerRunning(ctx, outErr, containerName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &InstallStatus{Running: running}, nil
+}
+
 func (install *PodmanInstall) Destroy(ctx context.Context, out, outErr io.Writer) error {
 	return install.Stop(ctx, out, outErr)
 }
@@ -194,24 +211,58 @@ func (install *PodmanInstall) containerRunning(
 	outErr io.Writer,
 	containerName string,
 ) (bool, error) {
+	exists, err := install.containerExists(ctx, outErr, containerName)
+	if err != nil || !exists {
+		return false, err
+	}
 	output, err := install.runPodmanOutput(
 		ctx,
 		nil,
 		outErr,
-		"ps",
+		"container",
+		"inspect",
 		"--format",
-		"{{.Names}}",
+		"{{.State.Running}}",
+		containerName,
 	)
 	if err != nil {
 		return false, fmt.Errorf("failed to inspect Nano container %s: %w", containerName, err)
 	}
-	for name := range strings.FieldsSeq(output) {
-		if name == containerName {
-			return true, nil
-		}
+	running, err := strconv.ParseBool(strings.TrimSpace(output))
+	if err != nil {
+		return false, fmt.Errorf(
+			"failed to parse running state for Nano container %s from %q: %w",
+			containerName,
+			strings.TrimSpace(output),
+			err,
+		)
 	}
 
-	return false, nil
+	return running, nil
+}
+
+func (install *PodmanInstall) containerExists(
+	ctx context.Context,
+	outErr io.Writer,
+	containerName string,
+) (bool, error) {
+	err := install.runPodman(
+		ctx,
+		nil,
+		outErr,
+		"container",
+		"exists",
+		containerName,
+	)
+	if err == nil {
+		return true, nil
+	}
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) && exitError.ExitCode() == 1 {
+		return false, nil
+	}
+
+	return false, fmt.Errorf("failed to find Nano container %s: %w", containerName, err)
 }
 
 func (install *PodmanInstall) resolveImagePath(ctx context.Context) (string, error) {
