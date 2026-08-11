@@ -79,7 +79,7 @@ func (install *PodmanInstall) Start(
 		return err
 	}
 	migrated, err := install.migrateOverlayDataIfNeeded(
-		ctx, out, outErr, containerName, startConfig.DataDir, containerStatus.Exists,
+		ctx, out, outErr, containerName, startConfig.DataDir, containerStatus,
 	)
 	if err != nil {
 		return err
@@ -88,7 +88,7 @@ func (install *PodmanInstall) Start(
 		containerStatus = podmanContainerStatus{}
 	}
 	recovered, err := install.recoverIncompleteInitialCreate(
-		ctx, out, outErr, containerName, startConfig.DataDir, containerStatus.Exists,
+		ctx, out, outErr, containerName, startConfig.DataDir, containerStatus,
 	)
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func (install *PodmanInstall) Start(
 			ctx, outErr, containerName, fmt.Errorf("failed to resolve Nano image: %w", err),
 		)
 	}
-	loadOutput, err := install.runCmdOutput(ctx, out, outErr, "podman", "load", "-i", imagePath)
+	loadOutput, err := install.runCmdOutput(ctx, out, outErr, "load", "-i", imagePath)
 	if err != nil {
 		return install.failureWithDiagnostics(ctx, outErr, containerName,
 			fmt.Errorf("failed to load Nano image %s: %w", imagePath, err))
@@ -130,7 +130,7 @@ func (install *PodmanInstall) Start(
 	}
 
 	imageTag := "localhost/" + containerName + ":latest"
-	if err := install.runCmd(ctx, out, outErr, "podman", "tag", loadedImage, imageTag); err != nil {
+	if err := install.runCmd(ctx, out, outErr, "tag", loadedImage, imageTag); err != nil {
 		return install.failureWithDiagnostics(ctx, outErr, containerName,
 			fmt.Errorf("failed to tag Nano image %s as %s: %w", loadedImage, imageTag, err))
 	}
@@ -164,20 +164,60 @@ func (install *PodmanInstall) Start(
 		args = append(args, "params="+strings.Join(startConfig.InitParams, " "))
 	}
 	args = append(args, nanoVersionCheckInitArgs(startConfig.VersionCheck)...)
-	if err := install.runCmd(ctx, out, outErr, "podman", args...); err != nil {
+	if err := install.runCmd(ctx, out, outErr, args...); err != nil {
 		return install.failureWithDiagnostics(ctx, outErr, containerName,
 			fmt.Errorf("failed to start Nano container %s: %w", containerName, err))
 	}
 	for index, slc := range startConfig.SLCs {
 		if strings.TrimSpace(slc.Image) == "" {
-			return fmt.Errorf("Nano SLC %d image is required", index)
+			return fmt.Errorf("nano SLC %d image is required", index)
 		}
 		if strings.TrimSpace(slc.Target) == "" {
-			return fmt.Errorf("Nano SLC %d target is required", index)
+			return fmt.Errorf("nano SLC %d target is required", index)
 		}
 	}
 
 	return nil
+}
+
+func (install *PodmanInstall) Stop(ctx context.Context, out, outErr io.Writer) error {
+	containerName, err := getContainerName(install.deployment)
+	if err != nil {
+		return err
+	}
+	if err := install.runCmd(
+		ctx,
+		out,
+		outErr,
+		"rm",
+		"--force",
+		"--ignore",
+		containerName,
+	); err != nil {
+		return fmt.Errorf("failed to remove Nano container %s: %w", containerName, err)
+	}
+
+	return nil
+}
+
+func (install *PodmanInstall) Status(
+	ctx context.Context,
+	_, outErr io.Writer,
+) (*InstallStatus, error) {
+	containerName, err := getContainerName(install.deployment)
+	if err != nil {
+		return nil, err
+	}
+	running, err := install.containerRunning(ctx, outErr, containerName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &InstallStatus{Running: running}, nil
+}
+
+func (install *PodmanInstall) Destroy(ctx context.Context, out, outErr io.Writer) error {
+	return install.Stop(ctx, out, outErr)
 }
 
 func (install *PodmanInstall) failureWithDiagnostics(
@@ -216,52 +256,11 @@ func (install *PodmanInstall) writePodmanDiagnostics(
 	for _, command := range commands {
 		_, _ = fmt.Fprintf(diagnosticOut, "$ podman %s\n", strings.Join(command, " "))
 		if err := install.runCmd(
-			diagnosticCtx, diagnosticOut, diagnosticOut, "podman", command...,
+			diagnosticCtx, diagnosticOut, diagnosticOut, command...,
 		); err != nil {
 			_, _ = fmt.Fprintf(diagnosticOut, "diagnostic command failed: %v\n", err)
 		}
 	}
-}
-
-func (install *PodmanInstall) Stop(ctx context.Context, out, outErr io.Writer) error {
-	containerName, err := getContainerName(install.deployment)
-	if err != nil {
-		return err
-	}
-	if err := install.runCmd(
-		ctx,
-		out,
-		outErr,
-		"podman",
-		"rm",
-		"--force",
-		"--ignore",
-		containerName,
-	); err != nil {
-		return fmt.Errorf("failed to remove Nano container %s: %w", containerName, err)
-	}
-
-	return nil
-}
-
-func (install *PodmanInstall) Status(
-	ctx context.Context,
-	_, outErr io.Writer,
-) (*InstallStatus, error) {
-	containerName, err := getContainerName(install.deployment)
-	if err != nil {
-		return nil, err
-	}
-	running, err := install.containerRunning(ctx, outErr, containerName)
-	if err != nil {
-		return nil, err
-	}
-
-	return &InstallStatus{Running: running}, nil
-}
-
-func (install *PodmanInstall) Destroy(ctx context.Context, out, outErr io.Writer) error {
-	return install.Stop(ctx, out, outErr)
 }
 
 func validateStartConfig(startConfig StartConfig) error {
@@ -278,7 +277,7 @@ func validateStartConfig(startConfig StartConfig) error {
 			"operating system": startConfig.VersionCheck.OperatingSystem,
 		} {
 			if strings.TrimSpace(value) == "" {
-				return fmt.Errorf("Nano version-check %s is required when enabled", name)
+				return fmt.Errorf("nano version-check %s is required when enabled", name)
 			}
 		}
 	}
@@ -373,7 +372,6 @@ func (install *PodmanInstall) inspectContainerStatus(
 		ctx,
 		nil,
 		outErr,
-		"podman",
 		"container",
 		"inspect",
 		"--format",
@@ -407,7 +405,6 @@ func (install *PodmanInstall) containerExists(
 		ctx,
 		nil,
 		outErr,
-		"podman",
 		"container",
 		"exists",
 		containerName,
@@ -437,10 +434,9 @@ func (install *PodmanInstall) resolveImagePath(ctx context.Context) (string, err
 func (install *PodmanInstall) runCmd(
 	ctx context.Context,
 	out, outErr io.Writer,
-	name string,
 	arg ...string,
 ) error {
-	cmd := install.command(ctx, name, arg...)
+	cmd := install.command(ctx, arg...)
 	cmd.Stdout = out
 	cmd.Stderr = outErr
 
@@ -450,10 +446,9 @@ func (install *PodmanInstall) runCmd(
 func (install *PodmanInstall) runCmdOutput(
 	ctx context.Context,
 	out, outErr io.Writer,
-	name string,
 	arg ...string,
 ) (string, error) {
-	cmd := install.command(ctx, name, arg...)
+	cmd := install.command(ctx, arg...)
 	var stdout bytes.Buffer
 	if out == nil {
 		cmd.Stdout = &stdout
@@ -467,10 +462,10 @@ func (install *PodmanInstall) runCmdOutput(
 	return stdout.String(), err
 }
 
-func (install *PodmanInstall) command(ctx context.Context, name string, arg ...string) *exec.Cmd {
+func (install *PodmanInstall) command(ctx context.Context, arg ...string) *exec.Cmd {
 	cmdLine := make([]string, 0, len(install.runtimeExec)+len(arg)+1)
 	cmdLine = append(cmdLine, install.runtimeExec...)
-	cmdLine = append(cmdLine, name)
+	cmdLine = append(cmdLine, "podman")
 	cmdLine = append(cmdLine, arg...)
 
 	return exec.CommandContext(ctx, cmdLine[0], cmdLine[1:]...)

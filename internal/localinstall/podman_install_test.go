@@ -214,7 +214,8 @@ func TestPodmanInstallStatus_InspectsExactDeploymentContainer(t *testing.T) {
 			expectedRunning: false,
 			expectedCommands: []string{
 				"<podman><container><exists><" + testContainerName + ">",
-				"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+				"<podman><container><inspect><--format><{{.State.Running}}><" +
+					testContainerName + ">",
 			},
 		},
 		{
@@ -223,7 +224,8 @@ func TestPodmanInstallStatus_InspectsExactDeploymentContainer(t *testing.T) {
 			expectedRunning: true,
 			expectedCommands: []string{
 				"<podman><container><exists><" + testContainerName + ">",
-				"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+				"<podman><container><inspect><--format><{{.State.Running}}><" +
+					testContainerName + ">",
 			},
 		},
 	}
@@ -604,7 +606,9 @@ if [ "$command" = "import" ] && [ -f "$scenario_dir/fail-import-image" ]; then
     exit 44
   fi
 fi
-if [ "$command" = "rmi" ] && [ -f "$scenario_dir/fail-rmi-image" ] && [ "$(cat "$scenario_dir/fail-rmi-image")" = "$3" ]; then
+if [ "$command" = "rmi" ] &&
+  [ -f "$scenario_dir/fail-rmi-image" ] &&
+  [ "$(cat "$scenario_dir/fail-rmi-image")" = "$3" ]; then
   printf 'fake rmi failure\n' >&2
   exit 45
 fi

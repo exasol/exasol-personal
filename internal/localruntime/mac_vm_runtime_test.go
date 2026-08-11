@@ -24,6 +24,8 @@ const (
 )
 
 func TestLocalRunnerVersionCheckArgs_PassesLauncherVersionCheckSettings(t *testing.T) {
+	t.Parallel()
+
 	// Given
 	const expectedURL = "https://example.test/v1/version-check"
 	versionCheck := localinstall.VersionCheckConfig{

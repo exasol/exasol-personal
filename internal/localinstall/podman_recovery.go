@@ -27,7 +27,7 @@ func (install *PodmanInstall) recoverIncompleteInitialCreate(
 	ctx context.Context,
 	out, outErr io.Writer,
 	containerName, dataDir string,
-	containerExists bool,
+	containerStatus podmanContainerStatus,
 ) (bool, error) {
 	markerPath := filepath.Join(dataDir, initialCreateMarkerName)
 	if _, err := os.Stat(markerPath); err != nil {
@@ -36,19 +36,17 @@ func (install *PodmanInstall) recoverIncompleteInitialCreate(
 		}
 
 		return false, fmt.Errorf(
-			"failed to inspect Nano initial-create marker %s: %w",
-			markerPath,
-			err,
+			"failed to inspect Nano initial-create marker %s: %w", markerPath, err,
 		)
 	}
 
-	if containerExists {
-		if err := install.runCmd(ctx, out, outErr, "podman", "stop", containerName); err != nil {
+	if containerStatus.Exists {
+		if err := install.runCmd(ctx, out, outErr, "stop", containerName); err != nil {
 			return false, install.failureWithDiagnostics(ctx, outErr, containerName,
 				fmt.Errorf("failed to stop incomplete Nano container %s: %w", containerName, err))
 		}
 		if err := install.runCmd(
-			ctx, out, outErr, "podman", "rm", "--force", "--ignore", containerName,
+			ctx, out, outErr, "rm", "--force", "--ignore", containerName,
 		); err != nil {
 			return false, install.failureWithDiagnostics(ctx, outErr, containerName,
 				fmt.Errorf("failed to remove incomplete Nano container %s: %w", containerName, err))
@@ -61,9 +59,7 @@ func (install *PodmanInstall) recoverIncompleteInitialCreate(
 	}
 	if err := os.Rename(dataDir, quarantinePath); err != nil {
 		return false, fmt.Errorf(
-			"failed to quarantine incomplete Nano data at %s: %w",
-			quarantinePath,
-			err,
+			"failed to quarantine incomplete Nano data at %s: %w", quarantinePath, err,
 		)
 	}
 	if err := os.MkdirAll(dataDir, dataDirMode); err != nil {

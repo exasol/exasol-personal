@@ -14,6 +14,7 @@ import (
 )
 
 type podmanMount struct {
+	//nolint:tagliatelle // Podman inspect emits this exact field name.
 	Destination string `json:"Destination"`
 }
 
@@ -21,9 +22,9 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	ctx context.Context,
 	out, outErr io.Writer,
 	containerName, dataDir string,
-	containerExists bool,
+	containerStatus podmanContainerStatus,
 ) (bool, error) {
-	if !containerExists {
+	if !containerStatus.Exists {
 		return false, nil
 	}
 	hasMount, err := install.containerHasDataMount(ctx, outErr, containerName)
@@ -40,21 +41,20 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	}
 	if populated {
 		return false, fmt.Errorf(
-			"refusing to overwrite populated persistent Nano data at %s while migrating %s:/exa; inspect both locations and merge them manually before removing the legacy container",
+			"refusing to overwrite populated persistent Nano data at %s while "+
+				"migrating %s:/exa; inspect both locations and merge them manually "+
+				"before removing the legacy container",
 			dataDir,
 			containerName,
 		)
 	}
 
-	if err := install.runCmd(ctx, out, outErr, "podman", "stop", containerName); err != nil {
+	if err := install.runCmd(ctx, out, outErr, "stop", containerName); err != nil {
 		return false, install.failureWithDiagnostics(
-			ctx,
-			outErr,
-			containerName,
+			ctx, outErr, containerName,
 			fmt.Errorf(
 				"failed to stop legacy Nano container %s before migration: %w",
-				containerName,
-				err,
+				containerName, err,
 			),
 		)
 	}
@@ -66,8 +66,7 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	)
 	if err != nil {
 		return false, fmt.Errorf(
-			"failed to create Nano overlay migration staging directory: %w",
-			err,
+			"failed to create Nano overlay migration staging directory: %w", err,
 		)
 	}
 
@@ -75,7 +74,6 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 		ctx,
 		out,
 		outErr,
-		"podman",
 		"cp",
 		containerName+":/exa/.",
 		stagingDir,
@@ -83,7 +81,8 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 		_ = os.RemoveAll(stagingDir)
 
 		return false, fmt.Errorf(
-			"failed to copy legacy Nano data from %s:/exa; the stopped container was retained. Retry with 'podman cp %s:/exa/. %s/': %w",
+			"failed to copy legacy Nano data from %s:/exa; the stopped container "+
+				"was retained. Retry with 'podman cp %s:/exa/. %s/': %w",
 			containerName,
 			containerName,
 			dataDir,
@@ -94,7 +93,8 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	stagedData, err := directoryHasEntries(stagingDir)
 	if err != nil {
 		return false, fmt.Errorf(
-			"failed to inspect copied Nano data in %s; the legacy container and staging directory were retained: %w",
+			"failed to inspect copied Nano data in %s; the legacy container and "+
+				"staging directory were retained: %w",
 			stagingDir,
 			err,
 		)
@@ -102,7 +102,8 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	if stagedData {
 		if err := installOverlayDataAtomically(dataDir, stagingDir); err != nil {
 			return false, fmt.Errorf(
-				"failed to install migrated Nano data from %s; the legacy container and staging directory were retained: %w",
+				"failed to install migrated Nano data from %s; the legacy container "+
+					"and staging directory were retained: %w",
 				stagingDir,
 				err,
 			)
@@ -111,10 +112,12 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 		return false, fmt.Errorf("failed to remove empty Nano migration staging directory: %w", err)
 	}
 
-	if err := install.runCmd(ctx, out, outErr, "podman", "rm", containerName); err != nil {
+	if err := install.runCmd(ctx, out, outErr, "rm", containerName); err != nil {
 		return false, install.failureWithDiagnostics(ctx, outErr, containerName,
 			fmt.Errorf(
-				"migrated Nano data is installed at %s, but the legacy container %s could not be removed; verify the data and remove that container before retrying: %w",
+				"migrated Nano data is installed at %s, but the legacy container %s "+
+					"could not be removed; verify the data and remove that container "+
+					"before retrying: %w",
 				dataDir,
 				containerName,
 				err,
@@ -133,7 +136,6 @@ func (install *PodmanInstall) containerHasDataMount(
 		ctx,
 		nil,
 		outErr,
-		"podman",
 		"container",
 		"inspect",
 		"--format",
@@ -142,17 +144,13 @@ func (install *PodmanInstall) containerHasDataMount(
 	)
 	if err != nil {
 		return false, fmt.Errorf(
-			"failed to inspect mounts for Nano container %s: %w",
-			containerName,
-			err,
+			"failed to inspect mounts for Nano container %s: %w", containerName, err,
 		)
 	}
 	var mounts []podmanMount
 	if err := json.Unmarshal([]byte(output), &mounts); err != nil {
 		return false, fmt.Errorf(
-			"failed to parse mounts for Nano container %s: %w",
-			containerName,
-			err,
+			"failed to parse mounts for Nano container %s: %w", containerName, err,
 		)
 	}
 	for _, mount := range mounts {
@@ -193,8 +191,7 @@ func installOverlayDataAtomically(dataDir, stagingDir string) error {
 	}
 	if populated {
 		return fmt.Errorf(
-			"persistent Nano data directory %s became populated during migration",
-			dataDir,
+			"persistent Nano data directory %s became populated during migration", dataDir,
 		)
 	}
 	if err := os.Remove(dataDir); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -203,7 +200,8 @@ func installOverlayDataAtomically(dataDir, stagingDir string) error {
 	if err := os.Rename(stagingDir, dataDir); err != nil {
 		if mkdirErr := os.MkdirAll(dataDir, dataDirMode); mkdirErr != nil {
 			return fmt.Errorf(
-				"failed to atomically install Nano data: %w (also failed to recreate %s: %w)",
+				"failed to atomically install Nano data: %w "+
+					"(also failed to recreate %s: %w)",
 				err,
 				dataDir,
 				mkdirErr,

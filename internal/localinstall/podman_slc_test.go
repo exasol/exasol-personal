@@ -155,15 +155,29 @@ func TestPodmanInstallStart_RewritesAuthoritativeEmptySLCStatus(t *testing.T) {
 func TestNormalizeSLCImageRef(t *testing.T) {
 	t.Parallel()
 
-	tests := map[string]string{
-		"docker.io/exasol/script-language-container:python": "exasol/script-language-container:python",
-		"localhost/custom:sha256":                           "custom:sha256",
-		"exasol/script-language-container":                  "exasol/script-language-container:latest",
-		"registry.example.test:5000/custom/image":           "registry.example.test:5000/custom/image:latest",
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{
+			input:    "docker.io/exasol/script-language-container:python",
+			expected: "exasol/script-language-container:python",
+		},
+		{input: "localhost/custom:sha256", expected: "custom:sha256"},
+		{
+			input:    "exasol/script-language-container",
+			expected: "exasol/script-language-container:latest",
+		},
+		{
+			input:    "registry.example.test:5000/custom/image",
+			expected: "registry.example.test:5000/custom/image:latest",
+		},
 	}
-	for input, expected := range tests {
-		if actual := normalizeSLCImageRef(input); actual != expected {
-			t.Errorf("normalizeSLCImageRef(%q) = %q, want %q", input, actual, expected)
+	for _, test := range tests {
+		if actual := normalizeSLCImageRef(test.input); actual != test.expected {
+			t.Errorf(
+				"normalizeSLCImageRef(%q) = %q, want %q", test.input, actual, test.expected,
+			)
 		}
 	}
 }

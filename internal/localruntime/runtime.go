@@ -64,7 +64,7 @@ type VMRuntimeEndpoint struct {
 	PrivateKeyRelativePath string
 }
 
-// Generic local runtime interface.
+// Runtime is the generic local runtime interface.
 type Runtime interface {
 	Deployment() config.DeploymentDir
 	Prepare(ctx context.Context, out, outErr io.Writer) error

@@ -182,10 +182,8 @@ func TestEmbeddedCatalogMapsAMD64ToX64ImageTags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to resolve amd64 python3: %v", err)
 	}
-	if want := "release_x64_GM7DI5JDDTJRRDVV2QPRSNDRDT5CCYHPPEZO7HPJSIX4B5ICISZQ"; !strings.Contains(
-		entry.Image,
-		want,
-	) {
+	want := "release_x64_GM7DI5JDDTJRRDVV2QPRSNDRDT5CCYHPPEZO7HPJSIX4B5ICISZQ"
+	if !strings.Contains(entry.Image, want) {
 		t.Errorf("amd64 image = %q, want tag containing %q", entry.Image, want)
 	}
 }
