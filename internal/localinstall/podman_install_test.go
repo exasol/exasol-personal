@@ -42,7 +42,7 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 		t.Fatalf("expected persistent data directory, got info=%v error=%v", info, statErr)
 	}
 	assertCommandLog(t, fixture.logPath, []string{
-		"<podman><ps><--format><{{.Names}}>",
+		"<podman><container><exists><" + testContainerName + ">",
 		"<podman><load><-i><" + fixture.imagePath + ">",
 		"<podman><tag><" + testLoadedImage + "><" + testTaggedImage + ">",
 		"<podman><run><-d><--replace><--name><" + testContainerName + ">" +
@@ -97,10 +97,73 @@ func TestPodmanInstallStart_ReturnsWhenContainerAlreadyRunning(t *testing.T) {
 		t.Fatalf("expected already-running start to succeed, got %v", err)
 	}
 	assertCommandLog(t, fixture.logPath, []string{
-		"<podman><ps><--format><{{.Names}}>",
+		"<podman><container><exists><" + testContainerName + ">",
+		"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
 	})
 	if _, statErr := os.Stat(startConfig.DataDir); !os.IsNotExist(statErr) {
 		t.Fatalf("expected no data-directory work for running container, got %v", statErr)
+	}
+}
+
+//nolint:revive
+func TestPodmanInstallStatus_InspectsExactDeploymentContainer(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	tests := []struct {
+		name             string
+		scenarioFile     string
+		expectedRunning  bool
+		expectedCommands []string
+	}{
+		{
+			name:            "missing",
+			expectedRunning: false,
+			expectedCommands: []string{
+				"<podman><container><exists><" + testContainerName + ">",
+			},
+		},
+		{
+			name:            "stopped",
+			scenarioFile:    "existing",
+			expectedRunning: false,
+			expectedCommands: []string{
+				"<podman><container><exists><" + testContainerName + ">",
+				"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+			},
+		},
+		{
+			name:            "running",
+			scenarioFile:    "running",
+			expectedRunning: true,
+			expectedCommands: []string{
+				"<podman><container><exists><" + testContainerName + ">",
+				"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given
+			install, _, fixture := newPodmanInstallFixture(t)
+			if test.scenarioFile != "" {
+				writeTestFile(t, filepath.Join(fixture.scenarioDir, test.scenarioFile), "present")
+			}
+
+			// When
+			status, err := install.Status(context.Background(), nil, nil)
+			// Then
+			if err != nil {
+				t.Fatalf("expected status to succeed, got %v", err)
+			}
+			if status.Running != test.expectedRunning {
+				t.Fatalf("expected running=%t, got %#v", test.expectedRunning, status)
+			}
+			assertCommandLog(t, fixture.logPath, test.expectedCommands)
+		})
 	}
 }
 
@@ -370,10 +433,26 @@ if [ -f "$scenario_dir/fail" ] && [ "$(cat "$scenario_dir/fail")" = "$command" ]
 fi
 
 case "$command" in
-  ps)
-    if [ -f "$scenario_dir/running" ]; then
-      cat "$scenario_dir/running"
-    fi
+  container)
+    operation=$3
+    case "$operation" in
+      exists)
+        if [ ! -f "$scenario_dir/running" ] && [ ! -f "$scenario_dir/existing" ]; then
+          exit 1
+        fi
+        ;;
+      inspect)
+        if [ -f "$scenario_dir/running" ]; then
+          printf 'true\n'
+        else
+          printf 'false\n'
+        fi
+        ;;
+      *)
+        printf 'unexpected fake Podman container operation: %s\n' "$operation" >&2
+        exit 92
+        ;;
+    esac
     ;;
   load)
     if [ -f "$scenario_dir/load-output" ]; then

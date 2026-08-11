@@ -30,10 +30,14 @@ type SLCConfig struct {
 	Package string
 }
 
+type InstallStatus struct {
+	Running bool
+}
+
 type LocalInstall interface {
 	// Prepare(ctx context.Context, out, outErr io.Writer) error
 	Start(ctx context.Context, out, outErr io.Writer, config StartConfig) error
 	Stop(ctx context.Context, out, outErr io.Writer) error
-	// Status(ctx context.Context, out, outErr io.Writer) (*RuntimeStatus, error)
+	Status(ctx context.Context, out, outErr io.Writer) (*InstallStatus, error)
 	Destroy(ctx context.Context, out, outErr io.Writer) error
 }
