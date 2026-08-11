@@ -27,16 +27,18 @@ func TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets(t *tes
 
 	// Given
 	deployment := newTestDeploymentWithState(t)
-	state := &localruntime.State{
+	endpoint := &localruntime.VMRuntimeEndpoint{
+		RuntimeEndpoint: localruntime.RuntimeEndpoint{
+			DBPort: localTestDatabasePort,
+			UIPort: 28443,
+		},
 		VMIP:                   "192.168.64.2",
 		SSHPort:                localTestSSHForwardedPort,
-		DBPort:                 localTestDatabasePort,
-		UIPort:                 28443,
 		PrivateKeyRelativePath: "local/node_access.pem",
 	}
 
 	// When
-	err := writeLocalDeploymentArtifacts(deployment, state)
+	err := writeLocalDeploymentArtifacts(deployment, endpoint)
 	// Then
 	if err != nil {
 		t.Fatalf("expected artifacts to be written, got %v", err)
@@ -94,15 +96,17 @@ func TestWriteLocalDeploymentArtifacts_OmitsLocalOnlyCloudMetadataInJSON(t *test
 
 	// Given
 	deployment := newTestDeploymentWithState(t)
-	state := &localruntime.State{
+	endpoint := &localruntime.VMRuntimeEndpoint{
+		RuntimeEndpoint: localruntime.RuntimeEndpoint{
+			DBPort: localTestDatabasePort,
+			UIPort: 28443,
+		},
 		SSHPort:                localTestSSHForwardedPort,
-		DBPort:                 localTestDatabasePort,
-		UIPort:                 28443,
 		PrivateKeyRelativePath: "local/node_access.pem",
 	}
 
 	// When
-	err := writeLocalDeploymentArtifacts(deployment, state)
+	err := writeLocalDeploymentArtifacts(deployment, endpoint)
 	// Then
 	if err != nil {
 		t.Fatalf("expected artifacts to be written, got %v", err)

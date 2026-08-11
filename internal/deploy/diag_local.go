@@ -54,7 +54,7 @@ func DiagnoseLocal(
 // command doesn't itself become another thing that can error out.
 func diagnoseLocalUnsafe(
 	ctx context.Context,
-	localRuntime localruntime.VMRuntime,
+	localRuntime localruntime.Runtime,
 ) *LocalDiagnostics {
 	diagnostics := &LocalDiagnostics{
 		Platform: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
@@ -90,12 +90,12 @@ func diagnoseLocalUnsafe(
 
 	diagnostics.Warning = unexpectedRunningVMWarning(deployment)
 
-	if state, err := localRuntime.ReadState(); err == nil {
-		diagnostics.Ports = map[string]int{"ssh": state.SSHPort, "db": state.DBPort}
-		if state.UIPort != 0 {
-			diagnostics.Ports["ui"] = state.UIPort
+	if endpoint, err := localRuntime.ReadEndpoints(); err == nil {
+		diagnostics.Ports = map[string]int{"ssh": endpoint.SSHPort, "db": endpoint.DBPort}
+		if endpoint.UIPort != 0 {
+			diagnostics.Ports["ui"] = endpoint.UIPort
 		}
-		diagnostics.GuestIP = state.VMIP
+		diagnostics.GuestIP = endpoint.VMIP
 	}
 
 	if health, err := localRuntime.HealthCheck(ctx); err == nil {
