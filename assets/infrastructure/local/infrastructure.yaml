@@ -1,5 +1,5 @@
-name: Exasol Local on macOS
-description: Exasol Local deployment using the macOS Apple Silicon VM runner.
+name: Exasol Local
+description: Exasol Local deployment using a macOS VM or Linux Podman.
 backend: local
 
 local:
