@@ -203,6 +203,9 @@ func writeLocalDeploymentArtifacts(
 	if endpoint == nil {
 		return errors.New("local runtime endpoint state is required")
 	}
+	if endpoint.DBPort <= 0 || endpoint.DBPort > 65535 {
+		return fmt.Errorf("local runtime database port is invalid: %d", endpoint.DBPort)
+	}
 
 	deploymentID := "local"
 	if launcherState, err := config.ReadExasolPersonalState(deployment); err == nil {
@@ -210,15 +213,6 @@ func writeLocalDeploymentArtifacts(
 			deploymentID = launcherState.DeploymentId
 		}
 	}
-
-	sshPort := strconv.Itoa(endpoint.SSHPort)
-	sshCommand := fmt.Sprintf(
-		"ssh -i %s %s@%s -p %s",
-		endpoint.PrivateKeyRelativePath,
-		localSSHUser,
-		localDeploymentPublicHost,
-		sshPort,
-	)
 
 	info := &config.DeploymentInfo{
 		Backend:         localDeploymentBackend,
@@ -234,10 +228,22 @@ func writeLocalDeploymentArtifacts(
 			DBPort:                     endpoint.DBPort,
 			Username:                   localDBUser,
 			InsecureSkipCertValidation: true,
-			SSHCommand:                 sshCommand,
-			SSHPort:                    sshPort,
-			ShellSupported:             true,
 		},
+	}
+	if endpoint.SSHPort > 0 {
+		if strings.TrimSpace(endpoint.PrivateKeyRelativePath) == "" {
+			return errors.New("local runtime SSH endpoint is missing its private key path")
+		}
+		sshPort := strconv.Itoa(endpoint.SSHPort)
+		info.Connection.SSHPort = sshPort
+		info.Connection.SSHCommand = fmt.Sprintf(
+			"ssh -i %s %s@%s -p %s",
+			endpoint.PrivateKeyRelativePath,
+			localSSHUser,
+			localDeploymentPublicHost,
+			sshPort,
+		)
+		info.Connection.ShellSupported = true
 	}
 	if err := config.WriteDeploymentInfo(deployment.Root(), info); err != nil {
 		return err

@@ -15,6 +15,10 @@ Notable user-facing changes to Exasol Personal are documented here.
   Like the official commands, a custom install or update restarts the database to mount the container, so it accepts `--auto-approve` to skip the confirmation and `--no-restart` to record the container and activate it on the next start instead. If the container cannot be made available, the database still starts and the command reports that the container is recorded but not active.
 
   `exasol slc list` now shows custom containers alongside official ones with a status column, and `--json` marks them with a `custom` type and an `available` field.
+- Added the foundational Linux host runtime lifecycle for starting Exasol Nano directly with
+  Podman, including SELinux-compatible persistent database data, configurable host DB port
+  publication, and idempotent container cleanup. Linux local deployments remain experimental and
+  are not yet a supported preset.
 
 ### Changed
 
