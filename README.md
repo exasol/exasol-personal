@@ -79,6 +79,23 @@ To run UDFs locally, install a script language container — see **UDFs and Scri
 Prefer to run in your own cloud? See the **Deploy to the Cloud** section below.
 
 
+## 🤖 Install with AI Agent
+
+If you work with an AI coding agent, it can set up and run Exasol Personal for you. Exasol publishes [agent skills](https://github.com/exasol-labs/exasol-agent-skills) that teach agents how to deploy Exasol Personal, connect to it, load data, and write Exasol SQL.
+
+One command is enough — the agent installs the skills itself, then uses them:
+
+```bash
+# Claude Code
+claude "Install skills from https://github.com/exasol-labs/exasol-agent-skills/ and use these skills to set up Exasol Personal"
+
+# Codex
+codex "Install skills from https://github.com/exasol-labs/exasol-agent-skills/ and use these skills to set up Exasol Personal"
+```
+
+The agent takes it from there, including installing the launcher, and asks before it makes changes to your machine or cloud account.
+
+
 ## ☁️ Deploy to the Cloud
 
 Deploy Exasol Personal to your own cloud account when you need more scale or a shared instance. Supported providers: AWS, Azure, Exoscale, and STACKIT.

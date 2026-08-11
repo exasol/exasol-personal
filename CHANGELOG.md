@@ -6,6 +6,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Added an **Install with AI Agent** section to the README, showing the single `claude`/`codex` command that has an AI coding agent install the [Exasol agent skills](https://github.com/exasol-labs/exasol-agent-skills) and set up Exasol Personal.
+
 - Added `exasol slc custom install` and `exasol slc custom update` to manage user-supplied (custom) script language containers in local deployments, for languages the official catalog does not ship — for example a Python container with extra packages. Custom containers are removed with the existing `exasol slc remove <alias>`, which handles both official and custom containers.
 
   The container is given as `--source`, which takes either a local tarball or an `https` URL, together with the `--alias` used in `CREATE <alias> SCALAR SCRIPT` and the `--language` it provides.
