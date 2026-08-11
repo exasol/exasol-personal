@@ -18,7 +18,7 @@
 
 ## 4. Linux Runtime Integration
 
-- [ ] 4.1 Implement Linux runtime status mapping, deployment endpoint recovery, published-port health checks, and Linux-specific reachability diagnostics
+- [x] 4.1 Implement Linux runtime status mapping, deployment endpoint recovery, published-port health checks, and Linux-specific reachability diagnostics
 - [ ] 4.2 Centralize platform runtime selection for all local workflows, promote Linux host Podman to `local`, remove `local-host`, and make VM sizing and shell behavior platform-specific
 
 ## 5. Documentation and Verification
