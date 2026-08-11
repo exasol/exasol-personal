@@ -205,10 +205,10 @@ func TestStart_InvokesResolvedRunnerWithArgs(t *testing.T) {
 
 	// When
 	err := localRuntime.Start(context.Background(), &out, nil, VMConfig{
-		CPUCount:   2,
-		MemoryMB:   4096,
-		DataSizeGB: 100,
-		Ports:      "auto",
+		RuntimeConfig: RuntimeConfig{Ports: "auto"},
+		CPUCount:      2,
+		MemoryMB:      4096,
+		DataSizeGB:    100,
 	})
 	// Then
 	if err != nil {
