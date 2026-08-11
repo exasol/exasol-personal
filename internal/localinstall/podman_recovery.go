@@ -5,10 +5,8 @@ package localinstall
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"time"
 )
@@ -30,14 +28,14 @@ func (install *PodmanInstall) recoverIncompleteInitialCreate(
 	containerStatus podmanContainerStatus,
 ) (bool, error) {
 	markerPath := filepath.Join(dataDir, initialCreateMarkerName)
-	if _, err := os.Stat(markerPath); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-
+	markerExists, err := install.environment.PathExists(ctx, markerPath)
+	if err != nil {
 		return false, fmt.Errorf(
 			"failed to inspect Nano initial-create marker %s: %w", markerPath, err,
 		)
+	}
+	if !markerExists {
+		return false, nil
 	}
 
 	if containerStatus.Exists {
@@ -53,41 +51,48 @@ func (install *PodmanInstall) recoverIncompleteInitialCreate(
 		}
 	}
 
-	quarantinePath, err := nextQuarantinePath(dataDir, time.Now())
+	quarantinePath, err := install.nextQuarantinePath(ctx, dataDir, time.Now())
 	if err != nil {
 		return false, err
 	}
-	if err := os.Rename(dataDir, quarantinePath); err != nil {
+	if err := install.environment.Rename(ctx, dataDir, quarantinePath); err != nil {
 		return false, fmt.Errorf(
 			"failed to quarantine incomplete Nano data at %s: %w", quarantinePath, err,
 		)
 	}
-	if err := os.MkdirAll(dataDir, dataDirMode); err != nil {
+	if err := install.environment.MkdirAll(ctx, dataDir, dataDirMode); err != nil {
 		return false, fmt.Errorf("failed to recreate Nano data directory %s: %w", dataDir, err)
 	}
 
 	return true, nil
 }
 
-func nextQuarantinePath(dataDir string, now time.Time) (string, error) {
+func (install *PodmanInstall) nextQuarantinePath(
+	ctx context.Context,
+	dataDir string,
+	now time.Time,
+) (string, error) {
 	base := dataDir + ".failed-" + now.Format(quarantineTimeFormat)
 	candidate := base
 	for suffix := 1; ; suffix++ {
-		_, err := os.Lstat(candidate)
-		if errors.Is(err, os.ErrNotExist) {
-			return candidate, nil
-		}
+		exists, err := install.environment.PathExists(ctx, candidate)
 		if err != nil {
 			return "", fmt.Errorf("failed to inspect Nano quarantine path %s: %w", candidate, err)
+		}
+		if !exists {
+			return candidate, nil
 		}
 		candidate = fmt.Sprintf("%s-%d", base, suffix)
 	}
 }
 
-func removeStaleNanoTLSFiles(dataDir string) error {
+func (install *PodmanInstall) removeStaleNanoTLSFiles(
+	ctx context.Context,
+	dataDir string,
+) error {
 	for _, relativePath := range nanoTLSFiles {
 		path := filepath.Join(dataDir, relativePath)
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := install.environment.RemoveFile(ctx, path); err != nil {
 			return fmt.Errorf("failed to remove stale Nano TLS file %s: %w", path, err)
 		}
 	}
