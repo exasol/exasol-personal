@@ -11,7 +11,6 @@ import (
 	"os"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
 const (
@@ -225,9 +224,9 @@ func GetStatus(
 	}
 }
 
-// localVMStoppedStatus returns a StatusStopped output when the local VM daemon
-// is not running, so GetStatus can short-circuit before the slower DB probe.
-// Returns nil for non-local deployments or when the VM is running.
+// localVMStoppedStatus returns a StatusStopped output when the selected local
+// runtime is not running, so GetStatus can short-circuit before the slower DB
+// probe. Returns nil for non-local deployments or when the runtime is running.
 func localVMStoppedStatus(ctx context.Context, deployment config.DeploymentDir) *StatusOutput {
 	if !isLocalDeployment(deployment) {
 		return nil
@@ -235,18 +234,27 @@ func localVMStoppedStatus(ctx context.Context, deployment config.DeploymentDir) 
 
 	manager, err := newResourceManager()
 	if err != nil {
-		slog.Debug("failed to construct resource manager for local VM status check", "error", err)
+		slog.Debug(
+			"failed to construct resource manager for local runtime status check",
+			"error", err,
+		)
+
 		return nil
 	}
 
-	vmStatus, err := localruntime.NewMacVMRuntime(deployment, manager).Status(ctx)
+	selectedRuntime, err := newLocalRuntime(deployment, manager)
 	if err != nil {
-		slog.Debug("local VM status check failed", "error", err)
+		slog.Debug("failed to select local runtime for status check", "error", err)
+		return nil
+	}
+	runtimeStatus, err := selectedRuntime.Status(ctx)
+	if err != nil {
+		slog.Debug("local runtime status check failed", "error", err)
 		return nil
 	}
 
-	if !vmStatus.Running {
-		slog.Debug("local VM is not running")
+	if !runtimeStatus.Running {
+		slog.Debug("local runtime is not running")
 
 		return &StatusOutput{
 			Status:  StatusStopped,
