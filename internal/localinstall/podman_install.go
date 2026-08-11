@@ -55,13 +55,7 @@ func NewPodmanInstall(
 ) *PodmanInstall {
 	directEnvironment := NewDirectExecutionEnvironment(runtimeExec)
 	resolveImage := func(ctx context.Context) (RuntimePath, error) {
-		if override := strings.TrimSpace(os.Getenv(nanoImageOverridePathEnv)); override != "" {
-			return IdentityRuntimePath(override), nil
-		}
-		if manager == nil {
-			return RuntimePath{}, errors.New("nano runtime artifact manager is required")
-		}
-		path, err := manager.Request(ctx, exasolNanoImageResourceID)
+		path, err := ResolveNanoImage(ctx, manager)
 		if err != nil {
 			return RuntimePath{}, err
 		}
@@ -76,6 +70,23 @@ func NewPodmanInstall(
 		IdentityRuntimePath(slcStagingDir),
 		IdentityRuntimePath(slcStatusPath),
 	)
+}
+
+// ResolveNanoImage materializes the platform-specific image archive on the host.
+// Runtimes that execute Podman elsewhere can stage and map this host path before
+// passing it back to PodmanInstall.
+func ResolveNanoImage(
+	ctx context.Context,
+	manager *runtimeartifacts.Manager,
+) (string, error) {
+	if override := strings.TrimSpace(os.Getenv(nanoImageOverridePathEnv)); override != "" {
+		return override, nil
+	}
+	if manager == nil {
+		return "", errors.New("nano runtime artifact manager is required")
+	}
+
+	return manager.Request(ctx, exasolNanoImageResourceID)
 }
 
 func NewPodmanInstallWithEnvironment(
@@ -107,12 +118,30 @@ func (install *PodmanInstall) Start(
 	if err != nil {
 		return err
 	}
+	migrationMode := overlayMigrationIfNeeded
+	if len(startConfig.LegacyContainerNames) > 0 {
+		legacyContainerAdopted, adoptErr := install.adoptLegacyContainerName(
+			ctx, out, outErr, containerName, startConfig.LegacyContainerNames,
+		)
+		if adoptErr != nil {
+			return adoptErr
+		}
+		if legacyContainerAdopted {
+			migrationMode = overlayMigrationRequired
+		}
+	}
 	containerStatus, err := install.inspectContainerStatus(ctx, outErr, containerName)
 	if err != nil {
 		return err
 	}
 	migrated, err := install.migrateOverlayDataIfNeeded(
-		ctx, out, outErr, containerName, startConfig.DataDir, containerStatus,
+		ctx,
+		out,
+		outErr,
+		containerName,
+		startConfig.DataDir,
+		containerStatus,
+		migrationMode,
 	)
 	if err != nil {
 		return err
@@ -245,6 +274,50 @@ func (install *PodmanInstall) Status(
 
 func (install *PodmanInstall) Destroy(ctx context.Context, out, outErr io.Writer) error {
 	return install.Stop(ctx, out, outErr)
+}
+
+func (install *PodmanInstall) adoptLegacyContainerName(
+	ctx context.Context,
+	out, outErr io.Writer,
+	containerName string,
+	legacyNames []string,
+) (bool, error) {
+	exists, err := install.containerExists(ctx, outErr, containerName)
+	if err != nil || exists {
+		return false, err
+	}
+	for _, legacyName := range legacyNames {
+		legacyName = strings.TrimSpace(legacyName)
+		if legacyName == "" || legacyName == containerName {
+			continue
+		}
+		exists, err := install.containerExists(ctx, outErr, legacyName)
+		if err != nil {
+			return false, err
+		}
+		if !exists {
+			continue
+		}
+		if err := install.runPodman(
+			ctx, out, outErr, "rename", legacyName, containerName,
+		); err != nil {
+			return false, install.failureWithDiagnostics(
+				ctx,
+				outErr,
+				legacyName,
+				fmt.Errorf(
+					"failed to adopt legacy Nano container %s as %s: %w",
+					legacyName,
+					containerName,
+					err,
+				),
+			)
+		}
+
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (install *PodmanInstall) failureWithDiagnostics(
@@ -504,7 +577,7 @@ func (install *PodmanInstall) runPodmanOutput(
 	return stdout.String(), err
 }
 
-func getContainerName(deployment config.DeploymentDir) (string, error) {
+func ContainerName(deployment config.DeploymentDir) (string, error) {
 	launcherState, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {
 		return "", err
@@ -515,4 +588,8 @@ func getContainerName(deployment config.DeploymentDir) (string, error) {
 	}
 
 	return "exasol-db-" + deploymentID, nil
+}
+
+func getContainerName(deployment config.DeploymentDir) (string, error) {
+	return ContainerName(deployment)
 }

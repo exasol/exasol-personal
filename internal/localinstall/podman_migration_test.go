@@ -62,6 +62,43 @@ func TestPodmanInstallStart_MigratesLegacyOverlayDataAtomically(t *testing.T) {
 	assertNoMigrationStagingDirs(t, startConfig.DataDir)
 }
 
+func TestPodmanInstallStart_AdoptsAndMigratesLegacyNamedVolumeContainer(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	startConfig.LegacyContainerNames = []string{"exasol-local-db"}
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "legacy-name"), "exasol-local-db")
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "cp-source", "exasol.conf"), "migrated")
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "cp-source", "storage", "data"), "payload")
+
+	if err := install.Start(context.Background(), nil, nil, startConfig); err != nil {
+		t.Fatalf("expected legacy named-volume migration to succeed: %v", err)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	wantPrefix := []string{
+		"<podman><container><exists><" + testContainerName + ">",
+		"<podman><container><exists><exasol-local-db>",
+		"<podman><rename><exasol-local-db><" + testContainerName + ">",
+		"<podman><container><exists><" + testContainerName + ">",
+		"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+		"<podman><container><inspect><--format><{{json .Mounts}}><" + testContainerName + ">",
+		"<podman><stop><" + testContainerName + ">",
+	}
+	if len(commands) < len(wantPrefix)+2 {
+		t.Fatalf("expected adoption and migration commands, got %#v", commands)
+	}
+	for index, expected := range wantPrefix {
+		if commands[index] != expected {
+			t.Fatalf("command %d = %q, want %q", index, commands[index], expected)
+		}
+	}
+	content, err := os.ReadFile(filepath.Join(startConfig.DataDir, "storage", "data"))
+	if err != nil || string(content) != "payload" {
+		t.Fatalf("expected migrated named-volume data, got %q, %v", content, err)
+	}
+}
+
 func TestPodmanInstallStart_RefusesToOverwritePopulatedMigrationDestination(t *testing.T) {
 	t.Parallel()
 	skipPodmanInstallTestOnWindows(t)
