@@ -529,29 +529,6 @@ func installedFlavors(deployment config.DeploymentDir) (map[string]bool, error) 
 	return installed, nil
 }
 
-// A custom SLC also names its staged package, because it exists on no registry.
-func localRunnerSlcArgs(deployment config.DeploymentDir) ([]string, error) {
-	state, err := config.ReadExasolPersonalState(deployment)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read installed SLCs: %w", err)
-	}
-
-	const argsPerSLC = 4
-	total := len(state.InstalledSLCs) + len(state.InstalledCustomSLCs)
-	args := make([]string, 0, total*argsPerSLC)
-	for _, installed := range state.InstalledSLCs {
-		args = append(args, "--slc", installed.Image+"="+installed.Target)
-	}
-	for _, custom := range state.InstalledCustomSLCs {
-		args = append(args,
-			"--slc", custom.Image+"="+custom.Target,
-			"--slc-package", custom.Image+"="+custom.Package,
-		)
-	}
-
-	return args, nil
-}
-
 // applySLCChange (re)starts the local database so a changed SLC set takes effect. Success
 // is verified through the readiness wait inside Start: startup fails, and the database never
 // becomes ready, if an image cannot be pulled or two SLCs collide, so a successful start
