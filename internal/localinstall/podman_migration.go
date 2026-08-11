@@ -16,11 +16,19 @@ type podmanMount struct {
 	Destination string `json:"Destination"`
 }
 
+type overlayMigrationMode int
+
+const (
+	overlayMigrationIfNeeded overlayMigrationMode = iota
+	overlayMigrationRequired
+)
+
 func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	ctx context.Context,
 	out, outErr io.Writer,
 	containerName, dataDir string,
 	containerStatus podmanContainerStatus,
+	migrationMode overlayMigrationMode,
 ) (bool, error) {
 	if !containerStatus.Exists {
 		return false, nil
@@ -29,7 +37,7 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	if err != nil {
 		return false, install.failureWithDiagnostics(ctx, outErr, containerName, err)
 	}
-	if hasMount {
+	if hasMount && migrationMode != overlayMigrationRequired {
 		return false, nil
 	}
 
