@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
@@ -68,24 +69,23 @@ func TestDiagnoseLocalUnsafe_VMRunningReportsPortsAndHealth(t *testing.T) {
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	healthJSON := `{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}`
+	healthJSON := `{"ports":{"db":{"state":"blocked"}}}`
 	manager := writeFakeCombinedRunner(t, `{"running":true}`, healthJSON)
-	writeFakeVMState(t, deployment, "192.168.64.5", 20022, 28563, 0)
+	writeFakeVMState(t, deployment, 28563)
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
 
 	diagnostics := diagnoseLocalUnsafe(
-		context.Background(), localruntime.NewMacVMRuntime(deployment, manager),
+		ctx, localruntime.NewMacVMRuntime(deployment, manager),
 	)
 
 	if diagnostics.VMRunning == nil || !*diagnostics.VMRunning {
 		t.Fatalf("expected VMRunning to be true, got %+v", diagnostics)
 	}
-	if diagnostics.GuestIP != "192.168.64.5" {
-		t.Fatalf("expected guest IP to be reported, got %q", diagnostics.GuestIP)
-	}
-	if diagnostics.Ports["ssh"] != 20022 || diagnostics.Ports["db"] != 28563 {
+	if diagnostics.Ports["db"] != 28563 {
 		t.Fatalf("expected bound host ports to be reported, got %+v", diagnostics.Ports)
 	}
-	if diagnostics.PortHealth["ssh"] != "reachable" || diagnostics.PortHealth["db"] != "blocked" {
+	if diagnostics.PortHealth["db"] != "blocked" {
 		t.Fatalf("expected per-port health to be reported, got %+v", diagnostics.PortHealth)
 	}
 	if diagnostics.DatabaseReady == nil {
@@ -101,9 +101,11 @@ func TestDiagnoseLocalUnsafe_VMRunningMatchesRunningState_NoWarning(t *testing.T
 	ensureLocalRuntimeWorkDir(t, deployment)
 	manager := writeFakeCombinedRunner(t, `{"running":true}`, `{"ports":{}}`)
 	writeFakeWorkflowState(t, deployment, &config.WorkflowStateRunning{})
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
 
 	diagnostics := diagnoseLocalUnsafe(
-		context.Background(),
+		ctx,
 		localruntime.NewMacVMRuntime(deployment, manager),
 	)
 
@@ -124,9 +126,11 @@ func TestDiagnoseLocalUnsafe_VMRunningButStateNotRunning_Warning(t *testing.T) {
 		Error:                      "boom",
 		InterruptedDuringOperation: "start",
 	})
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
 
 	diagnostics := diagnoseLocalUnsafe(
-		context.Background(),
+		ctx,
 		localruntime.NewMacVMRuntime(deployment, manager),
 	)
 
@@ -142,7 +146,10 @@ func TestDiagnoseLocalUnsafe_VMRunningButStateNotRunning_Warning(t *testing.T) {
 func writeFakeWorkflowState(t *testing.T, deployment config.DeploymentDir, state any) {
 	t.Helper()
 
-	exasolState := &config.ExasolPersonalState{}
+	exasolState, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		t.Fatalf("failed to read fake workflow state: %v", err)
+	}
 	if err := exasolState.SetWorkflowStateAndWrite(state, deployment); err != nil {
 		t.Fatalf("failed to write fake workflow state: %v", err)
 	}
@@ -151,19 +158,16 @@ func writeFakeWorkflowState(t *testing.T, deployment config.DeploymentDir, state
 func writeFakeVMState(
 	t *testing.T,
 	deployment config.DeploymentDir,
-	vmIP string,
-	sshPort, dbPort, uiPort int,
+	dbPort int,
 ) {
 	t.Helper()
 
 	paths := newLocalRuntimeTestPaths(deployment)
 	data, err := json.Marshal(map[string]any{
-		"vm_name": "exasol-local-vm",
-		"vm_ip":   vmIP,
-		"ports": map[string]any{
-			"ssh": sshPort,
-			"db":  dbPort,
-			"ui":  uiPort,
+		"vm_name":    "exasol-local-vm",
+		"shared_dir": "./vm-shared",
+		"forwards": map[string]any{
+			"db": map[string]any{"guest_port": 8563, "host_port": dbPort},
 		},
 	})
 	if err != nil {

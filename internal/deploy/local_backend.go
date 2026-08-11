@@ -17,7 +17,6 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/remote"
 	"github.com/exasol/exasol-personal/internal/util"
 	"gopkg.in/yaml.v3"
 )
@@ -38,7 +37,6 @@ const (
 	localDefaultDataSizeGB    = 100
 	localDeploymentBackend    = "local"
 	localDeploymentPublicHost = "127.0.0.1"
-	localSSHUser              = "root"
 	localDBUser               = "sys"
 	localDBPassword           = "exasol"
 	localManifestFileMode     = 0o600
@@ -422,15 +420,7 @@ func (b *localBackend) OpenHostShell(
 	ctx context.Context,
 	_ string,
 ) error {
-	if b.goos == localLinuxOS {
-		return errors.New("host shell is not supported for Linux host Podman local deployments")
-	}
-	sshRemote, err := localSSHRemoteUnsafe(b.deployment)
-	if err != nil {
-		return err
-	}
-
-	if err := sshRemote.Shell(ctx, os.Stdout, os.Stderr); err != nil {
+	if err := b.runtime.OpenHostShell(ctx, os.Stdin, os.Stdout, os.Stderr); err != nil {
 		return diagnoseLocalFailure(ctx, b.runtime, err)
 	}
 
@@ -438,79 +428,11 @@ func (b *localBackend) OpenHostShell(
 }
 
 func (b *localBackend) OpenCOSShell(ctx context.Context) error {
-	if b.goos == localLinuxOS {
-		return errors.New(
-			"container shell is not supported for Linux host Podman local deployments",
-		)
-	}
-	sshRemote, err := localSSHRemoteUnsafe(b.deployment)
-	if err != nil {
-		return err
-	}
-
-	command, err := localContainerShellCommand()
-	if err != nil {
-		return err
-	}
-
-	if err := sshRemote.RunInteractiveCommand(ctx, command, os.Stdout, os.Stderr); err != nil {
+	if err := b.runtime.OpenContainerShell(ctx, os.Stdin, os.Stdout, os.Stderr); err != nil {
 		return diagnoseLocalFailure(ctx, b.runtime, err)
 	}
 
 	return nil
-}
-
-func localContainerShellCommand() (string, error) {
-	return readLocalInfrastructureAsset(localContainerShellScriptAssetPath)
-}
-
-// localSSHRemoteUnsafe follows the deploy package convention that Unsafe helpers
-// must only be called from code that already owns the required deployment lock.
-// It does not mean the SSH connection skips additional security checks.
-func localSSHRemoteUnsafe(deployment config.DeploymentDir) (*remote.SSHRemote, error) {
-	options, err := localSSHConnectionOptions(deployment)
-	if err != nil {
-		return nil, err
-	}
-
-	return remote.NewSshRemote(options), nil
-}
-
-func localSSHConnectionOptions(
-	deployment config.DeploymentDir,
-) (*remote.SSHConnectionOptions, error) {
-	info, err := config.ReadDeploymentInfo(deployment)
-	if err != nil {
-		return nil, err
-	}
-	if info.Connection == nil {
-		return nil, errors.New("local connection details are missing")
-	}
-
-	host := strings.TrimSpace(info.Connection.Host)
-	if host == "" {
-		host = strings.TrimSpace(info.Connection.PublicIp)
-	}
-	if host == "" {
-		host = localDeploymentPublicHost
-	}
-	sshPort := strings.TrimSpace(info.Connection.SSHPort)
-	if sshPort == "" {
-		return nil, errors.New("local SSH port is missing")
-	}
-
-	keyPath := localruntime.DefaultVMPrivateKeyPath(deployment)
-	keyData, err := os.ReadFile(keyPath)
-	if err != nil {
-		return nil, fmt.Errorf("%w: could not read SSH key file %s", err, keyPath)
-	}
-
-	return &remote.SSHConnectionOptions{
-		Host: host,
-		User: localSSHUser,
-		Port: sshPort,
-		Key:  keyData,
-	}, nil
 }
 
 type localRuntimeConfig struct {

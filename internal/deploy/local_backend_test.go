@@ -8,11 +8,11 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
@@ -582,8 +582,11 @@ func TestLocalBackendConfigure_LinuxIgnoresVMSizingOverrides(t *testing.T) {
 func TestLocalBackend_LinuxShellsAreUnsupported(t *testing.T) {
 	t.Parallel()
 
+	deployment := config.NewDeploymentDir(t.TempDir())
 	backend := newLocalBackendForPlatform(
-		config.NewDeploymentDir(t.TempDir()), &presets.InfrastructureManifest{}, nil,
+		deployment,
+		&presets.InfrastructureManifest{},
+		localruntime.NewHostLinuxRuntime(deployment, nil),
 		localLinuxOS, localLinuxAMD64,
 	)
 	if err := backend.OpenHostShell(context.Background(), ""); err == nil ||
@@ -593,83 +596,6 @@ func TestLocalBackend_LinuxShellsAreUnsupported(t *testing.T) {
 	if err := backend.OpenCOSShell(context.Background()); err == nil ||
 		!strings.Contains(err.Error(), "container shell is not supported") {
 		t.Fatalf("expected explicit Linux container shell error, got %v", err)
-	}
-}
-
-func TestLocalSSHConnectionOptions_UsesConnectionMetadataWithoutNodes(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	keyData := []byte("fake private key")
-	keyPath := newLocalRuntimeTestPaths(deployment).PrivateKeyPath
-	if err := os.MkdirAll(filepath.Dir(keyPath), 0o750); err != nil {
-		t.Fatalf("failed to create key directory: %v", err)
-	}
-	if err := os.WriteFile(keyPath, keyData, 0o600); err != nil {
-		t.Fatalf("failed to write key file: %v", err)
-	}
-	if err := config.WriteDeploymentInfo(deployment.Root(), &config.DeploymentInfo{
-		Backend:      localDeploymentBackend,
-		DeploymentId: "local-test",
-		Connection: &config.DeploymentConnection{
-			Host:    "127.0.0.1",
-			DBPort:  28563,
-			SSHPort: "20022",
-		},
-	}); err != nil {
-		t.Fatalf("failed to write deployment info: %v", err)
-	}
-
-	// When
-	options, err := localSSHConnectionOptions(deployment)
-	// Then
-	if err != nil {
-		t.Fatalf("expected local SSH options, got %v", err)
-	}
-	if options.Host != "127.0.0.1" {
-		t.Fatalf("expected host %q, got %q", "127.0.0.1", options.Host)
-	}
-	if options.Port != "20022" {
-		t.Fatalf("expected port %q, got %q", "20022", options.Port)
-	}
-	if options.User != "root" {
-		t.Fatalf("expected user %q, got %q", "root", options.User)
-	}
-	if string(options.Key) != string(keyData) {
-		t.Fatal("expected SSH key data to be read from local runtime path")
-	}
-}
-
-func TestLocalContainerShellCommand_UsesMountedContainerRootfs(t *testing.T) {
-	t.Parallel()
-
-	// Given / When
-	command, err := localContainerShellCommand()
-	// Then
-	if err != nil {
-		t.Fatalf("expected local shell command to render, got error: %v", err)
-	}
-	if strings.Contains(command, "doas") {
-		t.Fatalf("expected local shell command to avoid doas, got %q", command)
-	}
-	if strings.Contains(command, "podman exec") {
-		t.Fatalf("expected local shell command not to probe container shells, got %q", command)
-	}
-	if !strings.Contains(command, "podman mount") {
-		t.Fatalf(
-			"expected local shell command to fall back to mounted container rootfs, got %q",
-			command,
-		)
-	}
-	if !strings.Contains(command, "nsenter") {
-		t.Fatalf("expected local shell command to enter container namespaces, got %q", command)
-	}
-	if !strings.Contains(command, "exasol-local-db") {
-		t.Fatalf("expected local shell command to target exasol-local-db, got %q", command)
-	}
-	if strings.Contains(command, "container_name=container") {
-		t.Fatalf("expected no generic container fallback, got %q", command)
 	}
 }
 

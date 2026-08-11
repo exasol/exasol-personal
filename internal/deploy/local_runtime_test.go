@@ -120,12 +120,10 @@ func TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets(t *tes
 	deployment := newTestDeploymentWithState(t)
 	endpoint := &localruntime.VMRuntimeEndpoint{
 		RuntimeEndpoint: localruntime.RuntimeEndpoint{
-			DBPort: localTestDatabasePort,
-			UIPort: 28443,
+			DBPort:         localTestDatabasePort,
+			UIPort:         28443,
+			ShellSupported: true,
 		},
-		VMIP:                   "192.168.64.2",
-		SSHPort:                localTestSSHForwardedPort,
-		PrivateKeyRelativePath: "local/node_access.pem",
 	}
 
 	// When
@@ -162,12 +160,11 @@ func TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets(t *tes
 	if !info.Connection.InsecureSkipCertValidation {
 		t.Fatal("expected insecure cert validation flag for local deployment")
 	}
-	if info.Connection.SSHPort != "20022" {
-		t.Fatalf("expected SSH port %q, got %q", "20022", info.Connection.SSHPort)
+	if !info.Connection.ShellSupported {
+		t.Fatal("expected runtime-provided shell support")
 	}
-	expectedSSHCommand := "ssh -i local/node_access.pem root@127.0.0.1 -p 20022"
-	if info.Connection.SSHCommand != expectedSSHCommand {
-		t.Fatalf("expected SSH command %q, got %q", expectedSSHCommand, info.Connection.SSHCommand)
+	if info.Connection.SSHPort != "" || info.Connection.SSHCommand != "" {
+		t.Fatalf("expected no SSH transport metadata, got %#v", info.Connection)
 	}
 
 	secrets, err := config.ReadSecrets(deployment)
@@ -189,11 +186,10 @@ func TestWriteLocalDeploymentArtifacts_OmitsLocalOnlyCloudMetadataInJSON(t *test
 	deployment := newTestDeploymentWithState(t)
 	endpoint := &localruntime.VMRuntimeEndpoint{
 		RuntimeEndpoint: localruntime.RuntimeEndpoint{
-			DBPort: localTestDatabasePort,
-			UIPort: 28443,
+			DBPort:         localTestDatabasePort,
+			UIPort:         28443,
+			ShellSupported: true,
 		},
-		SSHPort:                localTestSSHForwardedPort,
-		PrivateKeyRelativePath: "local/node_access.pem",
 	}
 
 	// When
@@ -222,6 +218,12 @@ func TestWriteLocalDeploymentArtifacts_OmitsLocalOnlyCloudMetadataInJSON(t *test
 	}
 	if _, exists := connection["uiPort"]; exists {
 		t.Fatalf("expected local deployment JSON to omit uiPort, got %s", string(data))
+	}
+	if _, exists := connection["sshPort"]; exists {
+		t.Fatalf("expected local deployment JSON to omit sshPort, got %s", string(data))
+	}
+	if _, exists := connection["sshCommand"]; exists {
+		t.Fatalf("expected local deployment JSON to omit sshCommand, got %s", string(data))
 	}
 }
 
@@ -336,7 +338,13 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 	if err := os.MkdirAll(paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime work dir: %v", err)
 	}
-	manager := newTestManagerForRunner(t, []byte("#!/bin/sh\nexit 0\n"))
+	manager := newTestManagerForRunner(t, []byte(`#!/bin/sh
+case "$1" in
+  status) printf '{"running":false}\n' ;;
+  stop) exit 0 ;;
+  *) exit 2 ;;
+esac
+`))
 	if err := config.WriteDeploymentInfo(deployment.Root(), &config.DeploymentInfo{
 		Backend:         localDeploymentBackend,
 		DeploymentId:    localTestDeploymentID,
@@ -345,9 +353,8 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 		ClusterSize:     1,
 		InstanceType:    "exasol-local",
 		Connection: &config.DeploymentConnection{
-			Host:    localDeploymentPublicHost,
-			DBPort:  localTestDatabasePort,
-			SSHPort: "20022",
+			Host:   localDeploymentPublicHost,
+			DBPort: localTestDatabasePort,
 		},
 	}); err != nil {
 		t.Fatalf("failed to write deployment info: %v", err)
@@ -425,6 +432,24 @@ func (*endpointRuntimeStub) HealthCheck(
 	context.Context,
 ) (*localruntime.HealthCheckResult, error) {
 	return nil, errors.New("not implemented")
+}
+
+func (*endpointRuntimeStub) OpenHostShell(
+	context.Context,
+	io.Reader,
+	io.Writer,
+	io.Writer,
+) error {
+	return localruntime.ErrHostShellUnsupported
+}
+
+func (*endpointRuntimeStub) OpenContainerShell(
+	context.Context,
+	io.Reader,
+	io.Writer,
+	io.Writer,
+) error {
+	return localruntime.ErrContainerShellUnsupported
 }
 
 func newTestDeploymentWithVersionCheckState(

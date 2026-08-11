@@ -50,6 +50,23 @@ const (
 	exasolLocalRunnerResourceID = "exasol-local-runner"
 )
 
+const containerShellScript = `set -eu
+container_name=$1
+if ! podman container exists "$container_name"; then
+    printf 'Exasol Local database container not found\n' >&2
+    podman ps -a >&2
+    exit 125
+fi
+rootfs=$(podman mount "$container_name")
+pid=$(podman inspect "$container_name" --format '{{.State.Pid}}')
+printf 'Nano does not include a shell; using the VM shell from the container rootfs.\n'
+printf 'Container rootfs: %s\n' "$rootfs"
+cd "$rootfs"
+if [ -n "$pid" ] && [ "$pid" != 0 ]; then
+    exec nsenter --target "$pid" --uts --ipc --net /bin/sh
+fi
+exec /bin/sh`
+
 //nolint:tagliatelle // Runner state JSON keys are defined by the runner contract.
 type runnerForwardState struct {
 	GuestPort int `json:"guest_port"`
@@ -220,6 +237,47 @@ func (runtime *MacVMRuntime) HealthCheck(ctx context.Context) (*HealthCheckResul
 	return runnerCommandJSON[HealthCheckResult](ctx, runtime, "health-check")
 }
 
+func (runtime *MacVMRuntime) OpenHostShell(
+	ctx context.Context,
+	stdin io.Reader,
+	stdout, stderr io.Writer,
+) error {
+	runnerPath, err := runtime.resolveRunnerPath(ctx)
+	if err != nil {
+		return err
+	}
+
+	return runtime.runInteractiveRunnerCommand(
+		ctx, runnerPath, []string{"run"}, stdin, stdout, stderr,
+	)
+}
+
+func (runtime *MacVMRuntime) OpenContainerShell(
+	ctx context.Context,
+	stdin io.Reader,
+	stdout, stderr io.Writer,
+) error {
+	containerName, err := localinstall.ContainerName(runtime.deployment)
+	if err != nil {
+		return err
+	}
+	runnerPath, err := runtime.resolveRunnerPath(ctx)
+	if err != nil {
+		return err
+	}
+
+	return runtime.runInteractiveRunnerCommand(
+		ctx,
+		runnerPath,
+		[]string{
+			"run", "--tty", "--", "sh", "-c", containerShellScript, "sh", containerName,
+		},
+		stdin,
+		stdout,
+		stderr,
+	)
+}
+
 func runnerCommandJSON[T any](
 	ctx context.Context,
 	runtime *MacVMRuntime,
@@ -298,7 +356,9 @@ func (runtime *MacVMRuntime) stopVM(
 	runnerPath string,
 	out, outErr io.Writer,
 ) error {
-	if err := runtime.runnerCommand(ctx, runnerPath, []string{"stop"}, out, outErr); err != nil {
+	if err := runtime.runnerCommand(
+		ctx, runnerPath, []string{"stop"}, out, outErr,
+	); err != nil {
 		return err
 	}
 
@@ -365,8 +425,7 @@ func (runtime *MacVMRuntime) install(
 		)
 		if err := materializeFileAtomically(sourcePath, hostPath); err != nil {
 			return localinstall.RuntimePath{}, fmt.Errorf(
-				"failed to stage Nano image for VM: %w",
-				err,
+				"failed to stage Nano image for VM: %w", err,
 			)
 		}
 
@@ -397,7 +456,8 @@ func materializeFileAtomically(sourcePath, targetPath string) error {
 	}
 	if targetInfo, statErr := os.Stat(targetPath); statErr == nil &&
 		targetInfo.Size() == sourceInfo.Size() &&
-		targetInfo.ModTime().Equal(sourceInfo.ModTime()) {
+		targetInfo.ModTime().Equal(sourceInfo.ModTime()) &&
+		targetInfo.Mode().Perm() == artifactFileMode {
 		return nil
 	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
 		return fmt.Errorf("failed to inspect staged artifact %s: %w", targetPath, statErr)
@@ -494,7 +554,7 @@ func runtimeEndpointFromRunnerState(state *runnerState) (*RuntimeEndpoint, error
 		return nil, err
 	}
 
-	return &RuntimeEndpoint{DBPort: forward.HostPort}, nil
+	return &RuntimeEndpoint{DBPort: forward.HostPort, ShellSupported: true}, nil
 }
 
 func (runtime *MacVMRuntime) resolveRunnerPath(ctx context.Context) (string, error) {
@@ -671,6 +731,25 @@ func (runtime *MacVMRuntime) runRunnerCommand(
 	}
 
 	return stdout.String(), nil
+}
+
+func (runtime *MacVMRuntime) runInteractiveRunnerCommand(
+	ctx context.Context,
+	runnerPath string,
+	args []string,
+	stdin io.Reader,
+	stdout, stderr io.Writer,
+) error {
+	cmd := exec.CommandContext(ctx, runnerPath, args...)
+	cmd.Dir = runtime.paths.WorkDir
+	cmd.Stdin = stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("local runner command %q failed: %w", args[0], err)
+	}
+
+	return nil
 }
 
 func (runtime *MacVMRuntime) waitForDaemonExit(ctx context.Context) error {

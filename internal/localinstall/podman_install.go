@@ -297,7 +297,7 @@ func (install *PodmanInstall) adoptLegacyContainerName(
 		if !exists {
 			continue
 		}
-		if err := install.runCmd(
+		if err := install.runPodman(
 			ctx, out, outErr, "rename", legacyName, containerName,
 		); err != nil {
 			return false, install.failureWithDiagnostics(

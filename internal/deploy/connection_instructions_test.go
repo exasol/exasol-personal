@@ -138,7 +138,6 @@ func TestRenderConnectionInstructionsText_OmitsAdminUIWhenMetadataMissing(t *tes
 			DBPort:          28563,
 			Username:        "sys",
 			SecretsFilePath: "/deployment/secrets.json",
-			SSHCommand:      "ssh -i key exasol@127.0.0.1 -p 20022",
 			ShellSupported:  true,
 		},
 	}
@@ -160,6 +159,9 @@ func TestRenderConnectionInstructionsText_OmitsAdminUIWhenMetadataMissing(t *tes
 	}
 	if !strings.Contains(content, "Host Shell Instructions") {
 		t.Fatalf("expected shell instructions to be preserved, got %q", content)
+	}
+	if strings.Contains(content, "Alternative:") {
+		t.Fatalf("expected empty transport alternative to be omitted, got %q", content)
 	}
 	if strings.Contains(content, "container shell") {
 		t.Fatalf("expected container shell instructions to be omitted, got %q", content)

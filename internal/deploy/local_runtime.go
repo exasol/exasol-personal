@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -301,22 +300,8 @@ func writeLocalDeploymentArtifacts(
 			DBPort:                     endpoint.DBPort,
 			Username:                   localDBUser,
 			InsecureSkipCertValidation: true,
+			ShellSupported:             endpoint.ShellSupported,
 		},
-	}
-	if endpoint.SSHPort > 0 {
-		if strings.TrimSpace(endpoint.PrivateKeyRelativePath) == "" {
-			return errors.New("local runtime SSH endpoint is missing its private key path")
-		}
-		sshPort := strconv.Itoa(endpoint.SSHPort)
-		info.Connection.SSHPort = sshPort
-		info.Connection.SSHCommand = fmt.Sprintf(
-			"ssh -i %s %s@%s -p %s",
-			endpoint.PrivateKeyRelativePath,
-			localSSHUser,
-			localDeploymentPublicHost,
-			sshPort,
-		)
-		info.Connection.ShellSupported = true
 	}
 	if err := config.WriteDeploymentInfo(deployment.Root(), info); err != nil {
 		return err

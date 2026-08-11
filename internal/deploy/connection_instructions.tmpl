@@ -53,14 +53,18 @@ To connect using the CLI:
 === Host Shell Instructions ===
   Local endpoint: {{ .DisplayHostname }}
   Host shell (VM OS): exasol shell host
+{{ if .SSHCommand -}}
   Alternative: {{ .SSHCommand }}
+{{ end -}}
 
 Note: exasol destroy deletes the local VM disk/data and launcher-managed share for this deployment.
 {{ else }}
 === SSH Connection Instructions ===
   Public IP: {{ .PublicIp }}
   Host shell (OS): exasol shell host
+{{ if .SSHCommand -}}
   Alternative: {{ .SSHCommand }}
+{{ end -}}
 {{ end }}{{ end }}
 {{- end }}
 
