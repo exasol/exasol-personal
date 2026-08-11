@@ -24,9 +24,9 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 	"github.com/exasol/exasol-personal/internal/util"
-	"github.com/exasol/exasol-personal/internal/version_check"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -128,16 +128,12 @@ func (runtime *MacVMRuntime) Start(
 	}
 
 	args := []string{"start"}
-	versionCheckArgs, err := localRunnerVersionCheckArgs(runtime.Deployment())
+	versionCheckArgs, err := localRunnerVersionCheckArgs(runtimeConfig.VersionCheck)
 	if err != nil {
 		return err
 	}
 	args = append(args, versionCheckArgs...)
-	slcArgs, err := localRunnerSlcArgs(runtime.Deployment())
-	if err != nil {
-		return err
-	}
-	args = append(args, slcArgs...)
+	args = append(args, localRunnerSlcArgs(runtimeConfig.SLCs)...)
 	if runtimeConfig.Ports != "" {
 		args = append(args, "--ports", runtimeConfig.Ports)
 	}
@@ -155,49 +151,35 @@ func (runtime *MacVMRuntime) Start(
 	return runtime.runnerCommand(ctx, runnerPath, args, out, outErr)
 }
 
-func localRunnerVersionCheckArgs(deployment config.DeploymentDir) ([]string, error) {
-	launcherState, err := config.ReadExasolPersonalState(deployment)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read local version-check settings: %w", err)
-	}
-
-	if !launcherState.VersionCheckEnabled {
+func localRunnerVersionCheckArgs(versionCheck localinstall.VersionCheckConfig) ([]string, error) {
+	if !versionCheck.Enabled {
 		return []string{"--version-check-enabled=false"}, nil
 	}
 
-	clusterIdentity := strings.TrimSpace(launcherState.ClusterIdentity)
+	clusterIdentity := strings.TrimSpace(versionCheck.Identity)
 	if clusterIdentity == "" {
 		return nil, errors.New("deployment state is missing cluster identity")
 	}
 
 	return []string{
 		"--version-check-enabled=true",
-		"--version-check-url", version_check.GetVersionCheckURL(),
+		"--version-check-url", versionCheck.URL,
 		"--version-check-identity", clusterIdentity,
 	}, nil
 }
 
 // A custom SLC also names its staged package, because it exists on no registry.
-func localRunnerSlcArgs(deployment config.DeploymentDir) ([]string, error) {
-	state, err := config.ReadExasolPersonalState(deployment)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read installed SLCs: %w", err)
-	}
-
+func localRunnerSlcArgs(slcs []localinstall.SLCConfig) []string {
 	const argsPerSLC = 4
-	total := len(state.InstalledSLCs) + len(state.InstalledCustomSLCs)
-	args := make([]string, 0, total*argsPerSLC)
-	for _, installed := range state.InstalledSLCs {
-		args = append(args, "--slc", installed.Image+"="+installed.Target)
-	}
-	for _, custom := range state.InstalledCustomSLCs {
-		args = append(args,
-			"--slc", custom.Image+"="+custom.Target,
-			"--slc-package", custom.Image+"="+custom.Package,
-		)
+	args := make([]string, 0, len(slcs)*argsPerSLC)
+	for _, slc := range slcs {
+		args = append(args, "--slc", slc.Image+"="+slc.Target)
+		if slc.Package != "" {
+			args = append(args, "--slc-package", slc.Image+"="+slc.Package)
+		}
 	}
 
-	return args, nil
+	return args
 }
 
 func (runtime *MacVMRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
