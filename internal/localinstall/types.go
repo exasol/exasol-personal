@@ -12,6 +12,22 @@ type StartConfig struct {
 	ContainerDBPort int
 	DataDir         string
 	InitParams      []string
+	VersionCheck    VersionCheckConfig
+	SLCs            []SLCConfig
+}
+
+type VersionCheckConfig struct {
+	Enabled         bool
+	URL             string
+	Identity        string
+	OperatingSystem string
+	IntervalSeconds int
+}
+
+type SLCConfig struct {
+	Image   string
+	Target  string
+	Package string
 }
 
 type LocalInstall interface {

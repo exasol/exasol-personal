@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
@@ -42,7 +43,10 @@ func startPreparedLocalRuntime(
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
-	localConfig := toLocalRuntimeConfig(runtimeConfig)
+	localConfig, err := toLocalRuntimeConfig(runtime.Deployment(), runtimeConfig)
+	if err != nil {
+		return err
+	}
 	if err := runtime.Start(ctx, out, outErr, localConfig); err != nil {
 		return diagnoseLocalFailure(ctx, runtime, err)
 	}
@@ -163,15 +167,51 @@ func destroyLocalRuntime(
 	return nil
 }
 
-func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.VMConfig {
+func toLocalRuntimeConfig(
+	deployment config.DeploymentDir,
+	runtimeConfig localRuntimeConfig,
+) (localruntime.VMConfig, error) {
+	state, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return localruntime.VMConfig{}, fmt.Errorf("failed to read local startup settings: %w", err)
+	}
+	versionDetails := GetVersionCheckDetails(deployment)
+	versionCheck := localinstall.VersionCheckConfig{
+		Enabled:         state.VersionCheckEnabled,
+		URL:             versionDetails.URL,
+		Identity:        strings.TrimSpace(state.ClusterIdentity),
+		OperatingSystem: versionDetails.OperatingSystem,
+	}
+	if versionCheck.Enabled && versionCheck.Identity == "" {
+		return localruntime.VMConfig{}, errors.New("deployment state is missing cluster identity")
+	}
+
+	totalSLCs := len(state.InstalledSLCs) + len(state.InstalledCustomSLCs)
+	slcs := make([]localinstall.SLCConfig, 0, totalSLCs)
+	for _, installed := range state.InstalledSLCs {
+		slcs = append(slcs, localinstall.SLCConfig{
+			Image:  installed.Image,
+			Target: installed.Target,
+		})
+	}
+	for _, installed := range state.InstalledCustomSLCs {
+		slcs = append(slcs, localinstall.SLCConfig{
+			Image:   installed.Image,
+			Target:  installed.Target,
+			Package: installed.Package,
+		})
+	}
+
 	return localruntime.VMConfig{
 		RuntimeConfig: localruntime.RuntimeConfig{
-			Ports: runtimeConfig.ports,
+			Ports:        runtimeConfig.ports,
+			VersionCheck: versionCheck,
+			SLCs:         slcs,
 		},
 		CPUCount:   runtimeConfig.cpuCount,
 		MemoryMB:   runtimeConfig.memoryMB,
 		DataSizeGB: runtimeConfig.dataSizeGB,
-	}
+	}, nil
 }
 
 func writeLocalRuntimeArtifactsAndWait(

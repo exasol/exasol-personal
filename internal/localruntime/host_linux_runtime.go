@@ -143,6 +143,8 @@ func (runtime *LinuxHostRuntime) podmanStartConfig(
 		ContainerDBPort: hostDBPort,
 		DataDir:         filepath.Join(runtime.paths.WorkDir, nanoDataDirName),
 		InitParams:      append([]string(nil), nanoInitParams...),
+		VersionCheck:    runtimeConfig.VersionCheck,
+		SLCs:            runtimeConfig.SLCs,
 	}, nil
 }
 

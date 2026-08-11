@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 )
 
 const (
@@ -27,7 +28,9 @@ const (
 )
 
 type RuntimeConfig struct {
-	Ports string
+	Ports        string
+	VersionCheck localinstall.VersionCheckConfig
+	SLCs         []localinstall.SLCConfig
 }
 
 type VMConfig struct {
