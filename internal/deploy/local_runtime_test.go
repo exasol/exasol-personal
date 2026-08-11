@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -134,6 +135,63 @@ func TestWriteLocalDeploymentArtifacts_OmitsLocalOnlyCloudMetadataInJSON(t *test
 	}
 }
 
+func TestStartPreparedLocalRuntime_WritesHostEndpointArtifacts(t *testing.T) {
+	// Given
+	t.Setenv(localSkipDatabaseWaitEnv, "true")
+	deployment := newTestDeploymentWithState(t)
+	runtime := &endpointRuntimeStub{
+		deployment: deployment,
+		endpoint:   &localruntime.RuntimeEndpoint{DBPort: localTestDatabasePort},
+	}
+
+	// When
+	err := startPreparedLocalRuntime(
+		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("expected host runtime start to succeed, got %v", err)
+	}
+	info, err := config.ReadDeploymentInfo(deployment)
+	if err != nil {
+		t.Fatalf("expected deployment info to be readable, got %v", err)
+	}
+	if info.Connection == nil || info.Connection.DBPort != localTestDatabasePort {
+		t.Fatalf("expected published database endpoint, got %#v", info.Connection)
+	}
+	if info.Connection.ShellSupported || info.Connection.SSHCommand != "" ||
+		info.Connection.SSHPort != "" {
+		t.Fatalf("expected host endpoint to omit VM shell details, got %#v", info.Connection)
+	}
+	secrets, err := config.ReadSecrets(deployment)
+	if err != nil {
+		t.Fatalf("expected secrets to be readable, got %v", err)
+	}
+	if secrets.DbPassword != localDBPassword {
+		t.Fatalf("expected local database password, got %#v", secrets)
+	}
+}
+
+func TestStartPreparedLocalRuntime_PreservesHostStartFailure(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	expectedErr := errors.New("Podman start failed")
+	runtime := &endpointRuntimeStub{
+		deployment: newTestDeploymentWithState(t),
+		startErr:   expectedErr,
+	}
+
+	// When
+	err := startPreparedLocalRuntime(
+		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
+	)
+	// Then
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected host start error to be preserved, got %v", err)
+	}
+}
+
 func TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts(t *testing.T) {
 	t.Parallel()
 
@@ -232,6 +290,51 @@ func newTestDeploymentWithState(t *testing.T) config.DeploymentDir {
 	t.Helper()
 
 	return newTestDeploymentWithVersionCheckState(t, false, "")
+}
+
+type endpointRuntimeStub struct {
+	deployment config.DeploymentDir
+	endpoint   *localruntime.RuntimeEndpoint
+	startErr   error
+}
+
+func (runtime *endpointRuntimeStub) Deployment() config.DeploymentDir {
+	return runtime.deployment
+}
+
+func (*endpointRuntimeStub) Prepare(context.Context, io.Writer, io.Writer) error {
+	return nil
+}
+
+func (runtime *endpointRuntimeStub) Start(
+	context.Context,
+	io.Writer,
+	io.Writer,
+	localruntime.VMConfig,
+) error {
+	return runtime.startErr
+}
+
+func (*endpointRuntimeStub) Stop(context.Context, io.Writer, io.Writer) error {
+	return nil
+}
+
+func (*endpointRuntimeStub) Status(context.Context) (*localruntime.RuntimeStatus, error) {
+	return &localruntime.RuntimeStatus{Running: true}, nil
+}
+
+func (*endpointRuntimeStub) Destroy(context.Context, io.Writer, io.Writer) error {
+	return nil
+}
+
+func (runtime *endpointRuntimeStub) ReadEndpoints() (*localruntime.VMRuntimeEndpoint, error) {
+	return &localruntime.VMRuntimeEndpoint{RuntimeEndpoint: *runtime.endpoint}, nil
+}
+
+func (*endpointRuntimeStub) HealthCheck(
+	context.Context,
+) (*localruntime.HealthCheckResult, error) {
+	return nil, errors.New("not implemented")
 }
 
 func newTestDeploymentWithVersionCheckState(
