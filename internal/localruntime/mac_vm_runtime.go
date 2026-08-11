@@ -49,15 +49,6 @@ const (
 	exasolLocalRunnerResourceID = "exasol-local-runner"
 )
 
-type State struct {
-	VMIP                   string
-	SSHPort                int
-	DBPort                 int
-	UIPort                 int
-	PrivateKeyPath         string
-	PrivateKeyRelativePath string
-}
-
 func (paths vmRuntimePaths) PrivateKeyRelativePath(
 	deployment config.DeploymentDir,
 ) (string, error) {
@@ -211,7 +202,7 @@ func localRunnerSlcArgs(deployment config.DeploymentDir) ([]string, error) {
 	return args, nil
 }
 
-func (runtime *MacVMRuntime) ReadState() (*State, error) {
+func (runtime *MacVMRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
 	state, err := readRunnerState(runtime.paths.StatePath)
 	if err != nil {
 		return nil, err
@@ -360,17 +351,19 @@ func (runtime *MacVMRuntime) initializeVMIfNeeded(
 	)
 }
 
-func (runtime *MacVMRuntime) toState(state *runnerState) (*State, error) {
+func (runtime *MacVMRuntime) toState(state *runnerState) (*VMRuntimeEndpoint, error) {
 	keyFile, err := runtime.paths.PrivateKeyRelativePath(runtime.deployment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve local SSH key path: %w", err)
 	}
 
-	return &State{
+	return &VMRuntimeEndpoint{
+		RuntimeEndpoint: RuntimeEndpoint{
+			DBPort: state.Ports.DB,
+			UIPort: state.Ports.UI,
+		},
 		VMIP:                   state.VMIP,
 		SSHPort:                state.Ports.SSH,
-		DBPort:                 state.Ports.DB,
-		UIPort:                 state.Ports.UI,
 		PrivateKeyPath:         runtime.paths.PrivateKeyPath,
 		PrivateKeyRelativePath: keyFile,
 	}, nil

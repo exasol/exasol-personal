@@ -47,17 +47,12 @@ func startPreparedLocalRuntime(
 		return diagnoseLocalFailure(ctx, runtime, err)
 	}
 
-	switch vmRuntime := runtime.(type) {
-	case localruntime.VMRuntime:
-		state, err := vmRuntime.ReadState()
-		if err != nil {
-			return err
-		}
-
-		return writeLocalRuntimeArtifactsAndWait(ctx, vmRuntime, state, waitTimeoutSeconds)
-	default:
-		return nil
+	endpoint, err := runtime.ReadEndpoints()
+	if err != nil {
+		return err
 	}
+
+	return writeLocalRuntimeArtifactsAndWait(ctx, runtime, endpoint, waitTimeoutSeconds)
 }
 
 // Must run after the caller commits its workflow state: that write serialises a copy read
@@ -181,11 +176,11 @@ func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.VMConfi
 
 func writeLocalRuntimeArtifactsAndWait(
 	ctx context.Context,
-	runtime localruntime.VMRuntime,
-	state *localruntime.State,
+	runtime localruntime.Runtime,
+	endpoint *localruntime.VMRuntimeEndpoint,
 	waitTimeoutSeconds int,
 ) error {
-	if err := writeLocalDeploymentArtifacts(runtime.Deployment(), state); err != nil {
+	if err := writeLocalDeploymentArtifacts(runtime.Deployment(), endpoint); err != nil {
 		return err
 	}
 	if os.Getenv(localSkipDatabaseWaitEnv) != "" {
@@ -203,9 +198,9 @@ func writeLocalRuntimeArtifactsAndWait(
 
 func writeLocalDeploymentArtifacts(
 	deployment config.DeploymentDir,
-	state *localruntime.State,
+	endpoint *localruntime.VMRuntimeEndpoint,
 ) error {
-	if state == nil {
+	if endpoint == nil {
 		return errors.New("local runtime endpoint state is required")
 	}
 
@@ -216,10 +211,10 @@ func writeLocalDeploymentArtifacts(
 		}
 	}
 
-	sshPort := strconv.Itoa(state.SSHPort)
+	sshPort := strconv.Itoa(endpoint.SSHPort)
 	sshCommand := fmt.Sprintf(
 		"ssh -i %s %s@%s -p %s",
-		state.PrivateKeyRelativePath,
+		endpoint.PrivateKeyRelativePath,
 		localSSHUser,
 		localDeploymentPublicHost,
 		sshPort,
@@ -236,7 +231,7 @@ func writeLocalDeploymentArtifacts(
 			Host:                       localDeploymentPublicHost,
 			DisplayHost:                localDeploymentPublicHost,
 			PublicIp:                   localDeploymentPublicHost,
-			DBPort:                     state.DBPort,
+			DBPort:                     endpoint.DBPort,
 			Username:                   localDBUser,
 			InsecureSkipCertValidation: true,
 			SSHCommand:                 sshCommand,

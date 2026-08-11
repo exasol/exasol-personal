@@ -42,7 +42,7 @@ const localReachabilityMessage = "could not reach the local database endpoint be
 // unavailable (e.g. an old runner daemon that predates health-check
 // support), or when at least one port is reachable, since that means the
 // problem is not network-wide.
-func classifyLocalReachability(ctx context.Context, runtime localruntime.VMRuntime) error {
+func classifyLocalReachability(ctx context.Context, runtime localruntime.Runtime) error {
 	if !isLocalDeployment(runtime.Deployment()) {
 		return nil
 	}
@@ -82,15 +82,10 @@ func diagnoseLocalFailure(ctx context.Context, runtime localruntime.Runtime, err
 		return nil
 	}
 
-	switch rt := runtime.(type) {
-	case localruntime.VMRuntime:
-		reachabilityErr := classifyLocalReachability(ctx, rt)
-		if reachabilityErr != nil {
-			return reachabilityErr
-		}
-
-		return err
-	default:
-		return err
+	reachabilityErr := classifyLocalReachability(ctx, runtime)
+	if reachabilityErr != nil {
+		return reachabilityErr
 	}
+
+	return err
 }

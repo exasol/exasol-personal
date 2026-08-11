@@ -42,6 +42,23 @@ type RuntimeStatus struct {
 	Running bool `json:"running"`
 }
 
+// RuntimeEndpoint describes the host endpoints published by a local runtime.
+// SSH fields are optional because host-container runtimes expose the database
+// directly and do not provide a separate runtime shell endpoint.
+type RuntimeEndpoint struct {
+	DBPort int
+	UIPort int
+}
+
+type VMRuntimeEndpoint struct {
+	RuntimeEndpoint
+
+	VMIP                   string
+	SSHPort                int
+	PrivateKeyPath         string
+	PrivateKeyRelativePath string
+}
+
 // Generic local runtime interface.
 type Runtime interface {
 	Deployment() config.DeploymentDir
@@ -50,6 +67,9 @@ type Runtime interface {
 	Stop(ctx context.Context, out, outErr io.Writer) error
 	Status(ctx context.Context) (*RuntimeStatus, error)
 	Destroy(ctx context.Context, out, outErr io.Writer) error
+
+	ReadEndpoints() (*VMRuntimeEndpoint, error)
+	HealthCheck(ctx context.Context) (*HealthCheckResult, error)
 }
 
 type runtimePaths struct {
@@ -65,14 +85,6 @@ func newRuntimePaths(deployment config.DeploymentDir) runtimePaths {
 		Root:    root,
 		WorkDir: workDir,
 	}
-}
-
-// VM-based local runtime interface.
-type VMRuntime interface {
-	Runtime
-
-	ReadState() (*State, error)
-	HealthCheck(ctx context.Context) (*HealthCheckResult, error)
 }
 
 type vmRuntimePaths struct {
