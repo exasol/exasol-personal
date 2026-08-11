@@ -184,6 +184,7 @@ func TestPodmanInstallStart_ReturnsWhenContainerAlreadyRunning(t *testing.T) {
 	assertCommandLog(t, fixture.logPath, []string{
 		"<podman><container><exists><" + testContainerName + ">",
 		"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+		"<podman><container><inspect><--format><{{json .Mounts}}><" + testContainerName + ">",
 	})
 	if _, statErr := os.Stat(startConfig.DataDir); !os.IsNotExist(statErr) {
 		t.Fatalf("expected no data-directory work for running container, got %v", statErr)
@@ -707,7 +708,13 @@ case "$command" in
         fi
         ;;
       inspect)
-        if [ -f "$scenario_dir/running" ]; then
+        if [ "$4" = "--format" ] && [ "$5" = "{{json .Mounts}}" ]; then
+          if [ -f "$scenario_dir/mounts-output" ]; then
+            cat "$scenario_dir/mounts-output"
+          else
+            printf '[{"Destination":"/exa"}]\n'
+          fi
+        elif [ -f "$scenario_dir/running" ]; then
           printf 'true\n'
         else
           printf 'false\n'
@@ -729,7 +736,21 @@ case "$command" in
   rm)
     rm -f "$scenario_dir/running" "$scenario_dir/existing"
     ;;
-  info|ps|logs|pull|import|tag|run|rmi|stop)
+  stop)
+    rm -f "$scenario_dir/running"
+    : > "$scenario_dir/existing"
+    ;;
+  cp)
+    if [ -f "$scenario_dir/populate-destination-during-cp" ]; then
+      destination_path=$(cat "$scenario_dir/populate-destination-during-cp")
+      mkdir -p "$destination_path"
+      printf 'raced\n' > "$destination_path/raced-data"
+    fi
+    if [ -d "$scenario_dir/cp-source" ]; then
+      cp -R "$scenario_dir/cp-source/." "$4"
+    fi
+    ;;
+  info|ps|logs|pull|import|tag|run|rmi)
     ;;
   *)
     printf 'unexpected fake Podman command: %s\n' "$command" >&2
