@@ -183,16 +183,11 @@ func TestPodmanInstallStart_RejectsInvalidConfigurationBeforePodman(t *testing.T
 		name   string
 		mutate func(*StartConfig)
 	}{
-		{name: "host port", mutate: func(config *StartConfig) { config.HostDBPort = 0 }},
 		{
-			name:   "container port",
+			name:   "published port",
 			mutate: func(config *StartConfig) { config.ContainerDBPort = 65536 },
 		},
 		{name: "data directory", mutate: func(config *StartConfig) { config.DataDir = " " }},
-		{name: "shared memory", mutate: func(config *StartConfig) { config.ShmSize = "" }},
-		{name: "PID limit", mutate: func(config *StartConfig) { config.PIDsLimit = "" }},
-		{name: "security option", mutate: func(config *StartConfig) { config.SecurityOpt = "" }},
-		{name: "restart policy", mutate: func(config *StartConfig) { config.RestartPolicy = "" }},
 	}
 
 	for _, test := range tests {
@@ -290,13 +285,8 @@ func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanI
 		[]string{scriptPath, logPath, scenarioDir},
 	)
 	startConfig := StartConfig{
-		HostDBPort:      28563,
-		ContainerDBPort: 8563,
+		ContainerDBPort: 28563,
 		DataDir:         filepath.Join(root, "runtime", "exa"),
-		ShmSize:         "512mb",
-		PIDsLimit:       "-1",
-		SecurityOpt:     "unmask=ALL",
-		RestartPolicy:   "always",
 		InitParams:      []string{"maxConnectionsLicenseLimit=20"},
 	}
 	fixture := podmanInstallFixture{

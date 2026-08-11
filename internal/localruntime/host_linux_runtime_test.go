@@ -24,17 +24,11 @@ func TestLinuxHostPodmanStartConfig_UsesReferenceDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected default config, got %v", err)
 	}
-	if startConfig.HostDBPort != nanoDBPort || startConfig.ContainerDBPort != nanoDBPort {
-		t.Fatalf("unexpected default DB ports: %#v", startConfig)
+	if startConfig.ContainerDBPort != nanoDBPort {
+		t.Fatalf("unexpected default DB port: %#v", startConfig)
 	}
 	if startConfig.DataDir != filepath.Join(localRuntime.paths.WorkDir, nanoDataDirName) {
 		t.Fatalf("unexpected Nano data directory %q", startConfig.DataDir)
-	}
-	if startConfig.ShmSize != nanoShmSize ||
-		startConfig.PIDsLimit != nanoPIDsLimit ||
-		startConfig.SecurityOpt != nanoSecurityOpt ||
-		startConfig.RestartPolicy != nanoRestartPolicy {
-		t.Fatalf("unexpected Nano defaults: %#v", startConfig)
 	}
 	if len(startConfig.InitParams) != 1 ||
 		startConfig.InitParams[0] != "maxConnectionsLicenseLimit=20" {
@@ -60,8 +54,8 @@ func TestLinuxHostPodmanStartConfig_UsesOnlyCommonRuntimeConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected host port override, got %v", err)
 	}
-	if startConfig.HostDBPort != 28563 || startConfig.ContainerDBPort != nanoDBPort {
-		t.Fatalf("expected host-only DB port override, got %#v", startConfig)
+	if startConfig.ContainerDBPort != 28563 {
+		t.Fatalf("expected published DB port override, got %#v", startConfig)
 	}
 }
 
