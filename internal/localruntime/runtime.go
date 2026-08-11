@@ -20,6 +20,8 @@ const (
 	sharedDirName      = "vm-shared"
 	vmStateFileName    = "vm-state.json"
 	PrivateKeyFileName = "node_access.pem"
+	slcStagingDirName  = "slc-packages"
+	slcStatusFileName  = "slc-status.json"
 	// runnerVersionMarkerFileName records the semver of the runner this
 	// deployment was last prepared/started with. It's a launcher-owned file,
 	// distinct from vm-state.json, whose schema is dictated by the runner's
@@ -121,4 +123,12 @@ func DefaultVMPrivateKeyPath(deployment config.DeploymentDir) string {
 
 func SharedDir(deployment config.DeploymentDir) string {
 	return newVMRuntimePaths(deployment).SharedDir
+}
+
+func SLCStagingDir(deployment config.DeploymentDir) string {
+	return filepath.Join(SharedDir(deployment), slcStagingDirName)
+}
+
+func SLCStatusPath(deployment config.DeploymentDir) string {
+	return filepath.Join(SharedDir(deployment), slcStatusFileName)
 }

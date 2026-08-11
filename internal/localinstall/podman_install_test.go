@@ -434,9 +434,11 @@ func TestPodmanInstallStop_RemovesContainerIdempotently(t *testing.T) {
 }
 
 type podmanInstallFixture struct {
-	logPath     string
-	scenarioDir string
-	imagePath   string
+	logPath       string
+	scenarioDir   string
+	imagePath     string
+	slcStagingDir string
+	slcStatusPath string
 }
 
 func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanInstallFixture) {
@@ -482,10 +484,14 @@ func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanI
 		runtime.GOARCH,
 	)
 
+	slcStagingDir := filepath.Join(root, "slc-packages")
+	slcStatusPath := filepath.Join(root, "slc-status.json")
 	install := NewPodmanInstall(
 		deployment,
 		manager,
 		[]string{"/bin/sh", scriptPath, logPath, scenarioDir},
+		slcStagingDir,
+		slcStatusPath,
 	)
 	startConfig := StartConfig{
 		ContainerDBPort: 28563,
@@ -493,9 +499,11 @@ func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanI
 		InitParams:      []string{"maxConnectionsLicenseLimit=20"},
 	}
 	fixture := podmanInstallFixture{
-		logPath:     logPath,
-		scenarioDir: scenarioDir,
-		imagePath:   imagePath,
+		logPath:       logPath,
+		scenarioDir:   scenarioDir,
+		imagePath:     imagePath,
+		slcStagingDir: slcStagingDir,
+		slcStatusPath: slcStatusPath,
 	}
 
 	return install, startConfig, fixture
@@ -551,6 +559,7 @@ func skipPodmanInstallTestOnWindows(t *testing.T) {
 	}
 }
 
+//nolint:dupword // Repeated shell terminators are required by this fixture.
 const fakePodmanScript = `#!/bin/sh
 set -eu
 
@@ -571,6 +580,13 @@ if [ -f "$scenario_dir/fail" ] && [ "$(cat "$scenario_dir/fail")" = "$command" ]
   printf 'fake %s failure\n' "$command" >&2
   exit 42
 fi
+if [ "$command" = "import" ] && [ -f "$scenario_dir/fail-import-image" ]; then
+  for last_argument in "$@"; do :; done
+  if [ "$(cat "$scenario_dir/fail-import-image")" = "$last_argument" ]; then
+    printf 'fake import failure\n' >&2
+    exit 44
+  fi
+fi
 if [ -f "$scenario_dir/fail-diagnostics" ]; then
   case "$command" in
     info|ps|logs)
@@ -587,6 +603,14 @@ if [ -f "$scenario_dir/fail-diagnostics" ]; then
 fi
 
 case "$command" in
+  image)
+    if [ "$3" != "exists" ]; then
+      exit 93
+    fi
+    if [ ! -f "$scenario_dir/images" ] || ! grep -Fxq "$4" "$scenario_dir/images"; then
+      exit 1
+    fi
+    ;;
   container)
     operation=$3
     case "$operation" in
@@ -615,7 +639,7 @@ case "$command" in
       printf 'Loaded image: docker.io/exasol/nano:test\n'
     fi
     ;;
-  info|ps|logs|tag|run|rm)
+  info|ps|logs|pull|import|tag|run|rm)
     ;;
   *)
     printf 'unexpected fake Podman command: %s\n' "$command" >&2
