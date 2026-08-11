@@ -14,5 +14,5 @@
 ## 3. Verification
 
 - [x] 3.1 Add fake-Podman unit tests covering success, repeat start, configuration errors, and command failures
-- [ ] 3.2 Run targeted Go tests, repository unit tests, lint, and build
+- [x] 3.2 Run targeted Go tests, repository unit tests, lint, and build
 - [x] 3.3 Update user-visible change documentation and validate the OpenSpec change
