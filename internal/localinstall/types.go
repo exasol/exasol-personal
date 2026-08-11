@@ -8,13 +8,8 @@ import (
 )
 
 type StartConfig struct {
-	HostDBPort      int
 	ContainerDBPort int
 	DataDir         string
-	ShmSize         string
-	PIDsLimit       string
-	SecurityOpt     string
-	RestartPolicy   string
 	InitParams      []string
 }
 
