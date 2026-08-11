@@ -6,10 +6,7 @@ package localruntime
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -27,64 +24,56 @@ import (
 	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 	"github.com/exasol/exasol-personal/internal/util"
-	"golang.org/x/crypto/ssh"
 )
 
 const (
 	vmPIDFileName      = "vm.pid"
-	openSSHKeyPEMType  = "OPENSSH PRIVATE KEY"
 	stopPollInterval   = 500 * time.Millisecond
 	stopTimeout        = 90 * time.Second
 	dirMode            = 0o750
-	privateFileMode    = 0o600
 	markerFileMode     = 0o600
 	executableFileMode = 0o700
+	artifactFileMode   = 0o640
 	maxTCPPort         = 65535
-	// Internal escape hatch for development with runners that predate version reporting.
+	minimumRunnerMajor = 2
+
+	vmNanoDataDir          = "/var/lib/exa"
+	nanoArtifactDirName    = "runtime-artifacts"
+	nanoArtifactFileName   = "nano.tar"
+	legacyNanoContainer    = "exasol-local-db"
+	forwardDatabaseService = "db"
+
+	// Internal escape hatch for development with runners that do not report semver.
 	forceRunnerReconciliationEnv = "EXASOL_LOCAL_FORCE_RUNNER_RECONCILIATION"
-	// Internal escape hatch for tests: exasol-local-runner is embed-only, so
-	// non-macOS test hosts have no way to resolve a runner through the
-	// Manager at all. Setting this to a path bypasses resolution entirely.
+	// Internal escape hatch for local runner integration tests and development.
 	runnerOverridePathEnv       = "EXASOL_LOCAL_RUNNER_OVERRIDE_PATH"
 	exasolLocalRunnerResourceID = "exasol-local-runner"
 )
 
-func (paths vmRuntimePaths) PrivateKeyRelativePath(
-	deployment config.DeploymentDir,
-) (string, error) {
-	rel, err := filepath.Rel(deployment.Root(), paths.PrivateKeyPath)
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.ToSlash(rel), nil
-}
-
-type runnerPorts struct {
-	SSH int `json:"ssh"`
-	DB  int `json:"db"`
-	UI  int `json:"ui"`
+//nolint:tagliatelle // Runner state JSON keys are defined by the runner contract.
+type runnerForwardState struct {
+	GuestPort int `json:"guest_port"`
+	HostPort  int `json:"host_port"`
 }
 
 //nolint:tagliatelle // Runner state JSON keys are defined by the runner contract.
 type runnerState struct {
-	VMName    string      `json:"vm_name"`
-	VMIP      string      `json:"vm_ip"`
-	CPUCount  string      `json:"cpu_count"`
-	RAMSize   string      `json:"ram_size"`
-	PID       string      `json:"pid"`
-	SharedDir string      `json:"shared_dir"`
-	Ports     runnerPorts `json:"ports"`
+	VMName    string                        `json:"vm_name"`
+	CPUCount  string                        `json:"cpu_count"`
+	RAMSize   string                        `json:"ram_size"`
+	PID       string                        `json:"pid"`
+	SharedDir string                        `json:"shared_dir"`
+	Forwards  map[string]runnerForwardState `json:"forwards"`
 }
 
 type MacVMRuntime struct {
-	deployment config.DeploymentDir
-	paths      vmRuntimePaths
-	manager    *runtimeartifacts.Manager
+	deployment     config.DeploymentDir
+	paths          vmRuntimePaths
+	manager        *runtimeartifacts.Manager
+	endpoint       *RuntimeEndpoint
+	installFactory func(string) (localinstall.LocalInstall, error)
 }
 
-// manager may be nil for operations that never need to invoke the runner
-// (e.g. Destroy on a deployment that was never prepared).
 func NewMacVMRuntime(
 	deployment config.DeploymentDir,
 	manager *runtimeartifacts.Manager,
@@ -100,8 +89,6 @@ func (runtime *MacVMRuntime) Deployment() config.DeploymentDir {
 	return runtime.deployment
 }
 
-// VM sizing (CPU/memory/data disk) is not a Prepare concern: it's passed
-// directly as RunCommand args for "start".
 func (runtime *MacVMRuntime) Prepare(ctx context.Context, out, outErr io.Writer) error {
 	if err := os.MkdirAll(runtime.paths.WorkDir, dirMode); err != nil {
 		return fmt.Errorf("failed to create local runtime directory: %w", err)
@@ -113,9 +100,6 @@ func (runtime *MacVMRuntime) Prepare(ctx context.Context, out, outErr io.Writer)
 	if err := runtime.reconcileRunnerVersion(ctx, runnerPath); err != nil {
 		return err
 	}
-	if err := runtime.ensureSSHKey(); err != nil {
-		return err
-	}
 
 	return runtime.initializeVMIfNeeded(ctx, runnerPath, out, outErr)
 }
@@ -125,81 +109,96 @@ func (runtime *MacVMRuntime) Start(
 	out, outErr io.Writer,
 	runtimeConfig VMConfig,
 ) error {
-	if err := os.Remove(runtime.paths.StatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("failed to remove stale local VM state: %w", err)
-	}
-
-	args := []string{"start"}
-	versionCheckArgs, err := localRunnerVersionCheckArgs(runtimeConfig.VersionCheck)
+	hostDBPort, err := resolveMacHostDBPort(runtimeConfig.Ports)
 	if err != nil {
 		return err
 	}
-	args = append(args, versionCheckArgs...)
-	args = append(args, localRunnerSlcArgs(runtimeConfig.SLCs)...)
-	if runtimeConfig.Ports != "" {
-		args = append(args, "--ports", runtimeConfig.Ports)
-	}
-	args = append(args,
-		strconv.Itoa(runtimeConfig.CPUCount),
-		strconv.Itoa(runtimeConfig.MemoryMB),
-		strconv.Itoa(runtimeConfig.DataSizeGB),
-	)
-
 	runnerPath, err := runtime.resolveRunnerPath(ctx)
 	if err != nil {
 		return err
 	}
-
-	return runtime.runnerCommand(ctx, runnerPath, args, out, outErr)
-}
-
-func localRunnerVersionCheckArgs(versionCheck localinstall.VersionCheckConfig) ([]string, error) {
-	if !versionCheck.Enabled {
-		return []string{"--version-check-enabled=false"}, nil
+	if err := runtime.reconcileRunnerVersion(ctx, runnerPath); err != nil {
+		return err
 	}
 
-	clusterIdentity := strings.TrimSpace(versionCheck.Identity)
-	if clusterIdentity == "" {
-		return nil, errors.New("deployment state is missing cluster identity")
+	args := []string{
+		"start",
+		"--forward", fmt.Sprintf("%s:%d:%d", forwardDatabaseService, nanoDBPort, hostDBPort),
+		strconv.Itoa(runtimeConfig.CPUCount),
+		strconv.Itoa(runtimeConfig.MemoryMB),
+		strconv.Itoa(runtimeConfig.DataSizeGB),
+	}
+	if err := runtime.runnerCommand(ctx, runnerPath, args, out, outErr); err != nil {
+		return err
 	}
 
-	return []string{
-		"--version-check-enabled=true",
-		"--version-check-url", versionCheck.URL,
-		"--version-check-identity", clusterIdentity,
-	}, nil
-}
-
-// A custom SLC also names its staged package, because it exists on no registry.
-func localRunnerSlcArgs(slcs []localinstall.SLCConfig) []string {
-	const argsPerSLC = 4
-	args := make([]string, 0, len(slcs)*argsPerSLC)
-	for _, slc := range slcs {
-		args = append(args, "--slc", slc.Image+"="+slc.Target)
-		if slc.Package != "" {
-			args = append(args, "--slc-package", slc.Image+"="+slc.Package)
-		}
+	state, err := readRunnerState(runtime.paths.StatePath)
+	if err != nil {
+		return runtime.stopAfterStartFailure(ctx, runnerPath, out, outErr, err)
+	}
+	endpoint, err := runtimeEndpointFromRunnerState(state)
+	if err != nil {
+		return runtime.stopAfterStartFailure(ctx, runnerPath, out, outErr, err)
+	}
+	install, err := runtime.install(runnerPath)
+	if err != nil {
+		return runtime.stopAfterStartFailure(ctx, runnerPath, out, outErr, err)
+	}
+	startConfig := localinstall.StartConfig{
+		ContainerDBPort:      nanoDBPort,
+		DataDir:              vmNanoDataDir,
+		InitParams:           append([]string(nil), nanoInitParams...),
+		VersionCheck:         runtimeConfig.VersionCheck,
+		SLCs:                 runtimeConfig.SLCs,
+		LegacyContainerNames: []string{legacyNanoContainer},
+	}
+	if err := install.Start(ctx, out, outErr, startConfig); err != nil {
+		return runtime.stopAfterStartFailure(ctx, runnerPath, out, outErr, err)
 	}
 
-	return args
+	runtime.endpoint = endpoint
+
+	return nil
 }
 
 func (runtime *MacVMRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
+	if runtime.endpoint != nil {
+		return &VMRuntimeEndpoint{RuntimeEndpoint: *runtime.endpoint}, nil
+	}
 	state, err := readRunnerState(runtime.paths.StatePath)
 	if err != nil {
 		return nil, err
 	}
+	endpoint, err := runtimeEndpointFromRunnerState(state)
+	if err != nil {
+		return nil, err
+	}
+	runtime.endpoint = endpoint
 
-	return runtime.toState(state)
+	return &VMRuntimeEndpoint{RuntimeEndpoint: *endpoint}, nil
 }
 
 func (runtime *MacVMRuntime) Status(ctx context.Context) (*RuntimeStatus, error) {
-	return runnerCommandJSON[RuntimeStatus](ctx, runtime, "status")
+	vmStatus, err := runnerCommandJSON[RuntimeStatus](ctx, runtime, "status")
+	if err != nil || !vmStatus.Running {
+		return vmStatus, err
+	}
+	runnerPath, err := runtime.resolveRunnerPath(ctx)
+	if err != nil {
+		return nil, err
+	}
+	install, err := runtime.install(runnerPath)
+	if err != nil {
+		return nil, err
+	}
+	installStatus, err := install.Status(ctx, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect Nano in the local VM: %w", err)
+	}
+
+	return &RuntimeStatus{Running: installStatus.Running}, nil
 }
 
-// PortState is one of the runner's classified per-port reachability states,
-// treated as an opaque external contract: this package does not interpret
-// how the runner arrived at it, only which value it reported.
 type PortState string
 
 const (
@@ -217,16 +216,10 @@ type HealthCheckResult struct {
 	Ports map[string]PortHealth `json:"ports"`
 }
 
-// HealthCheck asks the runner to freshly probe every forwarded port's guest
-// reachability. Unlike Status, this can trigger real network dials on the
-// runner side, so callers should only invoke it when they actually need a
-// reachability diagnosis, not from routine/frequent code paths.
 func (runtime *MacVMRuntime) HealthCheck(ctx context.Context) (*HealthCheckResult, error) {
 	return runnerCommandJSON[HealthCheckResult](ctx, runtime, "health-check")
 }
 
-// runnerCommandJSON is shared by Status and HealthCheck, which differ only
-// in the subcommand name and result shape.
 func runnerCommandJSON[T any](
 	ctx context.Context,
 	runtime *MacVMRuntime,
@@ -236,7 +229,6 @@ func runnerCommandJSON[T any](
 	if err != nil {
 		return nil, err
 	}
-
 	stdout, err := runtime.runnerCommandWithOutput(ctx, runnerPath, []string{command})
 	if err != nil {
 		return nil, err
@@ -255,19 +247,28 @@ func (runtime *MacVMRuntime) Stop(ctx context.Context, out, outErr io.Writer) er
 	if err != nil {
 		return err
 	}
-
-	if err := runtime.runnerCommand(ctx, runnerPath, []string{"stop"}, out, outErr); err != nil {
+	vmStatus, err := runnerCommandJSON[RuntimeStatus](ctx, runtime, "status")
+	if err != nil {
 		return err
 	}
+	if vmStatus.Running {
+		install, installErr := runtime.install(runnerPath)
+		if installErr != nil {
+			return installErr
+		}
+		if installErr := install.Stop(ctx, out, outErr); installErr != nil {
+			return installErr
+		}
+	}
+	runtime.endpoint = nil
 
-	return runtime.waitForDaemonExit(ctx)
+	return runtime.stopVM(ctx, runnerPath, out, outErr)
 }
 
 func (runtime *MacVMRuntime) Destroy(ctx context.Context, out, outErr io.Writer) error {
-	if err := runtime.stopBeforeDestroy(ctx, out, outErr); err != nil {
+	if err := runtime.cleanupBeforeDestroy(ctx, out, outErr); err != nil {
 		return err
 	}
-
 	if err := os.RemoveAll(runtime.paths.Root); err != nil {
 		return fmt.Errorf("failed to remove local runtime files %s: %w", runtime.paths.Root, err)
 	}
@@ -275,11 +276,39 @@ func (runtime *MacVMRuntime) Destroy(ctx context.Context, out, outErr io.Writer)
 	return nil
 }
 
-// stopBeforeDestroy stops a still-running VM before its files are removed. A
-// deployment that was never prepared (paths.VMDir absent) has nothing to
-// stop; a runner that fails to resolve or stop is treated the same way,
-// since Destroy's job is cleanup, not reporting a runner-invocation failure.
-func (runtime *MacVMRuntime) stopBeforeDestroy(ctx context.Context, out, outErr io.Writer) error {
+func (runtime *MacVMRuntime) stopAfterStartFailure(
+	ctx context.Context,
+	runnerPath string,
+	out, outErr io.Writer,
+	startErr error,
+) error {
+	stopErr := runtime.stopVM(ctx, runnerPath, out, outErr)
+	if stopErr != nil {
+		return errors.Join(
+			startErr,
+			fmt.Errorf("failed to stop VM after startup failure: %w", stopErr),
+		)
+	}
+
+	return startErr
+}
+
+func (runtime *MacVMRuntime) stopVM(
+	ctx context.Context,
+	runnerPath string,
+	out, outErr io.Writer,
+) error {
+	if err := runtime.runnerCommand(ctx, runnerPath, []string{"stop"}, out, outErr); err != nil {
+		return err
+	}
+
+	return runtime.waitForDaemonExit(ctx)
+}
+
+func (runtime *MacVMRuntime) cleanupBeforeDestroy(
+	ctx context.Context,
+	out, outErr io.Writer,
+) error {
 	if _, err := os.Stat(runtime.paths.VMDir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -287,27 +316,193 @@ func (runtime *MacVMRuntime) stopBeforeDestroy(ctx context.Context, out, outErr 
 
 		return fmt.Errorf("failed to inspect local VM directory: %w", err)
 	}
-
 	runnerPath, err := runtime.resolveRunnerPath(ctx)
 	if err != nil {
-		//nolint:nilerr // best-effort: cleanup proceeds even if the runner can't be resolved.
+		return err
+	}
+	vmStatus, err := runnerCommandJSON[RuntimeStatus](ctx, runtime, "status")
+	if err != nil {
+		return err
+	}
+	if !vmStatus.Running {
 		return nil
 	}
-	if err := runtime.runnerCommand(ctx, runnerPath, []string{"stop"}, out, outErr); err != nil {
-		//nolint:nilerr // best-effort: cleanup proceeds even if the running VM can't be stopped.
-		return nil
+	install, err := runtime.install(runnerPath)
+	if err != nil {
+		return err
+	}
+	if err := install.Destroy(ctx, out, outErr); err != nil {
+		return fmt.Errorf("failed to remove Nano before destroying the VM: %w", err)
 	}
 
-	return runtime.waitForDaemonExit(ctx)
+	return runtime.stopVM(ctx, runnerPath, out, outErr)
 }
 
-// The runner is never copied into the deployment directory: cmd.Dir is set
-// to the deployment's working directory independently of wherever the
-// manager resolves the binary itself (see runnerCommand/runnerCommandWithOutput),
-// so there's nothing for a per-deployment copy to do.
+func (runtime *MacVMRuntime) install(
+	runnerPath string,
+) (localinstall.LocalInstall, error) {
+	if runtime.installFactory != nil {
+		return runtime.installFactory(runnerPath)
+	}
+	mapper := newVMPathMapper(runtime.paths.SharedDir)
+	slcStagingDir, err := mapper.Map(SLCStagingDir(runtime.deployment))
+	if err != nil {
+		return nil, err
+	}
+	slcStatusPath, err := mapper.Map(SLCStatusPath(runtime.deployment))
+	if err != nil {
+		return nil, err
+	}
+	resolveImage := func(ctx context.Context) (localinstall.RuntimePath, error) {
+		sourcePath, err := localinstall.ResolveNanoImage(ctx, runtime.manager)
+		if err != nil {
+			return localinstall.RuntimePath{}, err
+		}
+		hostPath := filepath.Join(
+			runtime.paths.SharedDir,
+			nanoArtifactDirName,
+			nanoArtifactFileName,
+		)
+		if err := materializeFileAtomically(sourcePath, hostPath); err != nil {
+			return localinstall.RuntimePath{}, fmt.Errorf(
+				"failed to stage Nano image for VM: %w",
+				err,
+			)
+		}
+
+		return mapper.Map(hostPath)
+	}
+
+	return localinstall.NewPodmanInstallWithEnvironment(
+		runtime.deployment,
+		newRunnerExecutionEnvironment(runnerPath, runtime.paths.WorkDir),
+		resolveImage,
+		slcStagingDir,
+		slcStatusPath,
+	), nil
+}
+
+func materializeFileAtomically(sourcePath, targetPath string) error {
+	source, err := os.Open(sourcePath) //nolint:gosec // runtime-artifact path
+	if err != nil {
+		return fmt.Errorf("failed to open source artifact %s: %w", sourcePath, err)
+	}
+	defer func() { _ = source.Close() }()
+	sourceInfo, err := source.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to inspect source artifact %s: %w", sourcePath, err)
+	}
+	if sourceInfo.IsDir() {
+		return fmt.Errorf("source artifact is a directory: %s", sourcePath)
+	}
+	if targetInfo, statErr := os.Stat(targetPath); statErr == nil &&
+		targetInfo.Size() == sourceInfo.Size() &&
+		targetInfo.ModTime().Equal(sourceInfo.ModTime()) {
+		return nil
+	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("failed to inspect staged artifact %s: %w", targetPath, statErr)
+	}
+
+	directory := filepath.Dir(targetPath)
+	if err := os.MkdirAll(directory, dirMode); err != nil {
+		return fmt.Errorf("failed to create runtime artifact directory %s: %w", directory, err)
+	}
+	temporary, err := os.CreateTemp(directory, ".nano-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create staged artifact: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer func() { _ = os.Remove(temporaryPath) }()
+
+	if _, err := io.Copy(temporary, source); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("failed to copy Nano image: %w", err)
+	}
+	if err := temporary.Chmod(artifactFileMode); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("failed to set staged Nano image permissions: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("failed to sync staged Nano image: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("failed to close staged Nano image: %w", err)
+	}
+	if err := os.Chtimes(temporaryPath, sourceInfo.ModTime(), sourceInfo.ModTime()); err != nil {
+		return fmt.Errorf("failed to preserve staged Nano image timestamp: %w", err)
+	}
+	if err := os.Rename(temporaryPath, targetPath); err != nil {
+		return fmt.Errorf("failed to replace staged Nano image %s: %w", targetPath, err)
+	}
+
+	return nil
+}
+
+func resolveMacHostDBPort(ports string) (int, error) {
+	ports = strings.TrimSpace(ports)
+	if ports == "" {
+		return nanoDBPort, nil
+	}
+	if ports == "auto" {
+		return 0, nil
+	}
+
+	hostDBPort := nanoDBPort
+	dbPortConfigured := false
+	for _, rawEntry := range strings.Split(ports, ",") {
+		entry := strings.TrimSpace(rawEntry)
+		service, rawPort, found := strings.Cut(entry, ":")
+		service = strings.TrimSpace(service)
+		rawPort = strings.TrimSpace(rawPort)
+		if !found || service == "" || rawPort == "" {
+			return 0, fmt.Errorf("invalid local port mapping %q; expected <service>:<port>", entry)
+		}
+		port, err := strconv.Atoi(rawPort)
+		if err != nil || port < 0 || port > maxTCPPort {
+			return 0, fmt.Errorf("invalid local port %q for service %q", rawPort, service)
+		}
+		if service != forwardDatabaseService {
+			continue
+		}
+		if dbPortConfigured {
+			return 0, errors.New("local database port is configured more than once")
+		}
+		hostDBPort = port
+		dbPortConfigured = true
+	}
+
+	return hostDBPort, nil
+}
+
+func runtimeEndpointFromRunnerState(state *runnerState) (*RuntimeEndpoint, error) {
+	if state == nil {
+		return nil, errors.New("local VM state is missing")
+	}
+	forward, exists := state.Forwards[forwardDatabaseService]
+	if !exists {
+		return nil, errors.New("local VM state is missing the database forward")
+	}
+	if forward.GuestPort != nanoDBPort {
+		return nil, fmt.Errorf(
+			"local VM state contains database guest port %d, expected %d",
+			forward.GuestPort,
+			nanoDBPort,
+		)
+	}
+	if err := validatePort("database", forward.HostPort); err != nil {
+		return nil, err
+	}
+
+	return &RuntimeEndpoint{DBPort: forward.HostPort}, nil
+}
+
 func (runtime *MacVMRuntime) resolveRunnerPath(ctx context.Context) (string, error) {
 	if override := strings.TrimSpace(os.Getenv(runnerOverridePathEnv)); override != "" {
 		return override, nil
+	}
+	if runtime.manager == nil {
+		return "", errors.New("local runner artifact manager is required")
 	}
 
 	return runtime.manager.Request(ctx, exasolLocalRunnerResourceID)
@@ -324,40 +519,11 @@ func (runtime *MacVMRuntime) initializeVMIfNeeded(
 		return fmt.Errorf("failed to inspect local VM directory: %w", err)
 	}
 
-	return runtime.runnerCommand(
-		ctx,
-		runnerPath,
-		[]string{"init", "--ssh-key", runtime.paths.PrivateKeyPath},
-		out,
-		outErr,
-	)
+	return runtime.runnerCommand(ctx, runnerPath, []string{"init"}, out, outErr)
 }
 
-func (runtime *MacVMRuntime) toState(state *runnerState) (*VMRuntimeEndpoint, error) {
-	keyFile, err := runtime.paths.PrivateKeyRelativePath(runtime.deployment)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve local SSH key path: %w", err)
-	}
-
-	return &VMRuntimeEndpoint{
-		RuntimeEndpoint: RuntimeEndpoint{
-			DBPort: state.Ports.DB,
-			UIPort: state.Ports.UI,
-		},
-		VMIP:                   state.VMIP,
-		SSHPort:                state.Ports.SSH,
-		PrivateKeyPath:         runtime.paths.PrivateKeyPath,
-		PrivateKeyRelativePath: keyFile,
-	}, nil
-}
-
-// reconcileRunnerVersion records/updates this deployment's persisted runner
-// version marker based on the runner the manager just resolved. The runner
-// is always resolved fresh from the shared cache, so there is no older
-// installed copy to fall back to: an unsafe version relationship (a major
-// mismatch, or the resolved runner being older than the marker) is logged
-// as a warning and the marker is updated to match, rather than refusing to
-// proceed.
+// reconcileRunnerVersion enforces the VM-only v2 contract and records the
+// resolved runner version for deployment diagnostics.
 func (runtime *MacVMRuntime) reconcileRunnerVersion(ctx context.Context, runnerPath string) error {
 	resolvedVersion, err := readRunnerVersion(ctx, runnerPath)
 	forceReconciliation := strings.TrimSpace(os.Getenv(forceRunnerReconciliationEnv)) == "1"
@@ -374,6 +540,13 @@ func (runtime *MacVMRuntime) reconcileRunnerVersion(ctx context.Context, runnerP
 
 		return fmt.Errorf("resolved local runner does not report a valid version: %w", err)
 	}
+	if resolvedVersion.Major < minimumRunnerMajor {
+		return fmt.Errorf(
+			"resolved local runner %s uses the legacy application-owning contract; "+
+				"version 2 or newer is required",
+			resolvedVersion,
+		)
+	}
 
 	markerVersion, err := readRunnerVersionMarker(runtime.paths.RunnerVersionMarkerPath)
 	if err != nil {
@@ -383,15 +556,13 @@ func (runtime *MacVMRuntime) reconcileRunnerVersion(ctx context.Context, runnerP
 	switch {
 	case markerVersion.Major != resolvedVersion.Major:
 		slog.Warn(
-			"resolved local runner major version differs from this deployment's recorded "+
-				"version; proceeding anyway",
+			"resolved local runner major version differs from this deployment's recorded version",
 			"recordedVersion", markerVersion,
 			"resolvedVersion", resolvedVersion,
 		)
 	case resolvedVersion.LT(markerVersion):
 		slog.Warn(
-			"resolved local runner is older than this deployment's recorded version; "+
-				"proceeding anyway",
+			"resolved local runner is older than this deployment's recorded version",
 			"recordedVersion", markerVersion,
 			"resolvedVersion", resolvedVersion,
 		)
@@ -402,7 +573,7 @@ func (runtime *MacVMRuntime) reconcileRunnerVersion(ctx context.Context, runnerP
 			"resolvedVersion", resolvedVersion,
 		)
 	default:
-		// Identical version: nothing to log.
+		// Identical versions require no diagnostic message.
 	}
 
 	return writeRunnerVersionMarker(runtime.paths.RunnerVersionMarkerPath, resolvedVersion)
@@ -456,8 +627,6 @@ func writeRunnerVersionMarker(path string, version semver.Version) error {
 	return os.WriteFile(path, data, markerFileMode)
 }
 
-// runnerCommandWithOutput runs the runner and returns captured stdout.
-// Use this for commands whose output must be parsed (e.g. status JSON).
 func (runtime *MacVMRuntime) runnerCommandWithOutput(
 	ctx context.Context,
 	runnerPath string,
@@ -477,9 +646,6 @@ func (runtime *MacVMRuntime) runnerCommand(
 	return err
 }
 
-// runRunnerCommand runs the runner and returns captured stdout, additionally
-// forwarding stdout/stderr to out/outErr as they arrive (nil is a no-op, see
-// util.CombineWriters).
 func (runtime *MacVMRuntime) runRunnerCommand(
 	ctx context.Context,
 	runnerPath string,
@@ -492,11 +658,9 @@ func (runtime *MacVMRuntime) runRunnerCommand(
 
 	cmd := exec.CommandContext(ctx, runnerPath, args...)
 	cmd.Dir = runtime.paths.WorkDir
-
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = util.CombineWriters(&stdout, out)
 	cmd.Stderr = util.CombineWriters(&stderr, outErr)
-
 	if err := cmd.Run(); err != nil {
 		detail := strings.TrimSpace(stdout.String() + "\n" + stderr.String())
 		if detail != "" {
@@ -524,10 +688,8 @@ func (runtime *MacVMRuntime) waitForDaemonExit(ctx context.Context) error {
 
 	waitCtx, cancel := context.WithTimeout(ctx, stopTimeout)
 	defer cancel()
-
 	ticker := time.NewTicker(stopPollInterval)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-waitCtx.Done():
@@ -568,97 +730,26 @@ func processRunning(pid int) bool {
 	}
 
 	err = process.Signal(syscall.Signal(0))
-	if err == nil {
-		return true
-	}
-	if errors.Is(err, syscall.EPERM) {
-		return true
-	}
 
-	return false
-}
-
-func (runtime *MacVMRuntime) ensureSSHKey() error {
-	if keyData, err := os.ReadFile(runtime.paths.PrivateKeyPath); err == nil {
-		if isOpenSSHPrivateKey(keyData) {
-			return nil
-		}
-
-		if err := os.Remove(runtime.paths.PrivateKeyPath); err != nil {
-			return fmt.Errorf("failed to replace invalid local SSH key: %w", err)
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("failed to inspect local SSH key: %w", err)
-	}
-
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return fmt.Errorf("failed to generate local SSH key: %w", err)
-	}
-	privateKeyBlock, err := ssh.MarshalPrivateKey(privateKey, "")
-	if err != nil {
-		return fmt.Errorf("failed to marshal local SSH private key: %w", err)
-	}
-	privateKeyPEM := pem.EncodeToMemory(privateKeyBlock)
-	if err := os.MkdirAll(filepath.Dir(runtime.paths.PrivateKeyPath), dirMode); err != nil {
-		return fmt.Errorf("failed to create local SSH key directory: %w", err)
-	}
-	if err := os.WriteFile(
-		runtime.paths.PrivateKeyPath,
-		privateKeyPEM,
-		privateFileMode,
-	); err != nil {
-		return fmt.Errorf("failed to write local SSH private key: %w", err)
-	}
-
-	return nil
-}
-
-func isOpenSSHPrivateKey(keyData []byte) bool {
-	block, _ := pem.Decode(keyData)
-	if block == nil || block.Type != openSSHKeyPEMType {
-		return false
-	}
-	if _, err := ssh.ParsePrivateKey(keyData); err != nil {
-		return false
-	}
-
-	return true
+	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
 func readRunnerState(statePath string) (*runnerState, error) {
-	stateFile, err := os.Open(statePath)
+	stateFile, err := os.Open(statePath) //nolint:gosec // deployment-owned state path
 	if err != nil {
 		return nil, fmt.Errorf("failed to open local VM state file %s: %w", statePath, err)
 	}
-	defer stateFile.Close()
+	defer func() { _ = stateFile.Close() }()
 
 	var state runnerState
 	if err := json.NewDecoder(stateFile).Decode(&state); err != nil {
 		return nil, fmt.Errorf("failed to parse local VM state file %s: %w", statePath, err)
 	}
-	if err := validateRunnerState(&state); err != nil {
+	if _, err := runtimeEndpointFromRunnerState(&state); err != nil {
 		return nil, err
 	}
 
 	return &state, nil
-}
-
-func validateRunnerState(state *runnerState) error {
-	if state == nil {
-		return errors.New("local VM state is missing")
-	}
-	if err := validatePort("ssh", state.Ports.SSH); err != nil {
-		return err
-	}
-	if err := validatePort("database", state.Ports.DB); err != nil {
-		return err
-	}
-	if state.Ports.UI != 0 {
-		return validatePort("ui", state.Ports.UI)
-	}
-
-	return nil
 }
 
 func validatePort(name string, port int) error {
