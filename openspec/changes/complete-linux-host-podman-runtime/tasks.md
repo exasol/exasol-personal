@@ -9,7 +9,7 @@
 - [x] 2.1 Emit best-effort Podman environment and container diagnostics for materialization, recreation, and startup failures
 - [x] 2.2 Configure Nano version-check enablement, identity, operating system, URL, bounded interval, and bounded retry interval
 - [x] 2.3 Reuse, pull, or import configured SLCs, mount available images, and atomically publish their availability status
-- [ ] 2.4 Prune only unreferenced exact official-repository and labeled custom-import images for SLC-aware callers
+- [x] 2.4 Prune only unreferenced exact official-repository and labeled custom-import images for SLC-aware callers
 
 ## 3. Data Recovery and Migration
 
