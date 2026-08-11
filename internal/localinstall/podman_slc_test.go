@@ -37,6 +37,7 @@ func TestPodmanInstallStart_MaterializesAndMountsAvailableSLCs(t *testing.T) {
 	writeTestFile(t, filepath.Join(fixture.slcStagingDir, "imported.tar.gz"), "image archive")
 	writeTestFile(t, filepath.Join(fixture.slcStagingDir, "failed.tar.gz"), "invalid archive")
 	writeTestFile(t, fixture.slcStatusPath, `{"slc":[{"image":"stale","state":"present"}]}`)
+	install.slcStagingDir.HostPath = "/host-only/slc-packages"
 
 	// When
 	err := install.Start(context.Background(), nil, nil, startConfig)
