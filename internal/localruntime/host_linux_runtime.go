@@ -76,6 +76,7 @@ func (runtime *LinuxHostRuntime) Start(
 	}
 	install := localinstall.NewPodmanInstall(
 		runtime.Deployment(), runtime.manager, runtime.runCmd(),
+		SLCStagingDir(runtime.Deployment()), SLCStatusPath(runtime.Deployment()),
 	)
 
 	if err := install.Start(ctx, out, outErr, startConfig); err != nil {
@@ -89,6 +90,7 @@ func (runtime *LinuxHostRuntime) Start(
 func (runtime *LinuxHostRuntime) Stop(ctx context.Context, out, outErr io.Writer) error {
 	install := localinstall.NewPodmanInstall(
 		runtime.Deployment(), runtime.manager, runtime.runCmd(),
+		SLCStagingDir(runtime.Deployment()), SLCStatusPath(runtime.Deployment()),
 	)
 
 	return install.Stop(ctx, out, outErr)
@@ -102,6 +104,7 @@ func (*LinuxHostRuntime) Status(_ context.Context) (*RuntimeStatus, error) {
 func (runtime *LinuxHostRuntime) Destroy(ctx context.Context, out, outErr io.Writer) error {
 	install := localinstall.NewPodmanInstall(
 		runtime.Deployment(), runtime.manager, runtime.runCmd(),
+		SLCStagingDir(runtime.Deployment()), SLCStatusPath(runtime.Deployment()),
 	)
 
 	if err := install.Destroy(ctx, out, outErr); err != nil {
