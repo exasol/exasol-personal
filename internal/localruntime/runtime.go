@@ -26,11 +26,16 @@ const (
 	runnerVersionMarkerFileName = "runner-version.json"
 )
 
+type RuntimeConfig struct {
+	Ports string
+}
+
 type VMConfig struct {
+	RuntimeConfig
+
 	CPUCount   int
 	MemoryMB   int
 	DataSizeGB int
-	Ports      string
 }
 
 type RuntimeStatus struct {
