@@ -293,8 +293,7 @@ def test_diag_cos_runs_confd_client(
 ) -> None:
     if infra == "local":
         pytest.skip(
-            "confd_client is a COS tool; local deployments use a VM shell"
-            " fallback where it is not available"
+            "confd_client is a COS tool and is unavailable for local deployments"
         )
     # Given: A running deployment and a PTY for an interactive container shell session.
     launcher_path = reusable_deployment.launcher.launcher_path
