@@ -19,10 +19,12 @@ var ErrLocalReachability = errors.New("local runtime reachability problem")
 // a network-wide local runtime reachability problem, following the same
 // shape as blockedStateError: Error() is already the full message, Unwrap()
 // exposes the sentinel.
-type localReachabilityError struct{}
+type localReachabilityError struct {
+	message string
+}
 
-func (*localReachabilityError) Error() string { return localReachabilityMessage }
-func (*localReachabilityError) Unwrap() error { return ErrLocalReachability }
+func (err *localReachabilityError) Error() string { return err.message }
+func (*localReachabilityError) Unwrap() error     { return ErrLocalReachability }
 
 const localReachabilityMessage = "could not reach the local database endpoint because the " +
 	"host-to-VM network path appears blocked.\n\n" +
@@ -33,6 +35,11 @@ const localReachabilityMessage = "could not reach the local database endpoint be
 	"local network.\n\n" +
 	"To fix this: open System Settings -> Privacy & Security -> Local Network, and enable " +
 	"access for that application. Then retry."
+
+const linuxHostReachabilityMessage = "could not reach the local database endpoint published " +
+	"by the Linux Podman container.\n\n" +
+	"Inspect the deployment container with `podman ps -a` and `podman logs`, then check for " +
+	"a host firewall rule or another process using the configured database port."
 
 // classifyLocalReachability inspects the local runtime's forwarded-port
 // health and returns a localReachabilityError when every forwarded port is
@@ -71,7 +78,15 @@ func classifyLocalReachability(ctx context.Context, runtime localruntime.Runtime
 		}
 	}
 
-	return &localReachabilityError{}
+	return &localReachabilityError{message: localReachabilityMessageForRuntime(runtime)}
+}
+
+func localReachabilityMessageForRuntime(runtime localruntime.Runtime) string {
+	if _, isLinuxHost := runtime.(*localruntime.LinuxHostRuntime); isLinuxHost {
+		return linuxHostReachabilityMessage
+	}
+
+	return localReachabilityMessage
 }
 
 // diagnoseLocalFailure re-classifies a local-deployment operation failure
