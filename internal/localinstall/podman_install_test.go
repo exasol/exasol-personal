@@ -355,32 +355,63 @@ func TestPodmanInstallStart_RejectsInvalidConfigurationBeforePodman(t *testing.T
 
 	tests := []struct {
 		name   string
-		mutate func(*StartConfig)
+		mutate func(*PodmanInstall, *StartConfig)
 	}{
 		{
 			name:   "published port",
-			mutate: func(config *StartConfig) { config.ContainerDBPort = 65536 },
+			mutate: func(_ *PodmanInstall, config *StartConfig) { config.ContainerDBPort = 65536 },
 		},
-		{name: "data directory", mutate: func(config *StartConfig) { config.DataDir = " " }},
+		{
+			name: "data directory",
+			mutate: func(_ *PodmanInstall, config *StartConfig) {
+				config.DataDir = " "
+			},
+		},
 		{
 			name: "enabled version-check URL",
-			mutate: func(config *StartConfig) {
+			mutate: func(_ *PodmanInstall, config *StartConfig) {
 				config.VersionCheck = validTestVersionCheckConfig()
 				config.VersionCheck.URL = ""
 			},
 		},
 		{
 			name: "enabled version-check identity",
-			mutate: func(config *StartConfig) {
+			mutate: func(_ *PodmanInstall, config *StartConfig) {
 				config.VersionCheck = validTestVersionCheckConfig()
 				config.VersionCheck.Identity = ""
 			},
 		},
 		{
 			name: "enabled version-check operating system",
-			mutate: func(config *StartConfig) {
+			mutate: func(_ *PodmanInstall, config *StartConfig) {
 				config.VersionCheck = validTestVersionCheckConfig()
 				config.VersionCheck.OperatingSystem = ""
+			},
+		},
+		{
+			name: "SLC image",
+			mutate: func(_ *PodmanInstall, config *StartConfig) {
+				config.SLCs = []SLCConfig{{Target: "/exa/slc/python"}}
+			},
+		},
+		{
+			name: "SLC target",
+			mutate: func(_ *PodmanInstall, config *StartConfig) {
+				config.SLCs = []SLCConfig{{Image: "example.test/slc:latest"}}
+			},
+		},
+		{
+			name: "SLC status path",
+			mutate: func(install *PodmanInstall, config *StartConfig) {
+				config.SLCs = []SLCConfig{}
+				install.slcStatusPath = " "
+			},
+		},
+		{
+			name: "SLC staging directory",
+			mutate: func(install *PodmanInstall, config *StartConfig) {
+				config.SLCs = []SLCConfig{}
+				install.slcStagingDir = " "
 			},
 		},
 	}
@@ -391,7 +422,7 @@ func TestPodmanInstallStart_RejectsInvalidConfigurationBeforePodman(t *testing.T
 
 			// Given
 			install, startConfig, fixture := newPodmanInstallFixture(t)
-			test.mutate(&startConfig)
+			test.mutate(install, &startConfig)
 
 			// When
 			err := install.Start(context.Background(), nil, nil, startConfig)
@@ -403,7 +434,31 @@ func TestPodmanInstallStart_RejectsInvalidConfigurationBeforePodman(t *testing.T
 			if commands := readCommandLog(t, fixture.logPath); len(commands) != 0 {
 				t.Fatalf("expected no Podman commands, got %#v", commands)
 			}
+			if _, statErr := os.Stat(startConfig.DataDir); !os.IsNotExist(statErr) {
+				t.Fatalf("expected no data-directory work, got %v", statErr)
+			}
 		})
+	}
+}
+
+func TestPodmanInstallStart_RejectsInvalidSLCBeforeAlreadyRunningReturn(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	startConfig.SLCs = []SLCConfig{{Image: " ", Target: "/exa/slc/python"}}
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "running"), testContainerName+"\n")
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "nano SLC 0 image is required") {
+		t.Fatalf("expected invalid SLC configuration error, got %v", err)
+	}
+	if commands := readCommandLog(t, fixture.logPath); len(commands) != 0 {
+		t.Fatalf("expected no Podman commands, got %#v", commands)
 	}
 }
 
@@ -435,9 +490,11 @@ func TestPodmanInstallStop_RemovesContainerIdempotently(t *testing.T) {
 }
 
 type podmanInstallFixture struct {
-	logPath     string
-	scenarioDir string
-	imagePath   string
+	logPath       string
+	scenarioDir   string
+	imagePath     string
+	slcStagingDir string
+	slcStatusPath string
 }
 
 func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanInstallFixture) {
@@ -483,10 +540,14 @@ func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanI
 		runtime.GOARCH,
 	)
 
+	slcStagingDir := filepath.Join(root, "slc-packages")
+	slcStatusPath := filepath.Join(root, "slc-status.json")
 	install := NewPodmanInstall(
 		deployment,
 		manager,
 		[]string{"/bin/sh", scriptPath, logPath, scenarioDir},
+		slcStagingDir,
+		slcStatusPath,
 	)
 	startConfig := StartConfig{
 		ContainerDBPort: 28563,
@@ -494,9 +555,11 @@ func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanI
 		InitParams:      []string{"maxConnectionsLicenseLimit=20"},
 	}
 	fixture := podmanInstallFixture{
-		logPath:     logPath,
-		scenarioDir: scenarioDir,
-		imagePath:   imagePath,
+		logPath:       logPath,
+		scenarioDir:   scenarioDir,
+		imagePath:     imagePath,
+		slcStagingDir: slcStagingDir,
+		slcStatusPath: slcStatusPath,
 	}
 
 	return install, startConfig, fixture
@@ -552,6 +615,7 @@ func skipPodmanInstallTestOnWindows(t *testing.T) {
 	}
 }
 
+//nolint:dupword // Repeated shell terminators are required by this fixture.
 const fakePodmanScript = `#!/bin/sh
 set -eu
 
@@ -572,6 +636,13 @@ if [ -f "$scenario_dir/fail" ] && [ "$(cat "$scenario_dir/fail")" = "$command" ]
   printf 'fake %s failure\n' "$command" >&2
   exit 42
 fi
+if [ "$command" = "import" ] && [ -f "$scenario_dir/fail-import-image" ]; then
+  for last_argument in "$@"; do :; done
+  if [ "$(cat "$scenario_dir/fail-import-image")" = "$last_argument" ]; then
+    printf 'fake import failure\n' >&2
+    exit 44
+  fi
+fi
 if [ -f "$scenario_dir/fail-diagnostics" ]; then
   case "$command" in
     info|ps|logs)
@@ -588,6 +659,14 @@ if [ -f "$scenario_dir/fail-diagnostics" ]; then
 fi
 
 case "$command" in
+  image)
+    if [ "$3" != "exists" ]; then
+      exit 93
+    fi
+    if [ ! -f "$scenario_dir/images" ] || ! grep -Fxq "$4" "$scenario_dir/images"; then
+      exit 1
+    fi
+    ;;
   container)
     operation=$3
     case "$operation" in
@@ -616,7 +695,7 @@ case "$command" in
       printf 'Loaded image: docker.io/exasol/nano:test\n'
     fi
     ;;
-  info|ps|logs|tag|run|rm)
+  info|ps|logs|pull|import|tag|run|rm)
     ;;
   *)
     printf 'unexpected fake Podman command: %s\n' "$command" >&2
