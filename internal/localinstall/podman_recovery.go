@@ -27,49 +27,50 @@ func (install *PodmanInstall) recoverIncompleteInitialCreate(
 	ctx context.Context,
 	out, outErr io.Writer,
 	containerName, dataDir string,
-) error {
+	containerExists bool,
+) (bool, error) {
 	markerPath := filepath.Join(dataDir, initialCreateMarkerName)
 	if _, err := os.Stat(markerPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil
+			return false, nil
 		}
 
-		return fmt.Errorf("failed to inspect Nano initial-create marker %s: %w", markerPath, err)
+		return false, fmt.Errorf(
+			"failed to inspect Nano initial-create marker %s: %w",
+			markerPath,
+			err,
+		)
 	}
 
-	exists, err := install.containerExists(ctx, outErr, containerName)
-	if err != nil {
-		return err
-	}
-	if exists {
+	if containerExists {
 		if err := install.runCmd(ctx, out, outErr, "podman", "stop", containerName); err != nil {
-			return install.failureWithDiagnostics(ctx, outErr, containerName,
+			return false, install.failureWithDiagnostics(ctx, outErr, containerName,
 				fmt.Errorf("failed to stop incomplete Nano container %s: %w", containerName, err))
 		}
 		if err := install.runCmd(
 			ctx, out, outErr, "podman", "rm", "--force", "--ignore", containerName,
 		); err != nil {
-			return install.failureWithDiagnostics(ctx, outErr, containerName,
+			return false, install.failureWithDiagnostics(ctx, outErr, containerName,
 				fmt.Errorf("failed to remove incomplete Nano container %s: %w", containerName, err))
 		}
 	}
 
 	quarantinePath, err := nextQuarantinePath(dataDir, time.Now())
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := os.Rename(dataDir, quarantinePath); err != nil {
-		return fmt.Errorf(
+		return false, fmt.Errorf(
 			"failed to quarantine incomplete Nano data at %s: %w",
 			quarantinePath,
 			err,
 		)
 	}
 	if err := os.MkdirAll(dataDir, dataDirMode); err != nil {
-		return fmt.Errorf("failed to recreate Nano data directory %s: %w", dataDir, err)
+		return false, fmt.Errorf("failed to recreate Nano data directory %s: %w", dataDir, err)
 	}
 
-	return nil
+	return true, nil
 }
 
 func nextQuarantinePath(dataDir string, now time.Time) (string, error) {
