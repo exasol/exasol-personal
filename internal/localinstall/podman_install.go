@@ -38,20 +38,26 @@ const (
 )
 
 type PodmanInstall struct {
-	deployment  config.DeploymentDir
-	manager     *runtimeartifacts.Manager
-	runtimeExec []string
+	deployment    config.DeploymentDir
+	manager       *runtimeartifacts.Manager
+	runtimeExec   []string
+	slcStagingDir string
+	slcStatusPath string
 }
 
 func NewPodmanInstall(
 	deployment config.DeploymentDir,
 	manager *runtimeartifacts.Manager,
 	runtimeExec []string,
+	slcStagingDir string,
+	slcStatusPath string,
 ) *PodmanInstall {
 	return &PodmanInstall{
-		deployment:  deployment,
-		manager:     manager,
-		runtimeExec: runtimeExec,
+		deployment:    deployment,
+		manager:       manager,
+		runtimeExec:   runtimeExec,
+		slcStagingDir: slcStagingDir,
+		slcStatusPath: slcStatusPath,
 	}
 }
 
@@ -105,6 +111,10 @@ func (install *PodmanInstall) Start(
 		return install.failureWithDiagnostics(ctx, outErr, containerName,
 			fmt.Errorf("failed to tag Nano image %s as %s: %w", loadedImage, imageTag, err))
 	}
+	availableSLCs, err := install.materializeSLCs(ctx, out, outErr, containerName, startConfig.SLCs)
+	if err != nil {
+		return err
+	}
 
 	args := []string{
 		"run", "-d", "--replace",
@@ -115,6 +125,12 @@ func (install *PodmanInstall) Start(
 		"--restart", nanoRestartPolicy,
 		"-p", fmt.Sprintf("%d:%d", startConfig.ContainerDBPort, nanoInternalDBPort),
 		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
+	}
+	for _, slc := range availableSLCs {
+		args = append(args,
+			"--mount",
+			fmt.Sprintf("type=image,source=%s,destination=%s", slc.Image, slc.Target),
+		)
 	}
 	if startConfig.VersionCheck.Enabled {
 		args = append(args, "-e", "VERSION_CHECK_IDENTITY="+startConfig.VersionCheck.Identity)
@@ -128,6 +144,14 @@ func (install *PodmanInstall) Start(
 		return install.failureWithDiagnostics(ctx, outErr, containerName,
 			fmt.Errorf("failed to start Nano container %s: %w", containerName, err))
 	}
+	for index, slc := range startConfig.SLCs {
+		if strings.TrimSpace(slc.Image) == "" {
+			return fmt.Errorf("Nano SLC %d image is required", index)
+		}
+		if strings.TrimSpace(slc.Target) == "" {
+			return fmt.Errorf("Nano SLC %d target is required", index)
+		}
+	}
 
 	return nil
 }
@@ -138,6 +162,16 @@ func (install *PodmanInstall) failureWithDiagnostics(
 	containerName string,
 	failure error,
 ) error {
+	install.writePodmanDiagnostics(ctx, outErr, containerName)
+
+	return failure
+}
+
+func (install *PodmanInstall) writePodmanDiagnostics(
+	ctx context.Context,
+	outErr io.Writer,
+	containerName string,
+) {
 	diagnosticOut := outErr
 	if diagnosticOut == nil {
 		diagnosticOut = io.Discard
@@ -163,8 +197,6 @@ func (install *PodmanInstall) failureWithDiagnostics(
 			_, _ = fmt.Fprintf(diagnosticOut, "diagnostic command failed: %v\n", err)
 		}
 	}
-
-	return failure
 }
 
 func (install *PodmanInstall) Stop(ctx context.Context, out, outErr io.Writer) error {
