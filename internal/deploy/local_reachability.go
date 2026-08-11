@@ -77,15 +77,20 @@ func classifyLocalReachability(ctx context.Context, runtime localruntime.VMRunti
 // diagnoseLocalFailure re-classifies a local-deployment operation failure
 // as a localReachabilityError when the local runtime's forwarded ports are
 // all unreachable, deferring to the original error otherwise.
-func diagnoseLocalFailure(ctx context.Context, runtime localruntime.VMRuntime, err error) error {
+func diagnoseLocalFailure(ctx context.Context, runtime localruntime.Runtime, err error) error {
 	if err == nil {
 		return nil
 	}
 
-	reachabilityErr := classifyLocalReachability(ctx, runtime)
-	if reachabilityErr != nil {
-		return reachabilityErr
-	}
+	switch rt := runtime.(type) {
+	case localruntime.VMRuntime:
+		reachabilityErr := classifyLocalReachability(ctx, rt)
+		if reachabilityErr != nil {
+			return reachabilityErr
+		}
 
-	return err
+		return err
+	default:
+		return err
+	}
 }
