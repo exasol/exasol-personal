@@ -5,10 +5,12 @@ package localruntime
 
 import (
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 )
 
 func TestLinuxHostPodmanStartConfig_UsesReferenceDefaults(t *testing.T) {
@@ -42,10 +44,18 @@ func TestLinuxHostPodmanStartConfig_UsesOnlyCommonRuntimeConfig(t *testing.T) {
 	// Given
 	localRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
 	vmConfig := VMConfig{
-		RuntimeConfig: RuntimeConfig{Ports: "ssh:20022, db:28563, ui:28443"},
-		CPUCount:      32,
-		MemoryMB:      131072,
-		DataSizeGB:    4096,
+		RuntimeConfig: RuntimeConfig{
+			Ports: "ssh:20022, db:28563, ui:28443",
+			VersionCheck: localinstall.VersionCheckConfig{
+				Enabled:  true,
+				URL:      "https://example.test",
+				Identity: "cluster-id",
+			},
+			SLCs: []localinstall.SLCConfig{},
+		},
+		CPUCount:   32,
+		MemoryMB:   131072,
+		DataSizeGB: 4096,
 	}
 
 	// When
@@ -56,6 +66,12 @@ func TestLinuxHostPodmanStartConfig_UsesOnlyCommonRuntimeConfig(t *testing.T) {
 	}
 	if startConfig.ContainerDBPort != 28563 {
 		t.Fatalf("expected published DB port override, got %#v", startConfig)
+	}
+	if !reflect.DeepEqual(startConfig.VersionCheck, vmConfig.VersionCheck) {
+		t.Fatalf("expected portable version-check settings, got %#v", startConfig.VersionCheck)
+	}
+	if startConfig.SLCs == nil || len(startConfig.SLCs) != 0 {
+		t.Fatalf("expected authoritative empty SLC set, got %#v", startConfig.SLCs)
 	}
 }
 
