@@ -9,7 +9,6 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/connect"
-	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
 type Output struct {
@@ -62,11 +61,12 @@ func Connect(ctx context.Context, opts *connect.Opts, deployment config.Deployme
 					return err
 				}
 
-				return diagnoseLocalFailure(
-					ctx,
-					localruntime.NewMacVMRuntime(deployment, manager),
-					err,
-				)
+				selectedRuntime, runtimeErr := newLocalRuntime(deployment, manager)
+				if runtimeErr != nil {
+					return err
+				}
+
+				return diagnoseLocalFailure(ctx, selectedRuntime, err)
 			}
 
 			return nil

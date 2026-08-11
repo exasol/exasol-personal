@@ -14,7 +14,6 @@ import (
 
 	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/slc"
 )
 
@@ -569,7 +568,11 @@ func isLocalDeploymentRunning(ctx context.Context, deployment config.DeploymentD
 		return false
 	}
 
-	status, err := localruntime.NewMacVMRuntime(deployment, manager).Status(ctx)
+	selectedRuntime, err := newLocalRuntime(deployment, manager)
+	if err != nil {
+		return false
+	}
+	status, err := selectedRuntime.Status(ctx)
 	if err != nil {
 		return false
 	}
