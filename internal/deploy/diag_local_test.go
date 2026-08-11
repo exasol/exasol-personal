@@ -13,31 +13,8 @@ import (
 	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
-func TestDiagnoseLocalUnsafe_UnsupportedPlatform(t *testing.T) {
-	t.Parallel()
-
-	// Deliberately does not set localAllowUnsupportedEnv, unlike the
-	// "supported platform" tests below (which cannot run in parallel with
-	// each other since t.Setenv forbids that, but do not conflict with this
-	// test since Go runs all non-parallel tests to completion first).
-	deployment := newLocalTestDeployment(t)
-
-	diagnostics := diagnoseLocalUnsafe(
-		context.Background(),
-		localruntime.NewMacVMRuntime(deployment, nil),
-	)
-
-	if diagnostics.PlatformSupported {
-		t.Fatalf("expected unsupported platform, got %+v", diagnostics)
-	}
-	if diagnostics.Message == "" {
-		t.Fatal("expected a message explaining the unsupported platform")
-	}
-}
-
+//nolint:paralleltest // Fake runner resource resolution is process-sensitive.
 func TestDiagnoseLocalUnsafe_NonLocalDeployment(t *testing.T) {
-	t.Setenv(localAllowUnsupportedEnv, "1")
-
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o700); err != nil {
 		t.Fatalf("create infrastructure dir failed: %v", err)
@@ -54,24 +31,23 @@ backend: tofu
 	)
 
 	if !diagnostics.PlatformSupported {
-		t.Fatal("expected platform support to bypass via EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM")
+		t.Fatal("expected platform to be supported")
 	}
 	if diagnostics.VMRunning != nil {
 		t.Fatalf("expected no VM status check for a non-local deployment, got %+v", diagnostics)
 	}
 }
 
+//nolint:paralleltest // Fake runner resource resolution is process-sensitive.
 func TestDiagnoseLocalUnsafe_VMNotRunning(t *testing.T) {
 	skipOnWindows(t)
-	t.Setenv(localAllowUnsupportedEnv, "1")
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
 	manager := writeFakeCombinedRunner(t, `{"running":false}`, "")
 
 	diagnostics := diagnoseLocalUnsafe(
-		context.Background(),
-		localruntime.NewMacVMRuntime(deployment, manager),
+		context.Background(), localruntime.NewMacVMRuntime(deployment, manager),
 	)
 
 	if diagnostics.VMRunning == nil || *diagnostics.VMRunning {
@@ -86,9 +62,9 @@ func TestDiagnoseLocalUnsafe_VMNotRunning(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Fake runner resource resolution is process-sensitive.
 func TestDiagnoseLocalUnsafe_VMRunningReportsPortsAndHealth(t *testing.T) {
 	skipOnWindows(t)
-	t.Setenv(localAllowUnsupportedEnv, "1")
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
@@ -97,8 +73,7 @@ func TestDiagnoseLocalUnsafe_VMRunningReportsPortsAndHealth(t *testing.T) {
 	writeFakeVMState(t, deployment, "192.168.64.5", 20022, 28563, 0)
 
 	diagnostics := diagnoseLocalUnsafe(
-		context.Background(),
-		localruntime.NewMacVMRuntime(deployment, manager),
+		context.Background(), localruntime.NewMacVMRuntime(deployment, manager),
 	)
 
 	if diagnostics.VMRunning == nil || !*diagnostics.VMRunning {
@@ -118,9 +93,9 @@ func TestDiagnoseLocalUnsafe_VMRunningReportsPortsAndHealth(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Fake runner resource resolution is process-sensitive.
 func TestDiagnoseLocalUnsafe_VMRunningMatchesRunningState_NoWarning(t *testing.T) {
 	skipOnWindows(t)
-	t.Setenv(localAllowUnsupportedEnv, "1")
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
@@ -138,9 +113,9 @@ func TestDiagnoseLocalUnsafe_VMRunningMatchesRunningState_NoWarning(t *testing.T
 	}
 }
 
+//nolint:paralleltest // Fake runner resource resolution is process-sensitive.
 func TestDiagnoseLocalUnsafe_VMRunningButStateNotRunning_Warning(t *testing.T) {
 	skipOnWindows(t)
-	t.Setenv(localAllowUnsupportedEnv, "1")
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)

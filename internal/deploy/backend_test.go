@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
@@ -100,5 +101,72 @@ func TestNewDeploymentBackend_ReturnsLocalBackendForLocalManifest(t *testing.T) 
 	}
 	if _, ok := backend.(*localBackend); !ok {
 		t.Fatalf("expected *localBackend, got %T", backend)
+	}
+}
+
+func TestNewLocalRuntimeForPlatform_SelectsRuntime(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	tests := []struct {
+		name   string
+		goos   string
+		goarch string
+		assert func(*testing.T, localruntime.Runtime)
+	}{
+		{
+			name: "mac vm",
+			goos: localMacOS, goarch: localMacArch,
+			assert: func(t *testing.T, selected localruntime.Runtime) {
+				t.Helper()
+				if _, ok := selected.(*localruntime.MacVMRuntime); !ok {
+					t.Fatalf("expected MacVMRuntime, got %T", selected)
+				}
+			},
+		},
+		{
+			name: "linux amd64",
+			goos: localLinuxOS, goarch: localLinuxAMD64,
+			assert: func(t *testing.T, selected localruntime.Runtime) {
+				t.Helper()
+				if _, ok := selected.(*localruntime.LinuxHostRuntime); !ok {
+					t.Fatalf("expected LinuxHostRuntime, got %T", selected)
+				}
+			},
+		},
+		{
+			name: "linux arm64",
+			goos: localLinuxOS, goarch: localLinuxARM64,
+			assert: func(t *testing.T, selected localruntime.Runtime) {
+				t.Helper()
+				if _, ok := selected.(*localruntime.LinuxHostRuntime); !ok {
+					t.Fatalf("expected LinuxHostRuntime, got %T", selected)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			selected, err := newLocalRuntimeForPlatform(
+				deployment, nil, test.goos, test.goarch,
+			)
+			if err != nil {
+				t.Fatalf("expected runtime selection to succeed, got %v", err)
+			}
+			test.assert(t, selected)
+		})
+	}
+}
+
+func TestNewLocalRuntimeForPlatform_RejectsWindows(t *testing.T) {
+	t.Parallel()
+
+	_, err := newLocalRuntimeForPlatform(
+		config.NewDeploymentDir(t.TempDir()), nil, "windows", "amd64",
+	)
+	if !errors.Is(err, errUnsupportedLocalPlatform) {
+		t.Fatalf("expected unsupported platform error, got %v", err)
 	}
 }

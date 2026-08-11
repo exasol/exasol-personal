@@ -1,7 +1,7 @@
 # Copyright 2026 Exasol AG
 # SPDX-License-Identifier: MIT
 
-"""Tests specific to local VM deployments."""
+"""Tests specific to local deployments."""
 
 import json
 import sys
@@ -47,7 +47,7 @@ def local_ports_deployment(
 def test_ports_override_sets_db_port(
     local_ports_deployment: tuple[Deployment, int],
 ) -> None:
-    """--ports db:<port> passes the port through to the VM runner.
+    """--ports db:<port> passes the port to the selected local runtime.
 
     The DB is reachable on the specified port.
     """
@@ -72,7 +72,7 @@ def test_ports_override_stable_across_restarts(
     """Port assignments from --ports db:<port> survive a stop/start cycle.
 
     The custom DB port must remain unchanged in deployment.json and the DB
-    must be reachable on that port after the VM is restarted.
+    must be reachable on that port after the local runtime is restarted.
     """
     deployment, custom_db_port = local_ports_deployment
 

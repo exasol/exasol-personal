@@ -6,7 +6,6 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 	"time"
 
@@ -41,7 +40,11 @@ func DiagnoseLocal(
 			return err
 		}
 
-		diagnostics = diagnoseLocalUnsafe(ctx, localruntime.NewMacVMRuntime(deployment, manager))
+		selectedRuntime, err := newLocalRuntime(deployment, manager)
+		if err != nil {
+			return err
+		}
+		diagnostics = diagnoseLocalUnsafe(ctx, selectedRuntime)
 
 		return nil
 	})
@@ -60,8 +63,7 @@ func diagnoseLocalUnsafe(
 		Platform: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 	}
 
-	allowUnsupported := os.Getenv(localAllowUnsupportedEnv)
-	if err := validateLocalPlatform(runtime.GOOS, runtime.GOARCH, allowUnsupported); err != nil {
+	if err := validateLocalPlatform(runtime.GOOS, runtime.GOARCH); err != nil {
 		diagnostics.Message = err.Error()
 		return diagnostics
 	}
@@ -80,9 +82,7 @@ func diagnoseLocalUnsafe(
 			runtimeName = "Podman container"
 		}
 		diagnostics.Message = fmt.Sprintf(
-			"could not determine local %s status: %s",
-			runtimeName,
-			err,
+			"could not determine local %s status: %s", runtimeName, err,
 		)
 
 		return diagnostics

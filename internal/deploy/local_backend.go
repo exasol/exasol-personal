@@ -23,9 +23,11 @@ import (
 )
 
 const (
-	localSupportedOS           = "darwin"
-	localSupportedArch         = "arm64"
-	localAllowUnsupportedEnv   = "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM"
+	localMacOS                 = "darwin"
+	localMacArch               = "arm64"
+	localLinuxOS               = "linux"
+	localLinuxAMD64            = "amd64"
+	localLinuxARM64            = "arm64"
 	hostMemoryDefaultDivisor   = 2
 	localDefaultCPUCount       = 2
 	localMinimumMemoryMB       = 4096
@@ -47,7 +49,7 @@ const (
 )
 
 var errUnsupportedLocalPlatform = errors.New(
-	"local deployments are only supported on macOS Apple Silicon",
+	"local deployments are only supported on macOS Apple Silicon and Linux amd64/arm64",
 )
 
 func newLocalBackend(
@@ -55,17 +57,40 @@ func newLocalBackend(
 	manifest *presets.InfrastructureManifest,
 	localRuntime localruntime.Runtime,
 ) *localBackend {
-	return &localBackend{deployment: deployment, manifest: manifest, runtime: localRuntime}
+	return newLocalBackendForPlatform(
+		deployment, manifest, localRuntime, runtime.GOOS, runtime.GOARCH,
+	)
+}
+
+func newLocalBackendForPlatform(
+	deployment config.DeploymentDir,
+	manifest *presets.InfrastructureManifest,
+	localRuntime localruntime.Runtime,
+	goos, goarch string,
+) *localBackend {
+	return &localBackend{
+		deployment: deployment,
+		manifest:   manifest,
+		runtime:    localRuntime,
+		goos:       goos,
+		goarch:     goarch,
+	}
 }
 
 type localBackend struct {
 	deployment config.DeploymentDir
 	manifest   *presets.InfrastructureManifest
 	runtime    localruntime.Runtime
+	goos       string
+	goarch     string
 }
 
-func (*localBackend) ValidateEnvironment() error {
-	return validateLocalPlatform(runtime.GOOS, runtime.GOARCH, os.Getenv(localAllowUnsupportedEnv))
+type localPlatformCapabilities struct {
+	vmSizing bool
+}
+
+func (b *localBackend) ValidateEnvironment() error {
+	return validateLocalPlatform(b.goos, b.goarch)
 }
 
 func (*localBackend) SetupWorkspace(_ context.Context) error {
@@ -82,12 +107,15 @@ func (b *localBackend) Configure(
 		return errors.New("local infrastructure manifest is missing")
 	}
 
-	local := ensureLocalManifestConfig(ctx, b.manifest)
-	if err := applyLocalConfigOverrides(local, overrides); err != nil {
+	capabilities := localCapabilitiesForPlatform(b.goos, b.goarch)
+	local := ensureLocalManifestConfig(ctx, b.manifest, capabilities)
+	if err := applyLocalConfigOverrides(local, overrides, capabilities); err != nil {
 		return err
 	}
 
-	runtimeConfig, err := resolveLocalRuntimeConfig(b.manifest, detectLocalHostMemoryMB(ctx))
+	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
+		b.manifest, detectLocalHostMemoryMB(ctx), b.goos, b.goarch,
+	)
 	if err != nil {
 		return err
 	}
@@ -103,7 +131,7 @@ func (b *localBackend) Configure(
 	); err != nil {
 		return fmt.Errorf("failed to write local infrastructure manifest: %w", err)
 	}
-	if runtimeConfig.memoryMB <= localInfraMemThresholdMB {
+	if capabilities.vmSizing && runtimeConfig.memoryMB <= localInfraMemThresholdMB {
 		slog.Warn(localInfraMemoryNoticeText, "memory_mb", runtimeConfig.memoryMB)
 	}
 
@@ -114,6 +142,7 @@ func (b *localBackend) Configure(
 func applyLocalConfigOverrides(
 	local *presets.InfrastructureLocal,
 	overrides map[string]string,
+	capabilities localPlatformCapabilities,
 ) error {
 	for name, rawValue := range overrides {
 		name = strings.TrimSpace(name)
@@ -127,18 +156,27 @@ func applyLocalConfigOverrides(
 		case canonical == canonicalLocalConfigName(localPortsConfigName):
 			local.Ports = rawValue
 		case canonical == canonicalLocalConfigName(localCPUCountConfigName):
+			if !capabilities.vmSizing {
+				continue
+			}
 			parsed, err := parseLocalPositiveIntConfig(name, rawValue)
 			if err != nil {
 				return err
 			}
 			local.CPUCount = parsed
 		case canonical == canonicalLocalConfigName(localMemoryMBConfigName):
+			if !capabilities.vmSizing {
+				continue
+			}
 			parsed, err := parseLocalPositiveIntConfig(name, rawValue)
 			if err != nil {
 				return err
 			}
 			local.MemoryMB = parsed
 		case canonical == canonicalLocalConfigName(localDataSizeGBConfigName):
+			if !capabilities.vmSizing {
+				continue
+			}
 			parsed, err := parseLocalPositiveIntConfig(name, rawValue)
 			if err != nil {
 				return err
@@ -160,7 +198,21 @@ func validateLocalInitMemory(
 	manifest *presets.InfrastructureManifest,
 	overrides map[string]string,
 ) error {
+	return validateLocalInitMemoryForPlatform(
+		ctx, manifest, overrides, runtime.GOOS, runtime.GOARCH,
+	)
+}
+
+func validateLocalInitMemoryForPlatform(
+	ctx context.Context,
+	manifest *presets.InfrastructureManifest,
+	overrides map[string]string,
+	goos, goarch string,
+) error {
 	if manifest == nil || manifest.Backend != backendTypeLocal {
+		return nil
+	}
+	if !localPlatformSupportsVMSizing(goos, goarch) {
 		return nil
 	}
 
@@ -168,27 +220,48 @@ func validateLocalInitMemory(
 	if manifest.Local != nil {
 		candidate = *manifest.Local
 	}
-	if err := applyLocalConfigOverrides(&candidate, overrides); err != nil {
+	capabilities := localCapabilitiesForPlatform(goos, goarch)
+	if err := applyLocalConfigOverrides(&candidate, overrides, capabilities); err != nil {
 		return err
 	}
 
-	_, err := resolveLocalRuntimeConfig(
+	_, err := resolveLocalRuntimeConfigForPlatform(
 		&presets.InfrastructureManifest{Local: &candidate},
 		detectLocalHostMemoryMB(ctx),
+		goos,
+		goarch,
 	)
 
 	return err
 }
 
 func (b *localBackend) ReadConfiguration() ([]DeploymentConfigValue, error) {
-	detectedHostMemoryMB := detectLocalHostMemoryMB(context.Background())
-	runtimeConfig, err := resolveLocalRuntimeConfig(b.manifest, detectedHostMemoryMB)
+	detectedHostMemoryMB := 0
+	if localPlatformSupportsVMSizing(b.goos, b.goarch) {
+		detectedHostMemoryMB = detectLocalHostMemoryMB(context.Background())
+	}
+	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
+		b.manifest, detectedHostMemoryMB, b.goos, b.goarch,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defaults := defaultLocalRuntimeConfig(detectedHostMemoryMB)
 
-	return []DeploymentConfigValue{
+	// nolint: prealloc
+	values := []DeploymentConfigValue{{
+		Name:       localPortsConfigName,
+		Type:       ConfigVariableTypeString,
+		Value:      runtimeConfig.ports,
+		Default:    "",
+		RawValue:   runtimeConfig.ports,
+		RawDefault: "",
+	}}
+	if !localPlatformSupportsVMSizing(b.goos, b.goarch) {
+		return values, nil
+	}
+
+	return append(values,
 		localIntConfigValue(
 			localCPUCountConfigName,
 			runtimeConfig.cpuCount,
@@ -204,25 +277,33 @@ func (b *localBackend) ReadConfiguration() ([]DeploymentConfigValue, error) {
 			runtimeConfig.dataSizeGB,
 			defaults.dataSizeGB,
 		),
-	}, nil
+	), nil
 }
 
 func (b *localBackend) ReadDeploymentConfigVariables() (
 	map[string]ConfigVariableDefinition,
 	error,
 ) {
-	return localConfigVariableDefinitions(b.manifest), nil
+	return localConfigVariableDefinitionsForPlatform(b.manifest, b.goos, b.goarch), nil
 }
 
-func validateLocalPlatform(goos, goarch, allowUnsupported string) error {
-	if allowUnsupported != "" {
-		return nil
-	}
-	if goos == localSupportedOS && goarch == localSupportedArch {
+func validateLocalPlatform(goos, goarch string) error {
+	if (goos == localMacOS && goarch == localMacArch) ||
+		(goos == localLinuxOS && (goarch == localLinuxAMD64 || goarch == localLinuxARM64)) {
 		return nil
 	}
 
 	return fmt.Errorf("%w (current platform: %s/%s)", errUnsupportedLocalPlatform, goos, goarch)
+}
+
+func localPlatformSupportsVMSizing(goos, goarch string) bool {
+	return goos == localMacOS && goarch == localMacArch
+}
+
+func localCapabilitiesForPlatform(goos, goarch string) localPlatformCapabilities {
+	return localPlatformCapabilities{
+		vmSizing: localPlatformSupportsVMSizing(goos, goarch),
+	}
 }
 
 func canonicalLocalConfigName(name string) string {
@@ -268,44 +349,65 @@ func localIntConfigValue(name string, value, defaultValue int) DeploymentConfigV
 func localConfigVariableDefinitions(
 	manifest *presets.InfrastructureManifest,
 ) map[string]ConfigVariableDefinition {
-	detectedHostMemoryMB := detectLocalHostMemoryMB(context.Background())
-	runtimeConfig, err := resolveLocalRuntimeConfig(manifest, detectedHostMemoryMB)
-	if err != nil {
-		runtimeConfig = defaultLocalRuntimeConfig(detectedHostMemoryMB)
-	}
+	return localConfigVariableDefinitionsForPlatform(
+		manifest, runtime.GOOS, runtime.GOARCH,
+	)
+}
 
-	return map[string]ConfigVariableDefinition{
-		localCPUCountConfigName: {
-			Name:           localCPUCountConfigName,
-			Description:    "Number of CPUs for the Exasol Local VM",
-			Type:           ConfigVariableTypeNumber,
-			DefaultDisplay: strconv.Itoa(runtimeConfig.cpuCount),
-		},
-		localMemoryMBConfigName: {
-			Name:           localMemoryMBConfigName,
-			Description:    "Memory in MB for the Exasol Local VM",
-			Type:           ConfigVariableTypeNumber,
-			DefaultDisplay: strconv.Itoa(runtimeConfig.memoryMB),
-		},
-		localDataSizeGBConfigName: {
-			Name:           localDataSizeGBConfigName,
-			Description:    "Data disk size in GB for the Exasol Local VM",
-			Type:           ConfigVariableTypeNumber,
-			DefaultDisplay: strconv.Itoa(runtimeConfig.dataSizeGB),
-		},
+func localConfigVariableDefinitionsForPlatform(
+	manifest *presets.InfrastructureManifest,
+	goos, goarch string,
+) map[string]ConfigVariableDefinition {
+	definitions := map[string]ConfigVariableDefinition{
 		localPortsConfigName: {
 			Name:        localPortsConfigName,
-			Description: "Port overrides for the Exasol Local VM (format: <service>:<port>,...)",
+			Description: "Database port override for the local deployment",
 			Type:        ConfigVariableTypeString,
 		},
 	}
+	if !localPlatformSupportsVMSizing(goos, goarch) {
+		return definitions
+	}
+
+	detectedHostMemoryMB := detectLocalHostMemoryMB(context.Background())
+	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
+		manifest, detectedHostMemoryMB, goos, goarch,
+	)
+	if err != nil {
+		runtimeConfig = defaultLocalRuntimeConfig(detectedHostMemoryMB)
+	}
+	definitions[localCPUCountConfigName] = ConfigVariableDefinition{
+		Name:           localCPUCountConfigName,
+		Description:    "Number of CPUs for the Exasol Local VM",
+		Type:           ConfigVariableTypeNumber,
+		DefaultDisplay: strconv.Itoa(runtimeConfig.cpuCount),
+	}
+	definitions[localMemoryMBConfigName] = ConfigVariableDefinition{
+		Name:           localMemoryMBConfigName,
+		Description:    "Memory in MB for the Exasol Local VM",
+		Type:           ConfigVariableTypeNumber,
+		DefaultDisplay: strconv.Itoa(runtimeConfig.memoryMB),
+	}
+	definitions[localDataSizeGBConfigName] = ConfigVariableDefinition{
+		Name:           localDataSizeGBConfigName,
+		Description:    "Data disk size in GB for the Exasol Local VM",
+		Type:           ConfigVariableTypeNumber,
+		DefaultDisplay: strconv.Itoa(runtimeConfig.dataSizeGB),
+	}
+
+	return definitions
 }
 
 func ensureLocalManifestConfig(
 	ctx context.Context,
 	manifest *presets.InfrastructureManifest,
+	capabilities localPlatformCapabilities,
 ) *presets.InfrastructureLocal {
 	if manifest.Local == nil {
+		if !capabilities.vmSizing {
+			manifest.Local = &presets.InfrastructureLocal{}
+			return manifest.Local
+		}
 		defaults := defaultLocalRuntimeConfig(detectLocalHostMemoryMB(ctx))
 		manifest.Local = &presets.InfrastructureLocal{
 			CPUCount:   defaults.cpuCount,
@@ -321,6 +423,9 @@ func (b *localBackend) OpenHostShell(
 	ctx context.Context,
 	_ string,
 ) error {
+	if b.goos == localLinuxOS {
+		return errors.New("host shell is not supported for Linux host Podman local deployments")
+	}
 	sshRemote, err := localSSHRemoteUnsafe(b.deployment)
 	if err != nil {
 		return err
@@ -334,6 +439,11 @@ func (b *localBackend) OpenHostShell(
 }
 
 func (b *localBackend) OpenCOSShell(ctx context.Context) error {
+	if b.goos == localLinuxOS {
+		return errors.New(
+			"container shell is not supported for Linux host Podman local deployments",
+		)
+	}
 	sshRemote, err := localSSHRemoteUnsafe(b.deployment)
 	if err != nil {
 		return err
@@ -427,9 +537,8 @@ func defaultLocalRuntimeConfig(detectedHostMemoryMB int) localRuntimeConfig {
 }
 
 func detectLocalHostMemoryMB(ctx context.Context) int {
-	// Host memory detection is only implemented for macOS today; other platforms
-	// return an error here and fall back to the fixed default, which keeps local
-	// sizing deterministic where local deployments are not yet supported.
+	// Host memory is only used for macOS VM sizing. Linux host deployments do not
+	// impose launcher-managed resource limits.
 	//nolint:staticcheck // SA4023: See comment below.
 	memoryMB, err := util.GetTotalMemoryMB(ctx)
 	//nolint:staticcheck // SA4023: only true for the unsupported-platform build of
@@ -444,10 +553,19 @@ func detectLocalHostMemoryMB(ctx context.Context) int {
 	return int(memoryMB)
 }
 
-func resolveLocalRuntimeConfig(
+func resolveLocalRuntimeConfigForPlatform(
 	manifest *presets.InfrastructureManifest,
 	detectedHostMemoryMB int,
+	goos, goarch string,
 ) (localRuntimeConfig, error) {
+	if !localPlatformSupportsVMSizing(goos, goarch) {
+		runtimeConfig := localRuntimeConfig{}
+		if manifest != nil && manifest.Local != nil {
+			runtimeConfig.ports = manifest.Local.Ports
+		}
+
+		return runtimeConfig, nil
+	}
 	runtimeConfig := defaultLocalRuntimeConfig(detectedHostMemoryMB)
 	if manifest != nil && manifest.Local != nil {
 		if manifest.Local.CPUCount != 0 {
@@ -538,7 +656,9 @@ func (b *localBackend) deployOrStart(
 	if err := b.ValidateEnvironment(); err != nil {
 		return err
 	}
-	runtimeConfig, err := resolveLocalRuntimeConfig(b.manifest, detectLocalHostMemoryMB(ctx))
+	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
+		b.manifest, detectLocalHostMemoryMB(ctx), b.goos, b.goarch,
+	)
 	if err != nil {
 		return err
 	}

@@ -16,6 +16,8 @@ import (
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
+const testLocalDBPortConfig = "db:28563"
+
 type logCaptureHandler struct {
 	records []slog.Record
 }
@@ -42,10 +44,20 @@ func TestValidateLocalPlatform_AcceptsMacOSAppleSilicon(t *testing.T) {
 	t.Parallel()
 
 	// Given / When
-	err := validateLocalPlatform("darwin", "arm64", "")
+	err := validateLocalPlatform(localMacOS, localMacArch)
 	// Then
 	if err != nil {
 		t.Fatalf("expected platform to be accepted, got %v", err)
+	}
+}
+
+func TestValidateLocalPlatform_AcceptsLinux(t *testing.T) {
+	t.Parallel()
+
+	for _, architecture := range []string{localLinuxAMD64, localLinuxARM64} {
+		if err := validateLocalPlatform(localLinuxOS, architecture); err != nil {
+			t.Fatalf("expected linux/%s to be accepted, got %v", architecture, err)
+		}
 	}
 }
 
@@ -53,7 +65,7 @@ func TestValidateLocalPlatform_RejectsUnsupportedPlatform(t *testing.T) {
 	t.Parallel()
 
 	// Given / When
-	err := validateLocalPlatform("linux", "amd64", "")
+	err := validateLocalPlatform("windows", "amd64")
 
 	// Then
 	if !errors.Is(err, errUnsupportedLocalPlatform) {
@@ -61,22 +73,13 @@ func TestValidateLocalPlatform_RejectsUnsupportedPlatform(t *testing.T) {
 	}
 }
 
-func TestValidateLocalPlatform_AllowsUnsupportedPlatformForTests(t *testing.T) {
-	t.Parallel()
-
-	// Given / When
-	err := validateLocalPlatform("linux", "amd64", "1")
-	// Then
-	if err != nil {
-		t.Fatalf("expected override to accept platform, got %v", err)
-	}
-}
-
 func TestResolveLocalRuntimeConfig_UsesDefaults(t *testing.T) {
 	t.Parallel()
 
 	// Given / When
-	runtimeConfig, err := resolveLocalRuntimeConfig(&presets.InfrastructureManifest{}, 0)
+	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
+		&presets.InfrastructureManifest{}, 0, localMacOS, localMacArch,
+	)
 	expectedDefaults := defaultLocalRuntimeConfig(0)
 	// Then
 	if err != nil {
@@ -116,7 +119,9 @@ func TestResolveLocalRuntimeConfig_UsesManifestValues(t *testing.T) {
 	}
 
 	// When
-	runtimeConfig, err := resolveLocalRuntimeConfig(manifest, 0)
+	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
+		manifest, 0, localMacOS, localMacArch,
+	)
 	// Then
 	if err != nil {
 		t.Fatalf("expected local config, got %v", err)
@@ -138,7 +143,9 @@ func TestResolveLocalRuntimeConfig_ExplicitMemoryOverridesComputedDefault(t *tes
 	}
 
 	// When
-	runtimeConfig, err := resolveLocalRuntimeConfig(manifest, 24576)
+	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
+		manifest, 24576, localMacOS, localMacArch,
+	)
 	// Then
 	if err != nil {
 		t.Fatalf("expected local config, got %v", err)
@@ -157,11 +164,30 @@ func TestResolveLocalRuntimeConfig_RejectsInvalidValues(t *testing.T) {
 	}
 
 	// When
-	_, err := resolveLocalRuntimeConfig(manifest, 0)
+	_, err := resolveLocalRuntimeConfigForPlatform(manifest, 0, localMacOS, localMacArch)
 
 	// Then
 	if err == nil {
 		t.Fatal("expected invalid local config error, got nil")
+	}
+}
+
+func TestResolveLocalRuntimeConfig_LinuxIgnoresVMSizing(t *testing.T) {
+	t.Parallel()
+
+	manifest := &presets.InfrastructureManifest{Local: &presets.InfrastructureLocal{
+		CPUCount: -1, MemoryMB: -1, DataSizeGB: -1, Ports: testLocalDBPortConfig,
+	}}
+
+	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
+		manifest, 1024, localLinuxOS, localLinuxAMD64,
+	)
+	if err != nil {
+		t.Fatalf("expected Linux to ignore VM sizing, got %v", err)
+	}
+	if runtimeConfig.cpuCount != 0 || runtimeConfig.memoryMB != 0 ||
+		runtimeConfig.dataSizeGB != 0 || runtimeConfig.ports != testLocalDBPortConfig {
+		t.Fatalf("unexpected Linux runtime config: %#v", runtimeConfig)
 	}
 }
 
@@ -233,10 +259,12 @@ func TestValidateLocalInitMemory_RejectsOverrideBelowMinimum(t *testing.T) {
 
 	manifest := &presets.InfrastructureManifest{Backend: backendTypeLocal}
 
-	err := validateLocalInitMemory(
+	err := validateLocalInitMemoryForPlatform(
 		context.Background(),
 		manifest,
 		map[string]string{localMemoryMBConfigName: "4095"},
+		localMacOS,
+		localMacArch,
 	)
 	if err == nil {
 		t.Fatal("expected minimum memory validation error, got nil")
@@ -251,10 +279,12 @@ func TestValidateLocalInitMemory_AcceptsValidOverride(t *testing.T) {
 
 	manifest := &presets.InfrastructureManifest{Backend: backendTypeLocal}
 
-	err := validateLocalInitMemory(
+	err := validateLocalInitMemoryForPlatform(
 		context.Background(),
 		manifest,
 		map[string]string{localMemoryMBConfigName: "4096"},
+		localMacOS,
+		localMacArch,
 	)
 	if err != nil {
 		t.Fatalf("expected valid override to be accepted, got %v", err)
@@ -266,10 +296,12 @@ func TestValidateLocalInitMemory_IgnoresNonLocalBackend(t *testing.T) {
 
 	manifest := &presets.InfrastructureManifest{Backend: backendTypeTofu}
 
-	err := validateLocalInitMemory(
+	err := validateLocalInitMemoryForPlatform(
 		context.Background(),
 		manifest,
 		map[string]string{localMemoryMBConfigName: "4095"},
+		localMacOS,
+		localMacArch,
 	)
 	if err != nil {
 		t.Fatalf("expected non-local backend to be ignored, got %v", err)
@@ -305,7 +337,9 @@ func TestLocalBackendReadConfiguration_ExposesSizingValues(t *testing.T) {
 	}
 
 	// When
-	backend := newLocalBackend(config.NewDeploymentDir(t.TempDir()), manifest, nil)
+	backend := newLocalBackendForPlatform(
+		config.NewDeploymentDir(t.TempDir()), manifest, nil, localMacOS, localMacArch,
+	)
 	values, err := backend.ReadConfiguration()
 	// Then
 	if err != nil {
@@ -315,6 +349,33 @@ func TestLocalBackendReadConfiguration_ExposesSizingValues(t *testing.T) {
 	assertConfigValue(t, values, localCPUCountConfigName, 4, localDefaultCPUCount)
 	assertConfigValue(t, values, localMemoryMBConfigName, 8192, defaults.memoryMB)
 	assertConfigValue(t, values, localDataSizeGBConfigName, 250, localDefaultDataSizeGB)
+}
+
+func TestLocalBackendReadConfiguration_LinuxExposesOnlyPorts(t *testing.T) {
+	t.Parallel()
+
+	manifest := &presets.InfrastructureManifest{Local: &presets.InfrastructureLocal{
+		CPUCount: -1, MemoryMB: -1, DataSizeGB: -1, Ports: testLocalDBPortConfig,
+	}}
+	backend := newLocalBackendForPlatform(
+		config.NewDeploymentDir(t.TempDir()), manifest, nil, localLinuxOS, localLinuxAMD64,
+	)
+
+	values, err := backend.ReadConfiguration()
+	if err != nil {
+		t.Fatalf("expected Linux configuration, got %v", err)
+	}
+	if len(values) != 1 || values[0].Name != localPortsConfigName ||
+		values[0].Value != testLocalDBPortConfig {
+		t.Fatalf("expected only the port configuration, got %#v", values)
+	}
+	definitions, err := backend.ReadDeploymentConfigVariables()
+	if err != nil {
+		t.Fatalf("expected Linux configuration definitions, got %v", err)
+	}
+	if len(definitions) != 1 || definitions[localPortsConfigName].Name != localPortsConfigName {
+		t.Fatalf("expected only the port definition, got %#v", definitions)
+	}
 }
 
 func TestLocalBackendConfigure_WritesSizingValuesToManifest(t *testing.T) {
@@ -333,7 +394,9 @@ func TestLocalBackendConfigure_WritesSizingValuesToManifest(t *testing.T) {
 	}
 
 	// When
-	backend := newLocalBackend(deployment, manifest, nil)
+	backend := newLocalBackendForPlatform(
+		deployment, manifest, nil, localMacOS, localMacArch,
+	)
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{
@@ -381,7 +444,9 @@ func TestLocalBackendConfigure_WarnsForLowMemory(t *testing.T) {
 	defer slog.SetDefault(originalLogger)
 
 	// When
-	backend := newLocalBackend(deployment, manifest, nil)
+	backend := newLocalBackendForPlatform(
+		deployment, manifest, nil, localMacOS, localMacArch,
+	)
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{localMemoryMBConfigName: "8192"},
@@ -392,12 +457,38 @@ func TestLocalBackendConfigure_WarnsForLowMemory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected local configuration to be written, got %v", err)
 	}
+	foundMacNotice := false
 	for _, record := range logCapture.records {
 		if record.Level == slog.LevelWarn && record.Message == localInfraMemoryNoticeText {
-			return
+			foundMacNotice = true
 		}
 	}
-	t.Fatalf("expected warning log %q, got %#v", localInfraMemoryNoticeText, logCapture.records)
+	if !foundMacNotice {
+		t.Fatalf("expected warning log %q, got %#v", localInfraMemoryNoticeText, logCapture.records)
+	}
+
+	logCapture.records = nil
+	linuxDeployment := config.NewDeploymentDir(t.TempDir())
+	if err := os.MkdirAll(linuxDeployment.InfrastructureDir(), 0o750); err != nil {
+		t.Fatalf("failed to create Linux infrastructure dir: %v", err)
+	}
+	linuxBackend := newLocalBackendForPlatform(
+		linuxDeployment,
+		&presets.InfrastructureManifest{Backend: backendTypeLocal},
+		nil,
+		localLinuxOS,
+		localLinuxAMD64,
+	)
+	if err := linuxBackend.Configure(
+		context.Background(), nil, DeploymentMetadata{}, DeploymentLayout{},
+	); err != nil {
+		t.Fatalf("expected Linux configuration to succeed, got %v", err)
+	}
+	for _, record := range logCapture.records {
+		if record.Level == slog.LevelWarn && record.Message == localInfraMemoryNoticeText {
+			t.Fatalf("Linux configuration emitted Mac VM notice: %#v", logCapture.records)
+		}
+	}
 }
 
 func TestLocalBackendConfigure_RejectsInvalidSizingValues(t *testing.T) {
@@ -413,7 +504,9 @@ func TestLocalBackendConfigure_RejectsInvalidSizingValues(t *testing.T) {
 	}
 
 	// When
-	backend := newLocalBackend(deployment, manifest, nil)
+	backend := newLocalBackendForPlatform(
+		deployment, manifest, nil, localMacOS, localMacArch,
+	)
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{localCPUCountConfigName: "0"},
@@ -438,7 +531,9 @@ func TestLocalBackendConfigure_RejectsMemoryBelowMinimum(t *testing.T) {
 		Local:       &presets.InfrastructureLocal{},
 	}
 
-	backend := newLocalBackend(deployment, manifest, nil)
+	backend := newLocalBackendForPlatform(
+		deployment, manifest, nil, localMacOS, localMacArch,
+	)
 	err := backend.Configure(
 		context.Background(),
 		map[string]string{localMemoryMBConfigName: "4095"},
@@ -450,6 +545,54 @@ func TestLocalBackendConfigure_RejectsMemoryBelowMinimum(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "local memory-mb must be at least 4096 MB") {
 		t.Fatalf("unexpected minimum memory error: %v", err)
+	}
+}
+
+func TestLocalBackendConfigure_LinuxIgnoresVMSizingOverrides(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o750); err != nil {
+		t.Fatalf("failed to create infrastructure dir: %v", err)
+	}
+	manifest := &presets.InfrastructureManifest{
+		Name: "Local", Backend: backendTypeLocal, Local: &presets.InfrastructureLocal{},
+	}
+	backend := newLocalBackendForPlatform(
+		deployment, manifest, nil, localLinuxOS, localLinuxAMD64,
+	)
+
+	err := backend.Configure(
+		context.Background(),
+		map[string]string{
+			localCPUCountConfigName: "invalid", localMemoryMBConfigName: "-1",
+			localDataSizeGBConfigName: "0", localPortsConfigName: testLocalDBPortConfig,
+		},
+		DeploymentMetadata{}, DeploymentLayout{},
+	)
+	if err != nil {
+		t.Fatalf("expected Linux to ignore VM sizing overrides, got %v", err)
+	}
+	if manifest.Local.CPUCount != 0 || manifest.Local.MemoryMB != 0 ||
+		manifest.Local.DataSizeGB != 0 || manifest.Local.Ports != testLocalDBPortConfig {
+		t.Fatalf("unexpected Linux manifest configuration: %#v", manifest.Local)
+	}
+}
+
+func TestLocalBackend_LinuxShellsAreUnsupported(t *testing.T) {
+	t.Parallel()
+
+	backend := newLocalBackendForPlatform(
+		config.NewDeploymentDir(t.TempDir()), &presets.InfrastructureManifest{}, nil,
+		localLinuxOS, localLinuxAMD64,
+	)
+	if err := backend.OpenHostShell(context.Background(), ""); err == nil ||
+		!strings.Contains(err.Error(), "host shell is not supported") {
+		t.Fatalf("expected explicit Linux host shell error, got %v", err)
+	}
+	if err := backend.OpenCOSShell(context.Background()); err == nil ||
+		!strings.Contains(err.Error(), "container shell is not supported") {
+		t.Fatalf("expected explicit Linux container shell error, got %v", err)
 	}
 }
 
