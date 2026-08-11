@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
@@ -460,7 +459,7 @@ func TestLocalSSHConnectionOptions_UsesConnectionMetadataWithoutNodes(t *testing
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	keyData := []byte("fake private key")
-	keyPath := localruntime.NewPaths(deployment).PrivateKeyPath
+	keyPath := newLocalRuntimeTestPaths(deployment).PrivateKeyPath
 	if err := os.MkdirAll(filepath.Dir(keyPath), 0o750); err != nil {
 		t.Fatalf("failed to create key directory: %v", err)
 	}

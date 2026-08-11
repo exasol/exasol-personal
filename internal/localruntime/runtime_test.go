@@ -167,7 +167,7 @@ func TestReadRunnerState_RejectsInvalidPorts(t *testing.T) {
 func TestDestroy_RemovesLocalRuntime(t *testing.T) {
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	paths := NewPaths(deployment)
+	paths := newVMRuntimePaths(deployment)
 	if err := os.MkdirAll(paths.Root, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime root: %v", err)
 	}
@@ -479,7 +479,7 @@ func TestDestroy_StopsRunningVMBeforeRemoving(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	paths := NewPaths(deployment)
+	paths := newVMRuntimePaths(deployment)
 	if err := os.MkdirAll(paths.VMDir, 0o750); err != nil {
 		t.Fatalf("failed to create local VM directory: %v", err)
 	}

@@ -390,7 +390,7 @@ func localSSHConnectionOptions(
 		return nil, errors.New("local SSH port is missing")
 	}
 
-	keyPath := localruntime.NewPaths(deployment).PrivateKeyPath
+	keyPath := localruntime.DefaultVMPrivateKeyPath(deployment)
 	keyData, err := os.ReadFile(keyPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: could not read SSH key file %s", err, keyPath)
