@@ -5,12 +5,12 @@ TBD - created by archiving change add-exasol-local-backend. Update Purpose after
 ## Requirements
 ### Requirement: Exasol Local deployment preset
 
-The system SHALL provide the standard local deployment option through a managed VM on macOS Apple Silicon and through host Podman on Linux AMD64 and ARM64.
+The system SHALL provide the standard local deployment option through a VM-backed Podman installation on macOS Apple Silicon and host Podman on Linux AMD64 and ARM64.
 
 #### Scenario: Install local deployment
 
 - **WHEN** a user runs `exasol install local` in an empty deployment directory on macOS Apple Silicon
-- **THEN** the launcher initializes the deployment directory, starts the Exasol Local VM, waits up to a bounded timeout until the database accepts connections, and records the deployment as running
+- **THEN** the launcher initializes and starts the VM with application forwards, installs Nano through guest Podman, waits up to a bounded timeout until the database accepts connections, and records the deployment as running
 
 #### Scenario: Install local deployment on Linux
 
@@ -92,8 +92,8 @@ The system SHALL write standard launcher artifacts for local deployments so exis
 
 #### Scenario: Connection artifacts are written after startup
 
-- **WHEN** the Exasol Local VM starts successfully
-- **THEN** the launcher writes `deployment.json`, `secrets.json`, and connection instructions with loopback connection details
+- **WHEN** the local Podman installation starts successfully
+- **THEN** the launcher writes `deployment.json`, `secrets.json`, and connection instructions with loopback application connection details
 
 #### Scenario: Local credentials are available
 
@@ -102,8 +102,8 @@ The system SHALL write standard launcher artifacts for local deployments so exis
 
 #### Scenario: Forwarded ports are refreshed
 
-- **WHEN** a local deployment is started after being stopped
-- **THEN** the launcher refreshes `deployment.json` with the current forwarded SSH, database, and UI ports
+- **WHEN** a macOS local deployment is started after being stopped
+- **THEN** the launcher refreshes `deployment.json` with the current labeled database and UI forwards without recording an SSH endpoint
 
 ### Requirement: Local SQL connection
 
@@ -120,42 +120,34 @@ The system SHALL allow `exasol connect` to connect to the Exasol Local database 
 - **THEN** the metadata marks certificate validation as insecure for that local deployment
 
 ### Requirement: Local lifecycle commands
-
 The system SHALL support standard lifecycle commands for local deployments.
 
 #### Scenario: Stop local deployment
-
-- **WHEN** a local deployment is running and the user runs `exasol stop`
-- **THEN** the launcher stops the Exasol Local VM and records the deployment as stopped
+- **WHEN** a macOS local deployment is running and the user runs `exasol stop`
+- **THEN** the launcher removes the disposable Nano container, stops the VM, preserves persistent data, and records the deployment as stopped
 
 #### Scenario: Start local deployment
-
 - **WHEN** a local deployment is stopped and the user runs `exasol start`
-- **THEN** the launcher starts the Exasol Local VM, waits up to a bounded timeout until the database accepts connections, refreshes connection artifacts, and records the deployment as running
+- **THEN** the launcher starts its execution environment, starts the shared Podman installation, waits up to a bounded timeout until the database accepts connections, refreshes connection artifacts, and records the deployment as running
 
 #### Scenario: Start local deployment times out
-
 - **WHEN** a local deployment is stopped, the user runs `exasol start`, and the database does not become ready within the bounded timeout
 - **THEN** the launcher fails the command rather than waiting indefinitely
 
 #### Scenario: Destroy local deployment
-
 - **WHEN** a user runs `exasol destroy` for a local deployment
-- **THEN** the launcher stops the Exasol Local VM if needed, deletes the local VM disk/data and launcher-owned runtime artifacts, removes connection artifacts, and records the deployment as initialized
+- **THEN** the launcher removes the disposable container, stops its execution environment if needed, deletes runtime data and connection artifacts, and records the deployment as initialized
 
 ### Requirement: Local shell access
-
-The system SHALL provide shell access for local deployments through the existing shell commands.
+The system SHALL provide shell access for local deployments through the selected local runtime.
 
 #### Scenario: Host shell
-
-- **WHEN** a local deployment is running and the user runs `exasol shell host`
-- **THEN** the launcher opens an interactive SSH shell to the Exasol Local VM through the forwarded SSH endpoint
+- **WHEN** a macOS local deployment is running and the user runs `exasol shell host`
+- **THEN** the runtime opens an interactive shell in the VM without exposing the underlying transport
 
 #### Scenario: Container shell
-
-- **WHEN** a local deployment is running and the user runs `exasol shell container`
-- **THEN** the launcher opens an interactive shell inside the Exasol Local database container
+- **WHEN** a macOS local deployment is running and the user runs `exasol shell container`
+- **THEN** the runtime opens an interactive VM shell against the deployment's mounted Nano rootfs and container namespaces without exposing the underlying transport
 
 ### Requirement: Local configuration is platform-specific
 The system SHALL expose and validate VM CPU, memory, and data-size configuration only for the macOS VM runtime, while Linux SHALL ignore persisted VM sizing and use unrestricted host resources.
