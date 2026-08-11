@@ -74,16 +74,29 @@ func (install *PodmanInstall) Start(
 	if err != nil {
 		return err
 	}
-	if err := install.recoverIncompleteInitialCreate(
-		ctx, out, outErr, containerName, startConfig.DataDir,
-	); err != nil {
-		return err
-	}
-	running, err := install.containerRunning(ctx, outErr, containerName)
+	containerStatus, err := install.inspectContainerStatus(ctx, outErr, containerName)
 	if err != nil {
 		return err
 	}
-	if running {
+	migrated, err := install.migrateOverlayDataIfNeeded(
+		ctx, out, outErr, containerName, startConfig.DataDir, containerStatus.Exists,
+	)
+	if err != nil {
+		return err
+	}
+	if migrated {
+		containerStatus = podmanContainerStatus{}
+	}
+	recovered, err := install.recoverIncompleteInitialCreate(
+		ctx, out, outErr, containerName, startConfig.DataDir, containerStatus.Exists,
+	)
+	if err != nil {
+		return err
+	}
+	if recovered {
+		containerStatus = podmanContainerStatus{}
+	}
+	if containerStatus.Running {
 		return nil
 	}
 
@@ -338,9 +351,23 @@ func (install *PodmanInstall) containerRunning(
 	outErr io.Writer,
 	containerName string,
 ) (bool, error) {
+	status, err := install.inspectContainerStatus(ctx, outErr, containerName)
+	return status.Running, err
+}
+
+type podmanContainerStatus struct {
+	Exists  bool
+	Running bool
+}
+
+func (install *PodmanInstall) inspectContainerStatus(
+	ctx context.Context,
+	outErr io.Writer,
+	containerName string,
+) (podmanContainerStatus, error) {
 	exists, err := install.containerExists(ctx, outErr, containerName)
 	if err != nil || !exists {
-		return false, err
+		return podmanContainerStatus{}, err
 	}
 	output, err := install.runCmdOutput(
 		ctx,
@@ -354,11 +381,13 @@ func (install *PodmanInstall) containerRunning(
 		containerName,
 	)
 	if err != nil {
-		return false, fmt.Errorf("failed to inspect Nano container %s: %w", containerName, err)
+		return podmanContainerStatus{}, fmt.Errorf(
+			"failed to inspect Nano container %s: %w", containerName, err,
+		)
 	}
 	running, err := strconv.ParseBool(strings.TrimSpace(output))
 	if err != nil {
-		return false, fmt.Errorf(
+		return podmanContainerStatus{}, fmt.Errorf(
 			"failed to parse running state for Nano container %s from %q: %w",
 			containerName,
 			strings.TrimSpace(output),
@@ -366,7 +395,7 @@ func (install *PodmanInstall) containerRunning(
 		)
 	}
 
-	return running, nil
+	return podmanContainerStatus{Exists: true, Running: running}, nil
 }
 
 func (install *PodmanInstall) containerExists(
