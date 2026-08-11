@@ -23,6 +23,12 @@ const (
 	exasolNanoImageResourceID = "exasol-nano-image"
 	loadedImagePrefix         = "Loaded image:"
 	dataDirMode               = 0o750
+	nanoInternalDBPort        = 8563
+	nanoShmSize               = "512mb"
+	nanoPIDsLimit             = "-1"
+	nanoSecurityOpt           = "unmask=ALL"
+	nanoRestartPolicy         = "always"
+	nanoDataMountTarget       = "/exa:Z"
 )
 
 type PodmanInstall struct {
@@ -93,12 +99,12 @@ func (install *PodmanInstall) Start(
 	args := []string{
 		"run", "-d", "--replace",
 		"--name", containerName,
-		"--shm-size=" + startConfig.ShmSize,
-		"--pids-limit=" + startConfig.PIDsLimit,
-		"--security-opt", startConfig.SecurityOpt,
-		"--restart", startConfig.RestartPolicy,
-		"-p", fmt.Sprintf("%d:%d", startConfig.HostDBPort, startConfig.ContainerDBPort),
-		"-v", startConfig.DataDir + ":/exa:Z",
+		"--shm-size=" + nanoShmSize,
+		"--pids-limit=" + nanoPIDsLimit,
+		"--security-opt", nanoSecurityOpt,
+		"--restart", nanoRestartPolicy,
+		"-p", fmt.Sprintf("%d:%d", startConfig.ContainerDBPort, nanoInternalDBPort),
+		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
 		imageTag,
 		"init",
 	}
@@ -137,24 +143,11 @@ func (install *PodmanInstall) Destroy(ctx context.Context, out, outErr io.Writer
 }
 
 func validateStartConfig(startConfig StartConfig) error {
-	if startConfig.HostDBPort <= 0 || startConfig.HostDBPort > 65535 {
-		return fmt.Errorf("invalid Nano host DB port %d", startConfig.HostDBPort)
-	}
 	if startConfig.ContainerDBPort <= 0 || startConfig.ContainerDBPort > 65535 {
-		return fmt.Errorf("invalid Nano container DB port %d", startConfig.ContainerDBPort)
+		return fmt.Errorf("invalid Nano published DB port %d", startConfig.ContainerDBPort)
 	}
 	if strings.TrimSpace(startConfig.DataDir) == "" {
 		return errors.New("nano data directory is required")
-	}
-	for name, value := range map[string]string{
-		"shared memory size": startConfig.ShmSize,
-		"PID limit":          startConfig.PIDsLimit,
-		"security option":    startConfig.SecurityOpt,
-		"restart policy":     startConfig.RestartPolicy,
-	} {
-		if strings.TrimSpace(value) == "" {
-			return fmt.Errorf("nano %s is required", name)
-		}
 	}
 
 	return nil
