@@ -8,11 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
@@ -29,10 +31,12 @@ var nanoInitParams = []string{"maxConnectionsLicenseLimit=20"}
 // LinuxHostRuntime owns Linux-specific prerequisites and delegates the database
 // container lifecycle to localinstall.
 type LinuxHostRuntime struct {
-	deployment config.DeploymentDir
-	paths      runtimePaths
-	manager    *runtimeartifacts.Manager
-	endpoint   *RuntimeEndpoint
+	deployment  config.DeploymentDir
+	paths       runtimePaths
+	manager     *runtimeartifacts.Manager
+	endpoint    *RuntimeEndpoint
+	runtimeExec []string
+	dialContext func(context.Context, string, string) (net.Conn, error)
 }
 
 // manager may be nil for operations that never need to invoke the runner
@@ -74,12 +78,7 @@ func (runtime *LinuxHostRuntime) Start(
 	if err != nil {
 		return err
 	}
-	install := localinstall.NewPodmanInstall(
-		runtime.Deployment(), runtime.manager, runtime.runCmd(),
-		SLCStagingDir(runtime.Deployment()), SLCStatusPath(runtime.Deployment()),
-	)
-
-	if err := install.Start(ctx, out, outErr, startConfig); err != nil {
+	if err := runtime.install().Start(ctx, out, outErr, startConfig); err != nil {
 		return err
 	}
 	runtime.endpoint = &RuntimeEndpoint{DBPort: startConfig.ContainerDBPort}
@@ -88,26 +87,20 @@ func (runtime *LinuxHostRuntime) Start(
 }
 
 func (runtime *LinuxHostRuntime) Stop(ctx context.Context, out, outErr io.Writer) error {
-	install := localinstall.NewPodmanInstall(
-		runtime.Deployment(), runtime.manager, runtime.runCmd(),
-		SLCStagingDir(runtime.Deployment()), SLCStatusPath(runtime.Deployment()),
-	)
-
-	return install.Stop(ctx, out, outErr)
+	return runtime.install().Stop(ctx, out, outErr)
 }
 
-func (*LinuxHostRuntime) Status(_ context.Context) (*RuntimeStatus, error) {
-	// Host status reporting is outside the current minimal lifecycle.
-	return &RuntimeStatus{Running: true}, nil
+func (runtime *LinuxHostRuntime) Status(ctx context.Context) (*RuntimeStatus, error) {
+	status, err := runtime.install().Status(ctx, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &RuntimeStatus{Running: status.Running}, nil
 }
 
 func (runtime *LinuxHostRuntime) Destroy(ctx context.Context, out, outErr io.Writer) error {
-	install := localinstall.NewPodmanInstall(
-		runtime.Deployment(), runtime.manager, runtime.runCmd(),
-		SLCStagingDir(runtime.Deployment()), SLCStatusPath(runtime.Deployment()),
-	)
-
-	if err := install.Destroy(ctx, out, outErr); err != nil {
+	if err := runtime.install().Destroy(ctx, out, outErr); err != nil {
 		return fmt.Errorf("failed to remove deployment: %w", err)
 	}
 
@@ -120,18 +113,69 @@ func (runtime *LinuxHostRuntime) Destroy(ctx context.Context, out, outErr io.Wri
 
 func (runtime *LinuxHostRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
 	if runtime.endpoint == nil {
-		return nil, errors.New("linux host runtime endpoint is unavailable before start")
+		info, err := config.ReadDeploymentInfo(runtime.Deployment())
+		if err != nil {
+			return nil, fmt.Errorf("linux host runtime endpoint is unavailable: %w", err)
+		}
+		if info.Connection == nil || info.Connection.DBPort <= 0 || info.Connection.DBPort > 65535 {
+			return nil, errors.New(
+				"linux host runtime deployment information has no valid database endpoint",
+			)
+		}
+		runtime.endpoint = &RuntimeEndpoint{DBPort: info.Connection.DBPort}
 	}
 
 	return &VMRuntimeEndpoint{RuntimeEndpoint: *runtime.endpoint}, nil
 }
 
 func (runtime *LinuxHostRuntime) HealthCheck(ctx context.Context) (*HealthCheckResult, error) {
-	return nil, errors.New("not implemented")
+	endpoint, err := runtime.ReadEndpoints()
+	if err != nil {
+		return nil, err
+	}
+	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(endpoint.DBPort))
+	dialContext := runtime.dialContext
+	if dialContext == nil {
+		dialContext = (&net.Dialer{}).DialContext
+	}
+	connection, err := dialContext(ctx, "tcp", address)
+	state := classifyHostPortHealth(err)
+	if connection != nil {
+		_ = connection.Close()
+	}
+
+	return &HealthCheckResult{Ports: map[string]PortHealth{
+		"db": {State: state},
+	}}, nil
 }
 
-func (*LinuxHostRuntime) runCmd() []string {
-	return []string{}
+func classifyHostPortHealth(err error) PortState {
+	if err == nil {
+		return PortStateReachable
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return PortStateTimeout
+	}
+	var netError net.Error
+	if errors.As(err, &netError) && netError.Timeout() {
+		return PortStateTimeout
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return PortStateRefused
+	}
+
+	return PortStateBlocked
+}
+
+func (runtime *LinuxHostRuntime) install() *localinstall.PodmanInstall {
+	return localinstall.NewPodmanInstall(
+		runtime.Deployment(), runtime.manager, runtime.runCmd(),
+		SLCStagingDir(runtime.Deployment()), SLCStatusPath(runtime.Deployment()),
+	)
+}
+
+func (runtime *LinuxHostRuntime) runCmd() []string {
+	return runtime.runtimeExec
 }
 
 func (runtime *LinuxHostRuntime) podmanStartConfig(

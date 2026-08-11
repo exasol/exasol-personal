@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -122,6 +123,24 @@ func TestClassifyLocalReachability_HealthCheckUnavailableIsNoop(t *testing.T) {
 
 	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no-op when health-check is unavailable, got %v", err)
+	}
+}
+
+func TestLocalReachabilityMessageForLinuxHostDoesNotUseMacOSGuidance(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	localRuntime := localruntime.NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+
+	// When
+	message := localReachabilityMessageForRuntime(localRuntime)
+
+	// Then
+	if message != linuxHostReachabilityMessage {
+		t.Fatalf("expected Linux Podman guidance, got %q", message)
+	}
+	if strings.Contains(message, "Local Network") || strings.Contains(message, "host-to-VM") {
+		t.Fatalf("Linux guidance must not contain macOS VM advice: %q", message)
 	}
 }
 
