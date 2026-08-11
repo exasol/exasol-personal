@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
@@ -29,6 +30,7 @@ const (
 	nanoSecurityOpt           = "unmask=ALL"
 	nanoRestartPolicy         = "always"
 	nanoDataMountTarget       = "/exa:Z"
+	podmanDiagnosticsTimeout  = 10 * time.Second
 )
 
 type PodmanInstall struct {
@@ -80,20 +82,24 @@ func (install *PodmanInstall) Start(
 
 	imagePath, err := install.resolveImagePath(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to resolve Nano image: %w", err)
+		return install.failureWithDiagnostics(
+			ctx, outErr, containerName, fmt.Errorf("failed to resolve Nano image: %w", err),
+		)
 	}
 	loadOutput, err := install.runPodmanOutput(ctx, out, outErr, "load", "-i", imagePath)
 	if err != nil {
-		return fmt.Errorf("failed to load Nano image %s: %w", imagePath, err)
+		return install.failureWithDiagnostics(ctx, outErr, containerName,
+			fmt.Errorf("failed to load Nano image %s: %w", imagePath, err))
 	}
 	loadedImage, err := parseLoadedImage(loadOutput)
 	if err != nil {
-		return err
+		return install.failureWithDiagnostics(ctx, outErr, containerName, err)
 	}
 
 	imageTag := "localhost/" + containerName + ":latest"
 	if err := install.runPodman(ctx, out, outErr, "tag", loadedImage, imageTag); err != nil {
-		return fmt.Errorf("failed to tag Nano image %s as %s: %w", loadedImage, imageTag, err)
+		return install.failureWithDiagnostics(ctx, outErr, containerName,
+			fmt.Errorf("failed to tag Nano image %s as %s: %w", loadedImage, imageTag, err))
 	}
 
 	args := []string{
@@ -112,7 +118,8 @@ func (install *PodmanInstall) Start(
 		args = append(args, "params="+strings.Join(startConfig.InitParams, " "))
 	}
 	if err := install.runPodman(ctx, out, outErr, args...); err != nil {
-		return fmt.Errorf("failed to start Nano container %s: %w", containerName, err)
+		return install.failureWithDiagnostics(ctx, outErr, containerName,
+			fmt.Errorf("failed to start Nano container %s: %w", containerName, err))
 	}
 
 	return nil
@@ -156,6 +163,41 @@ func (install *PodmanInstall) Status(
 
 func (install *PodmanInstall) Destroy(ctx context.Context, out, outErr io.Writer) error {
 	return install.Stop(ctx, out, outErr)
+}
+
+func (install *PodmanInstall) failureWithDiagnostics(
+	ctx context.Context,
+	outErr io.Writer,
+	containerName string,
+	failure error,
+) error {
+	diagnosticOut := outErr
+	if diagnosticOut == nil {
+		diagnosticOut = io.Discard
+	}
+	diagnosticCtx, cancel := context.WithTimeout(
+		context.WithoutCancel(ctx),
+		podmanDiagnosticsTimeout,
+	)
+	defer cancel()
+
+	_, _ = fmt.Fprintf(diagnosticOut, "Podman diagnostics for %s:\n", containerName)
+	commands := [][]string{
+		{"info"},
+		{"ps", "-a"},
+		{"container", "inspect", containerName},
+		{"logs", containerName},
+	}
+	for _, command := range commands {
+		_, _ = fmt.Fprintf(diagnosticOut, "$ podman %s\n", strings.Join(command, " "))
+		if err := install.runPodman(
+			diagnosticCtx, diagnosticOut, diagnosticOut, command...,
+		); err != nil {
+			_, _ = fmt.Fprintf(diagnosticOut, "diagnostic command failed: %v\n", err)
+		}
+	}
+
+	return failure
 }
 
 func validateStartConfig(startConfig StartConfig) error {
