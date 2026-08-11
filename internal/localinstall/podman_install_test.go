@@ -559,7 +559,7 @@ func skipPodmanInstallTestOnWindows(t *testing.T) {
 	}
 }
 
-//nolint:dupword // Repeated shell terminators are required by this fixture.
+//nolint:dupword // Repeated shell terminators are required by this fixture. 
 const fakePodmanScript = `#!/bin/sh
 set -eu
 
@@ -587,6 +587,10 @@ if [ "$command" = "import" ] && [ -f "$scenario_dir/fail-import-image" ]; then
     exit 44
   fi
 fi
+if [ "$command" = "rmi" ] && [ -f "$scenario_dir/fail-rmi-image" ] && [ "$(cat "$scenario_dir/fail-rmi-image")" = "$3" ]; then
+  printf 'fake rmi failure\n' >&2
+  exit 45
+fi
 if [ -f "$scenario_dir/fail-diagnostics" ]; then
   case "$command" in
     info|ps|logs)
@@ -609,6 +613,15 @@ case "$command" in
     fi
     if [ ! -f "$scenario_dir/images" ] || ! grep -Fxq "$4" "$scenario_dir/images"; then
       exit 1
+    fi
+    ;;
+  images)
+    if [ "$3" = "--filter" ]; then
+      if [ -f "$scenario_dir/labeled-images-output" ]; then
+        cat "$scenario_dir/labeled-images-output"
+      fi
+    elif [ -f "$scenario_dir/images-output" ]; then
+      cat "$scenario_dir/images-output"
     fi
     ;;
   container)
@@ -639,7 +652,7 @@ case "$command" in
       printf 'Loaded image: docker.io/exasol/nano:test\n'
     fi
     ;;
-  info|ps|logs|pull|import|tag|run|rm)
+  info|ps|logs|pull|import|tag|run|rm|rmi)
     ;;
   *)
     printf 'unexpected fake Podman command: %s\n' "$command" >&2
