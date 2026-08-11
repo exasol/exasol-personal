@@ -186,9 +186,14 @@ func TestLinuxHostHealthCheck_ProbesRecoveredPublishedPort(t *testing.T) {
 	writeLinuxDeploymentInfo(t, deployment, 28563)
 	localRuntime := NewHostLinuxRuntime(deployment, nil)
 	var dialedNetwork, dialedAddress string
+	connection, peer := net.Pipe()
+	t.Cleanup(func() {
+		_ = connection.Close()
+		_ = peer.Close()
+	})
 	localRuntime.dialContext = func(_ context.Context, network, address string) (net.Conn, error) {
 		dialedNetwork, dialedAddress = network, address
-		return nil, nil
+		return connection, nil
 	}
 
 	// When
@@ -209,7 +214,9 @@ func newLinuxRuntimeStatusDeployment(t *testing.T) config.DeploymentDir {
 	t.Helper()
 	deployment := config.NewDeploymentDir(t.TempDir())
 	state := &config.ExasolPersonalState{DeploymentId: "linux-runtime-status"}
-	if err := state.SetWorkflowStateAndWrite(&config.WorkflowStateInitialized{}, deployment); err != nil {
+	if err := state.SetWorkflowStateAndWrite(
+		&config.WorkflowStateInitialized{}, deployment,
+	); err != nil {
 		t.Fatalf("failed to write deployment state: %v", err)
 	}
 

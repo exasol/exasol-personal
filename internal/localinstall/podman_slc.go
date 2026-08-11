@@ -93,7 +93,7 @@ func (install *PodmanInstall) materializeSLC(
 	}
 
 	if slc.Package == "" {
-		if err := install.runCmd(ctx, out, outErr, "podman", "pull", slc.Image); err != nil {
+		if err := install.runCmd(ctx, out, outErr, "pull", slc.Image); err != nil {
 			return false, "", install.failureWithDiagnostics(ctx, outErr, containerName,
 				fmt.Errorf("failed to pull SLC image %s: %w", slc.Image, err))
 		}
@@ -111,16 +111,13 @@ func (install *PodmanInstall) materializeSLC(
 		}
 
 		return false, "", fmt.Errorf(
-			"failed to inspect custom SLC package %s: %w",
-			packagePath,
-			err,
+			"failed to inspect custom SLC package %s: %w", packagePath, err,
 		)
 	}
 	if err := install.runCmd(
 		ctx,
 		out,
 		outErr,
-		"podman",
 		"import",
 		"--change",
 		"LABEL "+slcImportLabel,
@@ -129,6 +126,7 @@ func (install *PodmanInstall) materializeSLC(
 	); err != nil {
 		install.writePodmanDiagnostics(ctx, outErr, containerName)
 
+		//nolint:nilerr // Custom SLC imports are unavailable but do not block Nano startup.
 		return false, slcStatusImportFailed, nil
 	}
 
@@ -140,7 +138,7 @@ func (install *PodmanInstall) imageExists(
 	outErr io.Writer,
 	image string,
 ) (bool, error) {
-	err := install.runCmd(ctx, nil, outErr, "podman", "image", "exists", image)
+	err := install.runCmd(ctx, nil, outErr, "image", "exists", image)
 	if err == nil {
 		return true, nil
 	}
@@ -209,7 +207,7 @@ func (install *PodmanInstall) pruneUnreferencedSLCImages(
 
 	candidates := make(map[string]struct{})
 	allImages, err := install.runCmdOutput(
-		ctx, nil, outErr, "podman", "images", "--format", "{{.Repository}}:{{.Tag}}",
+		ctx, nil, outErr, "images", "--format", "{{.Repository}}:{{.Tag}}",
 	)
 	if err != nil {
 		writeSLCPruneWarning(outErr, "failed to list Podman images", err)
@@ -226,7 +224,6 @@ func (install *PodmanInstall) pruneUnreferencedSLCImages(
 		ctx,
 		nil,
 		outErr,
-		"podman",
 		"images",
 		"--filter",
 		"label="+slcImportLabel,
@@ -247,7 +244,7 @@ func (install *PodmanInstall) pruneUnreferencedSLCImages(
 		if _, referenced := desired[normalizeSLCImageRef(image)]; referenced {
 			continue
 		}
-		if err := install.runCmd(ctx, nil, outErr, "podman", "rmi", image); err != nil {
+		if err := install.runCmd(ctx, nil, outErr, "rmi", image); err != nil {
 			writeSLCPruneWarning(outErr, "failed to remove unreferenced SLC image "+image, err)
 		}
 	}

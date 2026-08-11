@@ -31,7 +31,8 @@ type Catalog struct {
 // Architecture holds the SLCs available for one container architecture.
 type Architecture struct {
 	//nolint:tagliatelle // YAML schema uses snake_case field names.
-	DefaultVersion    string             `yaml:"default_version"`
+	DefaultVersion string `yaml:"default_version"`
+	//nolint:tagliatelle // YAML schema uses snake_case field names.
 	ImageArchitecture string             `yaml:"image_architecture"`
 	Versions          map[string]Version `yaml:"versions"`
 }

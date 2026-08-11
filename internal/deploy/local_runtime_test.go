@@ -79,7 +79,9 @@ func TestToLocalRuntimeConfig_PreservesAuthoritativeEmptySLCSet(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	if err := config.WriteExasolPersonalState(&config.ExasolPersonalState{}, deployment); err != nil {
+	if err := config.WriteExasolPersonalState(
+		&config.ExasolPersonalState{}, deployment,
+	); err != nil {
 		t.Fatalf("failed to write deployment state: %v", err)
 	}
 
@@ -402,8 +404,8 @@ func (runtime *endpointRuntimeStub) ReadEndpoints() (*localruntime.VMRuntimeEndp
 	return &localruntime.VMRuntimeEndpoint{RuntimeEndpoint: *runtime.endpoint}, nil
 }
 
-func (runtime *endpointRuntimeStub) HealthCheck(
-	ctx context.Context,
+func (*endpointRuntimeStub) HealthCheck(
+	context.Context,
 ) (*localruntime.HealthCheckResult, error) {
 	return nil, errors.New("not implemented")
 }
