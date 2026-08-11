@@ -75,6 +75,11 @@ func (install *PodmanInstall) Start(
 	if err != nil {
 		return err
 	}
+	if err := install.recoverIncompleteInitialCreate(
+		ctx, out, outErr, containerName, startConfig.DataDir,
+	); err != nil {
+		return err
+	}
 	running, err := install.containerRunning(ctx, outErr, containerName)
 	if err != nil {
 		return err
@@ -89,6 +94,11 @@ func (install *PodmanInstall) Start(
 	freshDeployment, err := isFreshDeployment(startConfig.DataDir)
 	if err != nil {
 		return err
+	}
+	if freshDeployment {
+		if err := removeStaleNanoTLSFiles(startConfig.DataDir); err != nil {
+			return err
+		}
 	}
 
 	imagePath, err := install.resolveImagePath(ctx)
