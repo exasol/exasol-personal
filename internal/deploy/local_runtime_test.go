@@ -135,7 +135,7 @@ func TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts(t *testing.T) {
 
 	// Given
 	deployment := newTestDeploymentWithState(t)
-	paths := localruntime.NewPaths(deployment)
+	paths := newLocalRuntimeTestPaths(deployment)
 	if err := os.MkdirAll(paths.Root, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime root: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 
 	// Given
 	deployment := newTestDeploymentWithState(t)
-	paths := localruntime.NewPaths(deployment)
+	paths := newLocalRuntimeTestPaths(deployment)
 	if err := os.MkdirAll(paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime work dir: %v", err)
 	}

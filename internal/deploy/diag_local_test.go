@@ -181,7 +181,7 @@ func writeFakeVMState(
 ) {
 	t.Helper()
 
-	paths := localruntime.NewPaths(deployment)
+	paths := newLocalRuntimeTestPaths(deployment)
 	data, err := json.Marshal(map[string]any{
 		"vm_name": "exasol-local-vm",
 		"vm_ip":   vmIP,

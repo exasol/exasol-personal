@@ -31,6 +31,25 @@ const runnerZipEntryName = "launcher"
 // ResourceSpec.
 const exasolLocalRunnerResourceID = "exasol-local-runner"
 
+type localRuntimeTestPaths struct {
+	Root           string
+	WorkDir        string
+	StatePath      string
+	PrivateKeyPath string
+}
+
+func newLocalRuntimeTestPaths(deployment config.DeploymentDir) localRuntimeTestPaths {
+	root := deployment.Resolve("local")
+	workDir := filepath.Join(root, "runtime")
+
+	return localRuntimeTestPaths{
+		Root:           root,
+		WorkDir:        workDir,
+		StatePath:      filepath.Join(workDir, "vm-state.json"),
+		PrivateKeyPath: filepath.Join(root, localruntime.PrivateKeyFileName),
+	}
+}
+
 func TestClassifyLocalReachability_AllPortsBlocked(t *testing.T) {
 	t.Parallel()
 	skipOnWindows(t)
@@ -135,7 +154,7 @@ backend: local
 func ensureLocalRuntimeWorkDir(t *testing.T, deployment config.DeploymentDir) {
 	t.Helper()
 
-	if err := os.MkdirAll(localruntime.NewPaths(deployment).WorkDir, 0o750); err != nil {
+	if err := os.MkdirAll(newLocalRuntimeTestPaths(deployment).WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime work dir: %v", err)
 	}
 }
