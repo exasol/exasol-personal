@@ -31,6 +31,10 @@ const (
 	nanoRestartPolicy         = "always"
 	nanoDataMountTarget       = "/exa:Z"
 	podmanDiagnosticsTimeout  = 10 * time.Second
+	nanoVersionCheckDefault   = 86400
+	nanoVersionCheckMin       = 60
+	nanoVersionCheckMax       = 604800
+	nanoVersionCheckRetryMax  = 86400
 )
 
 type PodmanInstall struct {
@@ -111,12 +115,15 @@ func (install *PodmanInstall) Start(
 		"--restart", nanoRestartPolicy,
 		"-p", fmt.Sprintf("%d:%d", startConfig.ContainerDBPort, nanoInternalDBPort),
 		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
-		imageTag,
-		"init",
 	}
+	if startConfig.VersionCheck.Enabled {
+		args = append(args, "-e", "VERSION_CHECK_IDENTITY="+startConfig.VersionCheck.Identity)
+	}
+	args = append(args, imageTag, "init")
 	if freshDeployment && len(startConfig.InitParams) > 0 {
 		args = append(args, "params="+strings.Join(startConfig.InitParams, " "))
 	}
+	args = append(args, nanoVersionCheckInitArgs(startConfig.VersionCheck)...)
 	if err := install.runCmd(ctx, out, outErr, "podman", args...); err != nil {
 		return install.failureWithDiagnostics(ctx, outErr, containerName,
 			fmt.Errorf("failed to start Nano container %s: %w", containerName, err))
@@ -208,8 +215,43 @@ func validateStartConfig(startConfig StartConfig) error {
 	if strings.TrimSpace(startConfig.DataDir) == "" {
 		return errors.New("nano data directory is required")
 	}
+	if startConfig.VersionCheck.Enabled {
+		for name, value := range map[string]string{
+			"URL":              startConfig.VersionCheck.URL,
+			"identity":         startConfig.VersionCheck.Identity,
+			"operating system": startConfig.VersionCheck.OperatingSystem,
+		} {
+			if strings.TrimSpace(value) == "" {
+				return fmt.Errorf("Nano version-check %s is required when enabled", name)
+			}
+		}
+	}
 
 	return nil
+}
+
+func nanoVersionCheckInitArgs(versionCheck VersionCheckConfig) []string {
+	if !versionCheck.Enabled {
+		return []string{"VERSION_CHECK_ENABLED=0"}
+	}
+	interval := versionCheck.IntervalSeconds
+	if interval == 0 {
+		interval = nanoVersionCheckDefault
+	}
+	interval = clamp(interval, nanoVersionCheckMin, nanoVersionCheckMax)
+	retryInterval := clamp(interval, nanoVersionCheckMin, nanoVersionCheckRetryMax)
+
+	return []string{
+		"VERSION_CHECK_ENABLED=1",
+		"VERSION_CHECK_ENDPOINT=" + versionCheck.URL,
+		fmt.Sprintf("VERSION_CHECK_INTERVAL_SEC=%d", interval),
+		fmt.Sprintf("VERSION_CHECK_RETRY_INTERVAL_SEC=%d", retryInterval),
+		"VERSION_CHECK_OPERATING_SYSTEM=" + versionCheck.OperatingSystem,
+	}
+}
+
+func clamp(value, minimum, maximum int) int {
+	return min(max(value, minimum), maximum)
 }
 
 func isFreshDeployment(dataDir string) (bool, error) {

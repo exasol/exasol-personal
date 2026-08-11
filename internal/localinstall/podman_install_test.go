@@ -6,6 +6,7 @@ package localinstall
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,7 +49,8 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 		"<podman><run><-d><--replace><--name><" + testContainerName + ">" +
 			"<--shm-size=512mb><--pids-limit=-1><--security-opt><unmask=ALL>" +
 			"<--restart><always><-p><28563:8563><-v><" + startConfig.DataDir + ":/exa:Z>" +
-			"<" + testTaggedImage + "><init><params=maxConnectionsLicenseLimit=20>",
+			"<" + testTaggedImage + "><init><params=maxConnectionsLicenseLimit=20>" +
+			"<VERSION_CHECK_ENABLED=0>",
 	})
 	if !strings.Contains(out.String(), loadedImagePrefix+" "+testLoadedImage) {
 		t.Fatalf("expected load output to be forwarded, got %q", out.String())
@@ -73,11 +75,78 @@ func TestPodmanInstallStart_ReusesExistingDatabaseConfiguration(t *testing.T) {
 	if len(commands) != 4 {
 		t.Fatalf("expected four Podman commands, got %#v", commands)
 	}
-	if !strings.HasSuffix(commands[3], "<"+testTaggedImage+"><init>") {
+	if !strings.HasSuffix(
+		commands[3],
+		"<"+testTaggedImage+"><init><VERSION_CHECK_ENABLED=0>",
+	) {
 		t.Fatalf("expected existing database to run init without params, got %q", commands[3])
 	}
 	if strings.Contains(commands[3], "<params=") {
 		t.Fatalf("expected first-start params to be omitted, got %q", commands[3])
+	}
+}
+
+func TestPodmanInstallStart_ConfiguresEnabledNanoVersionChecks(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	tests := []struct {
+		name                  string
+		interval              int
+		expectedInterval      int
+		expectedRetryInterval int
+	}{
+		{
+			name:                  "default interval",
+			interval:              0,
+			expectedInterval:      86400,
+			expectedRetryInterval: 86400,
+		},
+		{name: "minimum interval", interval: 1, expectedInterval: 60, expectedRetryInterval: 60},
+		{
+			name:                  "maximum interval",
+			interval:              700000,
+			expectedInterval:      604800,
+			expectedRetryInterval: 86400,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given
+			install, startConfig, fixture := newPodmanInstallFixture(t)
+			startConfig.VersionCheck = VersionCheckConfig{
+				Enabled:         true,
+				URL:             "https://version-check.example.test",
+				Identity:        "exasol-personal;deployment;local;local",
+				OperatingSystem: "Linux",
+				IntervalSeconds: test.interval,
+			}
+
+			// When
+			err := install.Start(context.Background(), nil, nil, startConfig)
+			// Then
+			if err != nil {
+				t.Fatalf("expected enabled version-check start to succeed: %v", err)
+			}
+			commands := readCommandLog(t, fixture.logPath)
+			runCommand := commands[len(commands)-1]
+			expectedArgs := []string{
+				"<-e><VERSION_CHECK_IDENTITY=exasol-personal;deployment;local;local>",
+				"<VERSION_CHECK_ENABLED=1>",
+				"<VERSION_CHECK_ENDPOINT=https://version-check.example.test>",
+				fmt.Sprintf("<VERSION_CHECK_INTERVAL_SEC=%d>", test.expectedInterval),
+				fmt.Sprintf("<VERSION_CHECK_RETRY_INTERVAL_SEC=%d>", test.expectedRetryInterval),
+				"<VERSION_CHECK_OPERATING_SYSTEM=Linux>",
+			}
+			for _, expected := range expectedArgs {
+				if !strings.Contains(runCommand, expected) {
+					t.Fatalf("expected run command to contain %q, got %q", expected, runCommand)
+				}
+			}
+		})
 	}
 }
 
@@ -292,6 +361,27 @@ func TestPodmanInstallStart_RejectsInvalidConfigurationBeforePodman(t *testing.T
 			mutate: func(config *StartConfig) { config.ContainerDBPort = 65536 },
 		},
 		{name: "data directory", mutate: func(config *StartConfig) { config.DataDir = " " }},
+		{
+			name: "enabled version-check URL",
+			mutate: func(config *StartConfig) {
+				config.VersionCheck = validTestVersionCheckConfig()
+				config.VersionCheck.URL = ""
+			},
+		},
+		{
+			name: "enabled version-check identity",
+			mutate: func(config *StartConfig) {
+				config.VersionCheck = validTestVersionCheckConfig()
+				config.VersionCheck.Identity = ""
+			},
+		},
+		{
+			name: "enabled version-check operating system",
+			mutate: func(config *StartConfig) {
+				config.VersionCheck = validTestVersionCheckConfig()
+				config.VersionCheck.OperatingSystem = ""
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -313,6 +403,15 @@ func TestPodmanInstallStart_RejectsInvalidConfigurationBeforePodman(t *testing.T
 				t.Fatalf("expected no Podman commands, got %#v", commands)
 			}
 		})
+	}
+}
+
+func validTestVersionCheckConfig() VersionCheckConfig {
+	return VersionCheckConfig{
+		Enabled:         true,
+		URL:             "https://version-check.example.test",
+		Identity:        "test-identity",
+		OperatingSystem: "Linux",
 	}
 }
 
