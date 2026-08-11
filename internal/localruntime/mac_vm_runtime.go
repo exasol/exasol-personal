@@ -31,26 +31,15 @@ import (
 )
 
 const (
-	DirName            = "local"
-	runtimeDirName     = "runtime"
-	vmDirName          = "vm"
-	sharedDirName      = "vm-shared"
-	vmStateFileName    = "vm-state.json"
 	vmPIDFileName      = "vm.pid"
-	PrivateKeyFileName = "node_access.pem"
-	// runnerVersionMarkerFileName records the semver of the runner this
-	// deployment was last prepared/started with. It's a launcher-owned file,
-	// distinct from vm-state.json, whose schema is dictated by the runner's
-	// own external contract and isn't ours to extend.
-	runnerVersionMarkerFileName = "runner-version.json"
-	openSSHKeyPEMType           = "OPENSSH PRIVATE KEY"
-	stopPollInterval            = 500 * time.Millisecond
-	stopTimeout                 = 90 * time.Second
-	dirMode                     = 0o750
-	privateFileMode             = 0o600
-	markerFileMode              = 0o600
-	executableFileMode          = 0o700
-	maxTCPPort                  = 65535
+	openSSHKeyPEMType  = "OPENSSH PRIVATE KEY"
+	stopPollInterval   = 500 * time.Millisecond
+	stopTimeout        = 90 * time.Second
+	dirMode            = 0o750
+	privateFileMode    = 0o600
+	markerFileMode     = 0o600
+	executableFileMode = 0o700
+	maxTCPPort         = 65535
 	// Internal escape hatch for development with runners that predate version reporting.
 	forceRunnerReconciliationEnv = "EXASOL_LOCAL_FORCE_RUNNER_RECONCILIATION"
 	// Internal escape hatch for tests: exasol-local-runner is embed-only, so
@@ -69,32 +58,9 @@ type State struct {
 	PrivateKeyRelativePath string
 }
 
-type Paths struct {
-	Root                    string
-	WorkDir                 string
-	VMDir                   string
-	SharedDir               string
-	StatePath               string
-	PrivateKeyPath          string
-	RunnerVersionMarkerPath string
-}
-
-func NewPaths(deployment config.DeploymentDir) Paths {
-	root := deployment.Resolve(DirName)
-	workDir := filepath.Join(root, runtimeDirName)
-
-	return Paths{
-		Root:                    root,
-		WorkDir:                 workDir,
-		VMDir:                   filepath.Join(workDir, vmDirName),
-		SharedDir:               filepath.Join(workDir, sharedDirName),
-		StatePath:               filepath.Join(workDir, vmStateFileName),
-		PrivateKeyPath:          filepath.Join(root, PrivateKeyFileName),
-		RunnerVersionMarkerPath: filepath.Join(workDir, runnerVersionMarkerFileName),
-	}
-}
-
-func (paths Paths) PrivateKeyRelativePath(deployment config.DeploymentDir) (string, error) {
+func (paths vmRuntimePaths) PrivateKeyRelativePath(
+	deployment config.DeploymentDir,
+) (string, error) {
 	rel, err := filepath.Rel(deployment.Root(), paths.PrivateKeyPath)
 	if err != nil {
 		return "", err
@@ -122,7 +88,7 @@ type runnerState struct {
 
 type MacVMRuntime struct {
 	deployment config.DeploymentDir
-	paths      Paths
+	paths      vmRuntimePaths
 	manager    *runtimeartifacts.Manager
 }
 
@@ -134,7 +100,7 @@ func NewMacVMRuntime(
 ) *MacVMRuntime {
 	return &MacVMRuntime{
 		deployment: deployment,
-		paths:      NewPaths(deployment),
+		paths:      newVMRuntimePaths(deployment),
 		manager:    manager,
 	}
 }
@@ -254,8 +220,8 @@ func (runtime *MacVMRuntime) ReadState() (*State, error) {
 	return runtime.toState(state)
 }
 
-func (runtime *MacVMRuntime) Status(ctx context.Context) (*VMStatus, error) {
-	return runnerCommandJSON[VMStatus](ctx, runtime, "status")
+func (runtime *MacVMRuntime) Status(ctx context.Context) (*RuntimeStatus, error) {
+	return runnerCommandJSON[RuntimeStatus](ctx, runtime, "status")
 }
 
 // PortState is one of the runner's classified per-port reachability states,
