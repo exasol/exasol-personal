@@ -170,10 +170,12 @@ func destroyLocalRuntime(
 
 func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.VMConfig {
 	return localruntime.VMConfig{
+		RuntimeConfig: localruntime.RuntimeConfig{
+			Ports: runtimeConfig.ports,
+		},
 		CPUCount:   runtimeConfig.cpuCount,
 		MemoryMB:   runtimeConfig.memoryMB,
 		DataSizeGB: runtimeConfig.dataSizeGB,
-		Ports:      runtimeConfig.ports,
 	}
 }
 
