@@ -13,7 +13,7 @@
 
 ## 3. Data Recovery and Migration
 
-- [ ] 3.1 Recover interrupted initial Nano creation by quarantining partial data and removing only stale uninitialized TLS files
+- [x] 3.1 Recover interrupted initial Nano creation by quarantining partial data and removing only stale uninitialized TLS files
 - [ ] 3.2 Migrate legacy overlay-backed `/exa` data through sibling staging without overwriting populated storage or deleting the source prematurely
 
 ## 4. Linux Runtime Integration
