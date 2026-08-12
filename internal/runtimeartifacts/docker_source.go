@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -34,7 +35,14 @@ func (*DockerSource) Fetch(ctx context.Context, url, dstPath string) (string, er
 	if err != nil {
 		return "", err
 	}
-	destRef, err := ociarchive.NewReference(dstPath, parsedRef.destinationImage)
+	tmpDir, err := os.MkdirTemp(filepath.Dir(dstPath), "oci-archive-*")
+	if err != nil {
+		return "", fmt.Errorf("create temporary OCI archive directory: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	rawArchivePath := filepath.Join(tmpDir, "image.tar")
+	destRef, err := ociarchive.NewReference(rawArchivePath, parsedRef.destinationImage)
 	if err != nil {
 		return "", fmt.Errorf("create OCI archive destination: %w", err)
 	}
@@ -53,6 +61,11 @@ func (*DockerSource) Fetch(ctx context.Context, url, dstPath string) (string, er
 		_ = os.Remove(dstPath)
 
 		return "", fmt.Errorf("copy image to OCI archive: %w", err)
+	}
+	if err := repackTarDeterministically(rawArchivePath, dstPath); err != nil {
+		_ = os.Remove(dstPath)
+
+		return "", fmt.Errorf("repack OCI archive deterministically: %w", err)
 	}
 
 	return "", nil
