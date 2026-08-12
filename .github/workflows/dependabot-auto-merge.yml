@@ -96,10 +96,14 @@ jobs:
 
       - name: Enable auto-merge
         if: steps.policy.outputs.eligible == 'true' && (steps.policy.outputs.requires-delay != 'true' || steps.delay.outputs.passed == 'true')
+        # A transient GitHub API race right after the approval above can make this call
+        # fail spuriously; the scheduled-recheck job will retry later, so don't fail
+        # the run over it.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr merge --auto --squash "${PR_URL}"
+        run: gh pr merge --auto --rebase "${PR_URL}"
 
   scheduled-recheck:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -168,5 +172,6 @@ jobs:
               echo "Dependabot PR #${number} is already approved"
             fi
 
-            gh pr merge --repo "${GITHUB_REPOSITORY}" --auto --squash "${url}"
+            gh pr merge --repo "${GITHUB_REPOSITORY}" --auto --rebase "${url}" ||
+              echo "Failed to enable auto-merge for PR #${number}"
           done <<< "${prs}"
