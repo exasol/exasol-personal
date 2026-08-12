@@ -6,6 +6,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Enabled Virtual Schema support in local deployments when the required adapter runtime and dependencies are installed.
+
 - Added `exasol slc custom install`, `update`, and `remove` to manage user-supplied (custom) script language containers in local deployments, for languages the official catalog does not ship — for example a Python container with extra packages.
 
   The container is given as `--source`, which takes either a local tarball or an `https` URL, together with the `--alias` used in `CREATE <alias> SCALAR SCRIPT` and the `--language` it provides.

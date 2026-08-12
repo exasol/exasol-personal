@@ -194,6 +194,8 @@ exasol slc remove python3
 
 The argument is a language alias as used in `CREATE ... SCRIPT`, matched case-insensitively. `exasol slc list` shows each container's flavor, its aliases, its version, and whether it is installed.
 
+Script language containers are also used by features that execute script language code, such as virtual schema adapter scripts. Install the SLC required by the adapter language before creating the adapter script. For JDBC-based virtual schemas on local deployments, see [Virtual schemas on local deployments](doc/virtual_schemas.md).
+
 Installing, updating, or removing an SLC restarts the local database so the change takes effect, which drops open connections and aborts running statements. The command asks for confirmation first; pass `--auto-approve` to skip the prompt (required for non-interactive use), or `--no-restart` to record the change and activate it on the next start.
 
 `exasol slc install`, `update`, and `remove` apply to local deployments only.
@@ -367,7 +369,7 @@ Where the database runs depends on the deployment type:
 Local deployments are intended for development and exploration and do not yet support every feature of a cloud deployment:
 
 - **UDFs** — supported, but no script language container is installed by default. Install one with `exasol slc install <language>` (see **UDFs and Script Language Containers** above); on cloud deployments UDFs work out of the box.
-- **Virtual schemas** — virtual schemas are not available yet (coming soon).
+- **Virtual schemas** — supported when the required adapter runtime and dependencies are installed. Depending on the adapter, this may require installing an SLC and staging adapter or driver files. See [Virtual schemas on local deployments](doc/virtual_schemas.md).
 - **Admin UI** — the Administration UI is not available yet (coming soon).
 - **Multi-node clusters** — a local deployment is a single VM on your machine by design and always runs as a single node.
 

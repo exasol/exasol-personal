@@ -540,7 +540,7 @@ func localRunnerSlcArgs(deployment config.DeploymentDir) ([]string, error) {
 	total := len(state.InstalledSLCs) + len(state.InstalledCustomSLCs)
 	args := make([]string, 0, total*argsPerSLC)
 	for _, installed := range state.InstalledSLCs {
-		args = append(args, "--slc", installed.Image+"="+installed.Target)
+		args = appendOfficialSLCMountArgs(args, installed)
 	}
 	for _, custom := range state.InstalledCustomSLCs {
 		args = append(args,
@@ -550,6 +550,23 @@ func localRunnerSlcArgs(deployment config.DeploymentDir) ([]string, error) {
 	}
 
 	return args, nil
+}
+
+// Without this anchor JDBC IMPORT/EXPORT finds no JVM: etlJdbcJavaPath otherwise scans for a
+// directory name containing "_java_", which the flavor-named target (java-17) does not match.
+const currentJavaMountTarget = slc.SLCMountRoot + "/current-java"
+
+func appendOfficialSLCMountArgs(args []string, installed config.InstalledSLC) []string {
+	args = append(args, "--slc", installed.Image+"="+installed.Target)
+	if isJavaSLC(installed) {
+		args = append(args, "--slc", installed.Image+"="+currentJavaMountTarget)
+	}
+
+	return args
+}
+
+func isJavaSLC(installed config.InstalledSLC) bool {
+	return strings.EqualFold(installed.Language, "java")
 }
 
 // applySLCChange (re)starts the local database so a changed SLC set takes effect. Success
