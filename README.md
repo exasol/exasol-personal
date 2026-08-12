@@ -194,9 +194,25 @@ exasol slc remove python3
 
 The argument is a language alias as used in `CREATE ... SCRIPT`, matched case-insensitively. `exasol slc list` shows each container's flavor, its aliases, its version, and whether it is installed.
 
-Installing, updating, or removing an SLC restarts the local database so the change takes effect, which drops open connections and aborts running statements. The command asks for confirmation first; pass `--auto-approve` to skip the prompt (required for non-interactive use), or `--no-restart` to record the change and activate it on the next start.
+Operations that restart the local database — official `install`, `update`, and `remove`, plus `slc custom install` and `slc custom update` — drop open connections and abort running statements. The command asks for confirmation first; pass `--auto-approve` to skip the prompt (required for non-interactive use), or `--no-restart` to record the change and activate it on the next start.
 
-`exasol slc install`, `update`, and `remove` apply to local deployments only.
+### Custom containers
+
+When the official catalog does not ship what you need — for example a Python container with extra packages — install your own container with `exasol slc custom`:
+
+```bash
+exasol slc custom install --source ./my-python.tar.gz --alias MYPY3 --language python
+exasol slc custom update  --source ./my-python-v2.tar.gz --alias MYPY3
+exasol slc remove MYPY3
+```
+
+`--source` takes a local tarball path or an `https` URL, `--alias` is the name you then use in `CREATE <alias> SCALAR SCRIPT`, and `--language` is the language the container provides (`python`, `java`, or `r`). `custom install` and `custom update` restart the database and accept `--auto-approve` and `--no-restart` just like the official commands. If the container cannot be made available, the database still starts but the command fails, reporting that the container is recorded but not active.
+
+Removing a custom container works differently: it takes effect immediately without a restart, so `--auto-approve` and `--no-restart` do not apply. Because the alias is cleared through the database, the deployment must be running to remove an active container; one that was recorded but never activated can be removed while stopped.
+
+`exasol slc list` lists custom containers in their own table below the official ones, showing each alias, its language, its status (`active` or `pending`), and its source; under `--json` they carry a `custom` type and an `available` field. Use `exasol slc remove <alias>` to remove either kind.
+
+`exasol slc` applies to local deployments only.
 
 ## ⏯️ Start and stop Exasol Personal
 
