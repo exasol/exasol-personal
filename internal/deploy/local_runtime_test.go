@@ -9,7 +9,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -23,63 +22,23 @@ const (
 	localTestSSHForwardedPort = 20022
 )
 
-func TestLocalRunnerVersionCheckArgs_PassesLauncherVersionCheckSettings(t *testing.T) {
-	// Given
-	deployment := newTestDeploymentWithVersionCheckState(t, true, localTestClusterIdentity)
-	const expectedURL = "https://example.test/v1/version-check"
-	t.Setenv(VersionCheckURLEnvVar, expectedURL)
-
-	// When
-	args, err := localRunnerVersionCheckArgs(deployment)
-	// Then
-	if err != nil {
-		t.Fatalf("expected version-check args, got %v", err)
-	}
-	expected := []string{
-		"--version-check-enabled=true",
-		"--version-check-url", expectedURL,
-		"--version-check-identity", localTestClusterIdentity,
-	}
-	if !reflect.DeepEqual(args, expected) {
-		t.Fatalf("expected args %#v, got %#v", expected, args)
-	}
-}
-
-func TestLocalRunnerVersionCheckArgs_DisablesRunnerWhenLauncherVersionCheckDisabled(
-	t *testing.T,
-) {
-	t.Parallel()
-
-	// Given
-	deployment := newTestDeploymentWithVersionCheckState(t, false, "")
-
-	// When
-	args, err := localRunnerVersionCheckArgs(deployment)
-	// Then
-	if err != nil {
-		t.Fatalf("expected disabled version-check args, got %v", err)
-	}
-	expected := []string{"--version-check-enabled=false"}
-	if !reflect.DeepEqual(args, expected) {
-		t.Fatalf("expected args %#v, got %#v", expected, args)
-	}
-}
-
 func TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets(t *testing.T) {
 	t.Parallel()
 
 	// Given
 	deployment := newTestDeploymentWithState(t)
-	state := &localruntime.State{
+	endpoint := &localruntime.VMRuntimeEndpoint{
+		RuntimeEndpoint: localruntime.RuntimeEndpoint{
+			DBPort: localTestDatabasePort,
+			UIPort: 28443,
+		},
 		VMIP:                   "192.168.64.2",
 		SSHPort:                localTestSSHForwardedPort,
-		DBPort:                 localTestDatabasePort,
-		UIPort:                 28443,
 		PrivateKeyRelativePath: "local/node_access.pem",
 	}
 
 	// When
-	err := writeLocalDeploymentArtifacts(deployment, state)
+	err := writeLocalDeploymentArtifacts(deployment, endpoint)
 	// Then
 	if err != nil {
 		t.Fatalf("expected artifacts to be written, got %v", err)
@@ -137,15 +96,17 @@ func TestWriteLocalDeploymentArtifacts_OmitsLocalOnlyCloudMetadataInJSON(t *test
 
 	// Given
 	deployment := newTestDeploymentWithState(t)
-	state := &localruntime.State{
+	endpoint := &localruntime.VMRuntimeEndpoint{
+		RuntimeEndpoint: localruntime.RuntimeEndpoint{
+			DBPort: localTestDatabasePort,
+			UIPort: 28443,
+		},
 		SSHPort:                localTestSSHForwardedPort,
-		DBPort:                 localTestDatabasePort,
-		UIPort:                 28443,
 		PrivateKeyRelativePath: "local/node_access.pem",
 	}
 
 	// When
-	err := writeLocalDeploymentArtifacts(deployment, state)
+	err := writeLocalDeploymentArtifacts(deployment, endpoint)
 	// Then
 	if err != nil {
 		t.Fatalf("expected artifacts to be written, got %v", err)
@@ -178,7 +139,7 @@ func TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts(t *testing.T) {
 
 	// Given
 	deployment := newTestDeploymentWithState(t)
-	paths := localruntime.NewPaths(deployment)
+	paths := newLocalRuntimeTestPaths(deployment)
 	if err := os.MkdirAll(paths.Root, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime root: %v", err)
 	}
@@ -195,7 +156,12 @@ func TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts(t *testing.T) {
 
 	// When: paths.VMDir was never created, so destroyLocalRuntime never needs
 	// to resolve a runner, and a nil manager is safe here.
-	err := destroyLocalRuntime(context.Background(), localruntime.New(deployment, nil), nil, nil)
+	err := destroyLocalRuntime(
+		context.Background(),
+		localruntime.NewMacVMRuntime(deployment, nil),
+		nil,
+		nil,
+	)
 	// Then
 	if err != nil {
 		t.Fatalf("expected destroy cleanup to succeed, got %v", err)
@@ -218,7 +184,7 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 
 	// Given
 	deployment := newTestDeploymentWithState(t)
-	paths := localruntime.NewPaths(deployment)
+	paths := newLocalRuntimeTestPaths(deployment)
 	if err := os.MkdirAll(paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime work dir: %v", err)
 	}
@@ -240,7 +206,12 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 	}
 
 	// When
-	err := stopLocalRuntime(context.Background(), localruntime.New(deployment, manager), nil, nil)
+	err := stopLocalRuntime(
+		context.Background(),
+		localruntime.NewMacVMRuntime(deployment, manager),
+		nil,
+		nil,
+	)
 	// Then
 	if err != nil {
 		t.Fatalf("expected local stop to succeed, got %v", err)

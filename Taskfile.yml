@@ -32,6 +32,8 @@ tasks:
       TARGET_GOOS: '{{default "" .TARGET_GOOS}}'
       TARGET_GOARCH: '{{default "" .TARGET_GOARCH}}'
       SKIP_EMBED: '{{default "" .SKIP_EMBED}}'
+    env:
+      GOFLAGS: '-tags=containers_image_openpgp'
     cmds:
       # unset GOOS/GOARCH: an inherited value would cross-compile the
       # directives' own tool invocations instead of just running them
@@ -76,7 +78,9 @@ tasks:
     cmds:
       - |
         version=$(git describe --tags --abbrev=0) # First character is "v".
-        go build -o {{.BUILD_DIR_NAME}}/{{.BINARY_NAME}} \
+        go build \
+          -tags=containers_image_openpgp \
+          -o {{.BUILD_DIR_NAME}}/{{.BINARY_NAME}} \
           {{if eq .COVERAGE "true"}}-cover -covermode=atomic {{end}}\
           {{if eq .DEBUG_BUILD "true"}}-gcflags="all=-N -l"{{else}}-trimpath \
           -gcflags=all=-l{{end}} \
@@ -95,7 +99,7 @@ tasks:
     cmds:
       - |
         version=$(git describe --tags --abbrev=0) # First character is "v".
-        go build -o {{.BUILD_DIR_NAME}}/{{.OUTPUT_NAME}} \
+        go build -tags=containers_image_openpgp -o {{.BUILD_DIR_NAME}}/{{.OUTPUT_NAME}} \
           {{if eq .DEBUG_BUILD "true"}}-gcflags="all=-N -l"{{else}}-trimpath \
           -gcflags=all=-l{{end}} \
           -ldflags "{{if ne .DEBUG_BUILD "true"}}-s -w {{end}}-X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}
@@ -145,7 +149,7 @@ tasks:
       TEST: '{{default "" .TEST}}'
       COVERAGE: '{{default "false" .COVERAGE}}'
     cmds:
-      - go test -v -race{{if eq .COVERAGE "true"}} -coverprofile=coverage-unit.out -covermode=atomic{{end}}{{if .TEST}} -run "{{.TEST}}"{{end}} ./...
+      - go test -v  -tags=containers_image_openpgp -race{{if eq .COVERAGE "true"}} -coverprofile=coverage-unit.out -covermode=atomic{{end}}{{if .TEST}} -run "{{.TEST}}"{{end}} ./...
       - '{{if eq .COVERAGE "true"}}go tool cover -func=coverage-unit.out{{end}}'
 
   tests-unit-find:
@@ -156,7 +160,7 @@ tasks:
       TEST: '{{default "*" .TEST}}'
     cmds:
       - |
-        go test -json ./... | jq -r 'select(.Action=="run") | .Test'
+        go test -tags=containers_image_openpgp -json ./... | jq -r 'select(.Action=="run") | .Test'
 
   tests-integration:
     desc: 'Run integration tests. COVERAGE=true collects Go coverage from the exasol binary.'

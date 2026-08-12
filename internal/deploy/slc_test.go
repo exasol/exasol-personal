@@ -165,36 +165,3 @@ func TestFindInstalledByImage(t *testing.T) {
 		t.Errorf("findInstalledByImage(missing) = %d, want -1", got)
 	}
 }
-
-func TestLocalRunnerSlcArgsFromState(t *testing.T) {
-	t.Parallel()
-
-	deployment := config.NewDeploymentDir(t.TempDir())
-	state := &config.ExasolPersonalState{
-		InstalledSLCs: []config.InstalledSLC{
-			{Flavor: "python-3.12", Image: "docker.io/x:pytag", Target: "/exa/slc/python-3.12"},
-			{Flavor: "java-17", Image: "docker.io/x:javatag", Target: "/exa/slc/java-17"},
-		},
-	}
-	if err := config.WriteExasolPersonalState(state, deployment); err != nil {
-		t.Fatalf("failed to write state: %v", err)
-	}
-
-	args, err := localRunnerSlcArgs(deployment)
-	if err != nil {
-		t.Fatalf("localRunnerSlcArgs error: %v", err)
-	}
-
-	want := []string{
-		"--slc", "docker.io/x:pytag=/exa/slc/python-3.12",
-		"--slc", "docker.io/x:javatag=/exa/slc/java-17",
-	}
-	if len(args) != len(want) {
-		t.Fatalf("args = %v, want %v", args, want)
-	}
-	for i := range want {
-		if args[i] != want[i] {
-			t.Errorf("args[%d] = %q, want %q", i, args[i], want[i])
-		}
-	}
-}

@@ -3,6 +3,8 @@ version: "2"
 run:
   timeout: 5m
   allow-parallel-runners: true
+  build-tags:
+    - containers_image_openpgp
 
 issues:
   max-issues-per-linter: 0
@@ -95,4 +97,3 @@ formatters:
   - goimports
   - golines
   - swaggo
-

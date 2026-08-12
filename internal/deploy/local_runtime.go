@@ -23,7 +23,7 @@ const localSkipDatabaseWaitEnv = "EXASOL_LOCAL_SKIP_DB_WAIT"
 
 func startLocalRuntime(
 	ctx context.Context,
-	runtime *localruntime.Runtime,
+	runtime localruntime.Runtime,
 	runtimeConfig localRuntimeConfig,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
@@ -37,46 +37,22 @@ func startLocalRuntime(
 
 func startPreparedLocalRuntime(
 	ctx context.Context,
-	runtime *localruntime.Runtime,
+	runtime localruntime.Runtime,
 	runtimeConfig localRuntimeConfig,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
-	paths := runtime.Paths()
-	if err := os.Remove(paths.StatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("failed to remove stale local VM state: %w", err)
-	}
-
 	localConfig := toLocalRuntimeConfig(runtimeConfig)
-	startArgs := []string{"start"}
-	versionCheckArgs, err := localRunnerVersionCheckArgs(runtime.Deployment())
-	if err != nil {
-		return err
-	}
-	startArgs = append(startArgs, versionCheckArgs...)
-	slcArgs, err := localRunnerSlcArgs(runtime.Deployment())
-	if err != nil {
-		return err
-	}
-	startArgs = append(startArgs, slcArgs...)
-	if localConfig.Ports != "" {
-		startArgs = append(startArgs, "--ports", localConfig.Ports)
-	}
-	startArgs = append(startArgs,
-		strconv.Itoa(localConfig.CPUCount),
-		strconv.Itoa(localConfig.MemoryMB),
-		strconv.Itoa(localConfig.DataSizeGB),
-	)
-	if err := runtime.RunCommand(ctx, startArgs, out, outErr); err != nil {
+	if err := runtime.Start(ctx, out, outErr, localConfig); err != nil {
 		return diagnoseLocalFailure(ctx, runtime, err)
 	}
 
-	state, err := runtime.ReadState()
+	endpoint, err := runtime.ReadEndpoints()
 	if err != nil {
 		return err
 	}
 
-	return writeLocalRuntimeArtifactsAndWait(ctx, runtime, state, waitTimeoutSeconds)
+	return writeLocalRuntimeArtifactsAndWait(ctx, runtime, endpoint, waitTimeoutSeconds)
 }
 
 // Must run after the caller commits its workflow state: that write serialises a copy read
@@ -88,28 +64,6 @@ func reconcileCustomSLCsAfterStart(ctx context.Context, deployment config.Deploy
 	if err := reconcileCustomSLCActivation(ctx, deployment); err != nil {
 		slog.Warn("failed to activate a custom script language container", "error", err)
 	}
-}
-
-func localRunnerVersionCheckArgs(deployment config.DeploymentDir) ([]string, error) {
-	launcherState, err := config.ReadExasolPersonalState(deployment)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read local version-check settings: %w", err)
-	}
-
-	if !launcherState.VersionCheckEnabled {
-		return []string{"--version-check-enabled=false"}, nil
-	}
-
-	clusterIdentity := strings.TrimSpace(launcherState.ClusterIdentity)
-	if clusterIdentity == "" {
-		return nil, errors.New("deployment state is missing cluster identity")
-	}
-
-	return []string{
-		"--version-check-enabled=true",
-		"--version-check-url", GetVersionCheckURL(),
-		"--version-check-identity", clusterIdentity,
-	}, nil
 }
 
 // reconcileLocalVMState corrects a stale WorkflowStateRunning caused by an unclean
@@ -149,7 +103,7 @@ func reconcileLocalVMState(
 		return nil
 	}
 
-	vmStatus, err := localruntime.New(deployment, manager).Status(ctx)
+	vmStatus, err := localruntime.NewMacVMRuntime(deployment, manager).Status(ctx)
 	if err != nil {
 		slog.Warn("could not determine local VM status during reconciliation", "error", err)
 		return nil
@@ -176,7 +130,7 @@ func isLocalDeployment(deployment config.DeploymentDir) bool {
 
 func stopLocalRuntime(
 	ctx context.Context,
-	runtime *localruntime.Runtime,
+	runtime localruntime.Runtime,
 	out, outErr io.Writer,
 ) error {
 	if err := runtime.Stop(ctx, out, outErr); err != nil {
@@ -188,7 +142,7 @@ func stopLocalRuntime(
 
 func destroyLocalRuntime(
 	ctx context.Context,
-	runtime *localruntime.Runtime,
+	runtime localruntime.Runtime,
 	out, outErr io.Writer,
 ) error {
 	if err := runtime.Destroy(ctx, out, outErr); err != nil {
@@ -209,22 +163,24 @@ func destroyLocalRuntime(
 	return nil
 }
 
-func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.Config {
-	return localruntime.Config{
+func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.VMConfig {
+	return localruntime.VMConfig{
+		RuntimeConfig: localruntime.RuntimeConfig{
+			Ports: runtimeConfig.ports,
+		},
 		CPUCount:   runtimeConfig.cpuCount,
 		MemoryMB:   runtimeConfig.memoryMB,
 		DataSizeGB: runtimeConfig.dataSizeGB,
-		Ports:      runtimeConfig.ports,
 	}
 }
 
 func writeLocalRuntimeArtifactsAndWait(
 	ctx context.Context,
-	runtime *localruntime.Runtime,
-	state *localruntime.State,
+	runtime localruntime.Runtime,
+	endpoint *localruntime.VMRuntimeEndpoint,
 	waitTimeoutSeconds int,
 ) error {
-	if err := writeLocalDeploymentArtifacts(runtime.Deployment(), state); err != nil {
+	if err := writeLocalDeploymentArtifacts(runtime.Deployment(), endpoint); err != nil {
 		return err
 	}
 	if os.Getenv(localSkipDatabaseWaitEnv) != "" {
@@ -242,9 +198,9 @@ func writeLocalRuntimeArtifactsAndWait(
 
 func writeLocalDeploymentArtifacts(
 	deployment config.DeploymentDir,
-	state *localruntime.State,
+	endpoint *localruntime.VMRuntimeEndpoint,
 ) error {
-	if state == nil {
+	if endpoint == nil {
 		return errors.New("local runtime endpoint state is required")
 	}
 
@@ -255,10 +211,10 @@ func writeLocalDeploymentArtifacts(
 		}
 	}
 
-	sshPort := strconv.Itoa(state.SSHPort)
+	sshPort := strconv.Itoa(endpoint.SSHPort)
 	sshCommand := fmt.Sprintf(
 		"ssh -i %s %s@%s -p %s",
-		state.PrivateKeyRelativePath,
+		endpoint.PrivateKeyRelativePath,
 		localSSHUser,
 		localDeploymentPublicHost,
 		sshPort,
@@ -275,7 +231,7 @@ func writeLocalDeploymentArtifacts(
 			Host:                       localDeploymentPublicHost,
 			DisplayHost:                localDeploymentPublicHost,
 			PublicIp:                   localDeploymentPublicHost,
-			DBPort:                     state.DBPort,
+			DBPort:                     endpoint.DBPort,
 			Username:                   localDBUser,
 			InsecureSkipCertValidation: true,
 			SSHCommand:                 sshCommand,

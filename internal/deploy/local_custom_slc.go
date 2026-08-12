@@ -45,11 +45,11 @@ type slcStatusReport struct {
 
 // Only the shared directory is reachable by the guest that imports the package.
 func customSLCStagingDir(deployment config.DeploymentDir) string {
-	return filepath.Join(localruntime.NewPaths(deployment).SharedDir, slcStagingDirName)
+	return filepath.Join(localruntime.SharedDir(deployment), slcStagingDirName)
 }
 
 func customSLCStatusPath(deployment config.DeploymentDir) string {
-	return filepath.Join(localruntime.NewPaths(deployment).SharedDir, slcStatusFileName)
+	return filepath.Join(localruntime.SharedDir(deployment), slcStatusFileName)
 }
 
 // Downloads write here directly: rename is only atomic within one filesystem.

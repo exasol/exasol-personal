@@ -31,6 +31,25 @@ const runnerZipEntryName = "launcher"
 // ResourceSpec.
 const exasolLocalRunnerResourceID = "exasol-local-runner"
 
+type localRuntimeTestPaths struct {
+	Root           string
+	WorkDir        string
+	StatePath      string
+	PrivateKeyPath string
+}
+
+func newLocalRuntimeTestPaths(deployment config.DeploymentDir) localRuntimeTestPaths {
+	root := deployment.Resolve("local")
+	workDir := filepath.Join(root, "runtime")
+
+	return localRuntimeTestPaths{
+		Root:           root,
+		WorkDir:        workDir,
+		StatePath:      filepath.Join(workDir, "vm-state.json"),
+		PrivateKeyPath: filepath.Join(root, localruntime.PrivateKeyFileName),
+	}
+}
+
 func TestClassifyLocalReachability_AllPortsBlocked(t *testing.T) {
 	t.Parallel()
 	skipOnWindows(t)
@@ -39,7 +58,7 @@ func TestClassifyLocalReachability_AllPortsBlocked(t *testing.T) {
 	ensureLocalRuntimeWorkDir(t, deployment)
 	blockedJSON := `{"ports":{"ssh":{"state":"blocked"},"db":{"state":"blocked"}}}`
 	manager := writeFakeCombinedRunner(t, "", blockedJSON)
-	localRuntime := localruntime.New(deployment, manager)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
 
 	err := classifyLocalReachability(context.Background(), localRuntime)
 	if err == nil {
@@ -60,7 +79,7 @@ func TestClassifyLocalReachability_OnlyDatabasePortBlocked(t *testing.T) {
 	ensureLocalRuntimeWorkDir(t, deployment)
 	mixedJSON := `{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}`
 	manager := writeFakeCombinedRunner(t, "", mixedJSON)
-	localRuntime := localruntime.New(deployment, manager)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
 
 	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no reachability error when at least one port is reachable, got %v", err)
@@ -82,7 +101,7 @@ backend: tofu
 
 	// A nil manager is safe here: classifyLocalReachability short-circuits on
 	// isLocalDeployment before it would ever be dereferenced.
-	localRuntime := localruntime.New(deployment, nil)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, nil)
 	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no-op for non-local deployment, got %v", err)
 	}
@@ -99,7 +118,7 @@ func TestClassifyLocalReachability_HealthCheckUnavailableIsNoop(t *testing.T) {
 	ensureLocalRuntimeWorkDir(t, deployment)
 	runnerScript := "#!/bin/sh\necho 'Unknown command: health-check' >&2\nexit 1\n"
 	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime := localruntime.New(deployment, manager)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
 
 	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no-op when health-check is unavailable, got %v", err)
@@ -135,7 +154,7 @@ backend: local
 func ensureLocalRuntimeWorkDir(t *testing.T, deployment config.DeploymentDir) {
 	t.Helper()
 
-	if err := os.MkdirAll(localruntime.NewPaths(deployment).WorkDir, 0o750); err != nil {
+	if err := os.MkdirAll(newLocalRuntimeTestPaths(deployment).WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime work dir: %v", err)
 	}
 }
