@@ -7,4 +7,11 @@ runs:
       uses: ./.github/actions/setup-go
     - name: Build
       shell: bash
+      env:
+        # Override containers conf at least until github rolls out
+        # 'ubuntu-24.04 version 20260810.271.1' for all instanced of
+        # 'ubuntu-latest'.  At the time of writing, this is in staged rollout
+        # and version 20260720.247.2 ships a v1 registries.conf that the
+        # library that we use refuses.
+        CONTAINERS_REGISTRIES_CONF: ${{ github.workspace }}/.github/containers/registries.conf
       run: task build COVERAGE=true
