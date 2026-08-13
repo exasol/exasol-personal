@@ -19,8 +19,18 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          # this is need because we use "git describe" to get the latest version from git       
+          # this is need because we use "git describe" to get the latest version from git
           fetch-depth: 0
+      - name: Update podman (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          podman --version
+          cat /etc/containers/registries.conf
+          apt update -y
+          apt install -y podman
+          podman --version
+          cat /etc/containers/registries.conf
+
       - uses: ./.github/actions/build
 
       - name: Upload file
