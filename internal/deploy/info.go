@@ -16,6 +16,7 @@ type ConnectionDetails struct {
 	DisplayHost     string                    `json:"displayHost,omitempty"`
 	DBPort          int                       `json:"dbPort,omitempty"`
 	AdminUI         *config.DeploymentAdminUI `json:"adminUi,omitempty"`
+	AILab           *config.DeploymentAILab   `json:"aiLab,omitempty"`
 	Username        string                    `json:"username,omitempty"`
 	CertFingerprint string                    `json:"certFingerprint,omitempty"`
 	InsecureSkipTLS bool                      `json:"insecureSkipCertValidation,omitempty"`
@@ -25,6 +26,7 @@ type ConnectionDetails struct {
 	SSHPort         string                    `json:"sshPort,omitempty"`
 	ShellSupported  bool                      `json:"shellSupported,omitempty"`
 	AdminUISecured  bool                      `json:"-"`
+	AILabSecured    bool                      `json:"-"`
 }
 
 type DeploymentInfoReport struct {
@@ -62,6 +64,10 @@ func (details *ConnectionDetails) HasAdminUI() bool {
 	return details != nil && details.AdminUI != nil && details.AdminUI.URL != ""
 }
 
+func (details *ConnectionDetails) HasAILab() bool {
+	return details != nil && details.AILab != nil && details.AILab.URL != ""
+}
+
 func readConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails, error) {
 	deploymentInfo, err := config.ReadDeploymentInfo(deployment)
 	if err != nil {
@@ -83,6 +89,7 @@ func readConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails,
 		PublicIp:        connectionInfo.PublicIP,
 		DBPort:          connectionInfo.DBPort,
 		AdminUI:         connectionInfo.AdminUI,
+		AILab:           connectionInfo.AILab,
 		SSHCommand:      connectionInfo.SSHCommand,
 		SSHPort:         connectionInfo.SSHPort,
 		Username:        connectionInfo.Username,
@@ -91,6 +98,7 @@ func readConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails,
 		SecretsFilePath: connectionInfo.SecretsFilePath,
 		ShellSupported:  connectionInfo.ShellSupported,
 		AdminUISecured:  secrets.AdminUiPassword != "",
+		AILabSecured:    secrets.AiLabJupyterPassword != "",
 	}, nil
 }
 

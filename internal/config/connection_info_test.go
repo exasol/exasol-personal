@@ -160,6 +160,61 @@ func TestResolveConnectionInfo_AllowsMissingAdminUIMetadata(t *testing.T) {
 	}
 }
 
+func TestResolveConnectionInfo_UsesAILabMetadata(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := NewDeploymentDir(t.TempDir())
+	writeConnectionInfoTestFiles(t, deployment, &DeploymentInfo{
+		DeploymentId: "dep-1",
+		Connection: &DeploymentConnection{
+			Host:   "example.local",
+			DBPort: 8563,
+			AILab: &DeploymentAILab{
+				URL: " http://example.local:49494 ",
+			},
+		},
+	})
+
+	// When
+	info, err := ResolveConnectionInfo(deployment)
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if info.AILab == nil {
+		t.Fatal("expected AI Lab metadata")
+	}
+	if info.AILab.URL != "http://example.local:49494" {
+		t.Fatalf("expected trimmed AI Lab URL, got %q", info.AILab.URL)
+	}
+}
+
+func TestResolveConnectionInfo_AllowsMissingAILabMetadata(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := NewDeploymentDir(t.TempDir())
+	writeConnectionInfoTestFiles(t, deployment, &DeploymentInfo{
+		DeploymentId: "dep-1",
+		Connection: &DeploymentConnection{
+			Host:   "example.local",
+			DBPort: 8563,
+			AILab:  &DeploymentAILab{URL: "   "},
+		},
+	})
+
+	// When
+	info, err := ResolveConnectionInfo(deployment)
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if info.AILab != nil {
+		t.Fatalf("expected no AI Lab metadata for blank URL, got %#v", info.AILab)
+	}
+}
+
 func TestResolveConnectionInfo_UsesExplicitConnectionCertFingerprint(t *testing.T) {
 	t.Parallel()
 

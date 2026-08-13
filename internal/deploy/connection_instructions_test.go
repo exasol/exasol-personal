@@ -215,3 +215,72 @@ func TestRenderConnectionInstructionsText_IncludesAdminUIWhenMetadataPresent(t *
 		}
 	}
 }
+
+func TestRenderConnectionInstructionsText_OmitsAILabWhenMetadataMissing(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	report := &DeploymentInfoReport{
+		DeploymentDir:   "/deployment",
+		DeploymentID:    "test-deployment",
+		DeploymentState: StatusRunning,
+		Connection: &ConnectionDetails{
+			DisplayHost:     "db.example.local",
+			DBPort:          8563,
+			Username:        "sys",
+			SecretsFilePath: "/deployment/secrets.json",
+		},
+	}
+
+	// When
+	content, err := RenderConnectionInstructionsText(report)
+	// Then
+	if err != nil {
+		t.Fatalf("expected report to render: %v", err)
+	}
+	if strings.Contains(content, "AI Lab") {
+		t.Fatalf("expected AI Lab instructions to be omitted, got %q", content)
+	}
+	if !strings.Contains(content, "exasol connect") {
+		t.Fatalf("expected SQL instructions to be preserved, got %q", content)
+	}
+}
+
+func TestRenderConnectionInstructionsText_IncludesAILabWhenMetadataPresent(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	report := &DeploymentInfoReport{
+		DeploymentDir:   "/deployment",
+		DeploymentID:    "test-deployment",
+		DeploymentState: StatusRunning,
+		Connection: &ConnectionDetails{
+			DisplayHost:     "db.example.local",
+			DBPort:          8563,
+			Username:        "sys",
+			SecretsFilePath: "/deployment/secrets.json",
+			AILab: &config.DeploymentAILab{
+				URL: "http://ai.example.local:49494",
+			},
+			AILabSecured: true,
+		},
+	}
+
+	// When
+	content, err := RenderConnectionInstructionsText(report)
+	// Then
+	if err != nil {
+		t.Fatalf("expected report to render: %v", err)
+	}
+	for _, expected := range []string{
+		"How to open the AI Lab",
+		"http://ai.example.local:49494",
+		"Jupyter password: <stored in /deployment/secrets.json>",
+		"Config-store master password: <stored in /deployment/secrets.json>",
+		"pre-configured",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("expected instructions to contain %q, got %q", expected, content)
+		}
+	}
+}
