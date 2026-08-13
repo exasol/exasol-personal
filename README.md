@@ -307,6 +307,20 @@ Your browser may show a security warning when connecting to Exasol Admin because
 
 Currently, Exasol Admin is only available on cloud deployments.
 
+## 🤖 AI Lab
+
+The [Exasol AI Lab](https://github.com/exasol/ai-lab) is a ready-to-use JupyterLab environment for data science and AI work against your database. You can have it installed and pre-wired automatically on the same infrastructure as your database — **one flag, zero manual configuration**:
+
+```bash
+exasol install aws --with-ai-lab
+```
+
+When enabled, the launcher runs the `exasol/ai-lab` container alongside the database and pre-configures its connection to the Exasol database and BucketFS, so notebooks work with no manual setup. After installation, `exasol info` prints the AI Lab URL; the Jupyter and config-store passwords are stored in `secrets.json`.
+
+Currently, AI Lab is available on cloud deployments only.
+
+See [doc/ai_lab.md](doc/ai_lab.md) for the architecture, the port/firewall details, and how the connection is pre-wired.
+
 ## 🔒 Connect using SSH
 
 To connect with SSH to your deployment use one of the following commands:
