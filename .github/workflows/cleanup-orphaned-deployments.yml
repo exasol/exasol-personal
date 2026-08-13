@@ -1,0 +1,129 @@
+name: Cleanup orphaned deployment-test resources
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  MAX_AGE_HOURS: "24"
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    environment:
+      name: deployment-tests
+    permissions:
+      id-token: write # AWS OIDC auth
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: ./.github/actions/setup-aws
+        with:
+          aws-ci-role: ${{ vars.AWS_CI_ROLE_PLATFORM }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Azure credentials
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Exoscale credentials
+        shell: bash
+        env:
+          SECRET_EXOSCALE_API_KEY: ${{ secrets.EXOSCALE_API_KEY }}
+          SECRET_EXOSCALE_API_SECRET: ${{ secrets.EXOSCALE_API_SECRET }}
+        run: |
+          echo "EXOSCALE_API_KEY=${SECRET_EXOSCALE_API_KEY}" >> "$GITHUB_ENV"
+          echo "EXOSCALE_API_SECRET=${SECRET_EXOSCALE_API_SECRET}" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: tools/cleanup/go.mod
+
+      - uses: ./.github/actions/setup-task
+
+      - name: Build cleanup tool
+        working-directory: tools/cleanup
+        shell: bash
+        run: task build
+
+      - name: Discover and clean up orphaned deployments
+        working-directory: tools/cleanup
+        shell: bash
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          ./bin/exasol-cleanup discover \
+            --provider=aws,azure,exoscale \
+            --owner=* \
+            --azure-subscription-id="${AZURE_SUBSCRIPTION_ID}" \
+            --json > discover.json
+
+          jq . discover.json
+
+          threshold_epoch=$(date -u -d "-${MAX_AGE_HOURS} hours" +%s)
+          stale_ids_raw="$(jq -r \
+            --argjson threshold "${threshold_epoch}" \
+            '.data[] | select((.createdAt | fromdateiso8601) < $threshold) | .id' \
+            discover.json)"
+
+          stale_ids=()
+          while IFS= read -r id; do
+            [ -n "${id}" ] && stale_ids+=("${id}")
+          done <<< "${stale_ids_raw}"
+
+          {
+            echo "## Orphaned deployment cleanup"
+            echo "Age threshold: ${MAX_AGE_HOURS}h"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${#stale_ids[@]}" -eq 0 ]; then
+            echo "No deployments older than ${MAX_AGE_HOURS}h found." >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          {
+            echo "Found ${#stale_ids[@]} deployment(s) older than ${MAX_AGE_HOURS}h:"
+            printf -- '- `%s`\n' "${stale_ids[@]}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          run_json=$(./bin/exasol-cleanup run "${stale_ids[@]}" \
+            --provider=aws,azure,exoscale \
+            --owner=* \
+            --azure-subscription-id="${AZURE_SUBSCRIPTION_ID}" \
+            --execute \
+            --json)
+
+          jq -r '
+            .deployments[] |
+            if .error then "\(.requested): ERROR - \(.error.message)"
+            else "\(.requested): " + ([.results[] | "\(.action.ref.type) \(.action.ref.id) \(.status)"] | join(", "))
+            end
+          ' <<<"${run_json}"
+
+          # exasol-cleanup run's exit code ignores individual resource failures
+          # (only deployment-level errors), so check for those separately here.
+          failures="$(jq -r '
+            .deployments[] as $d |
+            if $d.error then
+              "\($d.requested): deployment error - \($d.error.message)"
+            else
+              ($d.resolved.provider // "unknown") as $provider |
+              ($d.results // [])[] |
+              select(.status == "failed") |
+              "\($d.requested) (\($provider)): \(.action.ref.type) \(.action.ref.id) failed" + (if .error != "" then " - \(.error)" else "" end)
+            end
+          ' <<<"${run_json}")"
+
+          if [[ -n "${failures}" ]]; then
+            while IFS= read -r failure; do
+              echo "::error::${failure}"
+            done <<<"${failures}"
+            exit 1
+          fi
