@@ -187,5 +187,12 @@ func archiveImageName(source types.ImageReference) (string, error) {
 		return "", fmt.Errorf("load source image descriptor: %w", err)
 	}
 
-	return descriptor.Annotations[imgspecv1.AnnotationRefName], nil
+	imageName := descriptor.Annotations[imgspecv1.AnnotationRefName]
+	if imageName == "" {
+		return "", fmt.Errorf(
+			"source image descriptor is missing %q annotation", imgspecv1.AnnotationRefName,
+		)
+	}
+
+	return imageName, nil
 }
