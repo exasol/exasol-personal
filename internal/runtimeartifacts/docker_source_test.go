@@ -99,6 +99,7 @@ func TestParseImageReference_OCIUsesDescriptorAnnotation(t *testing.T) {
 		name            string
 		descriptorImage string
 		sourceImage     string
+		wantErr         bool
 	}{
 		{
 			name:            "explicitly selected image",
@@ -106,7 +107,7 @@ func TestParseImageReference_OCIUsesDescriptorAnnotation(t *testing.T) {
 			sourceImage:     "example.org/foo:latest",
 		},
 		{name: "implicitly selected image", descriptorImage: "example.org/foo:latest"},
-		{name: "unnamed image"},
+		{name: "unnamed image", wantErr: true},
 	}
 
 	for _, testCase := range tests {
@@ -122,6 +123,13 @@ func TestParseImageReference_OCIUsesDescriptorAnnotation(t *testing.T) {
 			// When
 			parsedReference, err := parseImageReference(sourceName)
 			// Then
+			if testCase.wantErr {
+				if err == nil {
+					t.Fatal("expected parsing OCI reference to fail")
+				}
+
+				return
+			}
 			if err != nil {
 				t.Fatalf("parse OCI reference: %v", err)
 			}
