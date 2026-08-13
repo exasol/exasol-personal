@@ -33,6 +33,19 @@ resource "aws_security_group" "exasol_instance" {
     }
   }
 
+  # AI Lab (Jupyter) access, only when AI Lab is installed.
+  dynamic "ingress" {
+    for_each = var.with_ai_lab ? { (var.ai_lab_port) = "Exasol AI Lab (Jupyter)" } : {}
+
+    content {
+      from_port   = ingress.key
+      to_port     = ingress.key
+      protocol    = "tcp"
+      cidr_blocks = [var.allowed_cidr]
+      description = ingress.value
+    }
+  }
+
   # Allow all outbound traffic
   egress {
     from_port   = 0

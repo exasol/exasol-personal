@@ -32,6 +32,9 @@ locals {
         username                   = "admin"
         insecureSkipCertValidation = true
       }
+      aiLab = var.with_ai_lab ? {
+        url = "https://${values(data.aws_instance.nodes)[0].public_dns}:${var.ai_lab_port}"
+      } : null
       username       = "sys"
       sshCommand     = "ssh -i ${local.key_file_relative_path} ubuntu@${values(data.aws_instance.nodes)[0].public_dns} -p 22"
       sshPort        = "22"
@@ -61,12 +64,19 @@ locals {
       }
     }
   }
-  deployment_secrets = {
-    adminUiUsername = "admin"
-    adminUiPassword = local.adminui_password_final
-    dbUsername      = "sys"
-    dbPassword      = local.db_password_final
-  }
+  deployment_secrets = merge(
+    {
+      adminUiUsername = "admin"
+      adminUiPassword = local.adminui_password_final
+      dbUsername      = "sys"
+      dbPassword      = local.db_password_final
+    },
+    var.with_ai_lab ? {
+      aiLabScsPassword     = random_password.ai_lab_scs[0].result
+      aiLabJupyterPassword = random_password.ai_lab_jupyter[0].result
+      aiLabBfsPassword     = random_password.ai_lab_bfs[0].result
+    } : {}
+  )
 }
 
 output "deployment_info" {

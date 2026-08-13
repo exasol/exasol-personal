@@ -50,6 +50,40 @@ func TestBuiltInLocalPresetDoesNotDeclareAdminUICapability(t *testing.T) {
 	}
 }
 
+func TestBuiltInAwsPresetDeclaresAILabCapability(t *testing.T) {
+	t.Parallel()
+
+	// Given / When
+	manifest, err := ReadInfrastructureManifest("aws")
+	// Then
+	if err != nil {
+		t.Fatalf("failed to read aws infrastructure manifest: %v", err)
+	}
+	if !slices.Contains(manifest.ProvidedCapabilities(), "ai-lab") {
+		t.Fatalf(
+			"expected aws preset to provide ai-lab, got %#v",
+			manifest.ProvidedCapabilities(),
+		)
+	}
+}
+
+func TestBuiltInLocalPresetDoesNotDeclareAILabCapability(t *testing.T) {
+	t.Parallel()
+
+	// Given / When
+	manifest, err := ReadInfrastructureManifest("local")
+	// Then
+	if err != nil {
+		t.Fatalf("failed to read local infrastructure manifest: %v", err)
+	}
+	if slices.Contains(manifest.ProvidedCapabilities(), "ai-lab") {
+		t.Fatalf(
+			"expected local preset not to provide ai-lab, got %#v",
+			manifest.ProvidedCapabilities(),
+		)
+	}
+}
+
 func TestBuiltInCloudPresetsEmitAdminUIMetadata(t *testing.T) {
 	t.Parallel()
 

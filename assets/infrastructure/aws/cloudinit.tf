@@ -97,8 +97,22 @@ locals {
     }
     postInstall = {
       # postInstall hooks run on the *access node (n11) only*
-      scripts = var.s3_archive_enabled ? ["/opt/exasol_launcher/scripts/aws_registerS3ArchiveVolume.sh"] : []
+      scripts = concat(
+        var.s3_archive_enabled ? ["/opt/exasol_launcher/scripts/aws_registerS3ArchiveVolume.sh"] : [],
+        var.with_ai_lab ? ["/opt/exasol_launcher/scripts/installAiLab.sh"] : []
+      )
     }
+
+    # AI Lab settings consumed by the installAiLab.sh post-install hook. Emitted
+    # only when AI Lab is requested, so a plain deployment carries no AI Lab
+    # block in its cloud-init user-data.
+    aiLab = var.with_ai_lab ? {
+      enabled            = true
+      port               = var.ai_lab_port
+      scsPasswordB64     = base64encode(random_password.ai_lab_scs[0].result)
+      jupyterPasswordB64 = base64encode(random_password.ai_lab_jupyter[0].result)
+      bfsPasswordB64     = base64encode(random_password.ai_lab_bfs[0].result)
+    } : null
 
     # Cloud-provider specific values needed by optional infra hooks.
     aws = {
