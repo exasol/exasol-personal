@@ -129,7 +129,7 @@ func TestNewLocalRuntimeForPlatform_SelectsRuntime(t *testing.T) {
 			goos: localLinuxOS, goarch: localLinuxAMD64,
 			assert: func(t *testing.T, selected localruntime.Runtime) {
 				t.Helper()
-				if _, ok := selected.(*localruntime.LinuxHostRuntime); !ok {
+				if _, ok := selected.(*localruntime.HostRuntime); !ok {
 					t.Fatalf("expected LinuxHostRuntime, got %T", selected)
 				}
 			},
@@ -139,7 +139,7 @@ func TestNewLocalRuntimeForPlatform_SelectsRuntime(t *testing.T) {
 			goos: localLinuxOS, goarch: localLinuxARM64,
 			assert: func(t *testing.T, selected localruntime.Runtime) {
 				t.Helper()
-				if _, ok := selected.(*localruntime.LinuxHostRuntime); !ok {
+				if _, ok := selected.(*localruntime.HostRuntime); !ok {
 					t.Fatalf("expected LinuxHostRuntime, got %T", selected)
 				}
 			},

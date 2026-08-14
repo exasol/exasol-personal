@@ -134,6 +134,7 @@ func deployFromManifests(
 		})
 }
 
+//nolint:revive // verbose mirrors the command-level --verbose flag.
 func deployLocked(
 	ctx context.Context,
 	deployment config.DeploymentDir,
@@ -149,6 +150,26 @@ func deployLocked(
 	if err := WorkflowStatePermitsDeploy(exasolState, deployment); err != nil {
 		return err
 	}
+	infrastructureManifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return err
+	}
+	backend, err := newDeploymentBackend(deployment, infrastructureManifest)
+	if err != nil {
+		return err
+	}
+	var externalCommandOutput io.Writer
+	if verbose {
+		externalCommandOutput = os.Stderr
+	}
+	if err := backend.Prepare(
+		ctx,
+		externalCommandOutput,
+		externalCommandOutput,
+		options.RuntimePreparation,
+	); err != nil {
+		return err
+	}
 
 	// Set the workflowstate to deployment in-progress
 	if err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
@@ -157,7 +178,9 @@ func deployLocked(
 		slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 	}
 
-	return runDeployBackend(ctx, exasolState, deployment, verbose, options)
+	return runDeployBackend(
+		ctx, exasolState, deployment, backend, externalCommandOutput, options,
+	)
 }
 
 // runDeployBackend registers the interruption signal handler, runs the
@@ -171,7 +194,8 @@ func runDeployBackend(
 	ctx context.Context,
 	exasolState *config.ExasolPersonalState,
 	deployment config.DeploymentDir,
-	verbose bool,
+	backend deploymentBackend,
+	externalCommandOutput io.Writer,
 	options DeployOptions,
 ) error {
 	// Register signal handler for catching interruptions and set state
@@ -189,24 +213,9 @@ func runDeployBackend(
 	// Fallback cleanup
 	defer unregister()
 
-	// Manifest-driven execution
-	infrastructureManifest, err := config.ReadInfrastructureManifest(deployment)
-	if err != nil {
-		return err
-	}
-	backend, err := newDeploymentBackend(deployment, infrastructureManifest)
-	if err != nil {
-		return err
-	}
-
 	installManifest, err := config.ReadInstallManifest(deployment)
 	if err != nil {
 		return err
-	}
-
-	var externalCommandOutput io.Writer
-	if verbose {
-		externalCommandOutput = os.Stderr
 	}
 
 	if err := backend.Deploy(

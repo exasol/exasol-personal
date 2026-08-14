@@ -43,6 +43,31 @@ type VMConfig struct {
 	DataSizeGB int
 }
 
+// HostChangeKind identifies a host environment change that requires explicit
+// user approval before a runtime can apply it.
+type HostChangeKind string
+
+// HostCommand describes a command that preparation intends to run.
+type HostCommand struct {
+	Name string
+	Args []string
+}
+
+// HostChangeRequest describes an approval-gated host environment change.
+type HostChangeRequest struct {
+	Kind     HostChangeKind
+	Commands []HostCommand
+}
+
+// HostChangeApprover decides whether an approval-gated host change may run.
+type HostChangeApprover func(context.Context, HostChangeRequest) (bool, error)
+
+// PrepareOptions carries presentation policy for runtime preparation.
+type PrepareOptions struct {
+	ApproveHostChange HostChangeApprover
+	Progress          io.Writer
+}
+
 type RuntimeStatus struct {
 	Running bool `json:"running"`
 }
@@ -88,7 +113,7 @@ type HealthCheckResult struct {
 // nolint: interfacebloat
 type Runtime interface {
 	Deployment() config.DeploymentDir
-	Prepare(ctx context.Context, out, outErr io.Writer) error
+	Prepare(ctx context.Context, out, outErr io.Writer, options PrepareOptions) error
 	Start(ctx context.Context, out, outErr io.Writer, runtimeConfig VMConfig) error
 	Stop(ctx context.Context, out, outErr io.Writer) error
 	Status(ctx context.Context) (*RuntimeStatus, error)

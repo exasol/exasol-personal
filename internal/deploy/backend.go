@@ -34,6 +34,14 @@ type DeployOptions struct {
 	// .terraform.lock.hcl). When false, the backend must treat any such
 	// lockfile as read-only.
 	UpdateDependencyLockfile bool
+
+	RuntimePreparation localruntime.PrepareOptions
+}
+
+// StartOptions carries options for a single start invocation.
+type StartOptions struct {
+	WaitTimeoutSeconds int
+	RuntimePreparation localruntime.PrepareOptions
 }
 
 // deploymentBackend exposes the lifecycle and configuration operations the
@@ -44,6 +52,11 @@ type DeployOptions struct {
 // when the backend was constructed (see newDeploymentBackend).
 // nolint: interfacebloat
 type deploymentBackend interface {
+	Prepare(
+		ctx context.Context,
+		out, outErr io.Writer,
+		options localruntime.PrepareOptions,
+	) error
 	ValidateEnvironment() error
 	SetupWorkspace(ctx context.Context) error
 	Configure(

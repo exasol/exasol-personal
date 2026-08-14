@@ -545,7 +545,9 @@ func applySLCChange(
 		if err := Stop(ctx, deployment, verbose); err != nil {
 			return 0, err
 		}
-		if err := Start(ctx, deployment, verbose, StartedDefaultTimeoutSeconds); err != nil {
+		if err := Start(ctx, deployment, verbose, StartOptions{
+			WaitTimeoutSeconds: StartedDefaultTimeoutSeconds,
+		}); err != nil {
 			return 0, err
 		}
 
@@ -556,7 +558,9 @@ func applySLCChange(
 		return SLCApplyDeferred, nil
 	}
 
-	if err := Start(ctx, deployment, verbose, StartedDefaultTimeoutSeconds); err != nil {
+	if err := Start(ctx, deployment, verbose, StartOptions{
+		WaitTimeoutSeconds: StartedDefaultTimeoutSeconds,
+	}); err != nil {
 		return 0, err
 	}
 

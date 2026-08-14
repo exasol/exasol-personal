@@ -87,6 +87,18 @@ type localPlatformCapabilities struct {
 	vmSizing bool
 }
 
+func (b *localBackend) Prepare(
+	ctx context.Context,
+	out, outErr io.Writer,
+	options localruntime.PrepareOptions,
+) error {
+	if err := b.ValidateEnvironment(); err != nil {
+		return err
+	}
+
+	return b.runtime.Prepare(ctx, out, outErr, options)
+}
+
 func (b *localBackend) ValidateEnvironment() error {
 	return validateLocalPlatform(b.goos, b.goarch)
 }
@@ -585,5 +597,5 @@ func (b *localBackend) deployOrStart(
 		return err
 	}
 
-	return startLocalRuntime(ctx, b.runtime, runtimeConfig, waitTimeoutSeconds, out, outErr)
+	return startPreparedLocalRuntime(ctx, b.runtime, runtimeConfig, waitTimeoutSeconds, out, outErr)
 }
