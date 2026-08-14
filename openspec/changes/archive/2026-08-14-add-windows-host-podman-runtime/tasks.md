@@ -28,6 +28,6 @@
 
 ## 5. Final Verification and Archive
 
-- [ ] 5.1 Run strict OpenSpec validation, `task all`, Windows cross-build, and final repository checks
-- [ ] 5.2 Archive the completed OpenSpec change and validate the archived specifications
-- [ ] 5.3 Run full lint and commit the OpenSpec archive
+- [x] 5.1 Run strict OpenSpec validation, `task all`, Windows cross-build, and final repository checks
+- [x] 5.2 Archive the completed OpenSpec change and validate the archived specifications
+- [x] 5.3 Run full lint and commit the OpenSpec archive
