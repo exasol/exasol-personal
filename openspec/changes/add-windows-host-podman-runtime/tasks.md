@@ -14,11 +14,11 @@
 - [x] 2.5 Cover approval, retry, command failure, platform selection, configuration, shell, endpoint, and health behavior with focused tests
 - [x] 2.6 Run formatting, focused tests, Windows cross-build, and full lint, then commit the Windows runtime change
 
-## 3. Windows Lifecycle CI
+## 3. Windows Lifecycle Integration
 
-- [ ] 3.1 Add a Windows lifecycle smoke job covering built-in Podman setup, SQL readiness, stop/start persistence, and destroy cleanup
-- [ ] 3.2 Add failure diagnostics and keep the install/PATH regression checks in one PowerShell process
-- [ ] 3.3 Run workflow-oriented checks and full lint, then commit the CI change
+- [x] 3.1 Cover built-in Podman setup, SQL readiness, stop/start persistence, and destroy cleanup in the regular Windows integration suite
+- [x] 3.2 Add failure diagnostics and keep the install/PATH regression checks in one integration-test process
+- [x] 3.3 Run workflow-oriented checks and full lint, then commit the CI change
 
 ## 4. Documentation
 

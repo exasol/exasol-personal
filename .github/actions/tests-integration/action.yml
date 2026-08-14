@@ -10,6 +10,40 @@ runs:
     - name: Run Integration Tests
       shell: bash
       run: task tests-integration COVERAGE=true
+    - name: Collect Windows local diagnostics
+      if: ${{ failure() && runner.os == 'Windows' }}
+      shell: pwsh
+      run: |
+        $diagnostics = Join-Path $env:RUNNER_TEMP 'windows-local-integration-diagnostics'
+        New-Item -ItemType Directory -Force -Path $diagnostics | Out-Null
+        $podman = Join-Path $env:ProgramFiles 'RedHat\Podman\podman.exe'
+
+        if (Test-Path $podman) {
+          & $podman machine inspect *> (Join-Path $diagnostics 'machine-inspect.txt')
+          & $podman ps -a *> (Join-Path $diagnostics 'podman-ps.txt')
+          $containers = & $podman ps -aq
+          foreach ($container in $containers) {
+            & $podman inspect $container *> (Join-Path $diagnostics "inspect-$container.txt")
+            & $podman logs $container *> (Join-Path $diagnostics "logs-$container.txt")
+          }
+        }
+        Get-NetTCPConnection -ErrorAction SilentlyContinue |
+          Format-List * > (Join-Path $diagnostics 'tcp-connections.txt')
+
+        $testTemp = [System.IO.Path]::GetTempPath()
+        Get-ChildItem -Path $testTemp -Directory -Recurse `
+          -Filter 'windows-local-deployment' -ErrorAction SilentlyContinue |
+          ForEach-Object {
+            Copy-Item -Recurse -Force $_.FullName `
+              (Join-Path $diagnostics "deployment-$($_.Parent.Name)")
+          }
+    - name: Upload Windows local diagnostics
+      if: ${{ failure() && runner.os == 'Windows' }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: windows-local-integration-diagnostics
+        path: ${{ runner.temp }}/windows-local-integration-diagnostics
+        if-no-files-found: ignore
     - name: Upload integration coverage report
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
