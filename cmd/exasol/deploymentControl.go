@@ -59,7 +59,7 @@ var startCmd = &cobra.Command{
 			cmd.Context(),
 			deployment,
 			commonFlags.DeployVerbose,
-			waitTimeoutSeconds,
+			deploy.StartOptions{WaitTimeoutSeconds: waitTimeoutSeconds},
 		); err != nil {
 			if errors.Is(err, deploy.ErrLifecycleActionSkipped) {
 				return nil

@@ -8,10 +8,68 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
 )
+
+//nolint:paralleltest // The test replaces process-wide PATH for host preparation.
+func TestDeployPreparationFailurePreservesInitializedWorkflowState(t *testing.T) {
+	requireLinuxLocalPlatform(t)
+	deployment := newLocalTestDeployment(t)
+	t.Setenv("PATH", t.TempDir())
+
+	err := deployLocked(context.Background(), deployment, false, DeployOptions{})
+
+	if err == nil || !strings.Contains(err.Error(), "'podman' is required") {
+		t.Fatalf("expected Podman preparation failure, got %v", err)
+	}
+	state, readErr := config.ReadExasolPersonalState(deployment)
+	if readErr != nil {
+		t.Fatalf("failed to read workflow state: %v", readErr)
+	}
+	workflowState, readErr := state.GetWorkflowState()
+	if readErr != nil {
+		t.Fatalf("failed to decode workflow state: %v", readErr)
+	}
+	if _, ok := workflowState.(*config.WorkflowStateInitialized); !ok {
+		t.Fatalf("expected initialized workflow state, got %T", workflowState)
+	}
+}
+
+//nolint:paralleltest // The test replaces process-wide PATH for host preparation.
+func TestStartPreparationFailurePreservesStoppedWorkflowState(t *testing.T) {
+	requireLinuxLocalPlatform(t)
+	deployment := newLocalTestDeployment(t)
+	state, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		t.Fatalf("failed to read workflow state: %v", err)
+	}
+	if err := state.SetWorkflowStateAndWrite(
+		&config.WorkflowStateStopped{}, deployment,
+	); err != nil {
+		t.Fatalf("failed to write stopped workflow state: %v", err)
+	}
+	t.Setenv("PATH", t.TempDir())
+
+	err = startLocked(context.Background(), deployment, false, StartOptions{})
+
+	if err == nil || !strings.Contains(err.Error(), "'podman' is required") {
+		t.Fatalf("expected Podman preparation failure, got %v", err)
+	}
+	written, readErr := config.ReadExasolPersonalState(deployment)
+	if readErr != nil {
+		t.Fatalf("failed to read workflow state: %v", readErr)
+	}
+	workflowState, readErr := written.GetWorkflowState()
+	if readErr != nil {
+		t.Fatalf("failed to decode workflow state: %v", readErr)
+	}
+	if _, ok := workflowState.(*config.WorkflowStateStopped); !ok {
+		t.Fatalf("expected stopped workflow state, got %T", workflowState)
+	}
+}
 
 //nolint:paralleltest // The fake Podman executable requires a process-wide PATH override.
 func TestLocalStatusUsesLinuxPodmanRuntime(t *testing.T) {

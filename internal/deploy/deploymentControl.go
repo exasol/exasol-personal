@@ -173,11 +173,11 @@ func Start(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	verbose bool,
-	waitTimeoutSeconds int,
+	options StartOptions,
 ) error {
 	err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			return startLocked(ctx, deployment, verbose, waitTimeoutSeconds)
+			return startLocked(ctx, deployment, verbose, options)
 		})
 	if errors.Is(err, ErrDeploymentDirectoryLocked) {
 		slog.Warn(err.Error())
@@ -187,11 +187,12 @@ func Start(
 	return err
 }
 
+//nolint:revive // verbose mirrors the command-level --verbose flag.
 func startLocked(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	verbose bool,
-	waitTimeoutSeconds int,
+	options StartOptions,
 ) error {
 	exasolState, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {
@@ -214,6 +215,26 @@ func startLocked(
 
 		return ErrLifecycleActionSkipped
 	}
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return err
+	}
+	backend, err := newDeploymentBackend(deployment, manifest)
+	if err != nil {
+		return err
+	}
+	var externalCommandOutput io.Writer
+	if verbose {
+		externalCommandOutput = os.Stderr
+	}
+	if err := backend.Prepare(
+		ctx,
+		externalCommandOutput,
+		externalCommandOutput,
+		options.RuntimePreparation,
+	); err != nil {
+		return err
+	}
 
 	slog.Info("starting deployment. this may take a few minutes")
 
@@ -224,7 +245,14 @@ func startLocked(
 		slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 	}
 
-	return runStartBackend(ctx, exasolState, deployment, verbose, waitTimeoutSeconds)
+	return runStartBackend(
+		ctx,
+		exasolState,
+		deployment,
+		backend,
+		externalCommandOutput,
+		options.WaitTimeoutSeconds,
+	)
 }
 
 // runStartBackend registers the interruption signal handler, invokes the
@@ -238,7 +266,8 @@ func runStartBackend(
 	ctx context.Context,
 	exasolState *config.ExasolPersonalState,
 	deployment config.DeploymentDir,
-	verbose bool,
+	backend deploymentBackend,
+	externalCommandOutput io.Writer,
 	waitTimeoutSeconds int,
 ) error {
 	// Register signal handler for catching interruptions and set state
@@ -253,20 +282,6 @@ func runStartBackend(
 
 	// Fallback cleanup
 	defer unregister()
-
-	manifest, err := config.ReadInfrastructureManifest(deployment)
-	if err != nil {
-		return err
-	}
-	backend, err := newDeploymentBackend(deployment, manifest)
-	if err != nil {
-		return err
-	}
-
-	var externalCommandOutput io.Writer
-	if verbose {
-		externalCommandOutput = os.Stderr
-	}
 
 	if err := backend.Start(
 		ctx,

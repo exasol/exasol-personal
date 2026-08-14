@@ -77,7 +77,7 @@ func diagnoseLocalUnsafe(
 	runtimeStatus, err := localRuntime.Status(ctx)
 	if err != nil {
 		runtimeName := "VM"
-		if _, isLinuxHost := localRuntime.(*localruntime.LinuxHostRuntime); isLinuxHost {
+		if _, isHostRuntime := localRuntime.(*localruntime.HostRuntime); isHostRuntime {
 			runtimeName = "Podman container"
 		}
 		diagnostics.Message = fmt.Sprintf(
@@ -96,7 +96,7 @@ func diagnoseLocalUnsafe(
 		return diagnostics
 	}
 
-	if _, isLinuxHost := localRuntime.(*localruntime.LinuxHostRuntime); !isLinuxHost {
+	if _, isHostRuntime := localRuntime.(*localruntime.HostRuntime); !isHostRuntime {
 		diagnostics.Warning = unexpectedRunningVMWarning(deployment)
 	}
 

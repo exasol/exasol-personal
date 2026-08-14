@@ -82,7 +82,7 @@ func classifyLocalReachability(ctx context.Context, runtime localruntime.Runtime
 }
 
 func localReachabilityMessageForRuntime(runtime localruntime.Runtime) string {
-	if _, isLinuxHost := runtime.(*localruntime.LinuxHostRuntime); isLinuxHost {
+	if _, isHostRuntime := runtime.(*localruntime.HostRuntime); isHostRuntime {
 		return linuxHostReachabilityMessage
 	}
 
