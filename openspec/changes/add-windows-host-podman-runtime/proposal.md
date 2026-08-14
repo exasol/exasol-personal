@@ -8,7 +8,7 @@ The launcher runs local deployments directly through host Podman on Linux, but W
 - Support the standard `local` deployment on Windows AMD64 through host `podman.exe` and deployment-owned persistent storage.
 - Detect or install Podman through winget, refresh the launcher process PATH after installation, and ensure the default Podman machine is running rootful.
 - Require interactive approval, or `--auto-approve`, before installing Podman or converting an existing rootless machine.
-- Add Windows local lifecycle smoke coverage and document the supported platform and prerequisites.
+- Add Windows local lifecycle coverage to the regular integration suite and document the supported platform and prerequisites.
 
 ## Capabilities
 
@@ -23,4 +23,4 @@ The launcher runs local deployments directly through host Podman on Linux, but W
 
 ## Impact
 
-The change affects local runtime and deployment-backend preparation interfaces, Windows host command execution, CLI approval flags and prompts, platform selection, unit and Windows CI tests, end-user documentation, architecture documentation, and release notes. Linux and macOS behavior remains compatible, Windows ARM64 remains unsupported, and no new Go dependency is required.
+The change affects local runtime and deployment-backend preparation interfaces, Windows host command execution, CLI approval flags and prompts, platform selection, unit and integration tests, end-user documentation, architecture documentation, and release notes. Linux and macOS behavior remains compatible, Windows ARM64 remains unsupported, and no new Go dependency is required.

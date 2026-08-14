@@ -4,6 +4,8 @@
 import json
 import os
 import platform
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from subprocess import CalledProcessError
@@ -25,7 +27,12 @@ IS_LINUX_LOCAL_PLATFORM = sys.platform.startswith("linux") and LOCAL_MACHINE in 
     "arm64",
     "aarch64",
 }
-IS_SUPPORTED_LOCAL_PLATFORM = IS_MACOS_APPLE_SILICON or IS_LINUX_LOCAL_PLATFORM
+IS_WINDOWS_LOCAL_PLATFORM = sys.platform.startswith("win") and LOCAL_MACHINE in {
+    "amd64",
+    "x86_64",
+}
+IS_HOST_LOCAL_PLATFORM = IS_LINUX_LOCAL_PLATFORM or IS_WINDOWS_LOCAL_PLATFORM
+IS_SUPPORTED_LOCAL_PLATFORM = IS_MACOS_APPLE_SILICON or IS_HOST_LOCAL_PLATFORM
 LOCAL_VM_SIZING_FLAGS = {"--cpu-count", "--memory-mb", "--data-size-gb"}
 
 
@@ -227,18 +234,18 @@ def test_init_local_rejects_unsupported_platform_before_writing_files(
     # Then it fails before writing deployment state
     stderr = exc.value.stderr.lower()
     assert (
-        "local deployments are only supported on macos apple silicon "
-        "and linux amd64/arm64" in stderr
+        "local deployments are only supported on macos apple silicon, "
+        "linux amd64/arm64, and windows amd64" in stderr
     )
     assert list(deployment_dir.iterdir()) == []
 
 
 @pytest.mark.skipif(
-    not IS_LINUX_LOCAL_PLATFORM,
-    reason="Linux host configuration is only exposed on supported Linux platforms",
+    not IS_HOST_LOCAL_PLATFORM,
+    reason="host configuration is only exposed on supported host platforms",
 )
-def test_init_local_linux_help_exposes_only_host_parameters(exasol_path: str) -> None:
-    # Given the local preset on a supported Linux platform
+def test_init_local_host_help_exposes_only_host_parameters(exasol_path: str) -> None:
+    # Given the local preset on a supported host platform
 
     # When init help is requested
     result = run_command([exasol_path, "init", "local", "--help"])
@@ -250,13 +257,13 @@ def test_init_local_linux_help_exposes_only_host_parameters(exasol_path: str) ->
 
 
 @pytest.mark.skipif(
-    not IS_LINUX_LOCAL_PLATFORM,
-    reason="Linux host configuration is only exposed on supported Linux platforms",
+    not IS_HOST_LOCAL_PLATFORM,
+    reason="host configuration is only exposed on supported host platforms",
 )
-def test_init_local_linux_configuration_omits_vm_sizing(
+def test_init_local_host_configuration_omits_vm_sizing(
     exasol_path: str, tmp_path: Path
 ) -> None:
-    # Given an initialized local deployment on Linux
+    # Given an initialized local deployment on a direct-host platform
     deployment_dir = tmp_path / "deployment"
     run_command(
         [
@@ -529,3 +536,166 @@ esac
     assert start_result.returncode == 0
     assert_lifecycle_json_signal(start_result.stdout, "running", database_ready=True)
     assert "Connection Instructions" not in start_result.stdout
+
+
+@pytest.mark.skipif(
+    not IS_WINDOWS_LOCAL_PLATFORM,
+    reason="the real Windows host lifecycle runs only on Windows amd64",
+)
+def test_install_local_windows_lifecycle(exasol_path: str, tmp_path: Path) -> None:
+    """Exercise Windows setup and persistence through the regular integration suite."""
+    deployment_dir = tmp_path / "windows-local-deployment"
+    state_path = deployment_dir / ".exasolLauncherState.json"
+    destroyed = False
+
+    # Keep the launcher's winget and registered-PATH fallback covered by the
+    # standard Windows integration job rather than pre-installing Podman in CI.
+    assert shutil.which("podman") is None
+
+    try:
+        install_result = run_command(
+            [
+                exasol_path,
+                "install",
+                "local",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--auto-approve",
+                "--no-launcher-version-check",
+                "--no-db-version-check",
+                "--verbose",
+            ]
+        )
+        assert install_result.returncode == 0
+
+        deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
+        container_name = f"exasol-db-{deployment_data['deploymentId']}"
+        podman_path = (
+            Path(os.environ["PROGRAMFILES"]) / "RedHat" / "Podman" / "podman.exe"
+        )
+        assert podman_path.is_file()
+
+        machine = subprocess.run(
+            [
+                podman_path,
+                "machine",
+                "inspect",
+                "--format",
+                "{{.Rootful}} {{.State}}",
+                "podman-machine-default",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert machine.stdout.strip().lower() == "true running"
+
+        run_command(
+            [
+                exasol_path,
+                "connect",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--command",
+                "CREATE TABLE WINDOWS_SMOKE (ID DECIMAL(18,0)); "
+                "INSERT INTO WINDOWS_SMOKE VALUES 424242;",
+            ]
+        )
+
+        stop_result = run_command(
+            [
+                exasol_path,
+                "stop",
+                "--json",
+                "--deployment-dir",
+                str(deployment_dir),
+            ]
+        )
+        assert_lifecycle_json_signal(
+            stop_result.stdout, "stopped", database_ready=False
+        )
+        stopped_containers = subprocess.run(
+            [podman_path, "ps", "-a", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+        assert container_name not in stopped_containers
+
+        start_result = run_command(
+            [
+                exasol_path,
+                "start",
+                "--json",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--auto-approve",
+            ]
+        )
+        assert_lifecycle_json_signal(
+            start_result.stdout, "running", database_ready=True
+        )
+
+        persisted = run_command(
+            [
+                exasol_path,
+                "connect",
+                "--csv",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--command",
+                "SELECT ID FROM WINDOWS_SMOKE;",
+            ]
+        )
+        assert "424242" in persisted.stdout
+
+        run_command(
+            [
+                exasol_path,
+                "destroy",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--auto-approve",
+                "--verbose",
+            ]
+        )
+        destroyed = True
+
+        remaining_containers = subprocess.run(
+            [podman_path, "ps", "-a", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+        assert container_name not in remaining_containers
+        assert not (deployment_dir / "local").exists()
+
+        machine_after_destroy = subprocess.run(
+            [
+                podman_path,
+                "machine",
+                "inspect",
+                "--format",
+                "{{.State}}",
+                "podman-machine-default",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert machine_after_destroy.stdout.strip().lower() == "running"
+    finally:
+        if not destroyed and state_path.exists():
+            subprocess.run(
+                [
+                    exasol_path,
+                    "destroy",
+                    "--deployment-dir",
+                    str(deployment_dir),
+                    "--auto-approve",
+                    "--verbose",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )

@@ -46,7 +46,7 @@ The Linux runtime already executes the complete local Podman installation policy
 
 ## Risks / Trade-offs
 
-- Windows bind mounts can expose filesystem or path parsing differences -> cover exact generated arguments with unit tests and a live Windows lifecycle smoke test.
+- Windows bind mounts can expose filesystem or path parsing differences -> cover exact generated arguments with unit tests and a live Windows lifecycle integration test.
 - Windows Package Manager can fail transiently or require UAC -> preserve its output and causal error, leave workflow state unchanged, and make reruns safe.
 - Converting the shared default machine can affect unrelated containers -> require explicit approval, show exact commands, and never stop or delete the machine during Exasol lifecycle operations.
 - A generic host runtime could accumulate platform-specific behavior -> restrict the injected boundary to environment readiness and introduce a separate runtime if lifecycle or storage semantics diverge.
@@ -55,7 +55,7 @@ The Linux runtime already executes the complete local Podman installation policy
 
 1. Introduce the generic host runtime and pre-workflow preparation framework without changing supported platforms.
 2. Add and select Windows host preparation with focused tests.
-3. Enable live Windows lifecycle smoke coverage and update documentation.
+3. Enable live Windows lifecycle coverage in the regular integration suite and update documentation.
 4. Validate and archive the OpenSpec change after all commits pass lint and final verification.
 
 Rollback reverts Windows selection and CLI approval plumbing while retaining the behavior-compatible generic Linux host runtime. Windows deployment data remains in the deployment directory and can be inspected or removed normally.
