@@ -30,10 +30,20 @@ func TestToLocalRuntimeConfig_TranslatesPortableStartupState(t *testing.T) {
 	state := &config.ExasolPersonalState{
 		ClusterIdentity:     localTestClusterIdentity,
 		VersionCheckEnabled: true,
-		InstalledSLCs: []config.InstalledSLC{{
-			Image:  "docker.io/exasol/script-language-container:python",
-			Target: "/exa/slc/python",
-		}},
+		InstalledSLCs: []config.InstalledSLC{
+			{
+				Language: "java",
+				Image:    "docker.io/exasol/script-language-container:python",
+				Target:   "/exa/slc/python",
+				Aliases:  []string{"PYTHON3"},
+			},
+			{
+				Language: "python",
+				Image:    "docker.io/exasol/script-language-container:java",
+				Target:   "/exa/slc/java-17",
+				Aliases:  []string{"jAvA", "JAVA17"},
+			},
+		},
 		InstalledCustomSLCs: []config.InstalledCustomSLC{{
 			Image:   "localhost/custom:sha256",
 			Target:  "/exa/slc/custom",
@@ -66,10 +76,17 @@ func TestToLocalRuntimeConfig_TranslatesPortableStartupState(t *testing.T) {
 		actual.VersionCheck.OperatingSystem == "" {
 		t.Fatalf("unexpected version-check settings: %#v", actual.VersionCheck)
 	}
-	if len(actual.SLCs) != 2 {
-		t.Fatalf("expected official and custom SLCs, got %#v", actual.SLCs)
+	if len(actual.SLCs) != 4 {
+		t.Fatalf(
+			"expected official, Java compatibility, and custom SLC mounts, got %#v",
+			actual.SLCs,
+		)
 	}
-	if actual.SLCs[0].Package != "" || actual.SLCs[1].Package != "custom.tar.gz" {
+	if actual.SLCs[0].Target != "/exa/slc/python" ||
+		actual.SLCs[1].Target != "/exa/slc/java-17" ||
+		actual.SLCs[2].Image != actual.SLCs[1].Image ||
+		actual.SLCs[2].Target != currentJavaMountTarget ||
+		actual.SLCs[3].Package != "custom.tar.gz" {
 		t.Fatalf("unexpected SLC package translation: %#v", actual.SLCs)
 	}
 }

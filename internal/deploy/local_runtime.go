@@ -17,10 +17,15 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/slc"
 )
 
 // Internal escape hatch for fake local-runner integration tests.
 const localSkipDatabaseWaitEnv = "EXASOL_LOCAL_SKIP_DB_WAIT"
+
+// JDBC IMPORT/EXPORT expects the Java runtime at this stable path. The flavor-specific
+// mount remains available for Java UDF aliases.
+const currentJavaMountTarget = slc.SLCMountRoot + "/current-java"
 
 func startLocalRuntime(
 	ctx context.Context,
@@ -192,10 +197,7 @@ func toLocalRuntimeConfig(
 	totalSLCs := len(state.InstalledSLCs) + len(state.InstalledCustomSLCs)
 	slcs := make([]localinstall.SLCConfig, 0, totalSLCs)
 	for _, installed := range state.InstalledSLCs {
-		slcs = append(slcs, localinstall.SLCConfig{
-			Image:  installed.Image,
-			Target: installed.Target,
-		})
+		slcs = appendOfficialSLCConfigs(slcs, installed)
 	}
 	for _, installed := range state.InstalledCustomSLCs {
 		slcs = append(slcs, localinstall.SLCConfig{
@@ -215,6 +217,34 @@ func toLocalRuntimeConfig(
 		MemoryMB:   runtimeConfig.memoryMB,
 		DataSizeGB: runtimeConfig.dataSizeGB,
 	}, nil
+}
+
+func appendOfficialSLCConfigs(
+	configs []localinstall.SLCConfig,
+	installed config.InstalledSLC,
+) []localinstall.SLCConfig {
+	configs = append(configs, localinstall.SLCConfig{
+		Image:  installed.Image,
+		Target: installed.Target,
+	})
+	if isJavaSLC(installed) {
+		configs = append(configs, localinstall.SLCConfig{
+			Image:  installed.Image,
+			Target: currentJavaMountTarget,
+		})
+	}
+
+	return configs
+}
+
+func isJavaSLC(installed config.InstalledSLC) bool {
+	for _, alias := range installed.Aliases {
+		if strings.EqualFold(alias, "JAVA") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func writeLocalRuntimeArtifactsAndWait(
