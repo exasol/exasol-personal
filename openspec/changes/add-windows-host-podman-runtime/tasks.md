@@ -22,9 +22,9 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 Document Windows AMD64 local prerequisites, approval behavior, lifecycle capabilities, and limitations in the README and changelog
-- [ ] 4.2 Update architecture and CI documentation without duplicating operational instructions
-- [ ] 4.3 Run full lint and commit the documentation change
+- [x] 4.1 Document Windows AMD64 local prerequisites, approval behavior, lifecycle capabilities, and limitations in the README and changelog
+- [x] 4.2 Update architecture and CI documentation without duplicating operational instructions
+- [x] 4.3 Run full lint and commit the documentation change
 
 ## 5. Final Verification and Archive
 
