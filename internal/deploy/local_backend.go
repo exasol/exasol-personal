@@ -27,6 +27,8 @@ const (
 	localLinuxOS               = "linux"
 	localLinuxAMD64            = "amd64"
 	localLinuxARM64            = "arm64"
+	localWindowsOS             = "windows"
+	localWindowsAMD64          = "amd64"
 	hostMemoryDefaultDivisor   = 2
 	localDefaultCPUCount       = 2
 	localMinimumMemoryMB       = 4096
@@ -47,7 +49,8 @@ const (
 )
 
 var errUnsupportedLocalPlatform = errors.New(
-	"local deployments are only supported on macOS Apple Silicon and Linux amd64/arm64",
+	"local deployments are only supported on macOS Apple Silicon, " +
+		"Linux amd64/arm64, and Windows amd64",
 )
 
 func newLocalBackend(
@@ -298,7 +301,8 @@ func (b *localBackend) ReadDeploymentConfigVariables() (
 
 func validateLocalPlatform(goos, goarch string) error {
 	if (goos == localMacOS && goarch == localMacArch) ||
-		(goos == localLinuxOS && (goarch == localLinuxAMD64 || goarch == localLinuxARM64)) {
+		(goos == localLinuxOS && (goarch == localLinuxAMD64 || goarch == localLinuxARM64)) ||
+		(goos == localWindowsOS && goarch == localWindowsAMD64) {
 		return nil
 	}
 

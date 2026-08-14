@@ -145,11 +145,11 @@ func (runtime *HostRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
 	if runtime.endpoint == nil {
 		info, err := config.ReadDeploymentInfo(runtime.Deployment())
 		if err != nil {
-			return nil, fmt.Errorf("linux host runtime endpoint is unavailable: %w", err)
+			return nil, fmt.Errorf("host runtime endpoint is unavailable: %w", err)
 		}
 		if info.Connection == nil || info.Connection.DBPort <= 0 || info.Connection.DBPort > 65535 {
 			return nil, errors.New(
-				"linux host runtime deployment information has no valid database endpoint",
+				"host runtime deployment information has no valid database endpoint",
 			)
 		}
 		runtime.endpoint = &RuntimeEndpoint{DBPort: info.Connection.DBPort}

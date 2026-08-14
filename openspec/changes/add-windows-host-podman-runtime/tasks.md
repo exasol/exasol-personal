@@ -7,12 +7,12 @@
 
 ## 2. Windows Host Environment
 
-- [ ] 2.1 Implement testable Windows command execution, registered PATH refresh, winget installation, and Podman verification
-- [ ] 2.2 Implement default Podman machine discovery, rootful initialization, start, and approved rootless conversion
-- [ ] 2.3 Add command-layer host-change prompts and `--auto-approve` for install, deploy, and start
-- [ ] 2.4 Select the shared host runtime with Windows preparation on Windows AMD64 and reject unsupported Windows architectures
-- [ ] 2.5 Cover approval, retry, command failure, platform selection, configuration, shell, endpoint, and health behavior with focused tests
-- [ ] 2.6 Run formatting, focused tests, Windows cross-build, and full lint, then commit the Windows runtime change
+- [x] 2.1 Implement testable Windows command execution, registered PATH refresh, winget installation, and Podman verification
+- [x] 2.2 Implement default Podman machine discovery, rootful initialization, start, and approved rootless conversion
+- [x] 2.3 Add command-layer host-change prompts and `--auto-approve` for install, deploy, and start
+- [x] 2.4 Select the shared host runtime with Windows preparation on Windows AMD64 and reject unsupported Windows architectures
+- [x] 2.5 Cover approval, retry, command failure, platform selection, configuration, shell, endpoint, and health behavior with focused tests
+- [x] 2.6 Run formatting, focused tests, Windows cross-build, and full lint, then commit the Windows runtime change
 
 ## 3. Windows Lifecycle CI
 

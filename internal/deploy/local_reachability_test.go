@@ -124,7 +124,7 @@ func TestClassifyLocalReachability_HealthCheckUnavailableIsNoop(t *testing.T) {
 	}
 }
 
-func TestLocalReachabilityMessageForLinuxHostDoesNotUseMacOSGuidance(t *testing.T) {
+func TestLocalReachabilityMessageForHostRuntimeDoesNotUseMacOSGuidance(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -134,11 +134,11 @@ func TestLocalReachabilityMessageForLinuxHostDoesNotUseMacOSGuidance(t *testing.
 	message := localReachabilityMessageForRuntime(localRuntime)
 
 	// Then
-	if message != linuxHostReachabilityMessage {
-		t.Fatalf("expected Linux Podman guidance, got %q", message)
+	if message != hostReachabilityMessage {
+		t.Fatalf("expected host Podman guidance, got %q", message)
 	}
 	if strings.Contains(message, "Local Network") || strings.Contains(message, "host-to-VM") {
-		t.Fatalf("Linux guidance must not contain macOS VM advice: %q", message)
+		t.Fatalf("host guidance must not contain macOS VM advice: %q", message)
 	}
 }
 

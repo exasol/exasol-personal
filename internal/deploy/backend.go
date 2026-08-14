@@ -185,6 +185,8 @@ func newLocalRuntimeForPlatform(
 		return localruntime.NewMacVMRuntime(deployment, manager), nil
 	case goos == localLinuxOS && (goarch == localLinuxAMD64 || goarch == localLinuxARM64):
 		return localruntime.NewHostLinuxRuntime(deployment, manager), nil
+	case goos == localWindowsOS && goarch == localWindowsAMD64:
+		return localruntime.NewHostWindowsRuntime(deployment, manager), nil
 	default:
 		return nil, fmt.Errorf(
 			"%w (current platform: %s/%s)", errUnsupportedLocalPlatform, goos, goarch,
