@@ -36,7 +36,7 @@
 
 **Local deployment (recommended — fastest):**
 
-- **macOS:** Apple Silicon with at least 8 GB RAM.
+- **macOS:** Apple Silicon with at least 8 GB RAM. Podman is included in the managed VM; no host Podman installation is required.
 - **Linux:** amd64 or arm64 with Podman installed and available on `PATH`.
 
 Local deployments are not supported on Windows; use a cloud deployment instead.
@@ -233,7 +233,7 @@ exasol start
 ```
 The IP addresses of the nodes will change when you restart Exasol Personal. Check the output of the `start` command to know how to connect to the deployment after a restart.
 
-On macOS, the launcher manages a local VM. If you do not configure VM memory explicitly, it defaults to about 50% of detected host memory; configured VM memory must be at least 4096 MB. On Linux, the database runs directly in Podman and can use unrestricted host CPU, memory, and storage resources, so VM sizing options do not apply. The initial local database credentials are `sys` / `exasol`. The `exasol shell host` and `exasol shell container` commands are available for macOS local deployments but are not supported on Linux.
+On macOS, the launcher manages a local VM and runs the same Podman-based database installation used on Linux inside it. If you do not configure VM memory explicitly, it defaults to about 50% of detected host memory; configured VM memory must be at least 4096 MB. On Linux, the database runs directly in Podman and can use unrestricted host CPU, memory, and storage resources, so VM sizing options do not apply. The initial local database credentials are `sys` / `exasol`. The `exasol shell host` and `exasol shell container` commands are available for macOS local deployments but are not supported on Linux.
 
 If a local deployment does not behave as expected, `exasol diag local` prints a JSON snapshot of its runtime state, bound host ports, reachability, and database readiness. It is safe to run whether or not the deployment is currently running.
 
@@ -310,9 +310,9 @@ Your browser may show a security warning when connecting to Exasol Admin because
 
 Currently, Exasol Admin is only available on cloud deployments.
 
-## 🔒 Connect using SSH
+## 🔒 Shell access
 
-To connect with SSH to your deployment use one of the following commands:
+Use the runtime-managed shell commands without needing to know how the deployment is reached:
 
 ```bash
 # Connect to the compute instance your database is running on:
@@ -379,7 +379,7 @@ The Exasol Launcher runs on:
 Where the database runs depends on the deployment type:
 
 - **Cloud deployments** — the database runs on your provider's infrastructure, so any supported launcher platform above works. The launcher provisions **Ubuntu 22.04 LTS (x86-64)** compute instances on all cloud providers.
-- **Local deployments on macOS** — the database runs in a VM and requires macOS 15 (Sequoia) or later on Apple Silicon, with at least 8 GB RAM.
+- **Local deployments on macOS** — the database runs with the bundled Podman installation in a managed VM and requires macOS 15 (Sequoia) or later on Apple Silicon, with at least 8 GB RAM.
 - **Local deployments on Linux** — the database runs in Podman on amd64 or arm64 and uses host resources without launcher-managed limits.
 
 ## 🚧 Limitations
