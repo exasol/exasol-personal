@@ -129,6 +129,14 @@ The `destroy` command tears down all resources:
 2. Execute the selected backend destroy operation to remove deployment resources
 3. Clean up state files (optional)
 
+## Local Runtime Architecture
+
+Local deployments share one Podman installation policy that owns database images, containers, persistent data, and script language containers.
+
+On Linux, the policy executes directly against host Podman. On macOS, a runtime starts a managed VM, establishes labeled service forwarding, stages artifacts through a shared directory, and executes the same policy inside the VM. Effective host endpoints are returned to the deployment workflow after the VM starts.
+
+The macOS VM launcher owns only the VM lifecycle, forwarding, shared directory, and guest command execution. It does not own application containers or expose its command transport through deployment state.
+
 ## Cloud Infrastructure Architecture
 
 ### Infrastructure-as-Code Approach
@@ -183,7 +191,7 @@ For the detailed contract (well-known paths, host file locations) and the preset
 **Outputs (Consumed by Go app):**
 - Terraform outputs (JSON) - Resource IDs, IP addresses, DNS names
 - Deployment info file (JSON) - Connection details, node information
-- SSH private key - For status monitoring
+- SSH private key - For status monitoring of cloud deployments
 
 **Installation:**
 - Implemented by the selected installation preset
@@ -225,7 +233,7 @@ The deployment directory is the central artifact containing everything needed to
 **Outputs:**
 - `deployment.json` - Deployment information (IPs, connection details)
 - `secrets.json` - Credentials required by the launcher (sensitive)
-- SSH private key referenced by `deployment.json:nodes[*].ssh.keyFile` (current presets use `node_access.pem`)
+- SSH private key referenced by cloud deployment node metadata
 
 ### Runtime Artifact Cache
 
@@ -242,7 +250,7 @@ Users can inspect and maintain the cache with `exasol cache list`, `exasol cache
 ### Secrets Management
 
 **Generation:**
-- SSH keys generated during infrastructure provisioning
+- SSH keys generated during cloud infrastructure provisioning
 - Database passwords generated randomly
 - Secrets written with restrictive file permissions (0600)
 
@@ -252,7 +260,7 @@ Users can inspect and maintain the cache with `exasol cache list`, `exasol cache
 - Cloud credentials read from environment variables
 
 **Usage:**
-- SSH keys used for remote script execution
+- SSH keys used for remote execution in cloud deployments
 - Database passwords used for connection and passed to installer
 
 ## Error Handling and Observability
