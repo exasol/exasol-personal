@@ -178,12 +178,14 @@ func TestLocalRunnerSlcArgsFromState(t *testing.T) {
 				Flavor:   "python-3.12",
 				Image:    "docker.io/x:pytag",
 				Target:   "/exa/slc/python-3.12",
+				Aliases:  []string{"PYTHON3", "PYTHON312"},
 			},
 			{
 				Language: "java",
 				Flavor:   "java-17",
 				Image:    "docker.io/x:javatag",
 				Target:   "/exa/slc/java-17",
+				Aliases:  []string{"JAVA", "JAVA17"},
 			},
 		},
 	}

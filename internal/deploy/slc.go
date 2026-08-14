@@ -566,7 +566,13 @@ func appendOfficialSLCMountArgs(args []string, installed config.InstalledSLC) []
 }
 
 func isJavaSLC(installed config.InstalledSLC) bool {
-	return strings.EqualFold(installed.Language, "java")
+	for _, alias := range installed.Aliases {
+		if strings.EqualFold(alias, "JAVA") {
+			return true
+		}
+	}
+
+	return false
 }
 
 // applySLCChange (re)starts the local database so a changed SLC set takes effect. Success
