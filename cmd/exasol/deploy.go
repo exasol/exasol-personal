@@ -32,6 +32,9 @@ var deployCmd = &cobra.Command{
 			commonFlags.DeployVerbose,
 			deploy.DeployOptions{
 				UpdateDependencyLockfile: commonFlags.DeployTofuUpdateLockfile,
+				RuntimePreparation: hostRuntimePreparationOptions(
+					cmd, commonFlags.LocalRuntimeAutoApprove,
+				),
 			},
 		); err != nil {
 			return err

@@ -36,8 +36,8 @@ const localReachabilityMessage = "could not reach the local database endpoint be
 	"To fix this: open System Settings -> Privacy & Security -> Local Network, and enable " +
 	"access for that application. Then retry."
 
-const linuxHostReachabilityMessage = "could not reach the local database endpoint published " +
-	"by the Linux Podman container.\n\n" +
+const hostReachabilityMessage = "could not reach the local database endpoint published " +
+	"by the host Podman container.\n\n" +
 	"Inspect the deployment container with `podman ps -a` and `podman logs`, then check for " +
 	"a host firewall rule or another process using the configured database port."
 
@@ -83,7 +83,7 @@ func classifyLocalReachability(ctx context.Context, runtime localruntime.Runtime
 
 func localReachabilityMessageForRuntime(runtime localruntime.Runtime) string {
 	if _, isHostRuntime := runtime.(*localruntime.HostRuntime); isHostRuntime {
-		return linuxHostReachabilityMessage
+		return hostReachabilityMessage
 	}
 
 	return localReachabilityMessage
