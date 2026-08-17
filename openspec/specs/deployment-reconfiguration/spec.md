@@ -202,3 +202,78 @@ The CLI SHALL provide a command that removes the local deployment directory with
 - **THEN** the error message contains the absolute path of the entry that could not be removed
 - **AND** the underlying error is preserved in the message
 
+### Requirement: Config set SHALL report a clear error when configurable options cannot be loaded
+The `config set` command SHALL resolve the target deployment's configurable infrastructure
+options before parsing supplied option flags. When it cannot load those options because no
+initialized deployment directory can be resolved, it SHALL fail with a clear, actionable error
+that identifies the resolved deployment directory and directs the user to initialize it or to
+supply `--deployment-dir`, rather than reporting supplied infrastructure options as unknown
+flags.
+
+#### Scenario: Config set names the unresolved deployment directory
+- **WHEN** a user runs `exasol config set <infrastructure-options>` and no initialized
+  deployment directory can be resolved (for example `--deployment-dir` is omitted and the
+  current directory is not a deployment, or the target directory is not initialized)
+- **THEN** the command fails with an error identifying the resolved deployment directory
+- **AND** the error tells the user to initialize it with `exasol init` or `exasol install`, or
+  to pass `--deployment-dir` pointing to an existing deployment
+- **AND** the error does not report the supplied infrastructure options as unknown flags
+
+#### Scenario: Config set help renders without a resolvable deployment
+- **WHEN** a user runs `exasol config set --help` and the deployment's configurable options
+  cannot be loaded
+- **THEN** the command prints help without failing
+
+#### Scenario: Config set still rejects genuinely unknown options
+- **WHEN** a user runs `exasol config set` against an initialized deployment and supplies an
+  option that the deployment's presets do not define
+- **THEN** the command fails reporting that option as unknown
+
+### Requirement: State-guarded commands SHALL surface recovery guidance when blocked by deployment state
+
+State-guarded lifecycle commands (`install`/`deploy`, `connect`, `start`, `stop`) SHALL surface state-appropriate recovery guidance when the current deployment state does not permit the command, instead of a generic error. The message SHALL name the resolved deployment directory, report the current deployment state, and give the recovery command(s) for that state. The command SHALL NOT present a known, recoverable state as an "unexpected" error, and SHALL NOT require the user to run a separate command to learn how to recover. The recovery guidance SHALL be the same guidance reported by `exasol status` for that state.
+
+#### Scenario: Deploy blocked by an interrupted non-deploy operation
+
+- **WHEN** a user runs `exasol install` or `exasol deploy` while the deployment is
+  interrupted during an operation other than deploy (for example destroy)
+- **THEN** the command fails without deploying
+- **AND** the message reports the current deployment state
+- **AND** the message names the resolved deployment directory
+- **AND** the message tells the user which operation was interrupted and the recovery
+  command to run (for example, run `destroy`)
+- **AND** the message does not label the state as "unexpected"
+
+#### Scenario: Deploy blocked by a stopped deployment
+
+- **WHEN** a user runs `exasol install` or `exasol deploy` for a stopped deployment
+- **THEN** the command fails without deploying
+- **AND** the message reports the stopped state and points the user toward `start` or
+  `destroy`
+
+#### Scenario: Connect blocked before the database is running
+
+- **WHEN** a user runs `exasol connect` while the deployment is not running (for example
+  initialized, stopped, or interrupted)
+- **THEN** the command fails without connecting
+- **AND** the message reports the current state, names the deployment directory, and gives
+  the recovery command to reach a running database
+- **AND** the message does not label the state as "unexpected"
+
+#### Scenario: Start or stop blocked by an incompatible state
+
+- **WHEN** a user runs `exasol start` or `exasol stop` while the deployment state does not
+  permit that operation (for example starting a not-yet-deployed deployment, or stopping a
+  stopped one)
+- **THEN** the command fails without changing the deployment
+- **AND** the message reports the current state, names the deployment directory, and gives
+  the state-appropriate recovery command
+- **AND** the message does not label the state as "unexpected"
+
+#### Scenario: Permitted states still run
+
+- **WHEN** a user runs a lifecycle command in a state that permits it (for example
+  `deploy` when initialized, deployment failed, running, deploy in progress, or interrupted
+  during deploy; `connect` when running)
+- **THEN** the command proceeds as before
+
