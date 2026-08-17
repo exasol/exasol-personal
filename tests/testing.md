@@ -73,6 +73,12 @@ Provisioning and lifecycle behavior.
 | `test_ports_override_sets_db_port` | local | Verifies that `--ports db:<port>` correctly routes the DB port through to the VM; confirms the DB is reachable on the custom port |
 | `test_ports_override_stable_across_restarts` | local | Verifies that a custom DB port assigned at `exasol init` is preserved in `deployment.json` and remains reachable after a stop/start cycle |
 
+`tests/tests/deployment/test_local_update.py`
+
+| Test | Targets | Description |
+|------|---------|-------------|
+| `test_historical_local_update_preserves_committed_data` | local | Verifies updates from supported historical macOS ARM64 launchers preserve committed database rows through runner replacement and Nano-data migration |
+
 `tests/tests/deployment/test_local_vm.py`
 
 | Test | Targets | Description |
