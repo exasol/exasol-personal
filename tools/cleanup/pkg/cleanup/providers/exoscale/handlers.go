@@ -11,7 +11,6 @@ import (
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	v3 "github.com/exoscale/egoscale/v3"
 )
@@ -282,27 +281,11 @@ type sosBucketHandler struct {
 }
 
 func (h *sosBucketHandler) Delete(ctx context.Context, ref ResourceRef) error {
-	sosEndpoint := fmt.Sprintf("https://sos-%s.exo.io", h.zone)
-
-	cfg, err := awsconfig.LoadDefaultConfig(ctx,
-		awsconfig.WithRegion(h.zone),
-		awsconfig.WithEndpointResolverWithOptions(awssdk.EndpointResolverWithOptionsFunc(
-			func(service, region string, options ...interface{}) (awssdk.Endpoint, error) {
-				return awssdk.Endpoint{
-					URL:               sosEndpoint,
-					HostnameImmutable: true,
-					SigningRegion:     h.zone,
-				}, nil
-			},
-		)),
-	)
+	s3Client, err := newSOSS3Client(ctx, h.zone)
 	if err != nil {
-		return fmt.Errorf("failed to load AWS config for SOS: %w", err)
+		return err
 	}
 
-	s3Client := s3.NewFromConfig(cfg)
-
-	// List and delete all objects in the bucket first
 	listResp, err := s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket: awssdk.String(ref.ID),
 	})
@@ -313,7 +296,6 @@ func (h *sosBucketHandler) Delete(ctx context.Context, ref ResourceRef) error {
 		return fmt.Errorf("failed to list bucket objects: %w", err)
 	}
 
-	// Delete all objects
 	for _, obj := range listResp.Contents {
 		_, err := s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
 			Bucket: awssdk.String(ref.ID),
@@ -324,7 +306,6 @@ func (h *sosBucketHandler) Delete(ctx context.Context, ref ResourceRef) error {
 		}
 	}
 
-	// Delete the bucket
 	_, err = s3Client.DeleteBucket(ctx, &s3.DeleteBucketInput{
 		Bucket: awssdk.String(ref.ID),
 	})

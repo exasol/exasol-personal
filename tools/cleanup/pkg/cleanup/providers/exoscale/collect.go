@@ -14,6 +14,7 @@ import (
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	awscreds "github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	v3 "github.com/exoscale/egoscale/v3"
 	"github.com/exoscale/egoscale/v3/credentials"
@@ -1016,19 +1017,22 @@ func sosBucketARN(zone, bucket string) string {
 	return fmt.Sprintf("exoscale:%s:sos-bucket:%s", zone, bucket)
 }
 
-// listSOSBuckets lists SOS buckets matching the deployment pattern
-func listSOSBuckets(ctx context.Context, zone, deploymentID string) ([]string, error) {
-	// SOS uses S3-compatible API
-	sosEndpoint := fmt.Sprintf("https://sos-%s.exo.io", zone)
-
-	// Check if we have SOS credentials
-	if os.Getenv("EXOSCALE_API_KEY") == "" {
-		slog.Debug("SOS bucket discovery skipped: no credentials")
-		return []string{}, nil
+// newSOSS3Client builds an S3 client for Exoscale's SOS API, pinning its
+// credentials explicitly: CI environments commonly carry an unrelated AWS
+// role's credentials, which Exoscale rejects if the SDK's default credential
+// chain picks them up instead.
+func newSOSS3Client(ctx context.Context, zone string) (*s3.Client, error) {
+	apiKey := os.Getenv("EXOSCALE_API_KEY")
+	apiSecret := os.Getenv("EXOSCALE_API_SECRET")
+	if apiKey == "" || apiSecret == "" {
+		return nil, fmt.Errorf("EXOSCALE_API_KEY and EXOSCALE_API_SECRET environment variables are required")
 	}
+
+	sosEndpoint := fmt.Sprintf("https://sos-%s.exo.io", zone)
 
 	cfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithRegion(zone),
+		awsconfig.WithCredentialsProvider(awscreds.NewStaticCredentialsProvider(apiKey, apiSecret, "")),
 		awsconfig.WithEndpointResolverWithOptions(awssdk.EndpointResolverWithOptionsFunc(
 			func(service, region string, options ...interface{}) (awssdk.Endpoint, error) {
 				return awssdk.Endpoint{
@@ -1043,7 +1047,20 @@ func listSOSBuckets(ctx context.Context, zone, deploymentID string) ([]string, e
 		return nil, fmt.Errorf("failed to load AWS config for SOS: %w", err)
 	}
 
-	s3Client := s3.NewFromConfig(cfg)
+	return s3.NewFromConfig(cfg), nil
+}
+
+// listSOSBuckets lists SOS buckets matching the deployment pattern
+func listSOSBuckets(ctx context.Context, zone, deploymentID string) ([]string, error) {
+	if os.Getenv("EXOSCALE_API_KEY") == "" {
+		slog.Debug("SOS bucket discovery skipped: no credentials")
+		return []string{}, nil
+	}
+
+	s3Client, err := newSOSS3Client(ctx, zone)
+	if err != nil {
+		return nil, err
+	}
 
 	output, err := s3Client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
