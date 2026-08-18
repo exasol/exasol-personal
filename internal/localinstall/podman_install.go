@@ -117,16 +117,11 @@ func (install *PodmanInstall) Start(
 	if err != nil {
 		return err
 	}
-	migrationMode := overlayMigrationIfNeeded
 	if len(startConfig.LegacyContainerNames) > 0 {
-		legacyContainerAdopted, adoptErr := install.adoptLegacyContainerName(
+		if err := install.adoptLegacyContainerName(
 			ctx, out, outErr, containerName, startConfig.LegacyContainerNames,
-		)
-		if adoptErr != nil {
-			return adoptErr
-		}
-		if legacyContainerAdopted {
-			migrationMode = overlayMigrationRequired
+		); err != nil {
+			return err
 		}
 	}
 	containerStatus, err := install.inspectContainerStatus(ctx, outErr, containerName)
@@ -140,7 +135,6 @@ func (install *PodmanInstall) Start(
 		containerName,
 		startConfig.DataDir,
 		containerStatus,
-		migrationMode,
 	)
 	if err != nil {
 		return err
@@ -280,10 +274,10 @@ func (install *PodmanInstall) adoptLegacyContainerName(
 	out, outErr io.Writer,
 	containerName string,
 	legacyNames []string,
-) (bool, error) {
+) error {
 	exists, err := install.containerExists(ctx, outErr, containerName)
 	if err != nil || exists {
-		return false, err
+		return err
 	}
 	for _, legacyName := range legacyNames {
 		legacyName = strings.TrimSpace(legacyName)
@@ -292,7 +286,7 @@ func (install *PodmanInstall) adoptLegacyContainerName(
 		}
 		exists, err := install.containerExists(ctx, outErr, legacyName)
 		if err != nil {
-			return false, err
+			return err
 		}
 		if !exists {
 			continue
@@ -300,7 +294,7 @@ func (install *PodmanInstall) adoptLegacyContainerName(
 		if err := install.runPodman(
 			ctx, out, outErr, "rename", legacyName, containerName,
 		); err != nil {
-			return false, install.failureWithDiagnostics(
+			return install.failureWithDiagnostics(
 				ctx,
 				outErr,
 				legacyName,
@@ -313,10 +307,10 @@ func (install *PodmanInstall) adoptLegacyContainerName(
 			)
 		}
 
-		return true, nil
+		return nil
 	}
 
-	return false, nil
+	return nil
 }
 
 func (install *PodmanInstall) failureWithDiagnostics(

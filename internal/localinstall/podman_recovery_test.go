@@ -5,6 +5,7 @@ package localinstall
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,11 @@ func TestPodmanInstallStart_QuarantinesInterruptedInitialCreate(t *testing.T) {
 	writeTestFile(t, filepath.Join(startConfig.DataDir, initialCreateMarkerName), "incomplete")
 	writeTestFile(t, filepath.Join(startConfig.DataDir, "partial-data"), "recoverable")
 	writeTestFile(t, filepath.Join(fixture.scenarioDir, "running"), "present")
+	writeTestFile(
+		t,
+		filepath.Join(fixture.scenarioDir, "mounts-output"),
+		fmt.Sprintf(`[{"Source":%q,"Destination":"/exa"}]`, startConfig.DataDir),
+	)
 
 	// When
 	err := install.Start(context.Background(), nil, nil, startConfig)
