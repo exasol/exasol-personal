@@ -5,6 +5,7 @@ package localinstall
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,6 +97,42 @@ func TestPodmanInstallStart_AdoptsAndMigratesLegacyNamedVolumeContainer(t *testi
 	content, err := os.ReadFile(filepath.Join(startConfig.DataDir, "storage", "data"))
 	if err != nil || string(content) != "payload" {
 		t.Fatalf("expected migrated named-volume data, got %q, %v", content, err)
+	}
+}
+
+func TestPodmanInstallStart_AdoptsLegacyNamedContainerUsingPersistentData(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	startConfig.LegacyContainerNames = []string{"exasol-local-db"}
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "legacy-name"), "exasol-local-db")
+	writeTestFile(t, filepath.Join(startConfig.DataDir, "storage", "data"), "preserved")
+	writeTestFile(
+		t,
+		filepath.Join(fixture.scenarioDir, "mounts-output"),
+		fmt.Sprintf(`[{"Source":%q,"Destination":"/exa"}]`, startConfig.DataDir),
+	)
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected legacy container adoption to preserve mounted data: %v", err)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	for _, command := range commands {
+		if strings.HasPrefix(command, "<podman><cp>") ||
+			command == "<podman><stop><"+testContainerName+">" {
+			t.Fatalf("expected adoption without migration, got command %q", command)
+		}
+	}
+	content, readErr := os.ReadFile(
+		filepath.Join(startConfig.DataDir, "storage", "data"),
+	) //nolint:gosec // test-owned path
+	if readErr != nil || string(content) != "preserved" {
+		t.Fatalf("expected persistent data to remain untouched, got %q, %v", content, readErr)
 	}
 }
 

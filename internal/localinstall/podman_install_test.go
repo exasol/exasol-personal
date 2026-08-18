@@ -199,6 +199,11 @@ func TestPodmanInstallStart_ReturnsWhenContainerAlreadyRunning(t *testing.T) {
 	// Given
 	install, startConfig, fixture := newPodmanInstallFixture(t)
 	writeTestFile(t, filepath.Join(fixture.scenarioDir, "running"), testContainerName+"\n")
+	writeTestFile(
+		t,
+		filepath.Join(fixture.scenarioDir, "mounts-output"),
+		fmt.Sprintf(`[{"Source":%q,"Destination":"/exa"}]`, startConfig.DataDir),
+	)
 	install.resolveImage = nil
 
 	// When
