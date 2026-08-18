@@ -119,7 +119,7 @@ def test_reconcile_vm_state_after_improper_shutdown(
     original_error: BaseException | None = None
 
     try:
-        run_command([exasol_path, "init", "local", *base])
+        run_command([exasol_path, "init", "local", "--ports", "auto", *base])
         run_command([exasol_path, "install", "local", *base])
 
         # When the VM daemon is killed uncleanly (no `exasol stop`)
