@@ -13,31 +13,25 @@ import (
 
 type podmanMount struct {
 	//nolint:tagliatelle // Podman inspect emits this exact field name.
+	Source string `json:"Source"`
+	//nolint:tagliatelle // Podman inspect emits this exact field name.
 	Destination string `json:"Destination"`
 }
-
-type overlayMigrationMode int
-
-const (
-	overlayMigrationIfNeeded overlayMigrationMode = iota
-	overlayMigrationRequired
-)
 
 func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	ctx context.Context,
 	out, outErr io.Writer,
 	containerName, dataDir string,
 	containerStatus podmanContainerStatus,
-	migrationMode overlayMigrationMode,
 ) (bool, error) {
 	if !containerStatus.Exists {
 		return false, nil
 	}
-	hasMount, err := install.containerHasDataMount(ctx, outErr, containerName)
+	usesDataDir, err := install.containerUsesDataDir(ctx, outErr, containerName, dataDir)
 	if err != nil {
 		return false, install.failureWithDiagnostics(ctx, outErr, containerName, err)
 	}
-	if hasMount && migrationMode != overlayMigrationRequired {
+	if usesDataDir {
 		return false, nil
 	}
 
@@ -134,10 +128,10 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	return true, nil
 }
 
-func (install *PodmanInstall) containerHasDataMount(
+func (install *PodmanInstall) containerUsesDataDir(
 	ctx context.Context,
 	outErr io.Writer,
-	containerName string,
+	containerName, dataDir string,
 ) (bool, error) {
 	output, err := install.runPodmanOutput(
 		ctx,
@@ -161,7 +155,8 @@ func (install *PodmanInstall) containerHasDataMount(
 		)
 	}
 	for _, mount := range mounts {
-		if mount.Destination == "/exa" {
+		if mount.Destination == "/exa" &&
+			filepath.Clean(mount.Source) == filepath.Clean(dataDir) {
 			return true, nil
 		}
 	}
