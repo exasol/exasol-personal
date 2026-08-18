@@ -6,6 +6,12 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Added the Exasol AI Lab as an opt-in add-on for cloud deployments: `exasol install <cloud> --with-ai-lab` runs the [Exasol AI Lab](https://github.com/exasol/ai-lab) JupyterLab container on the database host, pre-configured to connect to the database and BucketFS so notebooks work with no manual setup.
+
+  The AI Lab is served over HTTPS (using the deployment's certificate) on a dedicated port (default `49494`, configurable with `--ai-lab-port`), restricted by `--allowed-cidr` and protected by a generated Jupyter password. `exasol info` shows the AI Lab URL; the Jupyter and config-store passwords are stored in `secrets.json`. Currently available on cloud deployments only.
+
+  Example: `exasol install aws --with-ai-lab`
+
 - Added `exasol slc custom install` and `exasol slc custom update` to manage user-supplied (custom) script language containers in local deployments, for languages the official catalog does not ship — for example a Python container with extra packages. Custom containers are removed with the existing `exasol slc remove <alias>`, which handles both official and custom containers.
 
   The container is given as `--source`, which takes either a local tarball or an `https` URL, together with the `--alias` used in `CREATE <alias> SCALAR SCRIPT` and the `--language` it provides.

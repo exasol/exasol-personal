@@ -1,0 +1,362 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+# installAiLab.sh - install and pre-configure the Exasol AI Lab container.
+#
+# This is a cloud-agnostic post-install hook (registered by the infrastructure
+# preset in postInstall.scripts). It runs on the access node (n11) only, after
+# the database is ready, as the unprivileged 'ubuntu' user (see
+# exasol_launcher_post_install.service, User=ubuntu). It:
+#   1. Runs the official exasol/ai-lab container via rootless Podman,
+#      publishing the configured AI Lab port.
+#   2. Seeds the AI Lab Secure Configuration Storage (SCS) with the database and
+#      BucketFS connection parameters so notebooks connect with no manual setup.
+#   3. Installs a Podman Quadlet unit (+ user lingering) so the container is
+#      restarted on reboot and across deployment stop/start.
+#
+# Settings are read from infrastructure.json (the `aiLab` block) and the DB
+# password from `dbPasswordB64`.
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# shellcheck source=./logging.sh
+source "${SCRIPT_DIR}/logging.sh"
+# shellcheck source=./config.sh
+source "${SCRIPT_DIR}/config.sh"
+# shellcheck source=./shared_post_install.sh
+source "${SCRIPT_DIR}/shared_post_install.sh" # provides C4_PATH
+
+readonly AILAB_IMAGE="docker.io/exasol/ai-lab:latest"
+readonly AILAB_CONTAINER="exasol-ai-lab"
+readonly AILAB_VOLUME="exasol-ai-lab-notebooks"
+# Jupyter always listens on 49494 inside the container.
+readonly AILAB_CONTAINER_PORT=49494
+# The SCS file the AI Lab notebooks load from the notebooks directory by default.
+readonly AILAB_SCS_FILE="/home/jupyter/notebooks/ai_lab_secure_configuration_storage.sqlite"
+# The notebook-connector library lives in the JupyterLab virtualenv, not the
+# system python, so the SCS must be seeded with that interpreter.
+readonly AILAB_PYTHON="/home/jupyter/jupyterenv/bin/python3"
+# Default database schema pre-created so notebooks are ready to use without
+# running the main configuration notebook.
+readonly AILAB_DB_SCHEMA="AI_LAB"
+# Dedicated BucketFS bucket pre-created for AI Lab, in the default BucketFS service.
+readonly AILAB_BFS_BUCKET="ailab_bucket"
+readonly AILAB_BFS_SERVICE="bfsdefault"
+# BucketFS HTTP auth user for write access on Exasol.
+readonly AILAB_BFS_USER="w"
+
+# Use -r (not -e): `jq -e` exits non-zero when the resolved value is false/null,
+# which under `set -e` would abort here before the graceful skip below.
+enabled="$(infra_jq -r '.aiLab.enabled // false')"
+if [[ "${enabled}" != "true" ]]; then
+  log_substep_info "AI Lab disabled; skipping installation"
+  exit 0
+fi
+
+log_step_info "Installing Exasol AI Lab"
+
+ai_lab_port="$(infra_jq -er '.aiLab.port')"
+jupyter_password="$(infra_jq -er '.aiLab.jupyterPasswordB64' | base64 -d)"
+scs_password="$(infra_jq -er '.aiLab.scsPasswordB64' | base64 -d)"
+db_password="$(infra_jq -er '.dbPasswordB64' | base64 -d)"
+# BucketFS bucket password. confd bucket_add and the SCS / BucketFS HTTP auth
+# both take it in plain text; bucket_add stores it base64-encoded internally.
+bfs_password="$(infra_jq -er '.aiLab.bfsPasswordB64' | base64 -d)"
+# TLS: reuse the deployment's self-signed server cert + key (the same one COS
+# uses for the Admin UI, injected via infrastructure.json) so Jupyter is served
+# over HTTPS instead of plaintext HTTP.
+tls_cert="$(infra_jq -er '.tlsCert')"
+tls_key="$(infra_jq -er '.tlsKey')"
+
+# This script runs as the unprivileged 'ubuntu' user, so Podman runs rootless
+# directly (no runuser). This hook runs from a systemd service with no user
+# login session, so enable lingering first: that creates the per-user runtime
+# directory (/run/user/<uid>) that rootless Podman requires. Do this before any
+# Podman call so it works on a fresh boot, not only when a session already exists.
+if ! sudo -n loginctl enable-linger "$(id -un)" 2>/dev/null; then
+  log_substep_info "Warning: could not enable user lingering; rootless Podman may be unavailable"
+fi
+XDG_RUNTIME_DIR="/run/user/$(id -u)"
+export XDG_RUNTIME_DIR
+for _ in $(seq 1 10); do
+  [[ -d "${XDG_RUNTIME_DIR}" ]] && break
+  sleep 1
+done
+
+# Podman on Ubuntu 22.04 requires fully-qualified image names by default and
+# refuses short names like "exasol/script-language-container:..." with "no
+# unqualified-search registries defined". The AI Lab exaslct/SLC build uses
+# short names pulled from docker.io, so configure docker.io as the default
+# search registry for the ubuntu user. The user-level file takes precedence
+# over /etc/containers/registries.conf without needing sudo.
+log_substep_info "Configuring Podman unqualified-search registries"
+mkdir -p "${HOME:-/home/ubuntu}/.config/containers"
+printf 'unqualified-search-registries = ["docker.io"]\n' \
+  > "${HOME:-/home/ubuntu}/.config/containers/registries.conf"
+
+# Enable the Podman Docker-compatible API socket so tools inside the AI Lab
+# container that use the Docker SDK (e.g. exaslct / Script Language Container
+# export) can reach it at /var/run/docker.sock. The socket is mounted into the
+# container below. Without this, the AI Lab export_as_is notebook fails with
+# "No such file or directory" when the Docker client looks for the socket.
+#
+# This is the documented limitation of the containerized AI Lab: by default it
+# "does not allow creating Script Language Containers (SLCs)" because the
+# container has no Docker daemon, and the sanctioned workaround is to mount the
+# daemon socket. See:
+#   https://github.com/exasol/ai-lab/blob/main/doc/user_guide/docker/docker-usage.md
+# The Podman-specific steps here (this socket, the registries.conf above, and
+# the DockerRegistryImageChecker patch below) adapt that Docker-oriented
+# workaround to the rootless Podman runtime we use on the host.
+#
+# The socket is created mode 0660 root-owned by default. When bind-mounted into
+# the rootless container, the host 'ubuntu' uid/gid is remapped to the
+# container's root, so the AI Lab's non-root 'jupyter' user (which actually runs
+# exaslct) cannot access it and the Docker client fails with PermissionError.
+# A drop-in sets SocketMode=0666 so that on a clean boot the socket is created
+# world-accessible. But podman.socket may already be active (started early via
+# user lingering) before the drop-in is read, in which case it keeps its
+# original 0660 mode for this session. So we ALSO chmod the live socket
+# explicitly below: the drop-in covers subsequent reboots, the chmod covers
+# install time. The chmod must run before the container mounts the socket.
+#
+# Security note: mode 0666 looks broad but is NOT world-exposed in practice. The
+# socket lives under ${XDG_RUNTIME_DIR} (/run/user/<uid>), which systemd-logind
+# creates mode 0700 owned by this user. No other host user can traverse that
+# directory, so the only principals that can reach the API socket are this user
+# (and its rootless subuids — i.e. the single-purpose AI Lab container's own
+# root/ubuntu/jupyter). Tighter group-based schemes don't help here: under
+# rootless userns the host owner/group remap to the container's root, the socket
+# inode is recreated on every reboot (so a chgrp would not persist), and a
+# usable container-visible group cannot be produced from the host side. Given
+# the 0700 parent and the single-user appliance model, 0666 is the simplest
+# robust choice. See exasol/ai-lab#535.
+log_substep_info "Enabling Podman Docker-compatible API socket"
+socket_dropin_dir="${HOME:-/home/ubuntu}/.config/systemd/user/podman.socket.d"
+mkdir -p "${socket_dropin_dir}"
+printf '[Socket]\nSocketMode=0666\n' > "${socket_dropin_dir}/mode.conf"
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" systemctl --user daemon-reload
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" systemctl --user enable --now podman.socket
+podman_sock="${XDG_RUNTIME_DIR}/podman/podman.sock"
+for _ in $(seq 1 15); do
+  [[ -S "${podman_sock}" ]] && break
+  sleep 1
+done
+# Make the live socket accessible to the container's non-root jupyter user
+# regardless of when the unit first created it (see comment above).
+chmod 666 "${podman_sock}" 2>/dev/null || true
+
+# Write the deployment TLS cert + key to a private host dir, mounted read-only
+# into the container below so Jupyter can serve HTTPS with them. Same cert the
+# Admin UI uses, so the trust story is identical (self-signed → browser warns,
+# user accepts, mirroring the Admin UI).
+#
+# Permissions: the AI Lab image runs Jupyter as the non-root 'jupyter' user,
+# which its entrypoint adds to group 0 (root). Under rootless userns the mounted
+# files' owner and group both remap to container-root (0:0), so the files must
+# be group-readable (0640) for Jupyter to read them — owner-only (0600) leaves
+# Jupyter unable to load the cert and it silently fails to start the HTTPS
+# listener. 0640 keeps the private key unreadable by other unprivileged host
+# users while letting the container's group-0 Jupyter read it.
+log_substep_info "Writing deployment TLS cert for the AI Lab"
+ailab_tls_dir="${HOME:-/home/ubuntu}/.config/exasol-ai-lab/tls"
+mkdir -p "${ailab_tls_dir}"
+(
+  umask 077
+  printf '%s\n' "${tls_cert}" > "${ailab_tls_dir}/cert.pem"
+  printf '%s\n' "${tls_key}" > "${ailab_tls_dir}/key.pem"
+)
+chmod 0640 "${ailab_tls_dir}/cert.pem" "${ailab_tls_dir}/key.pem"
+
+log_substep_info "Pulling AI Lab image ${AILAB_IMAGE}"
+podman pull "${AILAB_IMAGE}"
+
+# Recreate the container idempotently so re-running the hook is safe.
+podman rm -f "${AILAB_CONTAINER}" >/dev/null 2>&1 || true
+
+log_substep_info "Starting AI Lab container on port ${ai_lab_port}"
+# allow_host_loopback lets the rootless container reach the database and BucketFS
+# on the host (via host.containers.internal); slirp4netns blocks this by default.
+# Retry the first start: on a freshly-booted host the initial rootless run right
+# after the image pull can intermittently fail while the network/storage is set up.
+start_attempt=0
+until podman run \
+  --detach \
+  --name "${AILAB_CONTAINER}" \
+  --restart always \
+  --network slirp4netns:allow_host_loopback=true \
+  --env JUPYTER_PASSWORD="${jupyter_password}" \
+  --volume "${AILAB_VOLUME}:/home/jupyter/notebooks" \
+  --volume "${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock:Z" \
+  --volume "${ailab_tls_dir}:/etc/exasol-ai-lab/tls:ro,Z" \
+  --publish "${ai_lab_port}:${AILAB_CONTAINER_PORT}" \
+  "${AILAB_IMAGE}"; do
+  start_attempt=$((start_attempt + 1))
+  if [[ "${start_attempt}" -ge 3 ]]; then
+    log_error "Failed to start AI Lab container after ${start_attempt} attempts"
+    exit 1
+  fi
+  log_substep_info "AI Lab container start failed; retrying (attempt ${start_attempt})"
+  podman rm -f "${AILAB_CONTAINER}" >/dev/null 2>&1 || true
+  sleep 3
+done
+
+# Wait for the container to be running and the JupyterLab python (used for
+# seeding) to be invocable before exec'ing into it.
+log_substep_info "Waiting for the AI Lab container to be ready"
+for _ in $(seq 1 30); do
+  if podman exec --user jupyter "${AILAB_CONTAINER}" test -x "${AILAB_PYTHON}" 2>/dev/null; then
+    break
+  fi
+  sleep 2
+done
+
+log_substep_info "Ensuring BucketFS bucket '${AILAB_BFS_BUCKET}' exists"
+# Create a dedicated bucket for AI Lab in the default BucketFS service if it does
+# not already exist. confd_client runs inside the COS container, reached via c4
+# connect (same pattern as the archive-volume hook). bucket_add takes the
+# read/write passwords in plain text (it stores them base64-encoded), so we pass
+# the same plain-text password the SCS uses; params go as JSON to stay safe
+# regardless of password punctuation.
+PLAY_ID="$("${C4_PATH}" config -e .play.id)"
+{
+  printf 'BUCKET=%q\n' "${AILAB_BFS_BUCKET}"
+  printf 'BFS=%q\n' "${AILAB_BFS_SERVICE}"
+  printf 'PW=%q\n' "${bfs_password}"
+  cat <<'CONNECTEOF'
+set -Eeuo pipefail
+if confd_client -c bucketfs_info -a "bucketfs_name: ${BFS}" -j \
+  | jq -e --arg b "${BUCKET}" '.buckets[$b] // empty' >/dev/null 2>&1; then
+  echo "Bucket ${BUCKET} already exists; leaving it unchanged"
+else
+  PARAMS=$(jq -nc --arg b "${BUCKET}" --arg s "${BFS}" --arg p "${PW}" \
+    '{bucket_name:$b,bucketfs_name:$s,public:true,read_password:$p,write_password:$p}')
+  confd_client -c bucket_add -A "${PARAMS}"
+fi
+CONNECTEOF
+} | "${C4_PATH}" connect -s cos -i "${PLAY_ID}"
+
+log_substep_info "Pre-seeding AI Lab connection configuration (SCS)"
+# The database and BucketFS run on the host; from a rootless container the host
+# is reachable via host.containers.internal. Exasol Personal uses a self-signed
+# certificate, so certificate validation is disabled (cert_vld=false).
+# Run as the 'jupyter' user (the image's default user is 'ubuntu'), so the SCS is
+# owned by and readable from the JupyterLab environment. -i forwards the heredoc
+# to python's stdin.
+podman exec -i --user jupyter \
+  --env SCS_PASSWORD="${scs_password}" \
+  --env DB_PASSWORD="${db_password}" \
+  --env DB_SCHEMA="${AILAB_DB_SCHEMA}" \
+  --env BFS_SERVICE="${AILAB_BFS_SERVICE}" \
+  --env BFS_BUCKET="${AILAB_BFS_BUCKET}" \
+  --env BFS_USER="${AILAB_BFS_USER}" \
+  --env BFS_PASSWORD="${bfs_password}" \
+  "${AILAB_CONTAINER}" "${AILAB_PYTHON}" - "${AILAB_SCS_FILE}" <<'PY'
+import os
+import sys
+
+from pathlib import Path
+from exasol.nb_connector.secret_store import Secrets
+from exasol.nb_connector.ai_lab_config import AILabConfig as K, StorageBackend
+from exasol.nb_connector.connections import open_pyexasol_connection
+
+scs = Secrets(Path(sys.argv[1]), master_password=os.environ["SCS_PASSWORD"])
+
+# Database connection (on-prem, external DB on the same host).
+scs.save(K.storage_backend, StorageBackend.onprem.name)
+scs.save(K.use_itde, "False")
+scs.save(K.db_host_name, "host.containers.internal")
+scs.save(K.db_port, "8563")
+scs.save(K.db_user, "sys")
+scs.save(K.db_password, os.environ["DB_PASSWORD"])
+scs.save(K.db_encryption, "True")
+scs.save(K.cert_vld, "False")
+scs.save(K.db_schema, os.environ["DB_SCHEMA"])
+
+# BucketFS connection (default service is HTTPS on 2581, so encryption is on).
+scs.save(K.bfs_host_name, "host.containers.internal")
+scs.save(K.bfs_port, "2581")
+scs.save(K.bfs_service, os.environ["BFS_SERVICE"])
+scs.save(K.bfs_bucket, os.environ["BFS_BUCKET"])
+scs.save(K.bfs_user, os.environ["BFS_USER"])
+scs.save(K.bfs_password, os.environ["BFS_PASSWORD"])
+scs.save(K.bfs_encryption, "True")
+
+# Pre-create the database schema so notebooks are ready to use without running
+# the main configuration notebook (this mirrors its "Create DB schema" step).
+with open_pyexasol_connection(scs, compression=True) as con:
+    con.execute(f'CREATE SCHEMA IF NOT EXISTS "{os.environ["DB_SCHEMA"]}"')
+PY
+
+log_substep_info "Patching exasol_integration_test_docker_environment for Podman compatibility"
+# DockerRegistryImageChecker.handle_log_line raises on any unknown status, but
+# Podman emits "Already exists" for locally-cached layers during a registry pull
+# check (real Docker does too). The unpatched code crashes the SLC export step
+# in the export_as_is notebook. Return None instead of raising so the checker
+# can continue and correctly determine whether the image is in the registry.
+# Done before the systemd handover below so it runs while the container is
+# definitely up from 'podman run', independent of systemd unit activation.
+podman exec -i --user root "${AILAB_CONTAINER}" python3 - <<'PATCHPY'
+import glob
+import sys
+
+# Version-agnostic glob (python3.*): an upstream image Python bump must not make
+# a hardcoded path raise and abort the install under set -e. Skip cleanly if the
+# file is absent (e.g. a future image where the checker no longer exists).
+matches = glob.glob(
+    "/home/jupyter/jupyterenv/lib/python3.*/site-packages"
+    "/exasol_integration_test_docker_environment/lib/docker/images/create"
+    "/utils/docker_registry_image_checker.py"
+)
+if not matches:
+    print("docker_registry_image_checker.py not found — skipping patch")
+    sys.exit(0)
+old = '        raise Exception(f"Unexpected log line: {log_line}")'
+new = '        return None  # unknown status (e.g. "Already exists") — not an error'
+for path in matches:
+    with open(path) as fh:
+        src = fh.read()
+    if old in src:
+        with open(path, "w") as fh:
+            fh.write(src.replace(old, new))
+        print(f"Patched {path}")
+    else:
+        print(f"Already patched or pattern not found — {path}")
+PATCHPY
+
+log_substep_info "Configuring Jupyter to serve HTTPS"
+# Point Jupyter at the mounted deployment cert so it serves HTTPS rather than
+# plaintext HTTP (the published port is reachable from allowed_cidr, so the
+# login password must not cross the network in the clear). The config file is
+# read at every Jupyter start, and the systemd restart below re-launches Jupyter
+# with TLS on. Set both ServerApp (Jupyter Server 2+) and NotebookApp (older)
+# keys for cross-version safety.
+podman exec -i --user jupyter "${AILAB_CONTAINER}" \
+  bash -lc 'mkdir -p "${HOME}/.jupyter" && cat > "${HOME}/.jupyter/jupyter_server_config.py"' <<'JPYCFG'
+c.ServerApp.certfile = "/etc/exasol-ai-lab/tls/cert.pem"
+c.ServerApp.keyfile = "/etc/exasol-ai-lab/tls/key.pem"
+c.NotebookApp.certfile = "/etc/exasol-ai-lab/tls/cert.pem"
+c.NotebookApp.keyfile = "/etc/exasol-ai-lab/tls/key.pem"
+JPYCFG
+
+log_substep_info "Configuring AI Lab to restart on reboot"
+# Ubuntu 22.04 ships Podman 3.4.4 which predates Quadlet (4.4+). Use
+# podman generate systemd to create a plain systemd user service instead.
+systemd_user_dir="${HOME:-/home/ubuntu}/.config/systemd/user"
+mkdir -p "${systemd_user_dir}"
+podman generate systemd \
+  --name "${AILAB_CONTAINER}" \
+  --restart-policy always \
+  > "${systemd_user_dir}/container-${AILAB_CONTAINER}.service"
+
+log_substep_info "Activating AI Lab systemd unit"
+# The generated unit's ExecStart runs 'podman start <name>'. If the container is
+# still running from the 'podman run' above, systemd's start/notify handshake
+# fails ("did not take the steps required by its unit configuration") and, under
+# 'set -e', aborts the whole post-install. Stop the container first so systemd
+# cleanly starts and owns it. The container's writable layer (the patch above)
+# and its mounts/volume are preserved across stop/start.
+podman stop "${AILAB_CONTAINER}" >/dev/null 2>&1 || true
+XDG_RUNTIME_DIR="/run/user/$(id -u)" systemctl --user daemon-reload
+XDG_RUNTIME_DIR="/run/user/$(id -u)" systemctl --user enable --now "container-${AILAB_CONTAINER}"
+
+log_step_info "Exasol AI Lab installation completed"

@@ -20,6 +20,7 @@ type ConnectionInfo struct {
 	DBPort                     int
 	UIPort                     int
 	AdminUI                    *DeploymentAdminUI
+	AILab                      *DeploymentAILab
 	Username                   string
 	CertFingerprint            string
 	InsecureSkipCertValidation bool
@@ -82,6 +83,7 @@ func (info *DeploymentInfo) ConnectionInfo(deployment DeploymentDir) (*Connectio
 		DBPort:                     info.Connection.DBPort,
 		UIPort:                     info.Connection.UIPort,
 		AdminUI:                    cloneDeploymentAdminUI(info.Connection.AdminUI),
+		AILab:                      cloneDeploymentAILab(info.Connection.AILab),
 		Username:                   username,
 		CertFingerprint:            certFingerPrint,
 		InsecureSkipCertValidation: info.Connection.InsecureSkipCertValidation,
@@ -102,6 +104,17 @@ func cloneDeploymentAdminUI(adminUI *DeploymentAdminUI) *DeploymentAdminUI {
 	clone.URL = strings.TrimSpace(clone.URL)
 	clone.Username = strings.TrimSpace(clone.Username)
 	clone.CertFingerprint = strings.TrimSpace(clone.CertFingerprint)
+
+	return &clone
+}
+
+func cloneDeploymentAILab(aiLab *DeploymentAILab) *DeploymentAILab {
+	if aiLab == nil || strings.TrimSpace(aiLab.URL) == "" {
+		return nil
+	}
+
+	clone := *aiLab
+	clone.URL = strings.TrimSpace(clone.URL)
 
 	return &clone
 }

@@ -49,3 +49,15 @@ variable "s3_archive_enabled" {
   type        = bool
   default     = true
 }
+
+variable "with_ai_lab" {
+  description = "Install the Exasol AI Lab (Jupyter) container alongside the database, pre-configured to connect to the database and BucketFS."
+  type        = bool
+  default     = false
+}
+
+variable "ai_lab_port" {
+  description = "Port on which the AI Lab Jupyter server is exposed."
+  type        = number
+  default     = 49494
+}

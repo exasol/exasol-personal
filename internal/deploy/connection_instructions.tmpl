@@ -49,6 +49,17 @@ To connect using the CLI:
 {{- end }}
 
 {{ end -}}
+{{ if .HasAILab -}}
+=== How to open the AI Lab ===
+  URL: {{ .AILab.URL }}
+{{- if .AILabSecured }}
+  Jupyter password: <stored in {{ .SecretsFilePath }}>
+  Config-store master password: <stored in {{ .SecretsFilePath }}>
+{{- end }}
+  Certificate Validation: accept the self-signed certificate if necessary
+  The database and BucketFS connections are pre-configured.
+
+{{ end -}}
 {{ if .ShellSupported }}{{ if .IsLocalBackend }}
 === Host Shell Instructions ===
   Local endpoint: {{ .DisplayHostname }}
