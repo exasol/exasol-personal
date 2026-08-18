@@ -15,11 +15,17 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/slc"
 )
 
 // Internal escape hatch for fake local-runner integration tests.
 const localSkipDatabaseWaitEnv = "EXASOL_LOCAL_SKIP_DB_WAIT"
+
+// JDBC IMPORT/EXPORT expects the Java runtime at this stable path. The flavor-specific
+// mount remains available for Java UDF aliases.
+const currentJavaMountTarget = slc.SLCMountRoot + "/current-java"
 
 func startLocalRuntime(
 	ctx context.Context,
@@ -42,7 +48,10 @@ func startPreparedLocalRuntime(
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
-	localConfig := toLocalRuntimeConfig(runtimeConfig)
+	localConfig, err := toLocalRuntimeConfig(runtime.Deployment(), runtimeConfig)
+	if err != nil {
+		return err
+	}
 	if err := runtime.Start(ctx, out, outErr, localConfig); err != nil {
 		return diagnoseLocalFailure(ctx, runtime, err)
 	}
@@ -66,16 +75,14 @@ func reconcileCustomSLCsAfterStart(ctx context.Context, deployment config.Deploy
 	}
 }
 
-// reconcileLocalVMState corrects a stale WorkflowStateRunning caused by an unclean
-// VM shutdown (e.g. SIGKILL). If the mac-runner socket reports the daemon is not
-// running, the state is updated to WorkflowStateStopped so that subsequent permit
-// checks in Start/Stop see a consistent state.
+// reconcileLocalVMState corrects stale workflow state after an unclean local
+// runtime shutdown. The historical name is retained for compatibility with callers.
 //
 // Only reconciles Running→Stopped. Stopped→Running is not corrected, as a VM
 // running outside the launcher's knowledge is an externally-caused inconsistency
 // that should surface as an error rather than be silently accepted.
 //
-// Errors from the VM status check are logged and swallowed; reconciliation is
+// Errors from the runtime status check are logged and swallowed; reconciliation is
 // best-effort and must not block the caller's primary operation.
 // The caller must already hold the exclusive deployment lock.
 func reconcileLocalVMState(
@@ -103,14 +110,19 @@ func reconcileLocalVMState(
 		return nil
 	}
 
-	vmStatus, err := localruntime.NewMacVMRuntime(deployment, manager).Status(ctx)
+	selectedRuntime, err := newLocalRuntime(deployment, manager)
 	if err != nil {
-		slog.Warn("could not determine local VM status during reconciliation", "error", err)
+		slog.Warn("could not select local runtime during reconciliation", "error", err)
+		return nil
+	}
+	runtimeStatus, err := selectedRuntime.Status(ctx)
+	if err != nil {
+		slog.Warn("could not determine local runtime status during reconciliation", "error", err)
 		return nil
 	}
 
-	if !vmStatus.Running {
-		slog.Info("local VM is not running; correcting workflow state to stopped")
+	if !runtimeStatus.Running {
+		slog.Info("local runtime is not running; correcting workflow state to stopped")
 		return exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateStopped{}, deployment)
 	}
 
@@ -163,15 +175,76 @@ func destroyLocalRuntime(
 	return nil
 }
 
-func toLocalRuntimeConfig(runtimeConfig localRuntimeConfig) localruntime.VMConfig {
+func toLocalRuntimeConfig(
+	deployment config.DeploymentDir,
+	runtimeConfig localRuntimeConfig,
+) (localruntime.VMConfig, error) {
+	state, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		return localruntime.VMConfig{}, fmt.Errorf("failed to read local startup settings: %w", err)
+	}
+	versionDetails := GetVersionCheckDetails(deployment)
+	versionCheck := localinstall.VersionCheckConfig{
+		Enabled:         state.VersionCheckEnabled,
+		URL:             versionDetails.URL,
+		Identity:        strings.TrimSpace(state.ClusterIdentity),
+		OperatingSystem: versionDetails.OperatingSystem,
+	}
+	if versionCheck.Enabled && versionCheck.Identity == "" {
+		return localruntime.VMConfig{}, errors.New("deployment state is missing cluster identity")
+	}
+
+	totalSLCs := len(state.InstalledSLCs) + len(state.InstalledCustomSLCs)
+	slcs := make([]localinstall.SLCConfig, 0, totalSLCs)
+	for _, installed := range state.InstalledSLCs {
+		slcs = appendOfficialSLCConfigs(slcs, installed)
+	}
+	for _, installed := range state.InstalledCustomSLCs {
+		slcs = append(slcs, localinstall.SLCConfig{
+			Image:   installed.Image,
+			Target:  installed.Target,
+			Package: installed.Package,
+		})
+	}
+
 	return localruntime.VMConfig{
 		RuntimeConfig: localruntime.RuntimeConfig{
-			Ports: runtimeConfig.ports,
+			Ports:        runtimeConfig.ports,
+			VersionCheck: versionCheck,
+			SLCs:         slcs,
 		},
 		CPUCount:   runtimeConfig.cpuCount,
 		MemoryMB:   runtimeConfig.memoryMB,
 		DataSizeGB: runtimeConfig.dataSizeGB,
+	}, nil
+}
+
+func appendOfficialSLCConfigs(
+	configs []localinstall.SLCConfig,
+	installed config.InstalledSLC,
+) []localinstall.SLCConfig {
+	configs = append(configs, localinstall.SLCConfig{
+		Image:  installed.Image,
+		Target: installed.Target,
+	})
+	if isJavaSLC(installed) {
+		configs = append(configs, localinstall.SLCConfig{
+			Image:  installed.Image,
+			Target: currentJavaMountTarget,
+		})
 	}
+
+	return configs
+}
+
+func isJavaSLC(installed config.InstalledSLC) bool {
+	for _, alias := range installed.Aliases {
+		if strings.EqualFold(alias, "JAVA") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func writeLocalRuntimeArtifactsAndWait(
@@ -203,6 +276,9 @@ func writeLocalDeploymentArtifacts(
 	if endpoint == nil {
 		return errors.New("local runtime endpoint state is required")
 	}
+	if endpoint.DBPort <= 0 || endpoint.DBPort > 65535 {
+		return fmt.Errorf("local runtime database port is invalid: %d", endpoint.DBPort)
+	}
 
 	deploymentID := "local"
 	if launcherState, err := config.ReadExasolPersonalState(deployment); err == nil {
@@ -210,15 +286,6 @@ func writeLocalDeploymentArtifacts(
 			deploymentID = launcherState.DeploymentId
 		}
 	}
-
-	sshPort := strconv.Itoa(endpoint.SSHPort)
-	sshCommand := fmt.Sprintf(
-		"ssh -i %s %s@%s -p %s",
-		endpoint.PrivateKeyRelativePath,
-		localSSHUser,
-		localDeploymentPublicHost,
-		sshPort,
-	)
 
 	info := &config.DeploymentInfo{
 		Backend:         localDeploymentBackend,
@@ -234,10 +301,22 @@ func writeLocalDeploymentArtifacts(
 			DBPort:                     endpoint.DBPort,
 			Username:                   localDBUser,
 			InsecureSkipCertValidation: true,
-			SSHCommand:                 sshCommand,
-			SSHPort:                    sshPort,
-			ShellSupported:             true,
 		},
+	}
+	if endpoint.SSHPort > 0 {
+		if strings.TrimSpace(endpoint.PrivateKeyRelativePath) == "" {
+			return errors.New("local runtime SSH endpoint is missing its private key path")
+		}
+		sshPort := strconv.Itoa(endpoint.SSHPort)
+		info.Connection.SSHPort = sshPort
+		info.Connection.SSHCommand = fmt.Sprintf(
+			"ssh -i %s %s@%s -p %s",
+			endpoint.PrivateKeyRelativePath,
+			localSSHUser,
+			localDeploymentPublicHost,
+			sshPort,
+		)
+		info.Connection.ShellSupported = true
 	}
 	if err := config.WriteDeploymentInfo(deployment.Root(), info); err != nil {
 		return err

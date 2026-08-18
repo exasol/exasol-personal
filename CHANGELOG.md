@@ -6,6 +6,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Enabled Virtual Schema support in local deployments when the required adapter runtime and dependencies are installed.
+
 - Added `exasol slc custom install` and `exasol slc custom update` to manage user-supplied (custom) script language containers in local deployments, for languages the official catalog does not ship — for example a Python container with extra packages. Custom containers are removed with the existing `exasol slc remove <alias>`, which handles both official and custom containers.
 
   The container is given as `--source`, which takes either a local tarball or an `https` URL, together with the `--alias` used in `CREATE <alias> SCALAR SCRIPT` and the `--language` it provides.
@@ -15,6 +17,8 @@ Notable user-facing changes to Exasol Personal are documented here.
   Like the official commands, a custom install or update restarts the database to mount the container, so it accepts `--auto-approve` to skip the confirmation and `--no-restart` to record the container and activate it on the next start instead. If the container cannot be made available, the database still starts and the command reports that the container is recorded but not active.
 
   `exasol slc list` now shows custom containers alongside official ones with a status column, and `--json` marks them with a `custom` type and an `available` field.
+
+- Added support for "local" deployments on Linux. This requires `podman` to be available.
 
 ### Changed
 

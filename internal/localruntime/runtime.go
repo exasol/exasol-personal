@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 )
 
 const (
@@ -19,6 +20,8 @@ const (
 	sharedDirName      = "vm-shared"
 	vmStateFileName    = "vm-state.json"
 	PrivateKeyFileName = "node_access.pem"
+	slcStagingDirName  = "slc-packages"
+	slcStatusFileName  = "slc-status.json"
 	// runnerVersionMarkerFileName records the semver of the runner this
 	// deployment was last prepared/started with. It's a launcher-owned file,
 	// distinct from vm-state.json, whose schema is dictated by the runner's
@@ -27,7 +30,9 @@ const (
 )
 
 type RuntimeConfig struct {
-	Ports string
+	Ports        string
+	VersionCheck localinstall.VersionCheckConfig
+	SLCs         []localinstall.SLCConfig
 }
 
 type VMConfig struct {
@@ -118,4 +123,12 @@ func DefaultVMPrivateKeyPath(deployment config.DeploymentDir) string {
 
 func SharedDir(deployment config.DeploymentDir) string {
 	return newVMRuntimePaths(deployment).SharedDir
+}
+
+func SLCStagingDir(deployment config.DeploymentDir) string {
+	return filepath.Join(SharedDir(deployment), slcStagingDirName)
+}
+
+func SLCStatusPath(deployment config.DeploymentDir) string {
+	return filepath.Join(SharedDir(deployment), slcStatusFileName)
 }

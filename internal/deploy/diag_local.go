@@ -6,7 +6,6 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 	"time"
 
@@ -41,7 +40,11 @@ func DiagnoseLocal(
 			return err
 		}
 
-		diagnostics = diagnoseLocalUnsafe(ctx, localruntime.NewMacVMRuntime(deployment, manager))
+		selectedRuntime, err := newLocalRuntime(deployment, manager)
+		if err != nil {
+			return err
+		}
+		diagnostics = diagnoseLocalUnsafe(ctx, selectedRuntime)
 
 		return nil
 	})
@@ -60,8 +63,7 @@ func diagnoseLocalUnsafe(
 		Platform: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 	}
 
-	allowUnsupported := os.Getenv(localAllowUnsupportedEnv)
-	if err := validateLocalPlatform(runtime.GOOS, runtime.GOARCH, allowUnsupported); err != nil {
+	if err := validateLocalPlatform(runtime.GOOS, runtime.GOARCH); err != nil {
 		diagnostics.Message = err.Error()
 		return diagnostics
 	}
@@ -73,13 +75,20 @@ func diagnoseLocalUnsafe(
 		return diagnostics
 	}
 
-	vmStatus, err := localRuntime.Status(ctx)
+	runtimeStatus, err := localRuntime.Status(ctx)
 	if err != nil {
-		diagnostics.Message = fmt.Sprintf("could not determine local VM status: %s", err)
+		runtimeName := "VM"
+		if _, isLinuxHost := localRuntime.(*localruntime.LinuxHostRuntime); isLinuxHost {
+			runtimeName = "Podman container"
+		}
+		diagnostics.Message = fmt.Sprintf(
+			"could not determine local %s status: %s", runtimeName, err,
+		)
+
 		return diagnostics
 	}
 
-	running := vmStatus.Running
+	running := runtimeStatus.Running
 	diagnostics.VMRunning = &running
 	if !running {
 		diagnostics.Message = "The platform is ready to run the local deployment. " +
@@ -88,10 +97,15 @@ func diagnoseLocalUnsafe(
 		return diagnostics
 	}
 
-	diagnostics.Warning = unexpectedRunningVMWarning(deployment)
+	if _, isLinuxHost := localRuntime.(*localruntime.LinuxHostRuntime); !isLinuxHost {
+		diagnostics.Warning = unexpectedRunningVMWarning(deployment)
+	}
 
 	if endpoint, err := localRuntime.ReadEndpoints(); err == nil {
-		diagnostics.Ports = map[string]int{"ssh": endpoint.SSHPort, "db": endpoint.DBPort}
+		diagnostics.Ports = map[string]int{"db": endpoint.DBPort}
+		if endpoint.SSHPort != 0 {
+			diagnostics.Ports["ssh"] = endpoint.SSHPort
+		}
 		if endpoint.UIPort != 0 {
 			diagnostics.Ports["ui"] = endpoint.UIPort
 		}

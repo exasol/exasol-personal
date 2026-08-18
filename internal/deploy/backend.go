@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
 
 	"github.com/exasol/exasol-personal/assets/resources"
@@ -115,11 +116,12 @@ func newDeploymentBackend(
 	case backendTypeTofu:
 		return newTofuBackend(deployment, manifest, manager), nil
 	case backendTypeLocal:
-		return newLocalBackend(
-			deployment,
-			manifest,
-			localruntime.NewMacVMRuntime(deployment, manager),
-		), nil
+		localRuntime, err := newLocalRuntime(deployment, manager)
+		if err != nil {
+			return nil, err
+		}
+
+		return newLocalBackend(deployment, manifest, localRuntime), nil
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnknownDeploymentType, kind)
 	}
@@ -150,5 +152,29 @@ func readInfrastructurePresetConfigVariables(
 		return localConfigVariableDefinitions(manifest), nil
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnknownDeploymentType, kind)
+	}
+}
+
+func newLocalRuntime(
+	deployment config.DeploymentDir,
+	manager *runtimeartifacts.Manager,
+) (localruntime.Runtime, error) {
+	return newLocalRuntimeForPlatform(deployment, manager, runtime.GOOS, runtime.GOARCH)
+}
+
+func newLocalRuntimeForPlatform(
+	deployment config.DeploymentDir,
+	manager *runtimeartifacts.Manager,
+	goos, goarch string,
+) (localruntime.Runtime, error) {
+	switch {
+	case goos == localMacOS && goarch == localMacArch:
+		return localruntime.NewMacVMRuntime(deployment, manager), nil
+	case goos == localLinuxOS && (goarch == localLinuxAMD64 || goarch == localLinuxARM64):
+		return localruntime.NewHostLinuxRuntime(deployment, manager), nil
+	default:
+		return nil, fmt.Errorf(
+			"%w (current platform: %s/%s)", errUnsupportedLocalPlatform, goos, goarch,
+		)
 	}
 }

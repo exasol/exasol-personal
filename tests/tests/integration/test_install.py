@@ -14,6 +14,19 @@ from .helpers import first_infrastructure_preset_id_or_skip, run_command
 
 LOCAL_TEST_DB_PORT = 28563
 LOCAL_MINIMUM_MEMORY_MB = 4096
+LOCAL_MACHINE = platform.machine().lower()
+IS_MACOS_APPLE_SILICON = sys.platform == "darwin" and LOCAL_MACHINE in {
+    "arm64",
+    "aarch64",
+}
+IS_LINUX_LOCAL_PLATFORM = sys.platform.startswith("linux") and LOCAL_MACHINE in {
+    "amd64",
+    "x86_64",
+    "arm64",
+    "aarch64",
+}
+IS_SUPPORTED_LOCAL_PLATFORM = IS_MACOS_APPLE_SILICON or IS_LINUX_LOCAL_PLATFORM
+LOCAL_VM_SIZING_FLAGS = {"--cpu-count", "--memory-mb", "--data-size-gb"}
 
 
 def assert_lifecycle_json_signal(
@@ -189,8 +202,8 @@ def test_install_executes_init_step(exasol_path: str, tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(
-    sys.platform == "darwin" and platform.machine().lower() in {"arm64", "aarch64"},
-    reason="local deployments are supported on macOS Apple Silicon",
+    IS_SUPPORTED_LOCAL_PLATFORM,
+    reason="local deployments are supported on this platform",
 )
 def test_init_local_rejects_unsupported_platform_before_writing_files(
     exasol_path: str, tmp_path: Path
@@ -213,24 +226,76 @@ def test_init_local_rejects_unsupported_platform_before_writing_files(
 
     # Then it fails before writing deployment state
     stderr = exc.value.stderr.lower()
-    assert "local deployments are only supported on macos apple silicon" in stderr
+    assert (
+        "local deployments are only supported on macos apple silicon "
+        "and linux amd64/arm64" in stderr
+    )
     assert list(deployment_dir.iterdir()) == []
 
 
 @pytest.mark.skipif(
-    sys.platform.startswith("win"),
-    reason="fake local runner script is POSIX-only",
+    not IS_LINUX_LOCAL_PLATFORM,
+    reason="Linux host configuration is only exposed on supported Linux platforms",
+)
+def test_init_local_linux_help_exposes_only_host_parameters(exasol_path: str) -> None:
+    # Given the local preset on a supported Linux platform
+
+    # When init help is requested
+    result = run_command([exasol_path, "init", "local", "--help"])
+
+    # Then the host port option is exposed without VM sizing options
+    assert "--ports" in result.stdout
+    for flag in LOCAL_VM_SIZING_FLAGS:
+        assert flag not in result.stdout
+
+
+@pytest.mark.skipif(
+    not IS_LINUX_LOCAL_PLATFORM,
+    reason="Linux host configuration is only exposed on supported Linux platforms",
+)
+def test_init_local_linux_configuration_omits_vm_sizing(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given an initialized local deployment on Linux
+    deployment_dir = tmp_path / "deployment"
+    run_command(
+        [
+            exasol_path,
+            "init",
+            "local",
+            "--deployment-dir",
+            str(deployment_dir),
+            "--no-launcher-version-check",
+        ]
+    )
+
+    # When the active configuration is queried
+    result = run_command(
+        [
+            exasol_path,
+            "config",
+            "get",
+            "--json",
+            "--deployment-dir",
+            str(deployment_dir),
+        ]
+    )
+
+    # Then only the host-relevant local option is reported
+    options = json.loads(result.stdout)["infrastructure"]["options"]
+    assert options == {"ports": ""}
+
+
+@pytest.mark.skipif(
+    not IS_MACOS_APPLE_SILICON,
+    reason="local memory sizing applies only to the macOS VM runtime",
 )
 def test_init_local_accepts_explicit_minimum_memory(
     exasol_path: str, tmp_path: Path
 ) -> None:
-    # Given a local deployment directory on a test-enabled unsupported platform
+    # Given a local macOS VM deployment directory
     deployment_dir = tmp_path / "deployment"
     deployment_dir.mkdir()
-    env = {
-        **os.environ,
-        "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM": "1",
-    }
 
     # When init is invoked with the minimum supported memory
     result = run_command(
@@ -242,8 +307,7 @@ def test_init_local_accepts_explicit_minimum_memory(
             str(deployment_dir),
             "--memory-mb",
             "4096",
-        ],
-        env=env,
+        ]
     )
 
     # Then the deployment is initialized with that value
@@ -257,8 +321,7 @@ def test_init_local_accepts_explicit_minimum_memory(
             "memory-mb",
             "--deployment-dir",
             str(deployment_dir),
-        ],
-        env=env,
+        ]
     )
     config_data = json.loads(config_result.stdout)
     configured_memory_mb = config_data["infrastructure"]["options"]["memory-mb"]
@@ -266,19 +329,15 @@ def test_init_local_accepts_explicit_minimum_memory(
 
 
 @pytest.mark.skipif(
-    sys.platform.startswith("win"),
-    reason="fake local runner script is POSIX-only",
+    not IS_MACOS_APPLE_SILICON,
+    reason="local memory sizing applies only to the macOS VM runtime",
 )
 def test_init_local_rejects_memory_below_minimum(
     exasol_path: str, tmp_path: Path
 ) -> None:
-    # Given a local deployment directory on a test-enabled unsupported platform
+    # Given a local macOS VM deployment directory
     deployment_dir = tmp_path / "deployment"
     deployment_dir.mkdir()
-    env = {
-        **os.environ,
-        "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM": "1",
-    }
 
     # When init is invoked below the supported minimum memory
     args = [
@@ -291,7 +350,7 @@ def test_init_local_rejects_memory_below_minimum(
         "4095",
     ]
     with pytest.raises(CalledProcessError) as exc:
-        run_command(args, env=env)
+        run_command(args)
 
     # Then the user sees the minimum-memory validation message
     assert (
@@ -303,8 +362,8 @@ def test_init_local_rejects_memory_below_minimum(
 
 
 @pytest.mark.skipif(
-    sys.platform.startswith("win"),
-    reason="fake local runner script is POSIX-only",
+    not IS_MACOS_APPLE_SILICON,
+    reason="fake local runner exercises the macOS VM runtime",
 )
 def test_deploy_local_with_fake_runner_override(
     exasol_path: str, tmp_path: Path
@@ -375,11 +434,9 @@ esac
     deployment_dir.mkdir()
     env = {
         **os.environ,
-        "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM": "1",
         "EXASOL_LOCAL_SKIP_DB_WAIT": "1",
-        # exasol-local-runner is embed-only, so this is the only way to
-        # inject a fake runner on a platform (e.g. Linux CI) with no
-        # embedded artifact for it at all.
+        # exasol-local-runner is embed-only, so this override injects the
+        # fake executable without replacing the embedded artifact.
         "EXASOL_LOCAL_RUNNER_OVERRIDE_PATH": str(runner),
     }
 
