@@ -362,7 +362,7 @@ tasks:
   fmt-terraform:
     desc: Format Terraform code with OpenTofu
     cmds:
-      - go run ./tools/tofu/main.go fmt -recursive assets/infrastructure
+      - go run -tags=containers_image_openpgp ./tools/tofu/main.go fmt -recursive assets/infrastructure
 
   fmt:
     desc: Format code
