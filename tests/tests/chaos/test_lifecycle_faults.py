@@ -13,6 +13,7 @@ import logging
 import os
 import platform
 import signal
+import subprocess
 import sys
 import time
 from collections.abc import Iterator
@@ -115,34 +116,53 @@ def test_reconcile_vm_state_after_improper_shutdown(
     deployment_dir = tmp_path / "deployment"
     deployment_dir.mkdir()
     base = ["--deployment-dir", str(deployment_dir)]
-    run_command([exasol_path, "init", "local", *base])
-    run_command([exasol_path, "install", "local", *base])
+    original_error: BaseException | None = None
 
-    # When the VM daemon is killed uncleanly (no `exasol stop`)
-    _kill_vm_daemon(deployment_dir)
+    try:
+        run_command([exasol_path, "init", "local", *base])
+        run_command([exasol_path, "install", "local", *base])
 
-    # Then status reports stopped, fast — the VM daemon check short-circuits
-    # before the slower DB connection probe
-    started_at = time.monotonic()
-    status = json.loads(run_command([exasol_path, "status", "--json", *base]).stdout)
-    elapsed = time.monotonic() - started_at
-    assert status["status"] == "stopped"
-    assert elapsed < STATUS_FAST_PATH_SECONDS, (
-        f"status took {elapsed:.1f}s - DB probe not short-circuited?"
-    )
+        # When the VM daemon is killed uncleanly (no `exasol stop`)
+        _kill_vm_daemon(deployment_dir)
 
-    # Then start recovers without manual state surgery and the DB is reachable
-    run_command([exasol_path, "start", *base])
-    proc = run_command([exasol_path, "connect", "-c", "SELECT * FROM Dual", *base])
-    assert "DUMMY" in proc.stdout
+        # Then status reports stopped, fast — the VM daemon check short-circuits
+        # before the slower DB connection probe
+        started_at = time.monotonic()
+        status = json.loads(
+            run_command([exasol_path, "status", "--json", *base]).stdout
+        )
+        elapsed = time.monotonic() - started_at
+        assert status["status"] == "stopped"
+        assert elapsed < STATUS_FAST_PATH_SECONDS, (
+            f"status took {elapsed:.1f}s - DB probe not short-circuited?"
+        )
 
-    # Then stop also handles a stale running state gracefully (variant)
-    _kill_vm_daemon(deployment_dir)
-    run_command([exasol_path, "stop", *base])
-    status = json.loads(run_command([exasol_path, "status", "--json", *base]).stdout)
-    assert status["status"] == "stopped"
+        # Then start recovers without manual state surgery and the DB is reachable
+        run_command([exasol_path, "start", *base])
+        proc = run_command([exasol_path, "connect", "-c", "SELECT * FROM Dual", *base])
+        assert "DUMMY" in proc.stdout
 
-    run_command([exasol_path, "destroy", "--remove", "--auto-approve", *base])
+        # Then stop also handles a stale running state gracefully (variant)
+        _kill_vm_daemon(deployment_dir)
+        run_command([exasol_path, "stop", *base])
+        status = json.loads(
+            run_command([exasol_path, "status", "--json", *base]).stdout
+        )
+        assert status["status"] == "stopped"
+
+        run_command([exasol_path, "destroy", "--remove", "--auto-approve", *base])
+    except BaseException as error:
+        original_error = error
+        raise
+    finally:
+        if deployment_dir.exists():
+            try:
+                run_command(
+                    [exasol_path, "destroy", "--remove", "--auto-approve", *base]
+                )
+            except subprocess.CalledProcessError:
+                if original_error is None:
+                    raise
 
 
 @pytest.fixture
