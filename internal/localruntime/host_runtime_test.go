@@ -4,7 +4,9 @@
 package localruntime
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,6 +17,65 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
 )
+
+type recordingHostRuntimeEnvironmentPreparer struct {
+	called  bool
+	options PrepareOptions
+	err     error
+}
+
+func (preparer *recordingHostRuntimeEnvironmentPreparer) EnsureReady(
+	_ context.Context,
+	options PrepareOptions,
+) error {
+	preparer.called = true
+	preparer.options = options
+
+	return preparer.err
+}
+
+func TestHostRuntimePrepare_DelegatesEnvironmentReadinessBeforeCreatingWorkDir(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	prepareErr := errors.New("environment unavailable")
+	preparer := &recordingHostRuntimeEnvironmentPreparer{err: prepareErr}
+	localRuntime := newHostRuntime(deployment, nil, preparer)
+	progress := &bytes.Buffer{}
+	options := PrepareOptions{Progress: progress}
+
+	err := localRuntime.Prepare(context.Background(), nil, nil, options)
+
+	if !errors.Is(err, prepareErr) {
+		t.Fatalf("expected preparation failure, got %v", err)
+	}
+	if !preparer.called {
+		t.Fatal("expected environment preparation to run")
+	}
+	if preparer.options.Progress != progress {
+		t.Fatal("expected preparation options to be forwarded")
+	}
+	if _, statErr := os.Stat(localRuntime.paths.WorkDir); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected no runtime directory before environment readiness, got %v", statErr)
+	}
+}
+
+func TestHostRuntimePrepare_CreatesWorkDirAfterEnvironmentIsReady(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	preparer := &recordingHostRuntimeEnvironmentPreparer{}
+	localRuntime := newHostRuntime(deployment, nil, preparer)
+
+	if err := localRuntime.Prepare(
+		context.Background(), nil, nil, PrepareOptions{},
+	); err != nil {
+		t.Fatalf("expected preparation to succeed, got %v", err)
+	}
+	if stat, err := os.Stat(localRuntime.paths.WorkDir); err != nil || !stat.IsDir() {
+		t.Fatalf("expected runtime work directory, got stat=%v err=%v", stat, err)
+	}
+}
 
 func TestLinuxHostPodmanStartConfig_UsesReferenceDefaults(t *testing.T) {
 	t.Parallel()
@@ -267,7 +328,7 @@ case "$3" in
 esac
 `
 
-func TestResolveLinuxHostDBPort_RejectsInvalidMappings(t *testing.T) {
+func TestResolveHostDBPort_RejectsInvalidMappings(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -289,7 +350,7 @@ func TestResolveLinuxHostDBPort_RejectsInvalidMappings(t *testing.T) {
 			t.Parallel()
 
 			// Given / When
-			_, err := resolveLinuxHostDBPort(test.ports)
+			_, err := resolveHostDBPort(test.ports)
 
 			// Then
 			if err == nil {

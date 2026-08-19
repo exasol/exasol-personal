@@ -61,11 +61,19 @@ func TestValidateLocalPlatform_AcceptsLinux(t *testing.T) {
 	}
 }
 
+func TestValidateLocalPlatform_AcceptsWindowsAMD64(t *testing.T) {
+	t.Parallel()
+
+	if err := validateLocalPlatform(localWindowsOS, localWindowsAMD64); err != nil {
+		t.Fatalf("expected windows/amd64 to be accepted, got %v", err)
+	}
+}
+
 func TestValidateLocalPlatform_RejectsUnsupportedPlatform(t *testing.T) {
 	t.Parallel()
 
 	// Given / When
-	err := validateLocalPlatform("windows", "amd64")
+	err := validateLocalPlatform(localWindowsOS, "arm64")
 
 	// Then
 	if !errors.Is(err, errUnsupportedLocalPlatform) {
@@ -172,22 +180,28 @@ func TestResolveLocalRuntimeConfig_RejectsInvalidValues(t *testing.T) {
 	}
 }
 
-func TestResolveLocalRuntimeConfig_LinuxIgnoresVMSizing(t *testing.T) {
+func TestResolveLocalRuntimeConfig_HostPlatformsIgnoreVMSizing(t *testing.T) {
 	t.Parallel()
 
 	manifest := &presets.InfrastructureManifest{Local: &presets.InfrastructureLocal{
 		CPUCount: -1, MemoryMB: -1, DataSizeGB: -1, Ports: testLocalDBPortConfig,
 	}}
 
-	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
-		manifest, 1024, localLinuxOS, localLinuxAMD64,
-	)
-	if err != nil {
-		t.Fatalf("expected Linux to ignore VM sizing, got %v", err)
+	platforms := []struct{ goos, goarch string }{
+		{localLinuxOS, localLinuxAMD64},
+		{localWindowsOS, localWindowsAMD64},
 	}
-	if runtimeConfig.cpuCount != 0 || runtimeConfig.memoryMB != 0 ||
-		runtimeConfig.dataSizeGB != 0 || runtimeConfig.ports != testLocalDBPortConfig {
-		t.Fatalf("unexpected Linux runtime config: %#v", runtimeConfig)
+	for _, platform := range platforms {
+		runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
+			manifest, 1024, platform.goos, platform.goarch,
+		)
+		if err != nil {
+			t.Fatalf("expected %s to ignore VM sizing, got %v", platform.goos, err)
+		}
+		if runtimeConfig.cpuCount != 0 || runtimeConfig.memoryMB != 0 ||
+			runtimeConfig.dataSizeGB != 0 || runtimeConfig.ports != testLocalDBPortConfig {
+			t.Fatalf("unexpected %s runtime config: %#v", platform.goos, runtimeConfig)
+		}
 	}
 }
 
@@ -351,30 +365,36 @@ func TestLocalBackendReadConfiguration_ExposesSizingValues(t *testing.T) {
 	assertConfigValue(t, values, localDataSizeGBConfigName, 250, localDefaultDataSizeGB)
 }
 
-func TestLocalBackendReadConfiguration_LinuxExposesOnlyPorts(t *testing.T) {
+func TestLocalBackendReadConfiguration_HostPlatformsExposeOnlyPorts(t *testing.T) {
 	t.Parallel()
 
 	manifest := &presets.InfrastructureManifest{Local: &presets.InfrastructureLocal{
 		CPUCount: -1, MemoryMB: -1, DataSizeGB: -1, Ports: testLocalDBPortConfig,
 	}}
-	backend := newLocalBackendForPlatform(
-		config.NewDeploymentDir(t.TempDir()), manifest, nil, localLinuxOS, localLinuxAMD64,
-	)
-
-	values, err := backend.ReadConfiguration()
-	if err != nil {
-		t.Fatalf("expected Linux configuration, got %v", err)
+	platforms := []struct{ goos, goarch string }{
+		{localLinuxOS, localLinuxAMD64},
+		{localWindowsOS, localWindowsAMD64},
 	}
-	if len(values) != 1 || values[0].Name != localPortsConfigName ||
-		values[0].Value != testLocalDBPortConfig {
-		t.Fatalf("expected only the port configuration, got %#v", values)
-	}
-	definitions, err := backend.ReadDeploymentConfigVariables()
-	if err != nil {
-		t.Fatalf("expected Linux configuration definitions, got %v", err)
-	}
-	if len(definitions) != 1 || definitions[localPortsConfigName].Name != localPortsConfigName {
-		t.Fatalf("expected only the port definition, got %#v", definitions)
+	for _, platform := range platforms {
+		backend := newLocalBackendForPlatform(
+			config.NewDeploymentDir(t.TempDir()), manifest, nil, platform.goos, platform.goarch,
+		)
+		values, err := backend.ReadConfiguration()
+		if err != nil {
+			t.Fatalf("expected %s configuration, got %v", platform.goos, err)
+		}
+		if len(values) != 1 || values[0].Name != localPortsConfigName ||
+			values[0].Value != testLocalDBPortConfig {
+			t.Fatalf("expected only the port configuration, got %#v", values)
+		}
+		definitions, err := backend.ReadDeploymentConfigVariables()
+		if err != nil {
+			t.Fatalf("expected %s configuration definitions, got %v", platform.goos, err)
+		}
+		if len(definitions) != 1 ||
+			definitions[localPortsConfigName].Name != localPortsConfigName {
+			t.Fatalf("expected only the port definition, got %#v", definitions)
+		}
 	}
 }
 

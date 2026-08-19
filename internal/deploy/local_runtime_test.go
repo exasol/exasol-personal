@@ -399,7 +399,12 @@ func (runtime *endpointRuntimeStub) Deployment() config.DeploymentDir {
 	return runtime.deployment
 }
 
-func (*endpointRuntimeStub) Prepare(context.Context, io.Writer, io.Writer) error {
+func (*endpointRuntimeStub) Prepare(
+	context.Context,
+	io.Writer,
+	io.Writer,
+	localruntime.PrepareOptions,
+) error {
 	return nil
 }
 

@@ -34,6 +34,14 @@ type DeployOptions struct {
 	// .terraform.lock.hcl). When false, the backend must treat any such
 	// lockfile as read-only.
 	UpdateDependencyLockfile bool
+
+	RuntimePreparation localruntime.PrepareOptions
+}
+
+// StartOptions carries options for a single start invocation.
+type StartOptions struct {
+	WaitTimeoutSeconds int
+	RuntimePreparation localruntime.PrepareOptions
 }
 
 // deploymentBackend exposes the lifecycle and configuration operations the
@@ -44,6 +52,11 @@ type DeployOptions struct {
 // when the backend was constructed (see newDeploymentBackend).
 // nolint: interfacebloat
 type deploymentBackend interface {
+	Prepare(
+		ctx context.Context,
+		out, outErr io.Writer,
+		options localruntime.PrepareOptions,
+	) error
 	ValidateEnvironment() error
 	SetupWorkspace(ctx context.Context) error
 	Configure(
@@ -172,6 +185,8 @@ func newLocalRuntimeForPlatform(
 		return localruntime.NewMacVMRuntime(deployment, manager), nil
 	case goos == localLinuxOS && (goarch == localLinuxAMD64 || goarch == localLinuxARM64):
 		return localruntime.NewHostLinuxRuntime(deployment, manager), nil
+	case goos == localWindowsOS && goarch == localWindowsAMD64:
+		return localruntime.NewHostWindowsRuntime(deployment, manager), nil
 	default:
 		return nil, fmt.Errorf(
 			"%w (current platform: %s/%s)", errUnsupportedLocalPlatform, goos, goarch,

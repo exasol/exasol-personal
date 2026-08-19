@@ -133,7 +133,9 @@ The `destroy` command tears down all resources:
 
 Local deployments share one Podman installation policy that owns database images, containers, persistent data, and script language containers.
 
-On Linux, the policy executes directly against host Podman. On macOS, a runtime starts a managed VM, establishes labeled service forwarding, stages artifacts through a shared directory, and executes the same policy inside the VM. Effective host endpoints are returned to the deployment workflow after the VM starts.
+On Linux and Windows, the policy executes directly against host Podman through a shared host runtime. Platform environment preparation is injected separately, allowing each host platform to satisfy its prerequisites without branching throughout the container lifecycle. On macOS, a runtime starts a managed VM, establishes labeled service forwarding, stages artifacts through a shared directory, and executes the same policy inside the VM. Effective host endpoints are returned to the deployment workflow after the runtime starts.
+
+Host preparation that may change the system is approved before the deployment workflow records an operation in progress. This keeps cancellation and prerequisite failures retryable while leaving command presentation in the CLI layer.
 
 The macOS VM launcher owns only the VM lifecycle, forwarding, shared directory, and guest command execution. It does not own application containers or expose its command transport through deployment state.
 
