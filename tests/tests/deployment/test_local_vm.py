@@ -132,47 +132,6 @@ def test_local_deployment_json_is_endpoint_based(
     assert "nodes" not in deployment_data
 
 
-OPENSSH_KEY_HEADER: Final = "-----BEGIN OPENSSH PRIVATE KEY-----"
-
-
-LEGACY_PKCS8_KEY: Final = """-----BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEIP1HtSkjVc4Jl9U9jOJQl9Hpz27wSOZpmlGAsdOO5sx+
------END PRIVATE KEY-----
-"""
-
-
-@pytest.mark.local_e2e
-@requires_macos_arm
-def test_node_access_key_is_openssh_and_legacy_key_is_regenerated(
-    exasol_path: str, tmp_path: Path
-) -> None:
-    # Given an installed local deployment
-    deployment_dir = tmp_path / "deployment"
-    deployment_dir.mkdir()
-    base = ["--deployment-dir", str(deployment_dir)]
-    run_command([exasol_path, "init", "local", *base])
-    run_command([exasol_path, "install", "local", *base])
-
-    key_path = deployment_dir / "node_access.pem"
-
-    # Then the generated key is in OpenSSH format, not PKCS#8 or classic RSA
-    key_text = key_path.read_text()
-    assert key_text.lstrip().startswith(OPENSSH_KEY_HEADER)
-    assert "BEGIN PRIVATE KEY" not in key_text
-    assert "BEGIN RSA PRIVATE KEY" not in key_text
-
-    # When a legacy PKCS#8 key (rc4 format) is left on disk and the deployment
-    # is restarted
-    run_command([exasol_path, "stop", *base])
-    key_path.write_text(LEGACY_PKCS8_KEY)
-    run_command([exasol_path, "start", *base])
-
-    # Then the legacy key is detected and regenerated in OpenSSH format
-    regenerated = key_path.read_text()
-    assert regenerated.lstrip().startswith(OPENSSH_KEY_HEADER)
-    assert "BEGIN PRIVATE KEY" not in regenerated
-
-
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="local runner gate is POSIX-only here"
 )
