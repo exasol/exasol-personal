@@ -33,6 +33,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- Fixed Data Lakehouse Turbo activation failing on cloud deployments. Podman was missing from the deployment hosts, so activating the feature in the AdminUI hung on a spinner and reported `Activation status for database Exasol could not be retrieved`. Podman is now installed during cloud-init on all supported cloud providers (AWS, Azure, Exoscale, STACKIT).
+
 ### Breaking Changes
 
 - None.
