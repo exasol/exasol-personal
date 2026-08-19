@@ -24,7 +24,10 @@ func IdentityRuntimePath(path string) RuntimePath {
 }
 
 // ExecutionEnvironment isolates installation logic from its command transport and filesystem.
+// It intentionally owns both command and filesystem operations for the same runtime.
+// nolint: interfacebloat
 type ExecutionEnvironment interface {
+	Sync(ctx context.Context, stdout, stderr io.Writer) error
 	Run(
 		ctx context.Context,
 		stdin io.Reader,
@@ -53,6 +56,13 @@ type DirectExecutionEnvironment struct {
 
 func NewDirectExecutionEnvironment(commandPrefix []string) *DirectExecutionEnvironment {
 	return &DirectExecutionEnvironment{commandPrefix: append([]string(nil), commandPrefix...)}
+}
+
+func (environment *DirectExecutionEnvironment) Sync(
+	ctx context.Context,
+	stdout, stderr io.Writer,
+) error {
+	return environment.Run(ctx, nil, stdout, stderr, "sync")
 }
 
 func (environment *DirectExecutionEnvironment) Run(

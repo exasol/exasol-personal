@@ -60,6 +60,16 @@ func TestRunnerExecutionEnvironmentPreservesCommandIOAndExitStatus(t *testing.T)
 	}
 }
 
+func TestRunnerExecutionEnvironmentSyncsInsideRuntime(t *testing.T) {
+	t.Parallel()
+	requireRunnerEnvironmentPOSIX(t)
+
+	environment := newTestRunnerExecutionEnvironment(t)
+	if err := environment.Sync(context.Background(), nil, nil); err != nil {
+		t.Fatalf("expected runtime sync to succeed, got %v", err)
+	}
+}
+
 func TestRunnerExecutionEnvironmentFilesystemOperations(t *testing.T) {
 	t.Parallel()
 	requireRunnerEnvironmentPOSIX(t)
