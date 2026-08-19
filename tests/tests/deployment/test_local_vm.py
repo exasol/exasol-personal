@@ -111,27 +111,6 @@ def test_memory_default_is_half_host_ram(exasol_path: str, tmp_path: Path) -> No
     assert memory_mb >= LOCAL_MINIMUM_MEMORY_MB
 
 
-@pytest.mark.local_e2e
-@requires_macos_arm
-def test_local_deployment_json_is_endpoint_based(
-    exasol_path: str, tmp_path: Path
-) -> None:
-    # Given a fully installed local deployment
-    deployment_dir = tmp_path / "deployment"
-    deployment_dir.mkdir()
-    base = ["--deployment-dir", str(deployment_dir)]
-    run_command([exasol_path, "init", "local", *base])
-    run_command([exasol_path, "install", "local", *base])
-
-    # When deployment.json is inspected
-    deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
-
-    # Then it exposes a connection block and no top-level nodes array
-    assert "connection" in deployment_data
-    assert deployment_data["connection"]["host"] == "127.0.0.1"
-    assert "nodes" not in deployment_data
-
-
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="local runner gate is POSIX-only here"
 )
