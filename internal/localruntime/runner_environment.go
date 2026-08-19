@@ -32,6 +32,13 @@ func newRunnerExecutionEnvironment(runnerPath, workDir string) *runnerExecutionE
 	return &runnerExecutionEnvironment{runnerPath: runnerPath, workDir: workDir}
 }
 
+func (environment *runnerExecutionEnvironment) Sync(
+	ctx context.Context,
+	stdout, stderr io.Writer,
+) error {
+	return environment.Run(ctx, nil, stdout, stderr, "sync")
+}
+
 func (environment *runnerExecutionEnvironment) Run(
 	ctx context.Context,
 	stdin io.Reader,

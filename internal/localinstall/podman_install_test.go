@@ -46,6 +46,7 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 		"<podman><container><exists><" + testContainerName + ">",
 		"<podman><load><-i><" + fixture.imagePath + ">",
 		"<podman><tag><" + testLoadedImage + "><" + testTaggedImage + ">",
+		"<sync>",
 		"<podman><run><-d><--replace><--name><" + testContainerName + ">" +
 			"<--shm-size=512mb><--pids-limit=-1><--security-opt><unmask=ALL>" +
 			"<--restart><always><-p><28563:8563><-v><" + startConfig.DataDir + ":/exa:Z>" +
@@ -101,11 +102,11 @@ func TestPodmanInstallStart_ReusesExistingDatabaseConfiguration(t *testing.T) {
 		t.Fatalf("expected existing database start to succeed, got %v", err)
 	}
 	commands := readCommandLog(t, fixture.logPath)
-	if len(commands) != 4 {
-		t.Fatalf("expected four Podman commands, got %#v", commands)
+	if len(commands) != 5 {
+		t.Fatalf("expected five execution-environment commands, got %#v", commands)
 	}
 	if !strings.HasSuffix(
-		commands[3],
+		commands[4],
 		"<"+testTaggedImage+"><init><VERSION_CHECK_ENABLED=0>",
 	) {
 		t.Fatalf("expected existing database to run init without params, got %q", commands[3])
@@ -311,7 +312,7 @@ func TestPodmanInstallStart_StopsAfterCommandFailure(t *testing.T) {
 			name:             "run",
 			failedCommand:    "run",
 			expectedError:    "failed to start Nano container",
-			expectedCommands: 8,
+			expectedCommands: 9,
 		},
 		{
 			name:             "unparseable load output",
@@ -352,6 +353,36 @@ func TestPodmanInstallStart_StopsAfterCommandFailure(t *testing.T) {
 				t.Fatalf("expected %d commands, got %#v", test.expectedCommands, commands)
 			}
 		})
+	}
+}
+
+func TestPodmanInstallStart_StopsBeforeNanoWhenStorageSyncFails(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "fail-sync"), "enabled")
+
+	err := install.Start(context.Background(), nil, nil, startConfig)
+
+	if err == nil || !strings.Contains(
+		err.Error(),
+		"failed to synchronize local runtime storage before starting Nano",
+	) {
+		t.Fatalf("expected storage synchronization failure, got %v", err)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	syncIndex := -1
+	for index, command := range commands {
+		if command == "<sync>" {
+			syncIndex = index
+		}
+		if strings.Contains(command, "<podman><run>") {
+			t.Fatalf("Nano must not start after storage synchronization failure: %q", command)
+		}
+	}
+	if syncIndex < 0 || syncIndex < 2 {
+		t.Fatalf("expected sync after image load and tag, got %#v", commands)
 	}
 }
 
@@ -676,6 +707,13 @@ for argument in "$@"; do
 done
 printf '\n' >> "$log_path"
 
+if [ "$1" = "sync" ]; then
+  if [ -f "$scenario_dir/fail-sync" ]; then
+    printf 'fake sync failure\n' >&2
+    exit 42
+  fi
+  exit 0
+fi
 if [ "$1" != "podman" ]; then
   exit 90
 fi
