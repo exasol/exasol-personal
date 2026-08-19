@@ -196,6 +196,10 @@ func (install *PodmanInstall) Start(
 		return err
 	}
 	install.pruneUnreferencedSLCImages(ctx, outErr, startConfig.SLCs)
+	if err := install.environment.Sync(ctx, out, outErr); err != nil {
+		return install.failureWithDiagnostics(ctx, outErr, containerName,
+			fmt.Errorf("failed to synchronize local runtime storage before starting Nano: %w", err))
+	}
 
 	args := []string{
 		"run", "-d", "--replace",
