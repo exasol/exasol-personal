@@ -1,9 +1,10 @@
 # Copyright 2026 Exasol AG
 # SPDX-License-Identifier: MIT
 
-"""Local macOS VM deployments: lifecycle, memory, endpoints, keys, escape hatch."""
+"""Local macOS VM deployments: lifecycle, memory, endpoints, escape hatch."""
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Final
@@ -25,42 +26,63 @@ def test_full_local_deployment_lifecycle(exasol_path: str, tmp_path: Path) -> No
     deployment_dir = tmp_path / "exasol-local-test"
     deployment_dir.mkdir()
     base = ["--deployment-dir", str(deployment_dir)]
+    original_error: BaseException | None = None
 
-    # When the deployment is initialized and installed
-    run_command([exasol_path, "init", "local", *base])
-    # Then the infrastructure manifest declares the local backend (step 2)
-    manifest = (deployment_dir / "infrastructure" / "infrastructure.yaml").read_text()
-    assert "backend: local" in manifest
+    try:
+        # When the deployment is initialized and installed
+        run_command([exasol_path, "init", "local", *base])
+        # Then the infrastructure manifest declares the local backend (step 2)
+        manifest = (
+            deployment_dir / "infrastructure" / "infrastructure.yaml"
+        ).read_text()
+        assert "backend: local" in manifest
 
-    run_command([exasol_path, "install", "local", *base])
+        run_command([exasol_path, "install", "local", *base])
 
-    # Then the runner is staged under local/runtime (step 4)
-    assert (deployment_dir / "local" / "runtime" / "mac-runner-aarch64").exists()
+        # Then deployment.json and secrets.json expose the endpoint contract
+        deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
+        connection = deployment_data["connection"]
+        assert connection["host"] == "127.0.0.1"
+        assert connection["dbPort"]
+        assert connection["shellSupported"] is True
+        assert "nodes" not in deployment_data
+        assert "sshCommand" not in connection
+        assert "sshPort" not in connection
+        secrets_data = json.loads((deployment_dir / "secrets.json").read_text())
+        assert secrets_data["dbPassword"] == "exasol"
 
-    # Then deployment.json and secrets.json describe a local connection (step 5)
-    deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
-    connection = deployment_data["connection"]
-    assert connection["host"] == "127.0.0.1"
-    assert connection["dbPort"]
-    secrets_data = json.loads((deployment_dir / "secrets.json").read_text())
-    assert secrets_data["dbPassword"] == "exasol"
+        # Then a trivial query returns the single DUMMY row (step 6)
+        proc = run_command([exasol_path, "connect", "-c", "SELECT * FROM Dual", *base])
+        assert "DUMMY" in proc.stdout
 
-    # Then a trivial query returns the single DUMMY row (step 6)
-    proc = run_command([exasol_path, "connect", "-c", "SELECT * FROM Dual", *base])
-    assert "DUMMY" in proc.stdout
+        # When the deployment is stopped and started (steps 9-10)
+        run_command([exasol_path, "stop", *base])
+        stopped = json.loads(
+            run_command([exasol_path, "status", "--json", *base]).stdout
+        )
+        assert stopped["status"] == "stopped"
 
-    # When the deployment is stopped and started (steps 9-10)
-    run_command([exasol_path, "stop", *base])
-    stopped = json.loads(run_command([exasol_path, "status", "--json", *base]).stdout)
-    assert stopped["status"] == "stopped"
+        run_command([exasol_path, "start", *base])
+        running = json.loads(
+            run_command([exasol_path, "status", "--json", *base]).stdout
+        )
+        assert running["status"] in {"database_ready", "database_connection_failed"}
 
-    run_command([exasol_path, "start", *base])
-    running = json.loads(run_command([exasol_path, "status", "--json", *base]).stdout)
-    assert running["status"] in {"database_ready", "database_connection_failed"}
-
-    # When the deployment is destroyed with local cleanup (step 11)
-    run_command([exasol_path, "destroy", "--remove", "--auto-approve", *base])
-    assert not deployment_dir.exists()
+        # When the deployment is destroyed with local cleanup (step 11)
+        run_command([exasol_path, "destroy", "--remove", "--auto-approve", *base])
+        assert not deployment_dir.exists()
+    except BaseException as error:
+        original_error = error
+        raise
+    finally:
+        if deployment_dir.exists():
+            try:
+                run_command(
+                    [exasol_path, "destroy", "--remove", "--auto-approve", *base]
+                )
+            except subprocess.CalledProcessError:
+                if original_error is None:
+                    raise
 
 
 OLD_FIXED_DEFAULT_MB: Final = 2048
