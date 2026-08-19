@@ -111,6 +111,18 @@ func (runtime *LinuxHostRuntime) Destroy(ctx context.Context, out, outErr io.Wri
 	return nil
 }
 
+func (runtime *LinuxHostRuntime) WorkaroundNanoStartupDurability(
+	ctx context.Context,
+	out, outErr io.Writer,
+) error {
+	environment := localinstall.NewDirectExecutionEnvironment(runtime.runCmd())
+	if err := environment.Sync(ctx, out, outErr); err != nil {
+		return fmt.Errorf("failed to apply Nano startup durability workaround: %w", err)
+	}
+
+	return nil
+}
+
 func (runtime *LinuxHostRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
 	if runtime.endpoint == nil {
 		info, err := config.ReadDeploymentInfo(runtime.Deployment())

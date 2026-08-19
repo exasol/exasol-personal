@@ -67,6 +67,8 @@ var (
 )
 
 // Generic local runtime interface.
+// It intentionally owns the complete lifecycle and durability contract.
+// nolint: interfacebloat
 type Runtime interface {
 	Deployment() config.DeploymentDir
 	Prepare(ctx context.Context, out, outErr io.Writer) error
@@ -74,6 +76,9 @@ type Runtime interface {
 	Stop(ctx context.Context, out, outErr io.Writer) error
 	Status(ctx context.Context) (*RuntimeStatus, error)
 	Destroy(ctx context.Context, out, outErr io.Writer) error
+	// WorkaroundNanoStartupDurability flushes runtime storage after Nano becomes ready.
+	// Remove it when Nano durably commits its startup files itself.
+	WorkaroundNanoStartupDurability(ctx context.Context, out, outErr io.Writer) error
 
 	ReadEndpoints() (*VMRuntimeEndpoint, error)
 	HealthCheck(ctx context.Context) (*HealthCheckResult, error)

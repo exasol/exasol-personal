@@ -92,6 +92,16 @@ def test_start_interrupt_sets_interrupted_state(
 
 
 STATUS_FAST_PATH_SECONDS: Final = 30
+CREATE_RECOVERY_DATA_SQL: Final = """
+CREATE SCHEMA VM_CRASH_RECOVERY;
+CREATE TABLE VM_CRASH_RECOVERY.PRESERVED_ROWS (LABEL VARCHAR(100));
+INSERT INTO VM_CRASH_RECOVERY.PRESERVED_ROWS VALUES ('preserved');
+COMMIT;
+"""
+QUERY_RECOVERY_DATA_SQL: Final = """
+SELECT LABEL FROM VM_CRASH_RECOVERY.PRESERVED_ROWS
+"""
+EXPECTED_RECOVERY_DATA_CSV: Final = "LABEL\npreserved\n"
 
 
 def _kill_vm_daemon(deployment_dir: Path) -> None:
@@ -121,6 +131,7 @@ def test_reconcile_vm_state_after_improper_shutdown(
     try:
         run_command([exasol_path, "init", "local", "--ports", "auto", *base])
         run_command([exasol_path, "install", "local", *base])
+        run_command([exasol_path, "connect", "-c", CREATE_RECOVERY_DATA_SQL, *base])
 
         # When the VM daemon is killed uncleanly (no `exasol stop`)
         _kill_vm_daemon(deployment_dir)
@@ -137,10 +148,19 @@ def test_reconcile_vm_state_after_improper_shutdown(
             f"status took {elapsed:.1f}s - DB probe not short-circuited?"
         )
 
-        # Then start recovers without manual state surgery and the DB is reachable
+        # Then start recovers without manual state surgery and committed data survives
         run_command([exasol_path, "start", *base])
-        proc = run_command([exasol_path, "connect", "-c", "SELECT * FROM Dual", *base])
-        assert "DUMMY" in proc.stdout
+        proc = run_command(
+            [
+                exasol_path,
+                "connect",
+                "--csv",
+                "-c",
+                QUERY_RECOVERY_DATA_SQL,
+                *base,
+            ]
+        )
+        assert proc.stdout == EXPECTED_RECOVERY_DATA_CSV
 
         # Then stop also handles a stale running state gracefully (variant)
         _kill_vm_daemon(deployment_dir)

@@ -4,11 +4,15 @@
 package localruntime
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/exasol/exasol-personal/internal/config"
 )
 
 func TestReadRunnerStateUsesLabeledForwardsWithoutTransportMetadata(t *testing.T) {
@@ -134,6 +138,33 @@ func TestMaterializeFileAtomicallyRejectsDirectorySource(t *testing.T) {
 	err := materializeFileAtomically(t.TempDir(), filepath.Join(t.TempDir(), "target"))
 	if err == nil || !strings.Contains(err.Error(), "directory") {
 		t.Fatalf("expected directory source error, got %v", err)
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable fixtures.
+func TestMacVMRuntimeWorkaroundNanoStartupDurabilityDelegatesToRunner(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	logPath := filepath.Join(t.TempDir(), "runner-args")
+	runnerScript := fmt.Sprintf(`#!/bin/sh
+printf '%%s' "$*" > %q
+`, logPath)
+	localRuntime := NewMacVMRuntime(
+		deployment, newTestManagerForRunner(t, []byte(runnerScript)),
+	)
+	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
+		t.Fatalf("failed to create runtime work dir: %v", err)
+	}
+
+	if err := localRuntime.WorkaroundNanoStartupDurability(
+		context.Background(), nil, nil,
+	); err != nil {
+		t.Fatalf("expected VM sync to succeed, got %v", err)
+	}
+	args, err := os.ReadFile(logPath)
+	if err != nil || string(args) != "run -- sync" {
+		t.Fatalf("expected sync through runner, got %q, %v", string(args), err)
 	}
 }
 
