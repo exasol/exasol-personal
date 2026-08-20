@@ -30,6 +30,29 @@ Each local deployment test row SHALL use runner and tool-setup behavior compatib
 - **WHEN** the macOS ARM64 local row is selected
 - **THEN** it runs on the existing self-hosted ARM64 virtualization runner using the system-Python setup path and the local deployment test task
 
+### Requirement: Local test selection follows runtime capabilities
+The local deployment test suite SHALL run portable lifecycle coverage on every enabled local runtime, SHALL reserve platform skips for runtime-specific behavior, and SHALL exclude tests that cannot apply to local deployments.
+
+#### Scenario: Portable lifecycle runs on Linux
+- **WHEN** the Linux AMD64 local row runs the full local deployment lifecycle
+- **THEN** initialization, deployment, query, stop, start, and cleanup execute against the Linux host runtime and the published connection metadata reports shell access as unsupported
+
+#### Scenario: Portable lifecycle runs on macOS
+- **WHEN** the macOS ARM64 local row runs the full local deployment lifecycle
+- **THEN** initialization, deployment, query, stop, start, and cleanup execute against the macOS VM runtime and the published connection metadata reports shell access as supported
+
+#### Scenario: VM-specific behavior is selected on Linux
+- **WHEN** the Linux AMD64 local row collects memory-sizing, historical-update, or VM-daemon recovery cases
+- **THEN** those cases are explicitly skipped as macOS VM-specific
+
+#### Scenario: A test rejects local deployments
+- **WHEN** a test unconditionally skips for the local infrastructure preset
+- **THEN** it is not selected by the local deployment test marker
+
+#### Scenario: Optional custom-SLC input is absent
+- **WHEN** neither supported custom-SLC source variable is supplied for a local workflow dispatch
+- **THEN** the custom-SLC cases may skip without affecting the remaining platform coverage
+
 ### Requirement: Cloud and local selection coexist
 The workflow SHALL preserve existing cloud test-plan behavior while applying the OS selector to local rows.
 

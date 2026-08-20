@@ -18,3 +18,9 @@
 - [x] 4.1 Run strict OpenSpec validation, workflow syntax/planner checks, and local pytest collection
 - [x] 4.2 Run the repository formatting, linting, unit/integration test, and build checks required by the development guide
 - [x] 4.3 Document the post-push Linux AMD64 and macOS ARM64 dispatch commands and acceptance checks for deployment, test execution, cleanup, and final status reporting
+
+## 5. Test Portability Follow-up
+
+- [ ] 5.1 Run the full local deployment lifecycle on Linux and macOS with runtime-specific shell capability assertions while retaining macOS guards for VM-only behavior
+- [ ] 5.2 Remove the local marker from the COS-only diagnostic and delete the obsolete unsupported-platform escape-hatch test and helpers
+- [ ] 5.3 Verify local test collection, the real Linux lifecycle, the local-install integration subset, strict OpenSpec validation, and required repository checks

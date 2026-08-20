@@ -10,13 +10,15 @@ The deployment-test workflow currently filters a declarative cloud plan but hand
 - Reuse the current workflow inputs and local test task.
 - Preserve the self-hosted macOS runner requirements and cloud authentication boundaries.
 - Make unsupported exclusive selections fail before matrix expansion.
+- Run portable local lifecycle coverage on both runtimes while reserving platform guards for macOS VM-specific behavior.
 
 **Non-Goals:**
 
 - Add Linux ARM64 local CI coverage.
 - Add Windows local deployment support or an unsupported-platform-only lane.
 - Run local deployment tests automatically on pull requests, pushes, or schedules.
-- Change which tests carry the `local_e2e` marker.
+- Duplicate CSV and additional connect coverage across local platforms.
+- Require a custom-SLC source for every local workflow dispatch.
 
 ## Decisions
 
@@ -40,12 +42,17 @@ The deployment-test workflow currently filters a declarative cloud plan but hand
 
    The macOS row keeps `tests-deployment-local-self-hosted`; Linux receives a new platform-specific context. This avoids needless disruption to any repository settings that consume the existing status.
 
+6. Select local tests by runtime capability.
+
+   Portable lifecycle behavior runs on both Linux and macOS and asserts each runtime's published shell capability. Memory sizing, historical runner updates, and VM-daemon recovery remain guarded for the macOS VM runtime. COS-only diagnostics do not carry the local marker, and the obsolete unsupported-platform escape-hatch test is removed because Linux is supported and the launcher no longer implements that bypass. Custom-SLC cases remain selected but may skip when maintainers do not supply their manual test artifact.
+
 ## Risks / Trade-offs
 
 - GitHub-hosted Ubuntu runner image changes can affect Podman behavior -> retain the repository's container-registry override and surface deployment diagnostics through the existing test action.
 - A matrix value containing multiple self-hosted labels can be mishandled as a scalar -> represent every runner as an array and pass the matrix value directly to `runs-on`.
 - Local tests are slow and resource-intensive -> retain manual dispatch and the protected deployment-test environment.
-- Some local tests are macOS VM-specific -> retain their existing skip decorators so Linux runs only portable local coverage.
+- Some local tests are macOS VM-specific -> retain their explicit skip decorators while keeping generic lifecycle coverage outside those guards.
+- Optional custom-SLC coverage depends on a maintainer-supplied artifact -> retain its explicit skip when neither supported source variable is configured.
 
 ## Migration Plan
 
