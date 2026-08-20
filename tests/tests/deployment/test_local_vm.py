@@ -1,18 +1,17 @@
 # Copyright 2026 Exasol AG
 # SPDX-License-Identifier: MIT
 
-"""Local macOS VM deployments: lifecycle, memory, endpoints, escape hatch."""
+"""Local runtime lifecycle and macOS VM-specific configuration."""
 
 import json
 import subprocess
-import sys
 from pathlib import Path
 from typing import Final
 
 import pytest
 
 from tests.testcase_helpers import (
-    LOCAL_ALLOW_UNSUPPORTED_ENV,
+    IS_MACOS_ARM,
     requires_macos_arm,
     run_command,
 )
@@ -20,7 +19,6 @@ from tests.testcase_helpers import (
 
 @pytest.mark.local_e2e
 @pytest.mark.installation_e2e
-@requires_macos_arm
 def test_full_local_deployment_lifecycle(exasol_path: str, tmp_path: Path) -> None:
     # Given a clean, empty local deployment directory
     deployment_dir = tmp_path / "exasol-local-test"
@@ -44,7 +42,10 @@ def test_full_local_deployment_lifecycle(exasol_path: str, tmp_path: Path) -> No
         connection = deployment_data["connection"]
         assert connection["host"] == "127.0.0.1"
         assert connection["dbPort"]
-        assert connection["shellSupported"] is True
+        if IS_MACOS_ARM:
+            assert connection["shellSupported"] is True
+        else:
+            assert "shellSupported" not in connection
         assert "nodes" not in deployment_data
         assert "sshCommand" not in connection
         assert "sshPort" not in connection
@@ -109,29 +110,3 @@ def test_memory_default_is_half_host_ram(exasol_path: str, tmp_path: Path) -> No
     # Then it is no longer the old fixed default and honours the minimum
     assert memory_mb != OLD_FIXED_DEFAULT_MB
     assert memory_mb >= LOCAL_MINIMUM_MEMORY_MB
-
-
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="local runner gate is POSIX-only here"
-)
-def test_allow_unsupported_escape_hatch(exasol_path: str, tmp_path: Path) -> None:
-    # Given an empty deployment directory on a non-macOS host
-    deployment_dir = tmp_path / "deployment"
-    deployment_dir.mkdir()
-
-    # When init runs with the platform-check bypass enabled
-    result = run_command(
-        [
-            exasol_path,
-            "init",
-            "local",
-            "--deployment-dir",
-            str(deployment_dir),
-            "--no-launcher-version-check",
-        ],
-        env=LOCAL_ALLOW_UNSUPPORTED_ENV,
-    )
-
-    # Then init proceeds and initializes the deployment
-    assert result.returncode == 0
-    assert (deployment_dir / ".exasolLauncherState.json").exists()

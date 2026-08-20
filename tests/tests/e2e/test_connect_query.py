@@ -287,7 +287,6 @@ def test_connect_interactive_shows_version_and_exit_hint(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.installation_e2e
-@pytest.mark.local_e2e
 def test_diag_cos_runs_confd_client(
     reusable_deployment: Deployment, infra: str
 ) -> None:
