@@ -10,7 +10,7 @@ module provides the shared utilities they rely on.
 
 The helpers here re-export the small integration-test utilities and add the
 environment guards those manual cases assume (macOS Apple Silicon for local
-deployments, a selected cloud ``--infra`` for cloud cases, real credentials,
+VM behavior, a selected cloud ``--infra`` for cloud cases, real credentials,
 etc.).
 """
 
@@ -34,7 +34,6 @@ from tests.integration.helpers import (
 
 __all__ = [
     "IS_MACOS_ARM",
-    "LOCAL_ALLOW_UNSUPPORTED_ENV",
     "export_preset",
     "first_infrastructure_preset_id_or_skip",
     "first_installation_preset_id_or_skip",
@@ -42,7 +41,6 @@ __all__ = [
     "local_deploy_base_args",
     "preset_id_or_skip",
     "requires_macos_arm",
-    "requires_supported_local_platform",
     "run_command",
     "skip_unless_infra",
     "skip_without_cloud_deploy_optin",
@@ -55,24 +53,10 @@ IS_MACOS_ARM: bool = sys.platform == "darwin" and platform.machine().lower() in 
     "aarch64",
 }
 
-# Test-only escape hatch that bypasses the local platform gate. Used by the
-# cases that exercise local behaviour on CI runners without a real VM.
-LOCAL_ALLOW_UNSUPPORTED_ENV: dict[str, str] = {
-    **os.environ,
-    "EXASOL_LOCAL_ALLOW_UNSUPPORTED_PLATFORM": "1",
-}
-
 # Skip a case unless we are on macOS Apple Silicon (real local VM required).
 requires_macos_arm = pytest.mark.skipif(
     not IS_MACOS_ARM,
     reason="local VM deployments require macOS Apple Silicon",
-)
-
-# Skip a case that asserts the *rejection* on unsupported platforms when we are
-# actually on the supported platform.
-requires_supported_local_platform = pytest.mark.skipif(
-    IS_MACOS_ARM,
-    reason="platform-rejection case only applies off macOS Apple Silicon",
 )
 
 
