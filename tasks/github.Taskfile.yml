@@ -3,7 +3,7 @@ version: '3'
 
 tasks:
   trigger-deployment-tests:
-    desc: Trigger the deployment tests workflow on the current pushed commit (`task run-deployment-tests SUITE=local`, `task run-deployment-tests OS=macos-latest`)
+    desc: Trigger deployment tests on the current pushed commit (`task github:trigger-deployment-tests SUITE=local`, optionally with `OS=ubuntu-latest` or `OS=macos-latest`)
     vars:
       OS: '{{default "all" .OS}}'
       SUITE: '{{default "all" .SUITE}}'

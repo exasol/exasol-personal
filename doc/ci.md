@@ -60,7 +60,7 @@ This ensures multi-platform compatibility is validated on the main branch.
 
 ### Deployment Tests (`tests-deployment.yml`)
 
-Full end-to-end tests that provision real cloud infrastructure. These are expensive and slow, so they run only when needed:
+Full end-to-end tests that create real cloud or local deployments. These are expensive and slow, so they run only when needed:
 
 **Trigger manually via:**
 - GitHub Actions UI: [tests-deployment.yml](https://github.com/exasol/exasol-personal/actions/workflows/tests-deployment.yml) → "Run workflow"
@@ -71,19 +71,25 @@ Security guards:
 - Should be protected by an environment approval gate and ref restrictions in repository settings
 
 Workflow input:
-- `os`: OS selector for the deployment matrix (`all`, `ubuntu-latest`, `windows-latest`, `macos-latest`; default `all`)
-- The workflow uses a declarative test plan (provider/OS/task rows) and filters rows before matrix expansion, so non-selected OS jobs are not created.
-- Current enabled rows:
+- `suite`: test-suite selector (`all`, `cloud`, `local`; default `all`)
+- `os`: OS selector for both cloud and local matrices (`all`, `ubuntu-latest`, `windows-latest`, `macos-latest`; default `all`)
+- The workflow filters declarative cloud and local test plans before matrix expansion, so non-selected jobs are not created.
+- Current enabled cloud rows:
   - AWS runs `tests-deployment` (installation + infrastructure lanes)
   - Azure runs `tests-deployment-infrastructure`
-  - Exoscale rows are currently disabled in the test plan and can be re-enabled by toggling the plan entries.
+  - Exoscale runs `tests-deployment-infrastructure`
+- Current enabled local rows:
+  - Linux AMD64 runs `tests-deployment-local` on `ubuntu-latest`
+  - macOS ARM64 runs `tests-deployment-local` on the self-hosted virtualization runner
+  - Linux ARM64 coverage is deferred; Windows local deployments are unsupported.
+- After pushing a branch, dispatch one local row with `task github:trigger-deployment-tests SUITE=local OS=ubuntu-latest` or `task github:trigger-deployment-tests SUITE=local OS=macos-latest`, then verify deployment, tests, cleanup, and the final commit status.
 - Credential bootstrap:
   - AWS via OIDC role assumption
   - Azure via OIDC (`azure/login`)
   - Exoscale via `EXOSCALE_API_KEY` / `EXOSCALE_API_SECRET` secrets
   - Azure identifiers are sourced from GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
 
-**Warning:** These tests create real cloud resources and incur costs.
+**Warning:** Cloud rows create real infrastructure and incur costs; local rows create a real database deployment on the selected runner.
 
 ## AWS Identity Provider and IAM Role for Deployment Tests
 
