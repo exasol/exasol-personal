@@ -21,6 +21,6 @@
 
 ## 5. Test Portability Follow-up
 
-- [ ] 5.1 Run the full local deployment lifecycle on Linux and macOS with runtime-specific shell capability assertions while retaining macOS guards for VM-only behavior
-- [ ] 5.2 Remove the local marker from the COS-only diagnostic and delete the obsolete unsupported-platform escape-hatch test and helpers
-- [ ] 5.3 Verify local test collection, the real Linux lifecycle, the local-install integration subset, strict OpenSpec validation, and required repository checks
+- [x] 5.1 Run the full local deployment lifecycle on Linux and macOS with runtime-specific shell capability assertions while retaining macOS guards for VM-only behavior
+- [x] 5.2 Remove the local marker from the COS-only diagnostic and delete the obsolete unsupported-platform escape-hatch test and helpers
+- [x] 5.3 Verify local test collection, the real Linux lifecycle, the local-install integration subset, strict OpenSpec validation, and required repository checks

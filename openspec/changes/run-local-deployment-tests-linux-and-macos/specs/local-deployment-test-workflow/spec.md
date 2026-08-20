@@ -35,7 +35,7 @@ The local deployment test suite SHALL run portable lifecycle coverage on every e
 
 #### Scenario: Portable lifecycle runs on Linux
 - **WHEN** the Linux AMD64 local row runs the full local deployment lifecycle
-- **THEN** initialization, deployment, query, stop, start, and cleanup execute against the Linux host runtime and the published connection metadata reports shell access as unsupported
+- **THEN** initialization, deployment, query, stop, start, and cleanup execute against the Linux host runtime and the published connection metadata does not advertise shell access
 
 #### Scenario: Portable lifecycle runs on macOS
 - **WHEN** the macOS ARM64 local row runs the full local deployment lifecycle
