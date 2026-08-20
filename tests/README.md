@@ -59,7 +59,7 @@ The project uses multiple layers of testing to ensure quality at different level
   - Validate idempotency and state management
   - Check file creation and configuration handling
   
-### 3. Python Cloud Tests (deployment / e2e / chaos)
+### 3. Python Deployment Tests (cloud and local)
 
 Cloud tests provision real infrastructure and share one session-scoped deployment
 (the `reusable_deployment` fixture). They are split by kind across three directories,
@@ -76,6 +76,7 @@ and each test is stamped with a kind marker matching its directory (`-m deployme
 - **When to use:**
   - Validate complete deployment workflows
   - Test actual cloud provisioning
+  - Test local deployment behavior on supported hosts
   - Verify deployed database functionality
   - Pre-release validation
 
@@ -115,6 +116,9 @@ task tests-deployment-infrastructure INFRA=aws
 
 # Run installation-focused end-to-end tests
 task tests-deployment-installation INFRA=aws
+
+# Run local deployment tests on a supported Linux or macOS host
+task tests-deployment-local
 ```
 
 #### From tests/ Directory
@@ -176,7 +180,7 @@ they all funnel through. Nothing needs to be passed to the helpers to opt in.
 
 ## Continuous Integration
 
-All tests run automatically in GitHub Actions CI:
+GitHub Actions CI coverage:
 - Unit tests and integration tests run on every push
-- Deployment tests run manually via workflow dispatch
+- Deployment tests run manually via workflow dispatch; the local suite has Linux AMD64 and macOS ARM64 lanes
 - See [CI Documentation](../doc/ci.md) for details

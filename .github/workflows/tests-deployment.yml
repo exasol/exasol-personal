@@ -13,7 +13,7 @@ on:
           - cloud
           - local
       os:
-        description: Operating system selector (cloud suite only)
+        description: Operating system selector
         required: false
         default: all
         type: choice
@@ -30,23 +30,31 @@ env:
 
 jobs:
   plan-tests-deployment:
-    if: ${{ inputs.suite != 'local' }}
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
+      cloud_matrix: ${{ steps.plan.outputs.cloud_matrix }}
+      cloud_has_rows: ${{ steps.plan.outputs.cloud_has_rows }}
+      local_matrix: ${{ steps.plan.outputs.local_matrix }}
+      local_has_rows: ${{ steps.plan.outputs.local_has_rows }}
     steps:
       - id: plan
         shell: bash
         env:
           SELECTED_OS_INPUT: ${{ inputs.os }}
+          SELECTED_SUITE_INPUT: ${{ inputs.suite }}
         run: |
           selected_os="${SELECTED_OS_INPUT:-}"
           if [ -z "${selected_os}" ]; then
             selected_os="all"
           fi
 
-          # Declarative test plan. Toggle rows via "enabled" and route by "task".
-          full_plan_json='[
+          selected_suite="${SELECTED_SUITE_INPUT:-}"
+          if [ -z "${selected_suite}" ]; then
+            selected_suite="all"
+          fi
+
+          # Declarative cloud test plan. Toggle rows via "enabled" and route by "task".
+          cloud_plan_json='[
             {"enabled": true,   "infra": "aws",      "os": "ubuntu-latest",  "task": "tests-deployment"},
             {"enabled": false,  "infra": "aws",      "os": "windows-latest", "task": "tests-deployment"},
             {"enabled": false,  "infra": "aws",      "os": "macos-latest",   "task": "tests-deployment"},
@@ -58,23 +66,74 @@ jobs:
             {"enabled": true,   "infra": "exoscale", "os": "macos-latest",   "task": "tests-deployment-infrastructure"}
           ]'
 
-          filtered_plan_json="$(jq -c --arg os "${selected_os}" '
-            map(select(.enabled == true))
-            | if $os == "all" then . else map(select(.os == $os)) end
-            | map(del(.enabled))
-          ' <<< "${full_plan_json}")"
+          # Runner values are arrays so hosted and multi-label self-hosted runners
+          # share one matrix shape.
+          local_plan_json='[
+            {
+              "os": "ubuntu-latest",
+              "platform": "linux-amd64",
+              "runner": ["ubuntu-latest"],
+              "system_python": "false",
+              "status_context": "tests-deployment-local-linux-amd64"
+            },
+            {
+              "os": "macos-latest",
+              "platform": "macos-arm64",
+              "runner": ["self-hosted", "macOS", "ARM64", "virtualization"],
+              "system_python": "true",
+              "status_context": "tests-deployment-local-self-hosted"
+            }
+          ]'
 
-          echo "matrix=${filtered_plan_json}" >> "${GITHUB_OUTPUT}"
+          cloud_matrix="$(jq -c --arg os "${selected_os}" --arg suite "${selected_suite}" '
+            if $suite == "local" then
+              []
+            else
+              map(select(.enabled == true))
+              | if $os == "all" then . else map(select(.os == $os)) end
+              | map(del(.enabled))
+            end
+          ' <<< "${cloud_plan_json}")"
+
+          local_matrix="$(jq -c --arg os "${selected_os}" --arg suite "${selected_suite}" '
+            if $suite == "cloud" then
+              []
+            elif $os == "all" then
+              .
+            else
+              map(select(.os == $os))
+            end
+          ' <<< "${local_plan_json}")"
+
+          cloud_count="$(jq 'length' <<< "${cloud_matrix}")"
+          local_count="$(jq 'length' <<< "${local_matrix}")"
+
+          if [ "${selected_suite}" = "cloud" ] && [ "${cloud_count}" -eq 0 ]; then
+            echo "No enabled cloud deployment test row matches os=${selected_os}." >&2
+            exit 1
+          fi
+
+          if [ "${selected_suite}" = "local" ] && [ "${local_count}" -eq 0 ]; then
+            echo "No supported local deployment test row matches os=${selected_os}; use ubuntu-latest, macos-latest, or all." >&2
+            exit 1
+          fi
+
+          {
+            echo "cloud_matrix=${cloud_matrix}"
+            echo "cloud_has_rows=$([ "${cloud_count}" -gt 0 ] && echo true || echo false)"
+            echo "local_matrix=${local_matrix}"
+            echo "local_has_rows=$([ "${local_count}" -gt 0 ] && echo true || echo false)"
+          } >> "${GITHUB_OUTPUT}"
 
   tests-deployment:
-    if: ${{ inputs.suite != 'local' }}
+    if: ${{ needs.plan-tests-deployment.outputs.cloud_has_rows == 'true' }}
     needs: plan-tests-deployment
     environment:
       name: deployment-tests
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.plan-tests-deployment.outputs.matrix) }}
+        include: ${{ fromJSON(needs.plan-tests-deployment.outputs.cloud_matrix) }}
     runs-on: ${{ matrix.os }}
     permissions:
       id-token: write # Required for cloud OIDC auth
@@ -164,14 +223,15 @@ jobs:
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   tests-deployment-local:
-    if: ${{ inputs.suite != 'cloud' }}
+    if: ${{ needs.plan-tests-deployment.outputs.local_has_rows == 'true' }}
+    needs: plan-tests-deployment
     environment:
       name: deployment-tests
-    runs-on:
-      - self-hosted
-      - macOS
-      - ARM64
-      - virtualization
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan-tests-deployment.outputs.local_matrix) }}
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       statuses: write
@@ -181,7 +241,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/status-set
         with:
-          context: tests-deployment-local-self-hosted
+          context: ${{ matrix.status_context }}
           status: pending
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -191,12 +251,12 @@ jobs:
         with:
           infra: local
           task: tests-deployment-local
-          system-python: 'true'
+          system-python: ${{ matrix.system_python }}
 
       - uses: ./.github/actions/status-set
         if: always()
         with:
-          context: tests-deployment-local-self-hosted
+          context: ${{ matrix.status_context }}
           status: ${{ job.status }}
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
