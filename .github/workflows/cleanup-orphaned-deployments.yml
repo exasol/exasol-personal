@@ -70,7 +70,7 @@ jobs:
           threshold_epoch=$(date -u -d "-${MAX_AGE_HOURS} hours" +%s)
           stale_ids_raw="$(jq -r \
             --argjson threshold "${threshold_epoch}" \
-            '.data[] | select((.createdAt | fromdateiso8601) < $threshold) | .id' \
+            '(.data // [])[] | select((.createdAt | fromdateiso8601) < $threshold) | .id' \
             discover.json)"
 
           stale_ids=()
