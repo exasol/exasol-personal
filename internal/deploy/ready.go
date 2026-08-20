@@ -86,10 +86,13 @@ func WaitForDatabaseStarted(
 }
 
 func WaitForLocalDatabaseStarted(ctx context.Context, runtime localruntime.Runtime) error {
-	// Fail fast on an already-blocked network path instead of waiting out the
-	// whole backoff window on a problem that will never resolve on its own.
-	if err := classifyLocalReachability(ctx, runtime); err != nil {
-		return err
+	// A blocked host-to-VM path on macOS is stable and will not recover during
+	// the database wait. Linux Podman port publication, however, can briefly
+	// report the same state while the container network is still starting.
+	if shouldFailFastOnLocalReachability(runtime) {
+		if err := classifyLocalReachability(ctx, runtime); err != nil {
+			return err
+		}
 	}
 
 	return waitForDatabaseStartedWithBackoff(
@@ -98,6 +101,12 @@ func WaitForLocalDatabaseStarted(ctx context.Context, runtime localruntime.Runti
 		LocalDatabaseStartedInitialBackoff,
 		LocalDatabaseStartedMaxBackoff,
 	)
+}
+
+func shouldFailFastOnLocalReachability(runtime localruntime.Runtime) bool {
+	_, isLinuxHostRuntime := runtime.(*localruntime.LinuxHostRuntime)
+
+	return !isLinuxHostRuntime
 }
 
 func waitForDatabaseStartedWithBackoff(

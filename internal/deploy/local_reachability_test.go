@@ -142,6 +142,21 @@ func TestLocalReachabilityMessageForLinuxHostDoesNotUseMacOSGuidance(t *testing.
 	}
 }
 
+func TestShouldFailFastOnLocalReachability(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	linuxRuntime := localruntime.NewHostLinuxRuntime(deployment, nil)
+	if shouldFailFastOnLocalReachability(linuxRuntime) {
+		t.Fatal("Linux host runtime must allow transient Podman port publication states")
+	}
+
+	macRuntime := localruntime.NewMacVMRuntime(deployment, nil)
+	if !shouldFailFastOnLocalReachability(macRuntime) {
+		t.Fatal("macOS VM runtime must fail fast when its host-to-VM network is blocked")
+	}
+}
+
 func skipOnWindows(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
