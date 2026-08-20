@@ -1,6 +1,6 @@
 
 
-# Cloud test suites
+# Deployment test suites
 
 Cloud tests share one session-scoped deployment (the `reusable_deployment` fixture in
 `tests/tests/conftest.py`) and are split by kind across three directories. Each test is
@@ -66,11 +66,14 @@ Provisioning and lifecycle behavior.
 | `test_minimal_iam_policy_includes_bootstrap_bucket_actions` | cloud (AWS) | Verifies the documented minimal IAM policy covers the object-storage bootstrap actions |
 | `test_first_run_downloads_then_reuses_opentofu` | cloud | Verifies OpenTofu is downloaded on first use and reused from the cache afterwards |
 
+The manually dispatched local suite runs its portable cases on Linux AMD64 and
+macOS ARM64. VM-specific and historical-update cases remain guarded for macOS.
+
 `tests/tests/deployment/test_local_deployment.py`
 
 | Test | Targets | Description |
 |------|---------|-------------|
-| `test_ports_override_sets_db_port` | local | Verifies that `--ports db:<port>` correctly routes the DB port through to the VM; confirms the DB is reachable on the custom port |
+| `test_ports_override_sets_db_port` | local | Verifies that `--ports db:<port>` correctly routes the DB port through the selected local runtime; confirms the DB is reachable on the custom port |
 | `test_ports_override_stable_across_restarts` | local | Verifies that a custom DB port assigned at `exasol init` is preserved in `deployment.json` and remains reachable after a stop/start cycle |
 
 `tests/tests/deployment/test_local_update.py`
