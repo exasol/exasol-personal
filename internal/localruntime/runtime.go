@@ -78,6 +78,7 @@ type Runtime interface {
 	Destroy(ctx context.Context, out, outErr io.Writer) error
 	// WorkaroundNanoStartupDurability flushes runtime storage after Nano becomes ready.
 	// Remove it when Nano durably commits its startup files itself.
+	// See SPOT-32205
 	WorkaroundNanoStartupDurability(ctx context.Context, out, outErr io.Writer) error
 
 	ReadEndpoints() (*VMRuntimeEndpoint, error)

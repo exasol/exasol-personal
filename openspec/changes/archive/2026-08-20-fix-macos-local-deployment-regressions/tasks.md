@@ -20,4 +20,4 @@
 
 - [x] 4.1 Run formatting, build, lint, and unit tests on Linux for every rewritten commit.
 - [x] 4.2 Validate the active OpenSpec change.
-- [ ] 4.3 Synchronize the delta into the main specification and archive the change in a separate commit after implementation stabilizes.
+- [x] 4.3 Synchronize the delta into the main specification and archive the change in a separate commit after implementation stabilizes.
