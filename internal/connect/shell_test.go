@@ -69,7 +69,7 @@ func TestRunShell(t *testing.T) {
 			name: "single query without semicolon is buffered",
 			opts: ShellOpts{ExecuteOnSemicolon: true},
 			given: func(mocks *mocks) {
-				mocks.shell.ReadlineReturnsOnCall(0, "SELECT * FROM Dual", nil)
+				mocks.shell.ReadlineReturnsOnCall(0, "SELECT 1 FROM Dual", nil)
 				mocks.shell.ReadlineReturnsOnCall(1, "", errTest)
 			},
 			then: func(t *testing.T, mocks *mocks, err error) {
@@ -84,7 +84,7 @@ func TestRunShell(t *testing.T) {
 			name: "EOF flushes buffered statement without semicolon",
 			opts: ShellOpts{ExecuteOnSemicolon: true},
 			given: func(mocks *mocks) {
-				mocks.shell.ReadlineReturnsOnCall(0, "SELECT * FROM Dual", nil)
+				mocks.shell.ReadlineReturnsOnCall(0, "SELECT 1 FROM Dual", nil)
 				mocks.shell.ReadlineReturnsOnCall(1, "", io.EOF)
 			},
 			then: func(t *testing.T, mocks *mocks, err error) {
@@ -92,7 +92,7 @@ func TestRunShell(t *testing.T) {
 
 				require.NoError(t, err)
 				require.Equal(t, 2, mocks.shell.ReadlineCallCount())
-				require.Equal(t, []string{"SELECT * FROM Dual"}, mocks.inputsProcessor.inputs)
+				require.Equal(t, []string{"SELECT 1 FROM Dual"}, mocks.inputsProcessor.inputs)
 			},
 		},
 		{
@@ -115,21 +115,21 @@ func TestRunShell(t *testing.T) {
 			opts: ShellOpts{ExecuteOnSemicolon: true},
 			given: func(mocks *mocks) {
 				mocks.shell.ReadlineReturnsOnCall(0, "OPEN SCHEMA dummy  ", nil)
-				mocks.shell.ReadlineReturnsOnCall(1, "SELECT * FROM Dual;", nil)
+				mocks.shell.ReadlineReturnsOnCall(1, "SELECT 1 FROM Dual;", nil)
 				mocks.shell.ReadlineReturnsOnCall(2, "", errTest)
 			},
 			then: func(t *testing.T, mocks *mocks, err error) {
 				t.Helper()
 
 				require.ErrorIs(t, err, errTest)
-				require.Equal(t, []string{"OPEN SCHEMA dummy  \nSELECT * FROM Dual"}, mocks.inputsProcessor.inputs)
+				require.Equal(t, []string{"OPEN SCHEMA dummy  \nSELECT 1 FROM Dual"}, mocks.inputsProcessor.inputs)
 			},
 		},
 		{
 			name: "multiple queries same line execute separately",
 			opts: ShellOpts{ExecuteOnSemicolon: true},
 			given: func(mocks *mocks) {
-				mocks.shell.ReadlineReturnsOnCall(0, "OPEN SCHEMA dummy;SELECT * FROM Dual;", nil)
+				mocks.shell.ReadlineReturnsOnCall(0, "OPEN SCHEMA dummy;SELECT 1 FROM Dual;", nil)
 				mocks.shell.ReadlineReturnsOnCall(1, "", errTest)
 			},
 			then: func(t *testing.T, mocks *mocks, err error) {
@@ -138,7 +138,7 @@ func TestRunShell(t *testing.T) {
 				require.ErrorIs(t, err, errTest)
 				require.Equal(t, []string{
 					"OPEN SCHEMA dummy",
-					"SELECT * FROM Dual",
+					"SELECT 1 FROM Dual",
 				}, mocks.inputsProcessor.inputs)
 			},
 		},
@@ -146,7 +146,7 @@ func TestRunShell(t *testing.T) {
 			name: "input processor error",
 			opts: ShellOpts{ExecuteOnSemicolon: true},
 			given: func(mocks *mocks) {
-				mocks.shell.ReadlineReturnsOnCall(0, "SELECT * FROM Dual;", nil)
+				mocks.shell.ReadlineReturnsOnCall(0, "SELECT 1 FROM Dual;", nil)
 				mocks.shell.ReadlineReturnsOnCall(1, "", errTest)
 				mocks.inputsProcessor.returnError()
 			},
@@ -184,8 +184,8 @@ func TestRunShell(t *testing.T) {
 			opts: ShellOpts{ExecuteOnSemicolon: false},
 			given: func(mocks *mocks) {
 				mocks.shell.ReadlineReturnsOnCall(0, "OPEN SCHEMA dummy  ", nil)
-				mocks.shell.ReadlineReturnsOnCall(1, "  SELECT * FROM exa", nil)
-				mocks.shell.ReadlineReturnsOnCall(2, "SELECT * FROM Dual", nil)
+				mocks.shell.ReadlineReturnsOnCall(1, "  SELECT 1 FROM exa", nil)
+				mocks.shell.ReadlineReturnsOnCall(2, "SELECT 1 FROM Dual", nil)
 				mocks.shell.ReadlineReturnsOnCall(3, "", errTest)
 			},
 			then: func(t *testing.T, mocks *mocks, err error) {
@@ -194,8 +194,8 @@ func TestRunShell(t *testing.T) {
 				require.ErrorIs(t, err, errTest)
 				require.Equal(t, []string{
 					"OPEN SCHEMA dummy",
-					"SELECT * FROM exa",
-					"SELECT * FROM Dual",
+					"SELECT 1 FROM exa",
+					"SELECT 1 FROM Dual",
 				}, mocks.inputsProcessor.inputs)
 			},
 		},
@@ -221,14 +221,14 @@ func TestNonInteractiveLineReader(t *testing.T) {
 
 	// When
 	err := runShellImpl(readline.NewBuffered(
-		strings.NewReader("SELECT * FROM Dual;\nexit\n"),
+		strings.NewReader("SELECT 1 FROM Dual;\nexit\n"),
 	), processor.processInput, ShellOpts{
 		ExecuteOnSemicolon: true,
 	})
 
 	// Then
 	require.NoError(t, err)
-	require.Equal(t, []string{"SELECT * FROM Dual"}, processor.inputs)
+	require.Equal(t, []string{"SELECT 1 FROM Dual"}, processor.inputs)
 }
 
 func TestRunStatements(t *testing.T) {
@@ -294,10 +294,10 @@ func TestSplitSemicolonTerminatedStatements(t *testing.T) {
 		t.Parallel()
 
 		sql := "OPEN SCHEMA foo;" +
-			"SELECT * FROM dual"
+			"SELECT 1 FROM dual"
 		statements, remainder := splitStatements(sql)
 		require.Equal(t, []string{"OPEN SCHEMA foo"}, statements)
-		require.Equal(t, "SELECT * FROM dual", remainder)
+		require.Equal(t, "SELECT 1 FROM dual", remainder)
 	})
 
 	t.Run("keeps semicolons inside double quotes", func(t *testing.T) {
