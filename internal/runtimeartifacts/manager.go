@@ -591,8 +591,8 @@ func checksumMismatchError(expected, actual string) error {
 
 func urlBasename(rawURL string) string {
 	rawPath := rawURL
-	if strings.HasPrefix(rawPath, "file://") {
-		rawPath = strings.TrimPrefix(rawPath, "file://")
+	if after, ok := strings.CutPrefix(rawPath, "file://"); ok {
+		rawPath = after
 	} else if idx := strings.Index(rawPath, "://"); idx >= 0 {
 		rawPath = rawPath[idx+3:]
 	}

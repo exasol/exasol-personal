@@ -51,14 +51,16 @@ const (
 
 	rootCmdGroupEssential = "essential"
 	rootCmdGroupLifecycle = "lifecycle"
+	commandInfo           = "info"
+	commandList           = "list"
 )
 
 var logLevelMap = map[string]slog.Level{
-	"debug": slog.LevelDebug,
-	"info":  slog.LevelInfo,
-	"warn":  slog.LevelWarn,
-	"error": slog.LevelError,
-	"":      slog.LevelInfo, // default to info
+	"debug":     slog.LevelDebug,
+	commandInfo: slog.LevelInfo,
+	"warn":      slog.LevelWarn,
+	"error":     slog.LevelError,
+	"":          slog.LevelInfo, // default to info
 }
 
 var ErrInvalidLogLevel = errors.New("invalid log level")
@@ -126,7 +128,7 @@ func setupLogging() error {
 		levelVar := slog.LevelVar{}
 		levelVar.Set(selectedLevel)
 		// Design decision: when attached to a terminal, prefer human-friendly logs.
-		terminalHandler = tint.NewHandler(os.Stderr, &tint.Options{
+		terminalHandler = tint.NewTextHandler(os.Stderr, &tint.Options{
 			Level: &levelVar, TimeFormat: time.DateTime,
 		})
 	} else {

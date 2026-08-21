@@ -1,5 +1,7 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
+
+// Package config provides deployment configuration types and persistence.
 package config
 
 import (
@@ -78,7 +80,7 @@ type ExasolPersonalState struct {
 	// the original deployment creation time (which is a launcher concept, not a
 	// backend one). Backends may still receive CreatedAt via DeploymentMetadata
 	// and persist it for their own purposes (e.g. resource tagging).
-	CreatedAt time.Time `json:"createdAt,omitempty"`
+	CreatedAt time.Time `json:"createdAt,omitzero"`
 	// InstalledSLCs is the set of official script language containers installed into
 	// this (local) deployment. Image mounts are container-run arguments and do not
 	// persist across container recreation, so this set is the source of truth that the
@@ -112,7 +114,7 @@ type InstalledCustomSLC struct {
 	DisplacedURI string `json:"displacedUri,omitempty"`
 }
 
-// DirectoryExasolPersonalStatefile.
+// HasExasolPersonalStateFile reports whether the deployment state file exists.
 func HasExasolPersonalStateFile(deployment DeploymentDir) (bool, error) {
 	path := deployment.ExasolPersonalStatePath()
 
@@ -133,14 +135,14 @@ func HasExasolPersonalStateFile(deployment DeploymentDir) (bool, error) {
 	return true, nil
 }
 
-// SetExasolPersonalState writes a new exasol personal state to permanent storage.
+// WriteExasolPersonalState writes a new Exasol Personal state to permanent storage.
 func WriteExasolPersonalState(state *ExasolPersonalState, deployment DeploymentDir) error {
 	return writeConfig(state, deployment.ExasolPersonalStatePath(), "exasol personal state")
 }
 
 var ErrNoExasolPersonalStateSet = errors.New("no exasol-personal state is set")
 
-// GetExasolPersonalState returns the deployment state of the deployment directory.
+// ReadExasolPersonalState returns the deployment state of the deployment directory.
 func ReadExasolPersonalState(deployment DeploymentDir) (*ExasolPersonalState, error) {
 	slog.Debug("reading exasol personal state")
 	state, err := readConfig[ExasolPersonalState](

@@ -80,19 +80,19 @@ func (logBuffer *LogBuffer) writePartsRecursive(data []byte) int {
 
 	latestRecord := logBuffer.latestRecord()
 
-	idx := bytes.IndexByte(data, '\n')
+	before, after, found := bytes.Cut(data, []byte{'\n'})
 	msg := data
 	var remainder []byte
 
-	if idx != -1 {
-		msg = data[:idx]
-		remainder = data[idx+1:]
+	if found {
+		msg = before
+		remainder = after
 	}
 
 	latestRecord.Message = append(latestRecord.Message, msg...)
 	latestRecord.Time = time.Now()
 
-	if idx != -1 {
+	if found {
 		logBuffer.newRecord()
 	}
 

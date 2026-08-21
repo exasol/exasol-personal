@@ -4,12 +4,13 @@
 package deploy
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/exasol/exasol-personal/assets/resources"
@@ -653,8 +654,8 @@ func upsertInstalledSLC(
 		updated = append(updated, s)
 	}
 	updated = append(updated, entry)
-	sort.Slice(updated, func(i, j int) bool {
-		return updated[i].Flavor < updated[j].Flavor
+	slices.SortFunc(updated, func(a, b config.InstalledSLC) int {
+		return cmp.Compare(a.Flavor, b.Flavor)
 	})
 
 	return updated

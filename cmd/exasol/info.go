@@ -58,7 +58,7 @@ func renderDeploymentInfoText(
 }
 
 var deploymentInfoCmd = &cobra.Command{
-	Use:   "info",
+	Use:   commandInfo,
 	Short: deploymentInfoCmdShortDesc,
 	Long:  deploymentInfoCmdLongDesc,
 	Args:  cobra.NoArgs,

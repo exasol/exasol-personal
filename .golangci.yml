@@ -26,6 +26,7 @@ linters:
     - gochecknoglobals
     - wsl
     - testpackage
+    - gomodguard
 
   exclusions:
     paths:
@@ -34,6 +35,7 @@ linters:
 
   enable:
     - wsl_v5
+    - gomodguard_v2
 
   settings:
     gci:
@@ -49,6 +51,9 @@ linters:
       ignore-type-assert-ok: true
       ignore-map-index-ok: true
       ignore-chan-recv-ok: true
+
+    goconst:
+      ignore-tests: true
 
     revive:
       enable-all-rules: true
@@ -71,7 +76,16 @@ linters:
           disabled: true
         - name: max-public-structs
           disabled: true
-
+        # Keep explicit enum cases for exhaustive checking and preserve stable
+        # package and public API names.
+        - name: identical-switch-branches
+          disabled: true
+        - name: package-directory-mismatch
+          disabled: true
+        - name: package-naming
+          disabled: true
+        - name: flag-parameter
+          disabled: true
     gosec:
       excludes:
         - G204

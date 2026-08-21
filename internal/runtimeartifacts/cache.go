@@ -9,7 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -361,12 +362,12 @@ func (c *Cache) planCleanup(
 		switch opts.Mode {
 		case CleanupModeAll:
 			remove = true
+		case CleanupModeStale:
+			remove = isEntryStale(entry, cfg, now)
 		case CleanupModeInvalid:
 			check := c.checkIntegrity(entry)
 			invalid = check.Status != integrityStatusOK
 			remove = invalid
-		case CleanupModeStale:
-			remove = isEntryStale(entry, cfg, now)
 		case CleanupModePartialDownloads:
 			remove = false
 		default:
@@ -496,8 +497,8 @@ func (c *Cache) planPartialDownloadCleanup() (partialDownloadPlan, error) {
 
 		return plan, err
 	}
-	sort.Slice(entries, func(left, right int) bool {
-		return entries[left].Name() < entries[right].Name()
+	slices.SortFunc(entries, func(left, right os.DirEntry) int {
+		return strings.Compare(left.Name(), right.Name())
 	})
 
 	plan.candidates = make([]partialDownloadCandidate, 0, len(entries))
@@ -546,7 +547,7 @@ func sortedEntryIDs(index cacheIndex) []string {
 	for key := range index.Entries {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	return keys
 }

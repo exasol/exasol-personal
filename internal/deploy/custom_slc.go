@@ -16,7 +16,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/exasol/exasol-personal/assets/resources"
@@ -669,7 +669,7 @@ func applyScriptLanguages(
 	return nil
 }
 
-// Tolerates a missing state file so listing works before the deployment is initialized.
+// CustomSLCStatuses tolerates a missing state file before deployment initialization.
 func CustomSLCStatuses(deployment config.DeploymentDir) ([]CustomSLCStatus, error) {
 	has, err := config.HasExasolPersonalStateFile(deployment)
 	if err != nil {
@@ -1234,8 +1234,8 @@ func upsertInstalledCustomSLC(
 		updated = append(updated, inst)
 	}
 	updated = append(updated, entry)
-	sort.Slice(updated, func(i, j int) bool {
-		return updated[i].Alias < updated[j].Alias
+	slices.SortFunc(updated, func(left, right config.InstalledCustomSLC) int {
+		return strings.Compare(left.Alias, right.Alias)
 	})
 
 	return updated
@@ -1246,7 +1246,7 @@ func sortedKeys(set map[string]bool) []string {
 	for key := range set {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	return keys
 }

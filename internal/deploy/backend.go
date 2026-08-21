@@ -72,9 +72,7 @@ func resolveBackendKind(manifest *presets.InfrastructureManifest) (string, error
 	}
 
 	switch backend {
-	case backendTypeTofu:
-		return backend, nil
-	case backendTypeLocal:
+	case backendTypeTofu, backendTypeLocal:
 		return backend, nil
 	case "":
 		return "", fmt.Errorf(

@@ -7,7 +7,7 @@ import (
 	"archive/zip"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 )
 
@@ -29,7 +29,7 @@ func writeZipFixtureEntries(
 	for key := range entries {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	for _, entryName := range keys {
 		fw, err := zipWriter.Create(entryName)
 		if err != nil {

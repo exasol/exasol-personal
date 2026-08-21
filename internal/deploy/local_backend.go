@@ -437,6 +437,9 @@ func detectLocalHostMemoryMB(ctx context.Context) int {
 	if err != nil {
 		return 0
 	}
+	if memoryMB > uint64(^uint(0)>>1) {
+		return 0
+	}
 
 	return int(memoryMB)
 }

@@ -37,18 +37,21 @@ func renderCacheDiagnosticsText(
 	writer io.Writer,
 	report runtimeartifacts.DiagnosticReport,
 ) error {
-	lines := []string{
-		"Cache root: " + report.CacheRoot,
-		"Config file: " + report.ConfigPath,
+	lineCapacity := 10 + len(report.Entries) +
+		len(report.MissingFiles) + len(report.UnexpectedPaths)
+	lines := make([]string, 0, lineCapacity)
+	lines = append(lines,
+		"Cache root: "+report.CacheRoot,
+		"Config file: "+report.ConfigPath,
 		cacheConfigStatusLine(report),
-		"Index file: " + formatCachePath(report.CacheRoot, report.IndexPath),
+		"Index file: "+formatCachePath(report.CacheRoot, report.IndexPath),
 		cacheIndexStatusLine(report),
 		cacheLockStatusLine(report.Lock),
 		fmt.Sprintf("Artifacts: %d", report.ArtifactCount),
-		"Total size: " + formatByteSize(report.TotalBytes),
+		"Total size: "+formatByteSize(report.TotalBytes),
 		fmt.Sprintf("Stale candidates: %d", report.StaleCandidates),
 		fmt.Sprintf("Invalid artifacts: %d", report.InvalidArtifacts),
-	}
+	)
 	for _, entry := range report.Entries {
 		lines = append(
 			lines,

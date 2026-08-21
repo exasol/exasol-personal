@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -35,13 +36,7 @@ A copy of the EULA is also included as 'eula.txt' in this directory.
 func ResolveInfrastructureInfo(infrastructureName string) (*InfrastructureInfo, error) {
 	// Proactively validate against known infrastructures to produce a clearer error.
 	known := presets.ListEmbeddedInfrastructuresPresets()
-	found := false
-	for _, k := range known {
-		if k == infrastructureName {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(known, infrastructureName)
 	if !found {
 		return nil, fmt.Errorf("unknown infrastructure preset %q", infrastructureName)
 	}
@@ -349,10 +344,8 @@ func validateInfrastructurePreset(infrastructurePreset PresetRef) error {
 	}
 
 	known := presets.ListEmbeddedInfrastructuresPresets()
-	for _, k := range known {
-		if k == infrastructurePreset.Name {
-			return nil
-		}
+	if slices.Contains(known, infrastructurePreset.Name) {
+		return nil
 	}
 
 	return fmt.Errorf(
@@ -368,10 +361,8 @@ func validateInstallationPreset(installationPreset PresetRef) error {
 	}
 
 	known := presets.ListEmbeddedInstallationsPresets()
-	for _, k := range known {
-		if k == installationPreset.Name {
-			return nil
-		}
+	if slices.Contains(known, installationPreset.Name) {
+		return nil
 	}
 
 	return fmt.Errorf(

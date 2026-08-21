@@ -26,8 +26,7 @@ Example usage:
     exasol version --latest --json
 `
 
-// This variable must be named like this and remain in the main package,
-// because we inject it's true value during the build process with -ldflags.
+// CurrentLauncherVersion is injected during the build process with -ldflags.
 var CurrentLauncherVersion = "0.0.0"
 
 var versionCheckOpts = struct {

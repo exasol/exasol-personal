@@ -124,8 +124,7 @@ func TestCheck_RejectsInvalidVersions(t *testing.T) {
 			if res.Allowed {
 				t.Fatal("expected disallowed")
 			}
-			var inv *InvalidVersionError
-			if !errors.As(res.Err, &inv) {
+			if _, ok := errors.AsType[*InvalidVersionError](res.Err); !ok {
 				t.Fatalf("expected InvalidVersionError, got %T: %v", res.Err, res.Err)
 			}
 		})

@@ -246,5 +246,5 @@ func configureSSHSessionPty(
 
 type configureSSHSessionPtyRestoreFunc = func()
 
-// Re-exported ssh.ExitError.
+// ExitError re-exports ssh.ExitError.
 type ExitError = ssh.ExitError

@@ -103,10 +103,7 @@ func compatibilityMatrixColumnWidths(
 ) map[string]int {
 	widths := map[string]int{}
 	for installID := range installManifests {
-		width := len(installID)
-		if width < len(compatibleCell) {
-			width = len(compatibleCell)
-		}
+		width := max(len(installID), len(compatibleCell))
 		widths[installID] = width
 	}
 

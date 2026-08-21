@@ -83,8 +83,7 @@ type MacVMRuntime struct {
 	manager    *runtimeartifacts.Manager
 }
 
-// manager may be nil for operations that never need to invoke the runner
-// (e.g. Destroy on a deployment that was never prepared).
+// NewMacVMRuntime creates a VM runtime. manager may be nil when no runner invocation is needed.
 func NewMacVMRuntime(
 	deployment config.DeploymentDir,
 	manager *runtimeartifacts.Manager,
@@ -100,8 +99,7 @@ func (runtime *MacVMRuntime) Deployment() config.DeploymentDir {
 	return runtime.deployment
 }
 
-// VM sizing (CPU/memory/data disk) is not a Prepare concern: it's passed
-// directly as RunCommand args for "start".
+// Prepare initializes the local runtime without starting the VM.
 func (runtime *MacVMRuntime) Prepare(ctx context.Context, out, outErr io.Writer) error {
 	if err := os.MkdirAll(runtime.paths.WorkDir, dirMode); err != nil {
 		return fmt.Errorf("failed to create local runtime directory: %w", err)
