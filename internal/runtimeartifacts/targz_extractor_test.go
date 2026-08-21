@@ -113,6 +113,58 @@ func TestTarGzExtractor_Extract_RejectsPathTraversal(t *testing.T) {
 	}
 }
 
+func TestTarGzExtractor_Extract_MaterializesSymlinks(t *testing.T) {
+	t.Parallel()
+
+	archivePath := writeTarGzWithSymlink(t, "link.tf", "main.tf")
+	dstDir := t.TempDir()
+	ext := &TarGzExtractor{}
+
+	if err := ext.Extract(archivePath, dstDir); err != nil {
+		t.Fatalf("expected extraction to succeed, got %v", err)
+	}
+	target, err := os.Readlink(filepath.Join(dstDir, "link.tf"))
+	if err != nil {
+		t.Fatalf("expected link.tf to be a symlink, got %v", err)
+	}
+	if target != "main.tf" {
+		t.Fatalf("expected symlink target %q, got %q", "main.tf", target)
+	}
+}
+
+func writeTarGzWithSymlink(t *testing.T, linkName, linkTarget string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "archive.tar.gz")
+	archiveFile, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	gzw := gzip.NewWriter(archiveFile)
+	tarWriter := tar.NewWriter(gzw)
+
+	if err := tarWriter.WriteHeader(&tar.Header{
+		Name:     linkName,
+		Mode:     0o777,
+		Typeflag: tar.TypeSymlink,
+		Linkname: linkTarget,
+	}); err != nil {
+		t.Fatalf("write header: %v", err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gzw.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	if err := archiveFile.Close(); err != nil {
+		t.Fatalf("close file: %v", err)
+	}
+
+	return path
+}
+
 func writeTarGzWithEntry(t *testing.T, entryName, content string) string {
 	t.Helper()
 

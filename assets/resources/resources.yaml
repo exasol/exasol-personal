@@ -21,6 +21,22 @@ tofu:
       url: https://github.com/opentofu/opentofu/releases/download/v1.11.5/tofu_1.11.5_windows_amd64.tar.gz
       sha256: 69be358054afcc6a84c0ffb917056d21afc3ec5a0e0f66ffd4f498a1763a0fb8
       resource_path: tofu.exe
+infrastructure-presets:
+  glob: true
+  embed: always
+  artifact:
+    any:
+      url: assets/infrastructure
+      resource_path: "*"
+      download_path: infrastructure-presets.tar.gz
+installation-presets:
+  glob: true
+  embed: always
+  artifact:
+    any:
+      url: assets/installation
+      resource_path: "*"
+      download_path: installation-presets.tar.gz
 exasol-local-runner:
   extract: true
   embed: true

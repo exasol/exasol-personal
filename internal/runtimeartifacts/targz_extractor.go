@@ -66,61 +66,94 @@ func (*TarGzExtractor) Extract(srcPath, dstPath string) error {
 	return nil
 }
 
-// extractTarEntry extracts a single tar entry under dstPath and reports
-// whether it produced an extractable file or directory.
-func extractTarEntry(tarReader *tar.Reader, hdr *tar.Header, dstPath string) (bool, error) {
-	targetPath, err := sanitizeTarEntryPath(dstPath, hdr.Name)
+func extractTarEntry(
+	tarReader *tar.Reader,
+	hdr *tar.Header,
+	dstPath string,
+) (bool, error) {
+	root, err := os.OpenRoot(dstPath)
 	if err != nil {
 		return false, err
+	}
+	defer root.Close()
+
+	targetPath := filepath.FromSlash(hdr.Name)
+	if targetPath == "" || targetPath == "." {
+		return false, fmt.Errorf("invalid archive entry %q", hdr.Name)
 	}
 
 	mode := os.FileMode(hdr.Mode & tarPermissionMask).Perm()
 
 	switch hdr.Typeflag {
 	case tar.TypeDir:
-		if err := os.MkdirAll(targetPath, mode); err != nil {
+		if err := root.MkdirAll(targetPath, mode); err != nil {
 			return false, err
 		}
-		if err := os.Chmod(targetPath, mode); err != nil {
+		if err := root.Chmod(targetPath, mode); err != nil {
 			return false, err
 		}
 
 		return true, nil
+
 	case tar.TypeReg:
-		if err := writeTarRegularFile(tarReader, targetPath, mode); err != nil {
+		if err := writeTarRegularFile(tarReader, root, targetPath, mode); err != nil {
 			return false, err
 		}
 
 		return true, nil
+
+	case tar.TypeSymlink:
+		if err := writeTarSymlink(root, hdr, targetPath); err != nil {
+			return false, err
+		}
+
+		return true, nil
+
 	default:
 		return false, nil
 	}
 }
 
-func sanitizeTarEntryPath(dstPath, name string) (string, error) {
-	cleanName := filepath.Clean(filepath.FromSlash(name))
-	if cleanName == "." || cleanName == ".." ||
-		strings.HasPrefix(cleanName, ".."+string(filepath.Separator)) ||
-		filepath.IsAbs(cleanName) {
-		return "", fmt.Errorf(
-			"refusing to extract archive entry %q outside %s",
-			name,
-			dstPath,
-		)
+func writeTarSymlink(root *os.Root, hdr *tar.Header, targetPath string) error {
+	linkTarget := filepath.FromSlash(hdr.Linkname)
+	cleanTarget := filepath.Clean(linkTarget)
+
+	// Do not create links that point outside the extraction root.
+	if filepath.IsAbs(cleanTarget) ||
+		cleanTarget == ".." ||
+		strings.HasPrefix(cleanTarget, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("refusing unsafe symlink target %q", hdr.Linkname)
 	}
 
-	return filepath.Join(dstPath, cleanName), nil
-}
-
-func writeTarRegularFile(tarReader *tar.Reader, targetPath string, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(targetPath), dirPerm); err != nil {
+	if err := root.MkdirAll(filepath.Dir(targetPath), dirPerm); err != nil {
+		return err
+	}
+	if err := root.Remove(targetPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 
-	out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	return root.Symlink(linkTarget, targetPath)
+}
+
+func writeTarRegularFile(
+	tarReader *tar.Reader,
+	root *os.Root,
+	targetPath string,
+	mode os.FileMode,
+) error {
+	if err := root.MkdirAll(filepath.Dir(targetPath), dirPerm); err != nil {
+		return err
+	}
+
+	out, err := root.OpenFile(
+		targetPath,
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
+		mode,
+	)
 	if err != nil {
 		return err
 	}
+
 	// #nosec G110 -- archive contents are trusted runtime artifacts.
 	if _, err := io.Copy(out, tarReader); err != nil {
 		_ = out.Close()
@@ -130,5 +163,5 @@ func writeTarRegularFile(tarReader *tar.Reader, targetPath string, mode os.FileM
 		return err
 	}
 
-	return os.Chmod(targetPath, mode)
+	return root.Chmod(targetPath, mode)
 }

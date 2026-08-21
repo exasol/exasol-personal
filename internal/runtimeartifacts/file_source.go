@@ -14,10 +14,13 @@ import (
 	"strings"
 )
 
+// FileURLScheme is the URL scheme identifying a local filesystem artifact.
+const FileURLScheme = "file://"
+
 type FileSource struct{}
 
 func (FileSource) CanFetch(url string) bool {
-	if strings.HasPrefix(url, "file://") {
+	if strings.HasPrefix(url, FileURLScheme) {
 		return true
 	}
 	// Local filesystem path: no URL scheme and not a git@ remote
@@ -39,7 +42,7 @@ func (FileSource) Fetch(_ context.Context, url string, _ string) (string, error)
 }
 
 func resolveLocalPath(url string) (string, error) {
-	rawPath := strings.TrimPrefix(url, "file://")
+	rawPath := strings.TrimPrefix(url, FileURLScheme)
 	absPath, err := filepath.Abs(rawPath)
 	if err != nil {
 		return "", err

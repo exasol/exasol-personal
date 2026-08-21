@@ -15,7 +15,9 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	_ "embed" // required by go:embed on resourceFileTemplateSource below
@@ -25,12 +27,14 @@ import (
 	"fmt"
 	"go/format"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
@@ -64,6 +68,44 @@ func repoRoot() (string, error) {
 	return filepath.Abs(filepath.Join(filepath.Dir(thisFile), "..", ".."))
 }
 
+// A resource's location must not depend on the invoking process's working
+// directory, since go generate and a Task step run from the repo root can
+// differ.
+func resolveRelativeLocalArtifacts(
+	root string,
+	spec runtimeartifacts.ResourceSpec,
+) runtimeartifacts.ResourceSpec {
+	resolved := make(runtimeartifacts.ResourceSpec, len(spec))
+	for resourceID, def := range spec {
+		resolvedArtifacts := make(map[string]runtimeartifacts.ArtifactSpec, len(def.Artifact))
+		for key, artifact := range def.Artifact {
+			resolvedArtifacts[key] = resolveLocalArtifactURL(root, artifact)
+		}
+		def.Artifact = resolvedArtifacts
+		resolved[resourceID] = def
+	}
+
+	return resolved
+}
+
+func resolveLocalArtifactURL(
+	root string,
+	artifact runtimeartifacts.ArtifactSpec,
+) runtimeartifacts.ArtifactSpec {
+	if !(runtimeartifacts.FileSource{}).CanFetch(artifact.URL) {
+		return artifact
+	}
+
+	rawPath := strings.TrimPrefix(artifact.URL, runtimeartifacts.FileURLScheme)
+	if filepath.IsAbs(rawPath) {
+		return artifact
+	}
+
+	artifact.URL = runtimeartifacts.FileURLScheme + filepath.Join(root, rawPath)
+
+	return artifact
+}
+
 type config struct {
 	goos      string
 	goarch    string
@@ -94,6 +136,8 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 
+	spec = resolveRelativeLocalArtifacts(root, spec)
+
 	cache, err := runtimeartifacts.NewDefaultCache()
 	if err != nil {
 		return err
@@ -101,10 +145,7 @@ func run(ctx context.Context, args []string) error {
 
 	g := &generator{
 		manager: runtimeartifacts.NewResourceManagerWithCacheForPlatform(
-			spec,
-			cache,
-			cfg.goos,
-			cfg.goarch,
+			spec, cache, cfg.goos, cfg.goarch,
 		),
 		outputDir: outputDir,
 		goos:      cfg.goos,
@@ -113,6 +154,23 @@ func run(ctx context.Context, args []string) error {
 	}
 
 	return g.generatePlatform(ctx, spec)
+}
+
+// This tool never imports assets/resources/generated, so it has no embedded
+// data to fall back to; a declared Embed would make Get look for exactly
+// that, and fail. resource_path is cleared too, since Get would otherwise
+// treat it as a literal subdirectory name rather than the pattern it
+// actually is.
+func rawDefFor(def runtimeartifacts.ResourceDefinition) runtimeartifacts.ResourceDefinition {
+	rawDef := def
+	rawDef.Embed = runtimeartifacts.EmbedNever
+	rawDef.Artifact = make(map[string]runtimeartifacts.ArtifactSpec, len(def.Artifact))
+	for platform, artifact := range def.Artifact {
+		artifact.ResourcePath = ""
+		rawDef.Artifact[platform] = artifact
+	}
+
+	return rawDef
 }
 
 func parseFlags(args []string) (config, error) {
@@ -149,6 +207,9 @@ type resourceEmbed struct {
 	ResourceID string
 	VarName    string
 	DataFile   string
+	// Members holds the name of every entry a Glob:true resource matched at
+	// generation time, empty for a resource that isn't a glob template.
+	Members []string
 	// Hash is a content hash of this resource's embedded bytes, computed
 	// once here at generation time so the running binary never has to pay
 	// to hash its own embedded data on every startup.
@@ -179,7 +240,7 @@ type generator struct {
 func (g *generator) generatePlatform(ctx context.Context, spec runtimeartifacts.ResourceSpec) error {
 	resourceIDs := make([]string, 0, len(spec))
 	for resourceID, def := range spec {
-		if def.Embed {
+		if def.Embed != runtimeartifacts.EmbedNever {
 			resourceIDs = append(resourceIDs, resourceID)
 		}
 	}
@@ -203,55 +264,93 @@ func (g *generator) generatePlatform(ctx context.Context, spec runtimeartifacts.
 	return writePlatformFile(g.outputDir, data)
 }
 
-// resolveResourceEmbed fetches and stages one resource's raw artifact bytes
-// for g.goos/g.goarch, returning nil (not an error) when there's nothing to
-// embed: g.skipEmbed is set, or the resource declares no artifact for this
-// platform.
+// Returning nil, not an error, means there's nothing to embed: the resource
+// declares no artifact for this platform, or g.skipEmbed is set and the
+// artifact requires a real, potentially slow or networked fetch.
 func (g *generator) resolveResourceEmbed(
 	ctx context.Context,
 	resourceID string,
 	def runtimeartifacts.ResourceDefinition,
 ) (*resourceEmbed, error) {
-	if g.skipEmbed {
-		// Lint/test builds never look at the embedded bytes, so there's
-		// nothing for them to gain from a real fetch even once, cached or
-		// not: skip it unconditionally and just satisfy the build constraint.
+	artifact, err := def.Resolve(g.goos, g.goarch)
+	if err != nil {
 		return nil, nil
 	}
 
-	if _, err := def.Resolve(g.goos, g.goarch); err != nil {
+	if g.skipEmbed && def.Embed != runtimeartifacts.EmbedAlways {
+		// embed: always is the one exemption: it must still resolve to real
+		// data regardless of build speed concerns.
 		return nil, nil
 	}
 
-	// The real resources.yaml entry has extract: true and embed: true for this
-	// resource, which would make Get return the post-extraction resolved path
-	// and, once assets/resources/generated is linked into a process, prefer
-	// already-embedded bytes over a real fetch. Forcing both false here
-	// guarantees a real, checksum-verified network fetch of the raw artifact
-	// every time this tool runs, regardless of what resources.yaml declares or
-	// what the current process happens to have linked.
-	rawDef := def
+	if def.Glob {
+		return g.resolveGlobEmbed(ctx, resourceID, def, artifact)
+	}
+
+	return g.resolveRawEmbed(ctx, resourceID, def)
+}
+
+// This always fetches without extracting, regardless of what resources.yaml
+// declares: a running binary extracts the embedded bytes itself later if
+// the real entry declares extract: true.
+func (g *generator) resolveRawEmbed(
+	ctx context.Context, resourceID string, def runtimeartifacts.ResourceDefinition,
+) (*resourceEmbed, error) {
+	rawDef := rawDefFor(def)
 	rawDef.Extract = false
-	rawDef.Embed = false
-	// resource_path names a path inside the extracted archive, so it is
-	// meaningless for the raw artifact fetched here: joining it onto a bare
-	// file would resolve to a path that cannot exist. Clear it alongside
-	// Extract, on a fresh map so the caller's definition stays untouched.
-	rawDef.Artifact = make(map[string]runtimeartifacts.ArtifactSpec, len(def.Artifact))
-	for platform, artifact := range def.Artifact {
-		artifact.ResourcePath = ""
-		rawDef.Artifact[platform] = artifact
-	}
 
 	rawPath, err := g.manager.Get(ctx, rawDef, resourceID)
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(rawPath)
+	data, err := readResourceBytes(rawPath)
 	if err != nil {
 		return nil, err
 	}
 
+	return g.stageEmbed(resourceID, data, nil)
+}
+
+// A real directory is needed to glob within, so this fetches and extracts
+// resourceID exactly as declared. The embedded archive holds only the
+// matched entries, never the group's full content.
+func (g *generator) resolveGlobEmbed(
+	ctx context.Context,
+	resourceID string,
+	def runtimeartifacts.ResourceDefinition,
+	artifact runtimeartifacts.ArtifactSpec,
+) (*resourceEmbed, error) {
+	root, err := g.manager.Get(ctx, rawDefFor(def), resourceID)
+	if err != nil {
+		return nil, err
+	}
+
+	matches, err := runtimeartifacts.GlobMatches(root, artifact.ResourcePath)
+	if err != nil {
+		return nil, err
+	}
+
+	members := make([]string, 0, len(matches))
+	include := make(map[string]bool, len(matches))
+	for name, matchPath := range matches {
+		members = append(members, name)
+		relPath, err := filepath.Rel(root, matchPath)
+		if err != nil {
+			return nil, err
+		}
+		include[filepath.ToSlash(relPath)] = true
+	}
+	sort.Strings(members)
+
+	data, err := tarGzDirectory(root, include)
+	if err != nil {
+		return nil, err
+	}
+
+	return g.stageEmbed(resourceID, data, members)
+}
+
+func (g *generator) stageEmbed(resourceID string, data []byte, members []string) (*resourceEmbed, error) {
 	if err := os.MkdirAll(g.outputDir, dirPerm); err != nil {
 		return nil, err
 	}
@@ -267,8 +366,148 @@ func (g *generator) resolveResourceEmbed(
 		ResourceID: resourceID,
 		VarName:    goIdentifier(resourceID) + "Data",
 		DataFile:   dataFile,
+		Members:    members,
 		Hash:       hex.EncodeToString(sum[:]),
 	}, nil
+}
+
+// A directory is archived into a tar.gz in memory first, since embedding
+// stores a flat byte blob; a file's bytes are used as-is.
+func readResourceBytes(path string) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return tarGzDirectory(path, nil)
+	}
+
+	return os.ReadFile(path)
+}
+
+// tarGzDirectory archives root's contents into a tar.gz byte stream. If
+// include is non-nil, it names the archive's matched entries as slash-
+// separated paths relative to root; each entry, its ancestor directories
+// (needed to reach it), and everything beneath it are archived — this is how
+// a Glob:true resource embeds only its matches, not root's full content,
+// even for a pattern nested below root's own top level. Entry timestamps are
+// zeroed so the output is byte-for-byte deterministic for identical
+// directory content, regardless of the source files' own mtimes. Traversal
+// and file reads go through an os.Root scoped to root, so a symlink swapped
+// in after WalkDir stats an entry can't redirect the eventual open outside
+// root.
+func tarGzDirectory(root string, include map[string]bool) ([]byte, error) {
+	rootDir, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rootDir.Close() }()
+
+	var buf bytes.Buffer
+	gzipWriter := gzip.NewWriter(&buf)
+	tarWriter := tar.NewWriter(gzipWriter)
+
+	err = fs.WalkDir(rootDir.FS(), ".", func(relPath string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if relPath == "." {
+			return nil
+		}
+		if include != nil && !pathIncluded(include, relPath) {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+
+			return nil
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+
+		if info.Mode()&fs.ModeSymlink != 0 {
+			return writeSymlinkEntry(tarWriter, rootDir, relPath, info)
+		}
+
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(relPath)
+		if entry.IsDir() {
+			header.Name += "/"
+		}
+		header.ModTime = time.Time{}
+		header.AccessTime = time.Time{}
+		header.ChangeTime = time.Time{}
+
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+
+		file, err := rootDir.Open(relPath)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = file.Close() }()
+
+		_, err = io.Copy(tarWriter, file)
+
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tarWriter.Close(); err != nil {
+		return nil, err
+	}
+	if err := gzipWriter.Close(); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+// pathIncluded reports whether relPath belongs in the archive: it is itself
+// a matched entry, an ancestor directory of one, or nested beneath one.
+func pathIncluded(include map[string]bool, relPath string) bool {
+	if include[relPath] {
+		return true
+	}
+	for matched := range include {
+		if strings.HasPrefix(matched, relPath+"/") || strings.HasPrefix(relPath, matched+"/") {
+			return true
+		}
+	}
+
+	return false
+}
+
+// writeSymlinkEntry archives a symlink as a symlink, not as a copy of
+// whatever it currently resolves to: rootDir.Open would follow it (and
+// reject an escaping target), but a tar symlink header only needs the raw
+// link text, which Readlink returns without following anything.
+func writeSymlinkEntry(tarWriter *tar.Writer, rootDir *os.Root, relPath string, info fs.FileInfo) error {
+	target, err := rootDir.Readlink(relPath)
+	if err != nil {
+		return err
+	}
+	header, err := tar.FileInfoHeader(info, target)
+	if err != nil {
+		return err
+	}
+	header.Name = filepath.ToSlash(relPath)
+	header.ModTime = time.Time{}
+	header.AccessTime = time.Time{}
+	header.ChangeTime = time.Time{}
+
+	return tarWriter.WriteHeader(header)
 }
 
 // writePlatformFile gofmt-formats the rendered template output before
@@ -310,7 +549,9 @@ func platformFileName(goos, goarch string) string {
 }
 
 func dataFileName(resourceID, goos, goarch string) string {
-	return strings.ReplaceAll(resourceID, "-", "_") + "_" + goos + "_" + goarch + ".bin"
+	flat := strings.ReplaceAll(resourceID, "-", "_")
+
+	return flat + "_" + goos + "_" + goarch + ".bin"
 }
 
 // goIdentifier turns a kebab-case resource ID into a camelCase Go identifier.

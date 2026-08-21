@@ -4,6 +4,7 @@
 package runtimeartifacts
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -19,17 +20,116 @@ type ResourceSpec map[string]ResourceDefinition
 //nolint:golines // golines and tagalign disagree on struct tag alignment here; tagalign wins.
 type ResourceDefinition struct {
 	Extract  bool                    `json:"extract"  yaml:"extract"`
-	Embed    bool                    `json:"embed"    yaml:"embed"`
+	Embed    EmbedMode               `json:"embed"    yaml:"embed"`
 	Artifact map[string]ArtifactSpec `json:"artifact" yaml:"artifact"`
 	// Glob marks resource_path as a pattern to match within the artifact's
 	// resolved content, instead of a literal subpath.
 	Glob bool `json:"glob,omitempty" yaml:"glob,omitempty"`
 }
 
+// EmbedMode declares whether a resource's data is embedded into the compiled
+// binary, and whether that still happens for a build that otherwise skips
+// real embedding for speed (SKIP_EMBED=true, used by lint/test builds that
+// never look at the bytes). It parses from YAML/JSON as one of the values
+// false, true, or "always".
+// Unmarshal* needs a pointer receiver to mutate; Marshal* deliberately stays
+// on a value receiver so it still works on a non-addressable EmbedMode, such
+// as a ResourceDefinition read from a map value.
+//
+//nolint:recvcheck
+type EmbedMode int
+
+const (
+	// EmbedNever fetches this resource at runtime; it is never embedded.
+	EmbedNever EmbedMode = iota
+	// EmbedDefault embeds this resource in real builds, but is skipped under
+	// SKIP_EMBED=true.
+	EmbedDefault
+	// EmbedAlways embeds this resource even under SKIP_EMBED=true. Reserved
+	// for small, locally-sourced resources that cost nothing to embed.
+	EmbedAlways
+)
+
+func embedModeFromValue(raw any) (EmbedMode, error) {
+	switch value := raw.(type) {
+	case bool:
+		if value {
+			return EmbedDefault, nil
+		}
+
+		return EmbedNever, nil
+	case string:
+		if value == "always" {
+			return EmbedAlways, nil
+		}
+	default:
+	}
+
+	return EmbedNever, fmt.Errorf(
+		"invalid embed value %#v: must be true, false, or %q", raw, "always",
+	)
+}
+
+func (m *EmbedMode) UnmarshalYAML(node *yaml.Node) error {
+	var raw any
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	mode, err := embedModeFromValue(raw)
+	if err != nil {
+		return err
+	}
+	*m = mode
+
+	return nil
+}
+
+func (m EmbedMode) MarshalYAML() (any, error) {
+	return m.embedValue()
+}
+
+func (m *EmbedMode) UnmarshalJSON(data []byte) error {
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	mode, err := embedModeFromValue(raw)
+	if err != nil {
+		return err
+	}
+	*m = mode
+
+	return nil
+}
+
+func (m EmbedMode) MarshalJSON() ([]byte, error) {
+	value, err := m.embedValue()
+	if err != nil {
+		return nil, err
+	}
+
+	return json.Marshal(value)
+}
+
+func (m EmbedMode) embedValue() (any, error) {
+	switch m {
+	case EmbedNever:
+		return false, nil
+	case EmbedDefault:
+		return true, nil
+	case EmbedAlways:
+		return "always", nil
+	default:
+		return nil, fmt.Errorf("invalid embed mode %d", m)
+	}
+}
+
 // ArtifactSpec describes one downloadable artifact for a specific platform.
 type ArtifactSpec struct {
 	URL    string `yaml:"url"`
 	Sha256 string `yaml:"sha256"`
+	// DownloadPath's suffix picks the extractor (see extractors), so it must
+	// look like an archive even when the source itself is a bare directory.
 	//nolint:tagliatelle // YAML schema uses snake_case field names.
 	DownloadPath string `yaml:"download_path,omitempty"`
 	//nolint:tagliatelle // YAML schema uses snake_case field names.

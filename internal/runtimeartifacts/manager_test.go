@@ -69,11 +69,11 @@ not-embedded:
 	if err != nil {
 		t.Fatalf("expected spec to be valid, got %v", err)
 	}
-	if !spec["embedded"].Embed {
-		t.Fatal("expected embed: true to round-trip as true")
+	if spec["embedded"].Embed != EmbedDefault {
+		t.Fatal("expected embed: true to round-trip as EmbedDefault")
 	}
-	if spec["not-embedded"].Embed {
-		t.Fatal("expected omitted embed field to default to false")
+	if spec["not-embedded"].Embed != EmbedNever {
+		t.Fatal("expected omitted embed field to default to EmbedNever")
 	}
 }
 
@@ -480,7 +480,7 @@ func TestManager_RequestResolvesEmbeddedResourceWithoutNetwork(t *testing.T) {
 	spec := ResourceSpec{
 		resourceID: {
 			Extract: true,
-			Embed:   true,
+			Embed:   EmbedDefault,
 			Artifact: map[string]ArtifactSpec{
 				"darwin/arm64": {
 					URL:          server.URL + "/artifact.zip",
@@ -530,7 +530,7 @@ func TestManager_RequestFailsWhenEmbeddedResourceNotRegistered(t *testing.T) {
 	spec := ResourceSpec{
 		"embedded-missing-test": {
 			Extract: true,
-			Embed:   true,
+			Embed:   EmbedDefault,
 			Artifact: map[string]ArtifactSpec{
 				"darwin/arm64": {
 					URL:          server.URL + "/artifact.zip",
@@ -565,7 +565,7 @@ func TestManager_EmbeddedResourceIdentityComesFromContentHash(t *testing.T) {
 	})
 	spec := ResourceSpec{
 		resourceID: {
-			Embed: true,
+			Embed: EmbedDefault,
 			Artifact: map[string]ArtifactSpec{
 				anyPlatformKey: {URL: "embedded://" + resourceID},
 			},
@@ -1273,7 +1273,7 @@ func TestManager_GetEmbeddedResourcePrefersRegisteredHashOverADeclaredChecksum(t
 		delete(embeddedHashes, resourceID)
 	})
 	def := ResourceDefinition{
-		Embed: true,
+		Embed: EmbedDefault,
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {
 				URL:    "https://example.invalid/archive.tar.gz",
@@ -1923,7 +1923,7 @@ func TestManager_RequestMember_EmbeddedGlobResourceIsExtractedForMatching(t *tes
 	spec := ResourceSpec{
 		resourceID: {
 			Glob:  true,
-			Embed: true,
+			Embed: EmbedDefault,
 			Artifact: map[string]ArtifactSpec{
 				anyPlatformKey: {
 					URL:          "https://example.com/" + resourceID + ".tar.gz",
