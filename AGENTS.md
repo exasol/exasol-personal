@@ -10,7 +10,7 @@ Always read everything that is linked here at least once.
 
 ## Repository Workflow
 
-Before creating a branch, committing, or opening a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md) and follow the contribution process documented there.
+At the start of any task that may modify the repository, read the [Code and Writing Guidelines](CONTRIBUTING.md#code-and-writing-guidelines) before planning or editing. If the task may produce commits, also read the [Commit Guidelines](CONTRIBUTING.md#commit-guidelines) before planning task or commit boundaries. When working with OpenSpec, read the [OpenSpec Guidelines](CONTRIBUTING.md#openspec-guidelines). Follow the rest of the contribution process in [CONTRIBUTING.md](CONTRIBUTING.md) before creating a branch, committing, or opening a pull request.
 
 When preparing a branch or pull request, ask the user for a related Jira or GitHub issue ID if they have not already provided one; when provided, include it in the branch name and pull request description.
 
