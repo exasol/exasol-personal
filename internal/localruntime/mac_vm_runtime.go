@@ -216,23 +216,6 @@ func (runtime *MacVMRuntime) Status(ctx context.Context) (*RuntimeStatus, error)
 	return &RuntimeStatus{Running: installStatus.Running}, nil
 }
 
-type PortState string
-
-const (
-	PortStateReachable PortState = "reachable"
-	PortStateRefused   PortState = "refused"
-	PortStateBlocked   PortState = "blocked"
-	PortStateTimeout   PortState = "timeout"
-)
-
-type PortHealth struct {
-	State PortState `json:"state"`
-}
-
-type HealthCheckResult struct {
-	Ports map[string]PortHealth `json:"ports"`
-}
-
 func (runtime *MacVMRuntime) HealthCheck(ctx context.Context) (*HealthCheckResult, error) {
 	return runnerCommandJSON[HealthCheckResult](ctx, runtime, "health-check")
 }
