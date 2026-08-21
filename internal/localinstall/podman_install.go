@@ -186,11 +186,6 @@ func (install *PodmanInstall) Start(
 		return install.failureWithDiagnostics(ctx, outErr, containerName, err)
 	}
 
-	imageTag := "localhost/" + containerName + ":latest"
-	if err := install.runPodman(ctx, out, outErr, "tag", loadedImage, imageTag); err != nil {
-		return install.failureWithDiagnostics(ctx, outErr, containerName,
-			fmt.Errorf("failed to tag Nano image %s as %s: %w", loadedImage, imageTag, err))
-	}
 	availableSLCs, err := install.materializeSLCs(ctx, out, outErr, containerName, startConfig.SLCs)
 	if err != nil {
 		return err
@@ -220,7 +215,7 @@ func (install *PodmanInstall) Start(
 	if startConfig.VersionCheck.Enabled {
 		args = append(args, "-e", "VERSION_CHECK_IDENTITY="+startConfig.VersionCheck.Identity)
 	}
-	args = append(args, imageTag, "init")
+	args = append(args, loadedImage, "init")
 	if freshDeployment && len(startConfig.InitParams) > 0 {
 		args = append(args, "params="+strings.Join(startConfig.InitParams, " "))
 	}
