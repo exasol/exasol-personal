@@ -10,11 +10,17 @@ Always read everything that is linked here at least once.
 
 ## Repository Workflow
 
-Before creating a branch, committing, or opening a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md) and follow the contribution process documented there.
+At the start of any task that may modify the repository, read the [Code and Writing Guidelines](CONTRIBUTING.md#code-and-writing-guidelines) before planning or editing. If the task may produce commits, also read the [Commit Guidelines](CONTRIBUTING.md#commit-guidelines) before planning task or commit boundaries. Follow the rest of the contribution process in [CONTRIBUTING.md](CONTRIBUTING.md) before creating a branch, committing, or opening a pull request.
 
 When preparing a branch or pull request, ask the user for a related Jira or GitHub issue ID if they have not already provided one; when provided, include it in the branch name and pull request description.
 
 For non-trivial changes, propose using OpenSpec even if the user has not asked for it; for OpenSpec-backed work, propose archiving the completed change before committing and opening a pull request.
+
+## Git Safety
+
+When using Git to protect work in progress, keep stashes, temporary tags, and temporary branches narrowly scoped. Do not pass `-u` or `-a` to `git stash` unless untracked or ignored files are explicitly in scope.
+
+Inspect the complete contents of a stash, temporary tag, or temporary branch before deleting it. Prefer an isolated worktree for history rewrites when practical.
 
 ## Documentation Guidelines
 
