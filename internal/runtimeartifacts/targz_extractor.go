@@ -14,6 +14,8 @@ import (
 	"strings"
 )
 
+const tarPermissionMask = 0o777
+
 type TarGzExtractor struct{}
 
 func (*TarGzExtractor) CanExtract(filename string) bool {
@@ -72,7 +74,7 @@ func extractTarEntry(tarReader *tar.Reader, hdr *tar.Header, dstPath string) (bo
 		return false, err
 	}
 
-	mode := os.FileMode(hdr.Mode).Perm()
+	mode := os.FileMode(hdr.Mode & tarPermissionMask).Perm()
 
 	switch hdr.Typeflag {
 	case tar.TypeDir:
