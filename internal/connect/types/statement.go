@@ -96,10 +96,10 @@ func ClassifyStatement(sql string) StatementType {
 
 func (statementType StatementType) UsesExecPath() bool {
 	switch statementType {
-	case StatementTypeUnknown,
-		StatementTypeSelect,
+	case StatementTypeSelect,
 		StatementTypeWith,
-		StatementTypeExplain:
+		StatementTypeExplain,
+		StatementTypeUnknown:
 		return false
 	case StatementTypeInsert,
 		StatementTypeUpdate,
@@ -170,11 +170,11 @@ func stripLeadingSQLComments(sql string) string {
 			}
 			sql = trimmed[newline+1:]
 		case strings.HasPrefix(trimmed, "/*"):
-			end := strings.Index(trimmed, "*/")
-			if end < 0 {
+			_, after, ok := strings.Cut(trimmed, "*/")
+			if !ok {
 				return ""
 			}
-			sql = trimmed[end+2:]
+			sql = after
 		default:
 			return trimmed
 		}

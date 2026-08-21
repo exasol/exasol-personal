@@ -73,13 +73,15 @@ func addResolvedDeploymentDirNotice(
 	name string,
 ) {
 	switch source {
+	case deploymentDirSourceNone,
+		deploymentDirSourceExplicit,
+		deploymentDirSourceCurrent:
 	case deploymentDirSourceDefault:
 		addTerminalNotice("Using default deployment directory: " + deployment.Root())
 	case deploymentDirSourceNamed:
 		addTerminalNotice(fmt.Sprintf(
 			"Using named deployment directory %q: %s", name, deployment.Root(),
 		))
-	case deploymentDirSourceNone, deploymentDirSourceExplicit, deploymentDirSourceCurrent:
 	default:
 	}
 }

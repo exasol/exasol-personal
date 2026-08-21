@@ -377,14 +377,14 @@ func runSLCCustomUpdate(cmd *cobra.Command) error {
 
 func customSLCOutcomeSuffix(outcome deploy.SLCApplyOutcome) string {
 	switch outcome {
+	case deploy.SLCApplyNone:
+		return ""
 	case deploy.SLCApplyRestarted:
 		return " Database restarted; the language is ready to use."
 	case deploy.SLCApplyStarted:
 		return " Database started; the language is ready to use."
 	case deploy.SLCApplyDeferred:
 		return " It will become available on the next start."
-	case deploy.SLCApplyNone:
-		return ""
 	default:
 		return ""
 	}
@@ -476,7 +476,7 @@ func slcConfirmFunc(cmd *cobra.Command, autoApprove bool, action string) deploy.
 }
 
 var slcListCmd = &cobra.Command{
-	Use:   "list",
+	Use:   commandList,
 	Short: "List available script language containers and which are installed",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
