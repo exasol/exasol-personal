@@ -230,7 +230,7 @@ func scanInstallationPresetSelection(args []string) (*deploy.PresetRef, error) {
 		return nil, errors.New("no command with installation preset argument found")
 	}
 
-	positionals, err := preregisteredPositionals(remainingArgs)
+	positionals, err := preregisteredPositionals(cmd, remainingArgs)
 	if err != nil {
 		return nil, err
 	}
