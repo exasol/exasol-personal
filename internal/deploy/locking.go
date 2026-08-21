@@ -122,8 +122,7 @@ func activeOperationInProgressMessage(operation string) string {
 }
 
 func deploymentLockMessage(err error) string {
-	var lockErr *deploymentDirectoryLockedError
-	if errors.As(err, &lockErr) {
+	if lockErr, ok := errors.AsType[*deploymentDirectoryLockedError](err); ok {
 		return lockErr.message
 	}
 

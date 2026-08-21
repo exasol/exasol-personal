@@ -106,18 +106,14 @@ func (s *TaskRunnerImpl) RunScriptParallel(
 	mtx := sync.Mutex{}
 
 	for _, node := range nodes {
-		waitGroup.Add(1)
-
-		go func() {
-			defer waitGroup.Done()
-
+		waitGroup.Go(func() {
 			err := s.RunScript(ctx, script, node, nil, nil)
 
 			mtx.Lock()
 			defer mtx.Unlock()
 
 			results[node.Name] = err
-		}()
+		})
 	}
 
 	waitGroup.Wait()

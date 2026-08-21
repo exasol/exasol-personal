@@ -42,7 +42,7 @@ const acquireTimeout = 5 * time.Minute
 
 type cacheIndex struct {
 	Version     int                        `json:"version"`
-	LastCleanup time.Time                  `json:"lastCleanupAt,omitempty"`
+	LastCleanup time.Time                  `json:"lastCleanupAt,omitzero"`
 	Entries     map[string]cacheIndexEntry `json:"entries"`
 }
 

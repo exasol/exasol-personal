@@ -296,12 +296,10 @@ func TestSharedLockStressLeavesUnlocked(t *testing.T) {
 	errCh := make(chan error, workers)
 
 	for range workers {
-		waitGroup.Add(1)
-		go func() {
-			defer waitGroup.Done()
+		waitGroup.Go(func() {
 			<-start
 			acquireReleaseSharedRepeatedly(mutex, iterations, acquireTimeout, errCh)
-		}()
+		})
 	}
 	close(start)
 	waitGroup.Wait()

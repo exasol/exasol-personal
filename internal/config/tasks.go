@@ -37,8 +37,8 @@ func (s *Task) UnmarshalYAML(value *yaml.Node) error {
 	totalSetTasks := 0
 
 	val := reflect.ValueOf(s).Elem()
-	for i := range val.NumField() {
-		if !val.Field(i).IsNil() {
+	for _, field := range val.Fields() {
+		if !field.IsNil() {
 			totalSetTasks++
 		}
 	}
