@@ -124,7 +124,9 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 	}
 	// ArtifactSpec.URL may carry an @ref suffix; strip it before classification.
 	gitRepoURL, _ := ParseGitURL(a.URL)
-	if IsGitSourceURL(gitRepoURL) {
+
+	switch {
+	case IsGitSourceURL(gitRepoURL):
 		if strings.TrimSpace(a.Sha256) != "" {
 			return fmt.Errorf(
 				"resource %q artifact %q must not define sha256 for a git source"+
@@ -133,7 +135,11 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 				ctx.variant,
 			)
 		}
-	} else {
+	case (FileSource{}).CanFetch(a.URL):
+		// Local (file://, or bare local path) sources are first-party content whose
+		// integrity comes from being part of the same versioned repository commit,
+		// not from a hand-authored checksum, so a checksum is optional for them.
+	default:
 		if strings.TrimSpace(a.Sha256) == "" {
 			return fmt.Errorf(
 				"resource %q artifact %q must define sha256",
