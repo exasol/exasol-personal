@@ -177,8 +177,7 @@ func readDeploymentVersionMarker(deployment config.DeploymentDir) (string, error
 func logCompatibilityFailure(commandName string, err error) {
 	// Structured logging is useful for automation/diagnostics while keeping cmd output
 	// as just the returned error message.
-	var inc *IncompatibleError
-	if errors.As(err, &inc) {
+	if inc, ok := errors.AsType[*IncompatibleError](err); ok {
 		slog.Error(
 			"deployment directory compatibility check failed",
 			"command", inc.CommandName,

@@ -190,19 +190,19 @@ func TestDeploymentCompatibilityRules_MinorBaselineAndNeverNewerThanLauncher(t *
 			name:              "rejects deployment newer patch than launcher",
 			deploymentVersion: "1.2.7",
 			launcherVersion:   "1.2.5",
-			wantReason:        reasonPtr(deploymentcompatibility.ReasonDeploymentNewerThanLauncher),
+			wantReason:        new(deploymentcompatibility.ReasonDeploymentNewerThanLauncher),
 		},
 		{
 			name:              "rejects deployment newer minor than launcher",
 			deploymentVersion: "1.3.0",
 			launcherVersion:   "1.2.5",
-			wantReason:        reasonPtr(deploymentcompatibility.ReasonDeploymentNewerThanLauncher),
+			wantReason:        new(deploymentcompatibility.ReasonDeploymentNewerThanLauncher),
 		},
 		{
 			name:              "rejects deployment older than minimum minor",
 			deploymentVersion: "1.1.9",
 			launcherVersion:   "1.2.5",
-			wantReason:        reasonPtr(deploymentcompatibility.ReasonDeploymentTooOld),
+			wantReason:        new(deploymentcompatibility.ReasonDeploymentTooOld),
 		},
 	}
 
@@ -221,10 +221,6 @@ func TestDeploymentCompatibilityRules_MinorBaselineAndNeverNewerThanLauncher(t *
 			assertDeploymentCompatibilityResult(t, res, testcase.wantReason)
 		})
 	}
-}
-
-func reasonPtr(reason deploymentcompatibility.Reason) *deploymentcompatibility.Reason {
-	return &reason
 }
 
 // assertDeploymentCompatibilityResult checks a compatibility result against the expected
@@ -359,8 +355,7 @@ func TestRequireMinorBaselineDeploymentCompatibility_DoesNotPanicOnInvalidVersio
 	if res.Allowed {
 		t.Fatal("expected disallowed")
 	}
-	var inv *deploymentcompatibility.InvalidVersionError
-	if !errors.As(res.Err, &inv) {
+	if _, ok := errors.AsType[*deploymentcompatibility.InvalidVersionError](res.Err); !ok {
 		t.Fatalf("expected InvalidVersionError, got %T: %v", res.Err, res.Err)
 	}
 }

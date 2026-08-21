@@ -148,15 +148,11 @@ func TestStructuredSQLErrorFromError(t *testing.T) {
 			ErrorCode: "ETL-6009",
 			SQLState:  "42636",
 			Message:   "structured already",
-			SessionID: ptrToString("12345"),
+			SessionID: new("12345"),
 		}
 
 		structured := StructuredSQLErrorFromError(fakeStructuredSQLError{structured: expected})
 
 		require.Equal(t, expected, structured)
 	})
-}
-
-func ptrToString(value string) *string {
-	return &value
 }

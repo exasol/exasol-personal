@@ -57,7 +57,7 @@ func newBlockedStateError(deployment config.DeploymentDir, sentinel error) error
 	}
 }
 
-// waitParams holds configuration for the generic waitForDatabaseState helper.
+// WaitParams holds configuration for the generic waitForDatabaseState helper.
 type WaitParams struct {
 	InitialBackoff int
 	MaxBackoff     int
@@ -148,10 +148,7 @@ func PollWithBackoff(
 func logPollAttempt(logPrefix string, elapsed, backoff int, deadline time.Time) {
 	logValues := []any{"elapsed_seconds", elapsed, "next_retry_in_seconds", backoff}
 	if !deadline.IsZero() {
-		remaining := int(time.Until(deadline).Seconds())
-		if remaining < 0 {
-			remaining = 0
-		}
+		remaining := max(int(time.Until(deadline).Seconds()), 0)
 		logValues = append(logValues, "remaining_seconds", remaining)
 	}
 	slog.Info(logPrefix, logValues...)
