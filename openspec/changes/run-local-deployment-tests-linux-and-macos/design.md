@@ -11,6 +11,7 @@ The deployment-test workflow currently filters a declarative cloud plan but hand
 - Preserve the self-hosted macOS runner requirements and cloud authentication boundaries.
 - Make unsupported exclusive selections fail before matrix expansion.
 - Run portable local lifecycle coverage on both runtimes while reserving platform guards for macOS VM-specific behavior.
+- Tolerate transient connection resets from non-VM local-runtime port forwarding while the database is still starting.
 
 **Non-Goals:**
 
@@ -46,6 +47,10 @@ The deployment-test workflow currently filters a declarative cloud plan but hand
 
    Portable lifecycle behavior runs on both Linux and macOS and asserts each runtime's published shell capability. Memory sizing, historical runner updates, and VM-daemon recovery remain guarded for the macOS VM runtime. COS-only diagnostics do not carry the local marker, and the obsolete unsupported-platform escape-hatch test is removed because Linux is supported and the launcher no longer implements that bypass. Custom-SLC cases remain selected but may skip when maintainers do not supply their manual test artifact.
 
+7. Classify non-VM connection resets as refused.
+
+   A non-VM local runtime can publish the host port before Nano accepts connections, causing a readiness dial to reach the forwarding path but receive a connection reset. This proves the path is not blocked, so non-VM health checks classify the reset like a refused connection and allow the existing database readiness wait to continue. Other unexpected network errors remain blocked.
+
 ## Risks / Trade-offs
 
 - GitHub-hosted Ubuntu runner image changes can affect Podman behavior -> retain the repository's container-registry override and surface deployment diagnostics through the existing test action.
@@ -53,6 +58,7 @@ The deployment-test workflow currently filters a declarative cloud plan but hand
 - Local tests are slow and resource-intensive -> retain manual dispatch and the protected deployment-test environment.
 - Some local tests are macOS VM-specific -> retain their explicit skip decorators while keeping generic lifecycle coverage outside those guards.
 - Optional custom-SLC coverage depends on a maintainer-supplied artifact -> retain its explicit skip when neither supported source variable is configured.
+- A connection reset can also occur after startup for unrelated reasons -> limit the relaxed classification to reachability diagnosis; database readiness still has to succeed within its existing timeout.
 
 ## Migration Plan
 
