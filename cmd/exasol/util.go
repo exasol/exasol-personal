@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -116,7 +116,7 @@ func presetNamesForHelp(listname string, names []string) string {
 		}
 		namesList = append(namesList, name)
 	}
-	sort.Strings(namesList)
+	slices.Sort(namesList)
 	if len(namesList) == 0 {
 		return "(none)"
 	}

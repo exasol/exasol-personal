@@ -12,7 +12,7 @@ import (
 	"log/slog"
 	"net"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -42,12 +42,12 @@ type DeploymentInfo struct {
 
 type DeploymentNode struct {
 	AvailabilityZone string             `json:"availabilityZone,omitempty"`
-	Database         DeploymentDatabase `json:"database,omitempty"`
+	Database         DeploymentDatabase `json:"database,omitzero"`
 	DnsName          string             `json:"dnsName,omitempty"`
 	InstanceId       string             `json:"instanceId,omitempty"`
 	PrivateIp        string             `json:"privateIp,omitempty"`
 	PublicIp         string             `json:"publicIp,omitempty"`
-	Ssh              DeploymentSSH      `json:"ssh,omitempty"`
+	Ssh              DeploymentSSH      `json:"ssh,omitzero"`
 	TlsCert          string             `json:"tlsCert,omitempty"`
 }
 
@@ -153,14 +153,14 @@ func GetDeploymentInfoFilePath(deploymentDir string) (string, bool, error) {
 
 var ErrNoNodeDetailsFile = errors.New("node details file not found in deployment directory")
 
-// Returns the list of node names, sorted increasingly.
+// ListNodes returns the node names in ascending order.
 func (s *DeploymentInfo) ListNodes() []string {
 	result := make([]string, 0, len(s.Nodes))
 	for nodeName := range s.Nodes {
 		result = append(result, nodeName)
 	}
 
-	sort.Strings(result)
+	slices.Sort(result)
 
 	return result
 }

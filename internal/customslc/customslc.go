@@ -7,7 +7,7 @@ package customslc
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -46,7 +46,7 @@ func NormalizeLanguage(raw string) (Language, error) {
 	}
 }
 
-// Upper-cased so comparisons and stored values match how the database reports identifiers.
+// NormalizeAlias upper-cases aliases to match database-reported identifiers.
 func NormalizeAlias(alias string) string {
 	return strings.ToUpper(strings.TrimSpace(alias))
 }
@@ -58,7 +58,7 @@ func BuildActivationURI(dir string, language Language) string {
 	)
 }
 
-// Tokens without an '=' are skipped rather than guessed at.
+// ParseScriptLanguages skips tokens without an '=' rather than guessing at their meaning.
 func ParseScriptLanguages(value string) []AliasEntry {
 	fields := strings.Fields(value)
 	entries := make([]AliasEntry, 0, len(fields))
@@ -82,7 +82,7 @@ func SerializeScriptLanguages(entries []AliasEntry) string {
 	return strings.Join(parts, " ")
 }
 
-// Every other entry (builtins included) is preserved: read-merge-write, never a full replace.
+// SetAlias preserves every other entry, including builtins, through a read-merge-write update.
 func SetAlias(entries []AliasEntry, alias, uri string) []AliasEntry {
 	normalized := NormalizeAlias(alias)
 	updated := make([]AliasEntry, 0, len(entries)+1)
@@ -158,7 +158,7 @@ func BuiltinAliases(entries []AliasEntry) []string {
 			aliases = append(aliases, entry.Alias)
 		}
 	}
-	sort.Strings(aliases)
+	slices.Sort(aliases)
 
 	return aliases
 }

@@ -10,7 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 
 	"github.com/exasol/exasol-personal/assets"
 )
@@ -75,7 +75,7 @@ func ListEmbeddedInfrastructuresPresets() []string {
 			infrastructures = append(infrastructures, entry.Name())
 		}
 	}
-	sort.Strings(infrastructures)
+	slices.Sort(infrastructures)
 
 	return infrastructures
 }
@@ -96,7 +96,7 @@ func ListEmbeddedInstallationsPresets() []string {
 		}
 	}
 
-	sort.Strings(installs)
+	slices.Sort(installs)
 
 	return installs
 }
