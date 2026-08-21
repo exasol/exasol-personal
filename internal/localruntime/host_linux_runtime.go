@@ -190,7 +190,7 @@ func classifyHostPortHealth(err error) PortState {
 	if errors.As(err, &netError) && netError.Timeout() {
 		return PortStateTimeout
 	}
-	if errors.Is(err, syscall.ECONNREFUSED) {
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) {
 		return PortStateRefused
 	}
 

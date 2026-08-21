@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -243,6 +244,25 @@ func TestLinuxHostHealthCheck_ProbesRecoveredPublishedPort(t *testing.T) {
 	}
 	if dialedNetwork != "tcp" || dialedAddress != "127.0.0.1:28563" {
 		t.Fatalf("expected published loopback probe, got %s %s", dialedNetwork, dialedAddress)
+	}
+}
+
+func TestClassifyHostPortHealth_ConnectionResetIsRefused(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	dialError := &net.OpError{
+		Op:  "dial",
+		Net: "tcp",
+		Err: os.NewSyscallError("connect", syscall.ECONNRESET),
+	}
+
+	// When
+	state := classifyHostPortHealth(dialError)
+
+	// Then
+	if state != PortStateRefused {
+		t.Fatalf("expected a connection reset to be refused, got %q", state)
 	}
 }
 
