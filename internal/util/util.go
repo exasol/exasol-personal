@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/term"
 )
@@ -89,7 +90,7 @@ func (o Optional[T]) Unwrap() (T, bool) {
 	return o.value, o.present
 }
 
-// Helper function to log and wrap an error in one step.
+// LoggedError logs and wraps an error in one step.
 func LoggedError(err error, context string, args ...any) error {
 	if context == "" {
 		slog.Error(err.Error(), args...)
@@ -100,13 +101,15 @@ func LoggedError(err error, context string, args ...any) error {
 	msg := context
 	if len(args) > 0 {
 		msg = context + ": "
+		var msgSb103 strings.Builder
 		for i, arg := range args {
 			if i%2 == 0 { //nolint: revive
-				msg += fmt.Sprintf("%v=", arg)
+				_, _ = fmt.Fprintf(&msgSb103, "%v=", arg)
 			} else {
-				msg += fmt.Sprintf("\"%v\" ", arg)
+				_, _ = fmt.Fprintf(&msgSb103, "\"%v\" ", arg)
 			}
 		}
+		msg += msgSb103.String()
 	}
 
 	return fmt.Errorf("%w: %s", err, msg)
