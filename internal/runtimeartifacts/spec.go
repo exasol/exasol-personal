@@ -15,10 +15,15 @@ import (
 type ResourceSpec map[string]ResourceDefinition
 
 // ResourceDefinition describes how to fetch and materialize a resource.
+//
+//nolint:golines // golines and tagalign disagree on struct tag alignment here; tagalign wins.
 type ResourceDefinition struct {
 	Extract  bool                    `json:"extract"  yaml:"extract"`
 	Embed    bool                    `json:"embed"    yaml:"embed"`
 	Artifact map[string]ArtifactSpec `json:"artifact" yaml:"artifact"`
+	// Glob marks resource_path as a pattern to match within the artifact's
+	// resolved content, instead of a literal subpath.
+	Glob bool `json:"glob,omitempty" yaml:"glob,omitempty"`
 }
 
 // ArtifactSpec describes one downloadable artifact for a specific platform.
@@ -96,6 +101,7 @@ func (d ResourceDefinition) validate(resourceID string) error {
 			resourceID: resourceID,
 			variant:    key,
 			extract:    d.Extract,
+			glob:       d.Glob,
 		}); err != nil {
 			return err
 		}
@@ -116,6 +122,7 @@ type artifactValidationContext struct {
 	resourceID string
 	variant    string
 	extract    bool
+	glob       bool
 }
 
 func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
@@ -147,6 +154,50 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 				ctx.variant,
 			)
 		}
+	}
+
+	if ctx.glob {
+		return validateGlobResourcePath(a, ctx)
+	}
+
+	return nil
+}
+
+// A git checkout is already a directory, so a glob template with a git
+// source must not declare extract: true. Any other non-local source must,
+// since a git checkout or an extracted archive is the only way to have a
+// directory tree to glob within.
+func validateGlobResourcePath(artifact ArtifactSpec, ctx artifactValidationContext) error {
+	if strings.TrimSpace(artifact.ResourcePath) == "" {
+		return fmt.Errorf(
+			"resource %q artifact %q must define resource_path with a glob pattern",
+			ctx.resourceID,
+			ctx.variant,
+		)
+	}
+	// ArtifactSpec.URL may carry an @ref suffix; strip it before classification.
+	gitRepoURL, _ := ParseGitURL(artifact.URL)
+	if IsGitSourceURL(gitRepoURL) {
+		if ctx.extract {
+			return fmt.Errorf(
+				"resource %q artifact %q must not declare extract: true for a git source"+
+					" (a checkout is already a directory)",
+				ctx.resourceID,
+				ctx.variant,
+			)
+		}
+
+		return nil
+	}
+	if (FileSource{}).CanFetch(artifact.URL) {
+		return nil
+	}
+	if !ctx.extract {
+		return fmt.Errorf(
+			"resource %q artifact %q must declare extract: true to use a glob resource_path",
+			ctx.resourceID,
+			ctx.variant,
+		)
 	}
 
 	return nil
