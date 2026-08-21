@@ -21,7 +21,6 @@ const (
 	testDeploymentID       = "podman-install-test"
 	testContainerName      = "exasol-db-" + testDeploymentID
 	testLoadedImage        = "docker.io/exasol/nano:test"
-	testTaggedImage        = "localhost/" + testContainerName + ":latest"
 	testExecutableFileMode = 0o700
 )
 
@@ -45,16 +44,41 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 	assertCommandLog(t, fixture.logPath, []string{
 		"<podman><container><exists><" + testContainerName + ">",
 		"<podman><load><-i><" + fixture.imagePath + ">",
-		"<podman><tag><" + testLoadedImage + "><" + testTaggedImage + ">",
 		"<sync>",
 		"<podman><run><-d><--replace><--name><" + testContainerName + ">" +
 			"<--shm-size=512mb><--pids-limit=-1><--security-opt><unmask=ALL>" +
 			"<--restart><always><-p><28563:8563><-v><" + startConfig.DataDir + ":/exa:Z>" +
-			"<" + testTaggedImage + "><init><params=maxConnectionsLicenseLimit=20>" +
+			"<" + testLoadedImage + "><init><params=maxConnectionsLicenseLimit=20>" +
 			"<VERSION_CHECK_ENABLED=0>",
 	})
 	if !strings.Contains(out.String(), loadedImagePrefix+" "+testLoadedImage) {
 		t.Fatalf("expected load output to be forwarded, got %q", out.String())
+	}
+}
+
+func TestPodmanInstallStart_UsesLoadedNanoImageID(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	const loadedImageID = "sha256:0123456789abcdef"
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	writeTestFile(
+		t,
+		filepath.Join(fixture.scenarioDir, "load-output"),
+		loadedImagePrefix+" "+loadedImageID+"\n",
+	)
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected start with loaded image ID to succeed, got %v", err)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	runCommand := commands[len(commands)-1]
+	if !strings.Contains(runCommand, "<"+loadedImageID+"><init>") {
+		t.Fatalf("expected run command to use loaded image ID, got %q", runCommand)
 	}
 }
 
@@ -102,17 +126,18 @@ func TestPodmanInstallStart_ReusesExistingDatabaseConfiguration(t *testing.T) {
 		t.Fatalf("expected existing database start to succeed, got %v", err)
 	}
 	commands := readCommandLog(t, fixture.logPath)
-	if len(commands) != 5 {
-		t.Fatalf("expected five execution-environment commands, got %#v", commands)
+	if len(commands) != 4 {
+		t.Fatalf("expected four execution-environment commands, got %#v", commands)
 	}
+	runCommand := commands[len(commands)-1]
 	if !strings.HasSuffix(
-		commands[4],
-		"<"+testTaggedImage+"><init><VERSION_CHECK_ENABLED=0>",
+		runCommand,
+		"<"+testLoadedImage+"><init><VERSION_CHECK_ENABLED=0>",
 	) {
-		t.Fatalf("expected existing database to run init without params, got %q", commands[3])
+		t.Fatalf("expected existing database to run init without params, got %q", runCommand)
 	}
-	if strings.Contains(commands[3], "<params=") {
-		t.Fatalf("expected first-start params to be omitted, got %q", commands[3])
+	if strings.Contains(runCommand, "<params=") {
+		t.Fatalf("expected first-start params to be omitted, got %q", runCommand)
 	}
 	for _, relativePath := range nanoTLSFiles {
 		content, readErr := os.ReadFile(
@@ -303,16 +328,10 @@ func TestPodmanInstallStart_StopsAfterCommandFailure(t *testing.T) {
 			expectedCommands: 6,
 		},
 		{
-			name:             "tag",
-			failedCommand:    "tag",
-			expectedError:    "failed to tag Nano image",
-			expectedCommands: 7,
-		},
-		{
 			name:             "run",
 			failedCommand:    "run",
 			expectedError:    "failed to start Nano container",
-			expectedCommands: 9,
+			expectedCommands: 8,
 		},
 		{
 			name:             "unparseable load output",
@@ -382,7 +401,7 @@ func TestPodmanInstallStart_StopsBeforeNanoWhenStorageSyncFails(t *testing.T) {
 		}
 	}
 	if syncIndex < 0 || syncIndex < 2 {
-		t.Fatalf("expected sync after image load and tag, got %#v", commands)
+		t.Fatalf("expected sync after image load, got %#v", commands)
 	}
 }
 
@@ -829,7 +848,7 @@ case "$command" in
 	rm -f "$scenario_dir/legacy-name"
 	: > "$scenario_dir/existing"
 	;;
-  info|ps|logs|pull|import|tag|run|rmi)
+	info|ps|logs|pull|import|run|rmi)
     ;;
   *)
     printf 'unexpected fake Podman command: %s\n' "$command" >&2
