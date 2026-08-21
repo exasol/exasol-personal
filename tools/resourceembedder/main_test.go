@@ -4,6 +4,8 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -288,5 +290,79 @@ func TestGeneratePlatform_CombinesMultipleResourcesIntoOneFile(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(outputDir, dataFile)); err != nil {
 			t.Fatalf("expected data file %s to exist, got %v", dataFile, err)
 		}
+	}
+}
+
+// zipContaining builds an in-memory zip archive holding a single named entry,
+// matching the shape of the real embedded resources: an archive that declares
+// extract: true plus a resource_path pointing at a file inside it.
+func zipContaining(t *testing.T, name string, content []byte) []byte {
+	t.Helper()
+
+	buffer := bytes.Buffer{}
+	writer := zip.NewWriter(&buffer)
+	entry, err := writer.Create(name)
+	if err != nil {
+		t.Fatalf("creating zip entry: %v", err)
+	}
+	if _, err := entry.Write(content); err != nil {
+		t.Fatalf("writing zip entry: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("closing zip: %v", err)
+	}
+
+	return buffer.Bytes()
+}
+
+// Embedding stages the raw archive, so the generator neutralizes extract and
+// the resource_path that goes with it. Leaving resource_path in place resolves
+// it against the downloaded file instead of an extracted directory, yielding a
+// path such as artifact.zip/launcher that cannot exist.
+func TestGeneratePlatform_EmbedsRawArchiveWhenResourcePathIsDeclared(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	inner := []byte("runner binary bytes")
+	archive := zipContaining(t, "launcher", inner)
+	server := newFixtureServer(t, "artifact.zip", archive)
+	def := runtimeartifacts.ResourceDefinition{
+		Extract: true,
+		Embed:   true,
+		Artifact: map[string]runtimeartifacts.ArtifactSpec{
+			"darwin/arm64": {
+				URL:          server.URL + "/artifact.zip",
+				Sha256:       sha256Hex(archive),
+				ResourcePath: "launcher",
+			},
+		},
+	}
+	spec := runtimeartifacts.ResourceSpec{"embed-extract-test": def}
+	outputDir := t.TempDir()
+	manager := runtimeartifacts.NewResourceManagerForPlatform(
+		spec, t.TempDir(), "darwin", "arm64",
+	)
+	g := &generator{manager: manager, outputDir: outputDir, goos: "darwin", goarch: "arm64"}
+
+	// When
+	err := g.generatePlatform(context.Background(), spec)
+
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	dataPath := filepath.Join(outputDir, "embed_extract_test_darwin_arm64.bin")
+	dataBytes, err := os.ReadFile(dataPath)
+	if err != nil {
+		t.Fatalf("expected embedded data file, got %v", err)
+	}
+	if !bytes.Equal(dataBytes, archive) {
+		t.Fatalf("expected the raw archive bytes, got %d bytes", len(dataBytes))
+	}
+
+	// The caller's definition must survive untouched: the generator clears
+	// resource_path on its own copy, not on the shared spec.
+	if got := spec["embed-extract-test"].Artifact["darwin/arm64"].ResourcePath; got != "launcher" {
+		t.Errorf("expected the spec's resource_path to be left alone, got %q", got)
 	}
 }
