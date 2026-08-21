@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -46,9 +47,11 @@ func TestRunLocalCommand(t *testing.T) {
 			},
 			expectedStdOut: func() string { // output contains all node names
 				nodeNames := ""
+				var nodeNamesSb49 strings.Builder
 				for _, node := range nodeLookupMock.Directory {
-					nodeNames += node.Name + "\n"
+					_, _ = nodeNamesSb49.WriteString(node.Name + "\n")
 				}
+				nodeNames += nodeNamesSb49.String()
 
 				return nodeNames
 			}(),
