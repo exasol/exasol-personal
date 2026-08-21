@@ -85,6 +85,7 @@ func workflowStatePermitsStart(
 				interruptedOperationGuidance(state.InterruptedDuringOperation, "start"),
 			), nil
 		}
+	default:
 	}
 
 	return guidanceOnly(
@@ -355,6 +356,7 @@ func workflowStatePermitsStop(
 				interruptedOperationGuidance(state.InterruptedDuringOperation, "stop"),
 			), nil
 		}
+	default:
 	}
 
 	return guidanceOnly(

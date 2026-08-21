@@ -4,7 +4,8 @@
 package main
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"sync"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -56,7 +57,7 @@ func loadInfrastructurePresets() []Preset {
 			Preset{ID: presetId, Name: info.ShortDescription, Description: info.LongDescription},
 		)
 	}
-	sort.Slice(presetList, func(i, j int) bool { return presetList[i].ID < presetList[j].ID })
+	slices.SortFunc(presetList, func(a, b Preset) int { return cmp.Compare(a.ID, b.ID) })
 
 	return presetList
 }
@@ -74,7 +75,7 @@ func loadInstallationPresets() []Preset {
 			Preset{ID: presetId, Name: manifest.Name, Description: manifest.Description},
 		)
 	}
-	sort.Slice(presetList, func(i, j int) bool { return presetList[i].ID < presetList[j].ID })
+	slices.SortFunc(presetList, func(a, b Preset) int { return cmp.Compare(a.ID, b.ID) })
 
 	return presetList
 }

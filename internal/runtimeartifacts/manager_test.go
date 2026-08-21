@@ -13,7 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -951,7 +951,7 @@ func writeTarGzMultiFixture(
 	for key := range entries {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	for _, entryName := range keys {
 		writeTarGzFixtureEntry(t, tarWriter, entryName, entries[entryName])
 	}

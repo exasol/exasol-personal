@@ -115,6 +115,7 @@ func WorkflowStatePermitsDeploy(
 			slog.Debug("deploying in workflow state `deploymentInterrupted`")
 			return nil
 		}
+	default:
 	}
 
 	return newBlockedStateError(deployment, ErrUnexpectedDeploymentStatus)
