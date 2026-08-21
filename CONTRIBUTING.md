@@ -11,21 +11,30 @@ Thank you for your interest in contributing! We welcome contributions from the c
 5. **Test your changes** - see [Development Guide](doc/development.md#testing)
 6. **Submit a pull request**
 
+## Code and Writing Guidelines
+
+- **Keep code comments rare and concise** - add comments only for non-obvious current invariants, constraints, or workarounds. Do not explain obvious behavior, repeat names, describe historical changes or rejected alternatives, or refer to tools, tickets, tasks, or OpenSpec artifacts.
+- **Keep task, issue, and pull request descriptions concise and outcome-focused** - put implementation mechanisms in supporting details or acceptance criteria. Avoid unrelated scope, empty sections, and em dashes.
+
+## OpenSpec Guidelines
+
+- **Use positive requirements** - always specify what should happen, never what should not.
+- **Only specify user-visible side-effects** - never include implementation details in requirements. User-visible side-effects include CLI behavior or output, file modifications, network access, process management, etc.
+
+## Commit Guidelines
+
+- **Use [Conventional Commits](https://www.conventionalcommits.org/)** - capitalize the subject after the type and omit the commit body unless the contribution process or a maintainer specifically requests one. For example, `docs: Clarify contribution guidelines`.
+- **Keep cleanup with the related change** - amend the relevant commit instead of adding fixup commits for linting, formatting, typos, or later work that belongs to an earlier task.
+- **Keep OpenSpec tasks independently verifiable** - map each task to exactly one commit and ensure that commit passes the full relevant check suite.
+- **Archive OpenSpec changes before committing their artifacts** - do not commit OpenSpec artifacts while the change is active, and do not mix them with non-OpenSpec files in the same commit. Follow any more specific timing instructions defined by the change.
+
 ## Pull Request Guidelines
 
 - **Keep PRs focused** - one feature or fix per PR
 - **Write clear descriptions** - explain what and why, not just how
-- **Fold cleanup into the related commit** - do not create separate commits for lint, formatting, or typo fixes
 - **Explain CLI changes with examples** - when changing CLI commands or behavior, describe the user-visible behavior in the PR description and include example invocations or output
 - **Update the changelog for user-facing changes** - add an entry to [CHANGELOG.md](CHANGELOG.md) under `Unreleased` when a change affects CLI behavior, deployment behavior, supported platforms/providers, user-visible errors, documentation that changes how users operate the tool, or compatibility/breaking behavior. Use the existing `Added`, `Changed`, `Fixed`, and `Breaking Changes` sections, and include a short command example for new or changed CLI behavior when useful.
 - **Use the [pull request template](.github/pull_request_template.md)** when submitting a pull request
-- **Use semantic commit messages** - follow [Conventional Commits](https://www.conventionalcommits.org/) format:
-  - `feat:` new features
-  - `fix:` bug fixes
-  - `docs:` documentation changes
-  - `test:` test additions or changes
-  - `refactor:` code refactoring
-  - `chore:` maintenance tasks
 - **Add tests** for new features or bug fixes
 - **Update documentation** if you're changing functionality
 - **Run `task fmt` and `task lint`** before committing
