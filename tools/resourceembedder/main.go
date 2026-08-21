@@ -227,6 +227,15 @@ func (g *generator) resolveResourceEmbed(
 	rawDef := def
 	rawDef.Extract = false
 	rawDef.Embed = false
+	// resource_path names a path inside the extracted archive, so it is
+	// meaningless for the raw artifact fetched here: joining it onto a bare
+	// file would resolve to a path that cannot exist. Clear it alongside
+	// Extract, on a fresh map so the caller's definition stays untouched.
+	rawDef.Artifact = make(map[string]runtimeartifacts.ArtifactSpec, len(def.Artifact))
+	for platform, artifact := range def.Artifact {
+		artifact.ResourcePath = ""
+		rawDef.Artifact[platform] = artifact
+	}
 
 	rawPath, err := g.manager.Get(ctx, rawDef, resourceID)
 	if err != nil {
