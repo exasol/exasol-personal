@@ -117,7 +117,7 @@ func operationInProgressStatus(lockMessage string) *StatusOutput {
 	}
 }
 
-// nolint: revive
+// GetStatus returns the current deployment status.
 func GetStatus(
 	ctx context.Context,
 	deployment config.DeploymentDir,

@@ -29,8 +29,7 @@ type Databaser interface {
 	Close() error
 }
 
-// Sheller describes a way to interact with an interactive
-// shell processor.
+// LineReader describes an interactive shell input reader.
 //
 //counterfeiter:generate . LineReader
 type LineReader interface {

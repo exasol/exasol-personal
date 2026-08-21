@@ -35,8 +35,7 @@ func withDriverErrorLogger(temp logger.Logger, callback func() error) error {
 	return callback()
 }
 
-// withSilencedDriverErrors runs fn with driver errors suppressed.
-// Exported for readiness probes & tests.
+// WithSilencedDriverErrors runs fn with driver errors suppressed.
 func WithSilencedDriverErrors(fn func() error) error { //nolint:revive
 	return withDriverErrorLogger(discardLogger{}, fn)
 }
