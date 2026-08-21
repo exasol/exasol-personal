@@ -469,8 +469,11 @@ func TestManager_RequestResolvesEmbeddedResourceWithoutNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read artifact fixture: %v", err)
 	}
-	Register(resourceID, archiveData)
-	t.Cleanup(func() { delete(embeddedResources, resourceID) })
+	Register(resourceID, archiveData, sha256OfTestFile(t, archivePath))
+	t.Cleanup(func() {
+		delete(embeddedResources, resourceID)
+		delete(embeddedHashes, resourceID)
+	})
 
 	server, requests := newCountingArtifactServer(t, "artifact.zip", archiveData)
 	spec := ResourceSpec{
@@ -551,12 +554,73 @@ func TestManager_RequestFailsWhenEmbeddedResourceNotRegistered(t *testing.T) {
 }
 
 //nolint:paralleltest // embeddedResources is shared; concurrent Register calls aren't safe.
+func TestManager_EmbeddedResourceIdentityComesFromContentHash(t *testing.T) {
+	// Given: one cache root and spec shared across two "builds" that embed
+	// different content under the same resource ID.
+	const resourceID = "embedded-identity-test"
+	t.Cleanup(func() {
+		delete(embeddedResources, resourceID)
+		delete(embeddedHashes, resourceID)
+	})
+	spec := ResourceSpec{
+		resourceID: {
+			Embed: true,
+			Artifact: map[string]ArtifactSpec{
+				anyPlatformKey: {URL: "embedded://" + resourceID},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+
+	// When: the first build resolves its own embedded content.
+	firstData := []byte("build-one-content")
+	Register(resourceID, firstData, sha256OfBytes(firstData))
+	firstPath, err := manager.Request(context.Background(), resourceID)
+	if err != nil {
+		t.Fatalf("expected no error resolving the first payload, got %v", err)
+	}
+	firstResolved, err := os.ReadFile(firstPath)
+	if err != nil || string(firstResolved) != string(firstData) {
+		t.Fatalf("expected the first payload's own content, got %q, err %v", firstResolved, err)
+	}
+
+	// When: a second build, sharing the same cache root and resource ID,
+	// registers different content (simulating an upgraded binary).
+	secondData := []byte("build-two-content")
+	Register(resourceID, secondData, sha256OfBytes(secondData))
+	secondPath, err := manager.Request(context.Background(), resourceID)
+	if err != nil {
+		t.Fatalf("expected no error resolving the second payload, got %v", err)
+	}
+	secondResolved, err := os.ReadFile(secondPath)
+	if err != nil || string(secondResolved) != string(secondData) {
+		t.Fatalf("expected the second payload's own content, got %q, err %v", secondResolved, err)
+	}
+
+	// Then: the two payloads resolved to distinct cache entries, and the
+	// first entry's content was never overwritten by the second.
+	if firstPath == secondPath {
+		t.Fatalf(
+			"expected a different content hash to resolve to a different entry, got %q twice",
+			firstPath,
+		)
+	}
+	firstStillIntact, err := os.ReadFile(firstPath)
+	if err != nil || string(firstStillIntact) != string(firstData) {
+		t.Fatalf("expected the first entry to remain intact, got %q, err %v", firstStillIntact, err)
+	}
+}
+
+//nolint:paralleltest // embeddedResources is shared; concurrent Register calls aren't safe.
 func TestManager_RequestIgnoresEmbeddedRegistryWithoutEmbedFlag(t *testing.T) {
 	// Given
 	const resourceID = "embedded-ignored-test"
 	deploymentDir := t.TempDir()
-	Register(resourceID, []byte("should never be used"))
-	t.Cleanup(func() { delete(embeddedResources, resourceID) })
+	Register(resourceID, []byte("should never be used"), "unused-hash")
+	t.Cleanup(func() {
+		delete(embeddedResources, resourceID)
+		delete(embeddedHashes, resourceID)
+	})
 
 	content := []byte("from the network")
 	server := newArtifactServer(t, "artifact.bin", content)
@@ -1006,6 +1070,12 @@ func writeZipFixture(t *testing.T, dir, name string, entries map[string]string) 
 	return writeZipFixtureEntries(t, dir, name, entries)
 }
 
+func sha256OfBytes(data []byte) string {
+	sum := sha256.Sum256(data)
+
+	return hex.EncodeToString(sum[:])
+}
+
 func sha256OfTestFile(t *testing.T, path string) string {
 	t.Helper()
 
@@ -1187,6 +1257,66 @@ func TestManager_GetNoChecksumAlwaysRefetches(t *testing.T) {
 	// Then
 	if requests.Load() != 2 {
 		t.Fatalf("expected 2 requests for no-checksum archive, got %d", requests.Load())
+	}
+}
+
+//nolint:paralleltest // embeddedHashes/embeddedResources are shared globals.
+func TestManager_GetEmbeddedResourcePrefersRegisteredHashOverADeclaredChecksum(t *testing.T) {
+	// Given: an embedded resource whose artifact also declares a checksum,
+	// as tofu's local-runner and nano-image resources already do — the
+	// declared checksum verifies what got fetched, not necessarily what a
+	// given build ends up embedding.
+	const resourceID = "manager-test-embed-checksum-fix"
+	t.Cleanup(func() {
+		delete(embeddedResources, resourceID)
+		delete(embeddedHashes, resourceID)
+	})
+	def := ResourceDefinition{
+		Embed: true,
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {
+				URL:    "https://example.invalid/archive.tar.gz",
+				Sha256: "source-archive-checksum",
+			},
+		},
+	}
+	cacheRoot := t.TempDir()
+
+	// When: a first build registers one set of embedded bytes...
+	Register(resourceID, []byte("old-content"), "hash-of-old-content")
+	oldManager := NewResourceManagerForPlatform(ResourceSpec{}, cacheRoot, "linux", "amd64")
+	oldPath, err := oldManager.Get(context.Background(), def, resourceID)
+	if err != nil {
+		t.Fatalf("expected first Get to succeed, got %v", err)
+	}
+	oldData, err := os.ReadFile(oldPath)
+	if err != nil {
+		t.Fatalf("failed to read first resolved artifact: %v", err)
+	}
+
+	// ...and a later build registers different bytes, while the source
+	// artifact's own declared checksum stays the same.
+	Register(resourceID, []byte("new-content"), "hash-of-new-content")
+	newManager := NewResourceManagerForPlatform(ResourceSpec{}, cacheRoot, "linux", "amd64")
+	newPath, err := newManager.Get(context.Background(), def, resourceID)
+	if err != nil {
+		t.Fatalf("expected second Get to succeed, got %v", err)
+	}
+	newData, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatalf("failed to read second resolved artifact: %v", err)
+	}
+
+	// Then: the second build resolves its own embedded bytes, not a stale
+	// cache entry reused because the declared checksum never changed.
+	if string(oldData) != "old-content" {
+		t.Fatalf("expected the first build's own embedded content, got %q", oldData)
+	}
+	if string(newData) != "new-content" {
+		t.Fatalf(
+			"expected the second build's own embedded content, got %q (stale cache entry reused)",
+			newData,
+		)
 	}
 }
 

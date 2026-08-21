@@ -19,7 +19,7 @@ var {{.VarName}} []byte
 {{end}}
 func init() {
 {{- range .Resources}}
-	runtimeartifacts.Register({{printf "%q" .ResourceID}}, {{.VarName}})
+	runtimeartifacts.Register({{printf "%q" .ResourceID}}, {{.VarName}}, {{printf "%q" .Hash}})
 {{- end}}
 }
 {{end -}}

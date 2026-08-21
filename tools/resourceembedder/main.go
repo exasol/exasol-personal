@@ -17,7 +17,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	_ "embed" // required by go:embed on resourceFileTemplateSource below
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -147,6 +149,10 @@ type resourceEmbed struct {
 	ResourceID string
 	VarName    string
 	DataFile   string
+	// Hash is a content hash of this resource's embedded bytes, computed
+	// once here at generation time so the running binary never has to pay
+	// to hash its own embedded data on every startup.
+	Hash string
 }
 
 // platformFileData is the template input for one platform's generated file.
@@ -255,10 +261,13 @@ func (g *generator) resolveResourceEmbed(
 	}
 	fmt.Fprintf(os.Stdout, "Staged embedded resource %s (%s/%s): %s\n", resourceID, g.goos, g.goarch, dataFile)
 
+	sum := sha256.Sum256(data)
+
 	return &resourceEmbed{
 		ResourceID: resourceID,
 		VarName:    goIdentifier(resourceID) + "Data",
 		DataFile:   dataFile,
+		Hash:       hex.EncodeToString(sum[:]),
 	}, nil
 }
 
