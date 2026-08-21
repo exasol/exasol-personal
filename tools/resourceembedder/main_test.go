@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -80,8 +81,11 @@ func TestGeneratePlatform_WritesRealDataForDeclaredPlatform(t *testing.T) {
 	if !strings.Contains(string(goSource), "//go:build darwin && arm64") {
 		t.Fatalf("expected build tag for darwin/arm64, got:\n%s", goSource)
 	}
-	if !strings.Contains(string(goSource), `runtimeartifacts.Register("embed-gen-test", embedGenTestData)`) {
-		t.Fatalf("expected Register call with resource ID, got:\n%s", goSource)
+	wantRegister := fmt.Sprintf(
+		`runtimeartifacts.Register("embed-gen-test", embedGenTestData, %q)`, sha256Hex(content),
+	)
+	if !strings.Contains(string(goSource), wantRegister) {
+		t.Fatalf("expected Register call with resource ID and content hash, got:\n%s", goSource)
 	}
 	dataBytes, err := os.ReadFile(dataPath)
 	if err != nil {
@@ -274,10 +278,16 @@ func TestGeneratePlatform_CombinesMultipleResourcesIntoOneFile(t *testing.T) {
 		t.Fatalf("expected a combined generated .go file, got %v", err)
 	}
 	source := string(goSource)
-	if !strings.Contains(source, `runtimeartifacts.Register("embed-gen-first", embedGenFirstData)`) {
+	wantFirst := fmt.Sprintf(
+		`runtimeartifacts.Register("embed-gen-first", embedGenFirstData, %q)`, sha256Hex(firstContent),
+	)
+	if !strings.Contains(source, wantFirst) {
 		t.Fatalf("expected the first resource to be registered, got:\n%s", source)
 	}
-	if !strings.Contains(source, `runtimeartifacts.Register("embed-gen-second", embedGenSecondData)`) {
+	wantSecond := fmt.Sprintf(
+		`runtimeartifacts.Register("embed-gen-second", embedGenSecondData, %q)`, sha256Hex(secondContent),
+	)
+	if !strings.Contains(source, wantSecond) {
 		t.Fatalf("expected the second resource to be registered, got:\n%s", source)
 	}
 	if strings.Contains(source, "embed-gen-not-declared") == false {

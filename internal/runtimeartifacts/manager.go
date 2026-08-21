@@ -150,8 +150,22 @@ func (m *Manager) Get(
 
 	// If the source can identify its content before fetching, use that identity
 	// as a synthetic Sha256 so the standard cache machinery handles the rest.
-	if strings.TrimSpace(artifact.Sha256) == "" {
+	// An embed: true resource uses its own build-time content hash instead,
+	// even when the source artifact also declares a checksum: the checksum
+	// describes what was fetched from the source, not necessarily what a
+	// particular build ends up embedding, so only the build's own hash can
+	// tell two builds' embedded content apart. A source's own Identify exists
+	// to identify network content before fetching it, not to stand in for the
+	// identity of whatever was actually embedded (e.g. FileSource.Identify
+	// hashes a path, not file content).
+	switch {
+	case def.Embed:
+		if hash, ok := lookupEmbeddedHash(resourceID); ok {
+			artifact.Sha256 = hash
+		}
+	case strings.TrimSpace(artifact.Sha256) == "":
 		artifact.Sha256 = m.identify(ctx, artifact)
+	default:
 	}
 
 	entry, err := m.resolveEntry(resourceID, def, artifact)
