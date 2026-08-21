@@ -106,7 +106,7 @@ func Plan(
 	return tofuRunner.Plan(ctx, cfg.PlanFile(), cfg.VarsOutputFile(), cfg.StateFile())
 }
 
-// Apply a tofu action with variable overrides (used for start/stop).
+// ApplyPlan applies a tofu plan with variable overrides.
 func ApplyPlan(
 	ctx context.Context,
 	cfg *Config,
@@ -129,7 +129,7 @@ func ApplyPlan(
 	return tofuRunner.Apply(ctx, applyOpts)
 }
 
-// Apply a tofu action with variable overrides (used for start/stop).
+// ApplyAction applies a tofu action with variable overrides.
 func ApplyAction(
 	ctx context.Context,
 	cfg *Config,
