@@ -26,6 +26,7 @@ linters:
     - gochecknoglobals
     - wsl
     - testpackage
+    - gomodguard
 
   exclusions:
     paths:
@@ -34,6 +35,7 @@ linters:
 
   enable:
     - wsl_v5
+    - gomodguard_v2
 
   settings:
     gci:
