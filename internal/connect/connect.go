@@ -382,10 +382,10 @@ func printExitHint(output io.Writer) error {
 
 func normalizeJSONFormat(format JSONFormat) JSONFormat {
 	switch JSONFormat(strings.ToLower(strings.TrimSpace(format.String()))) {
-	case JSONFormatPretty:
-		return JSONFormatPretty
 	case JSONFormatCompact:
 		return JSONFormatCompact
+	case JSONFormatPretty:
+		return JSONFormatPretty
 	default:
 		return JSONFormatPretty
 	}
