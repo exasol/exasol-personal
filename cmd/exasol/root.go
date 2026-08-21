@@ -51,14 +51,17 @@ const (
 
 	rootCmdGroupEssential = "essential"
 	rootCmdGroupLifecycle = "lifecycle"
+	commandInfo           = "info"
+	commandList           = "list"
+	logLevelInfo          = "info"
 )
 
 var logLevelMap = map[string]slog.Level{
-	"debug": slog.LevelDebug,
-	"info":  slog.LevelInfo,
-	"warn":  slog.LevelWarn,
-	"error": slog.LevelError,
-	"":      slog.LevelInfo, // default to info
+	"debug":      slog.LevelDebug,
+	logLevelInfo: slog.LevelInfo,
+	"warn":       slog.LevelWarn,
+	"error":      slog.LevelError,
+	"":           slog.LevelInfo, // default to info
 }
 
 var ErrInvalidLogLevel = errors.New("invalid log level")

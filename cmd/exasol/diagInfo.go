@@ -16,7 +16,7 @@ The output is formatted as JSON.
 `
 
 var infoCmd = &cobra.Command{
-	Use:   "info",
+	Use:   commandInfo,
 	Short: infoCmdShortDesc,
 	Long:  infoCmdLongDesc,
 	Args:  cobra.NoArgs,

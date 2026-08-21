@@ -178,7 +178,7 @@ func embeddedPresetAppendixText() string {
 }
 
 var presetsListCmd = &cobra.Command{
-	Use:   "list",
+	Use:   commandList,
 	Short: "List available presets",
 	Long: `List available embedded presets.
 
