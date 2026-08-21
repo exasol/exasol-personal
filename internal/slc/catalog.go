@@ -12,7 +12,7 @@ package slc
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -155,7 +155,7 @@ func (c *Catalog) entries(goarch string) ([]Entry, error) {
 	for name := range langs.Languages {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	entries := make([]Entry, 0, len(names))
 	for _, name := range names {
@@ -198,7 +198,7 @@ func aliasList(entries []Entry) []string {
 			all = append(all, alias)
 		}
 	}
-	sort.Strings(all)
+	slices.Sort(all)
 
 	return all
 }

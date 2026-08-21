@@ -52,6 +52,9 @@ linters:
       ignore-map-index-ok: true
       ignore-chan-recv-ok: true
 
+    goconst:
+      ignore-tests: true
+
     revive:
       enable-all-rules: true
       rules:
@@ -73,7 +76,16 @@ linters:
           disabled: true
         - name: max-public-structs
           disabled: true
-
+        # Keep explicit enum cases for exhaustive checking and preserve stable
+        # package and public API names.
+        - name: identical-switch-branches
+          disabled: true
+        - name: package-directory-mismatch
+          disabled: true
+        - name: package-naming
+          disabled: true
+        - name: flag-parameter
+          disabled: true
     gosec:
       excludes:
         - G204

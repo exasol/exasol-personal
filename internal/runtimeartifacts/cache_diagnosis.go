@@ -7,7 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -181,7 +181,7 @@ func (c *Cache) unexpectedEntryRoots(expected map[string]struct{}) []string {
 
 		return filepath.SkipDir
 	})
-	sort.Strings(unexpected)
+	slices.Sort(unexpected)
 	if len(unexpected) > defaultUnexpectedReportSize {
 		return unexpected[:defaultUnexpectedReportSize]
 	}

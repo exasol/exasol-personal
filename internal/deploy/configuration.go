@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -405,7 +405,7 @@ func resetSelectedDeploymentConfiguration(
 		}
 	}
 	if len(missing) > 0 {
-		sort.Strings(missing)
+		slices.Sort(missing)
 
 		return DeploymentConfiguration{}, fmt.Errorf("unknown configuration option %q", missing[0])
 	}
@@ -673,7 +673,7 @@ func installationVariableType(raw string) ConfigVariableType {
 }
 
 func sortConfigurationValues(values []DeploymentConfigValue) {
-	sort.Slice(values, func(left, right int) bool {
-		return values[left].Name < values[right].Name
+	slices.SortFunc(values, func(left, right DeploymentConfigValue) int {
+		return strings.Compare(left.Name, right.Name)
 	})
 }

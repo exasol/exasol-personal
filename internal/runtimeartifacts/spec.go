@@ -5,7 +5,7 @@ package runtimeartifacts
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -44,7 +44,7 @@ func (d ResourceDefinition) Resolve(goos, goarch string) (ArtifactSpec, error) {
 			for candidate := range d.Artifact {
 				keys = append(keys, candidate)
 			}
-			sort.Strings(keys)
+			slices.Sort(keys)
 
 			return ArtifactSpec{}, fmt.Errorf(
 				"no artifact for platform %s in resource; available variants: %s",
@@ -89,7 +89,7 @@ func (d ResourceDefinition) validate(resourceID string) error {
 	for key := range d.Artifact {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	for _, key := range keys {
 		artifact := d.Artifact[key]
 		if err := artifact.validate(artifactValidationContext{

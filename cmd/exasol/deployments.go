@@ -4,12 +4,13 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -53,7 +54,7 @@ var deploymentsCmd = &cobra.Command{
 }
 
 var deploymentsListCmd = &cobra.Command{
-	Use:   "list",
+	Use:   commandList,
 	Short: "List launcher-managed deployment directories",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
@@ -103,7 +104,9 @@ func listDeploymentDirectories(ctx context.Context) ([]deploymentListEntry, erro
 		entries = append(entries, deploymentListEntryFor(ctx, dirEntry.Name(), path))
 	}
 
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	slices.SortFunc(entries, func(a, b deploymentListEntry) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 
 	return entries, nil
 }
