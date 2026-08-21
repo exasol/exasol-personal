@@ -30,18 +30,35 @@ func preregisteredCommandIs(args []string, expected *cobra.Command) bool {
 	return cmd == expected
 }
 
-func preregisteredPositionals(args []string) ([]string, error) {
+func preregisteredPositionals(cmd *cobra.Command, args []string) ([]string, error) {
 	flagset := pflag.NewFlagSet("preregister-args", pflag.ContinueOnError)
 	flagset.SetOutput(io.Discard)
 	flagset.SetInterspersed(true)
 	flagset.ParseErrorsAllowlist.UnknownFlags = true
 	flagset.BoolP(helpCommandName, "h", false, "")
+	registerPreregisteredBooleanFlags(flagset, cmd)
 
 	if err := flagset.Parse(args); err != nil && !errors.Is(err, pflag.ErrHelp) {
 		return nil, fmt.Errorf("cannot parse pre-registration args: %w", err)
 	}
 
 	return flagset.Args(), nil
+}
+
+// registerPreregisteredBooleanFlags teaches the tolerant pre-parser which flags
+// do not consume a following value. Without this, pflag treats an unknown boolean
+// flag as value-taking and can consume the preset positional that follows it.
+func registerPreregisteredBooleanFlags(flagset *pflag.FlagSet, cmd *cobra.Command) {
+	if cmd == nil {
+		return
+	}
+
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		if flag.Value.Type() != "bool" || flagset.Lookup(flag.Name) != nil {
+			return
+		}
+		flagset.BoolP(flag.Name, flag.Shorthand, false, "")
+	})
 }
 
 func deploymentDirFromRawArgs(args []string) (config.DeploymentDir, error) {
