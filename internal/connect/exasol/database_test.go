@@ -384,7 +384,7 @@ func TestExecClosesResultRows(t *testing.T) {
 	})
 	require.NoError(t, database.Connect(t.Context()))
 
-	_, err := database.Exec(t.Context(), "SELECT * FROM Dual", 0)
+	_, err := database.Exec(t.Context(), "SELECT 1 FROM Dual", 0)
 	require.NoError(t, err)
 
 	// The handle is closed exactly once after consumption.
@@ -419,7 +419,7 @@ func TestExecWrapsSQLErrorWithLiveSessionID(t *testing.T) {
 	})
 	require.NoError(t, database.Connect(t.Context()))
 
-	_, err := database.Exec(t.Context(), "SELECT * FROM Dual", 0)
+	_, err := database.Exec(t.Context(), "SELECT 1 FROM Dual", 0)
 	require.Error(t, err)
 
 	structured := generaltypes.StructuredSQLErrorFromError(err)
@@ -459,7 +459,7 @@ func TestExecPrefersLiveSessionIDOverMessageSessionID(t *testing.T) {
 	})
 	require.NoError(t, database.Connect(t.Context()))
 
-	_, err := database.Exec(t.Context(), "SELECT * FROM Dual", 0)
+	_, err := database.Exec(t.Context(), "SELECT 1 FROM Dual", 0)
 	require.Error(t, err)
 
 	structured := generaltypes.StructuredSQLErrorFromError(err)
@@ -492,7 +492,7 @@ func TestExecDoesNotFetchSessionIDOnSuccessfulQueries(t *testing.T) {
 	})
 	require.NoError(t, database.Connect(t.Context()))
 
-	_, err := database.Exec(t.Context(), "SELECT * FROM Dual", 0)
+	_, err := database.Exec(t.Context(), "SELECT 1 FROM Dual", 0)
 	require.NoError(t, err)
 	require.Equal(t, 2, fakeConnector.QueryContextCallCount())
 }
