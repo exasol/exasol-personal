@@ -3,7 +3,9 @@
 ## Purpose
 
 Defines the minimal persistent lifecycle for running an Exasol Nano database directly through Podman on a Linux host.
+
 ## Requirements
+
 ### Requirement: Linux host runtime starts a persistent Nano container
 The system SHALL start an Exasol Nano container through Podman when a local deployment uses the Linux host runtime, and SHALL keep the database data in the deployment's local runtime directory.
 
@@ -46,11 +48,11 @@ The system SHALL stop the start sequence at the failing Podman operation and ret
 
 #### Scenario: Image loading fails
 - **WHEN** Podman fails to load the Nano image
-- **THEN** the start operation returns an image-loading error and does not attempt to tag or run the image
+- **THEN** the start operation returns an image-loading error and does not attempt to run the image
 
 #### Scenario: Loaded image cannot be identified
 - **WHEN** Podman reports a successful load but its documented output does not identify the loaded image
-- **THEN** the start operation fails before tagging or running a container
+- **THEN** the start operation fails before running a container
 
 ### Requirement: Linux host container cleanup is idempotent
 The system SHALL tolerate cleanup when the deployment's Podman container is absent.
@@ -161,7 +163,7 @@ The system SHALL migrate a legacy deployment container whose `/exa` is not persi
 - **THEN** the persistent destination becomes active before the old container is removed
 
 ### Requirement: Podman image loading uses runtime artifact paths
-The system SHALL load a Nano image using `podman load -i` with the runtime path supplied for the materialized image.
+The system SHALL load a Nano image using `podman load -i` with the runtime path supplied for the materialized image and SHALL run the exact image reference reported by the load without creating a deployment-specific image tag.
 
 #### Scenario: Linux host loads Nano image
 - **WHEN** the Linux runtime materializes the embedded Nano image
@@ -170,6 +172,14 @@ The system SHALL load a Nano image using `podman load -i` with the runtime path 
 #### Scenario: VM-backed runtime loads Nano image
 - **WHEN** a VM-backed runtime materializes the embedded Nano image in its shared directory
 - **THEN** Podman reads the mapped guest path through `-i` without installation code selecting a transport
+
+#### Scenario: Loaded image is identified by name
+- **WHEN** Podman reports the loaded Nano image as a named image reference
+- **THEN** the system runs that exact reference without creating another image tag
+
+#### Scenario: Loaded image is identified by ID
+- **WHEN** Podman reports the loaded Nano image as an image ID
+- **THEN** the system runs that exact ID without creating an image tag
 
 ### Requirement: Podman installation uses its execution environment
 The system SHALL perform command execution and installation-owned filesystem operations through the selected runtime execution environment.
