@@ -126,7 +126,7 @@ func setupLogging() error {
 		levelVar := slog.LevelVar{}
 		levelVar.Set(selectedLevel)
 		// Design decision: when attached to a terminal, prefer human-friendly logs.
-		terminalHandler = tint.NewHandler(os.Stderr, &tint.Options{
+		terminalHandler = tint.NewTextHandler(os.Stderr, &tint.Options{
 			Level: &levelVar, TimeFormat: time.DateTime,
 		})
 	} else {
