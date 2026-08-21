@@ -34,7 +34,7 @@ type Config struct {
 	manager        *runtimeartifacts.Manager
 }
 
-// Construct a tofu config from a deployment directory and a preset manifest.
+// NewTofuConfigFromDeployment constructs a Tofu config from a deployment and preset.
 func NewTofuConfigFromDeployment(
 	deploymentDir string,
 	presetTofuConfig presets.InfrastructureTofu,
@@ -50,7 +50,7 @@ func NewTofuConfigFromDeployment(
 	)
 }
 
-// Construct a tofu config from a infra directory and a preset manifest.
+// NewTofuConfigFromPreset constructs a Tofu config from a preset directory.
 func NewTofuConfigFromPreset(
 	infraDir string,
 	presetTofuConfig presets.InfrastructureTofu,
@@ -101,13 +101,12 @@ func newTofuConfig(
 	}
 }
 
-// The directory that all file paths are relative to if they aren't absolute.
-// And that should be used as the working dir for tofu.
+// WorkDir returns the directory used as Tofu's working directory.
 func (c *Config) WorkDir() string {
 	return c.workDir
 }
 
-// Relative to the deployment root or absolute.
+// TofuBinaryPath returns the configured or cached Tofu executable path.
 func (c *Config) TofuBinaryPath(ctx context.Context) (string, error) {
 	if c.tofuBinaryPath != "" {
 		return c.tofuBinaryPath, nil
@@ -127,22 +126,22 @@ func (c *Config) TofuBinaryPath(ctx context.Context) (string, error) {
 	return c.tofuBinaryPath, nil
 }
 
-// Relative to the work dir or absolute.
+// VariablesFile returns the variables file path.
 func (c *Config) VariablesFile() string {
 	return c.variablesFile
 }
 
-// Relative to the work dir or absolute.
+// VarsOutputFile returns the variables output file path.
 func (c *Config) VarsOutputFile() string {
 	return c.varsOutputFile
 }
 
-// Relative to the work dir or absolute.
+// PlanFile returns the plan file path.
 func (c *Config) PlanFile() string {
 	return c.planeFile
 }
 
-// Relative to the work dir or absolute.
+// StateFile returns the state file path.
 func (c *Config) StateFile() string {
 	return c.stateFile
 }
