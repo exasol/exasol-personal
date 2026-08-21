@@ -45,6 +45,9 @@ def _generate_csv(target_path: Path, size_mb: int) -> None:
 
 
 _PEOPLE_CSV: Final = Path(__file__).parent.parent / "e2e" / "assets" / "people.csv"
+_PARQUET_FIXTURE: Final = (
+    Path(__file__).parent.parent / "e2e" / "assets" / "local_parquet_fixture.parquet"
+)
 
 
 def _make_table_statements(schema: str) -> list[str]:
@@ -132,6 +135,71 @@ def test_import_csv_uses_local_filesystem(
     assert expected.splitlines()[0] in proc.stdout, (
         f"Expected reference table header, got:\n{proc.stdout}"
     )
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+def test_import_parquet_uses_local_filesystem(
+    reusable_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """IMPORT INTO ... FROM LOCAL PARQUET must read a client-local file."""
+    # ========== GIVEN ==========
+    assert _PARQUET_FIXTURE.exists()
+    local_only = tmp_path / "client_only" / f"{uuid.uuid4().hex}.parquet"
+    local_only.parent.mkdir()
+    shutil.copy(_PARQUET_FIXTURE, local_only)
+
+    schema = f"test_import_parquet_{uuid.uuid4().hex[:8]}"
+    statements = [
+        f"CREATE SCHEMA {schema};",
+        f"OPEN SCHEMA {schema};",
+        'CREATE TABLE Data ("id" BIGINT, "name" VARCHAR(32));',
+        f"IMPORT INTO Data FROM LOCAL PARQUET FILE '{local_only}';",
+        'SELECT "id", "name" FROM Data ORDER BY "id";',
+    ]
+
+    # ========== WHEN ==========
+    proc = reusable_deployment.connect(input="\n".join(statements), capture_output=True)
+
+    # ========== THEN ==========
+    assert proc.returncode == 0, f"Parquet import failed: {proc.stderr!r}"
+    assert "alpha" in proc.stdout
+    assert "beta" in proc.stdout
+    assert "gamma" in proc.stdout
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+def test_import_parquet_missing_file_reports_client_side(
+    reusable_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """A missing local Parquet file must fail without a successful import."""
+    # ========== GIVEN ==========
+    missing = tmp_path / "does_not_exist.parquet"
+    assert not missing.exists()
+
+    schema = f"test_import_parquet_missing_{uuid.uuid4().hex[:8]}"
+    statements = [
+        f"CREATE SCHEMA {schema};",
+        f"OPEN SCHEMA {schema};",
+        'CREATE TABLE Data ("id" BIGINT, "name" VARCHAR(32));',
+        f"IMPORT INTO Data FROM LOCAL PARQUET FILE '{missing}';",
+    ]
+
+    # ========== WHEN ==========
+    proc = reusable_deployment.connect(input="\n".join(statements), capture_output=True)
+
+    # ========== THEN ==========
+    combined = (proc.stdout + proc.stderr).lower()
+    assert proc.returncode != 0
+    assert any(
+        token in combined
+        for token in ("not found", "no such file", "does not exist", "cannot open")
+    ), f"Expected file-not-found error, got: {combined!r}"
 
 
 @pytest.mark.skipif(

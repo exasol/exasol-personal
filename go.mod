@@ -5,7 +5,7 @@ go 1.25.8
 require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/chzyer/readline v1.5.1
-	github.com/exasol/exasol-driver-go v1.0.17
+	github.com/exasol/exasol-driver-go v1.1.0
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/lmittmann/tint v1.1.3
