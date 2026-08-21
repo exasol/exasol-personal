@@ -13,6 +13,8 @@ import (
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
+const testLocalPresetName = "local"
+
 // WARNING: Keep the tests in this file sequential.
 //
 // The preregistration helpers call rootCmd.Find before Cobra's real Parse step.
@@ -90,6 +92,85 @@ func TestScanInfrastructurePresetFromArgs_InstallCommand(t *testing.T) {
 	}
 	if preset.Name != presets.DefaultInfrastructure || preset.Path != "" {
 		t.Fatalf("unexpected preset: %#v", preset)
+	}
+}
+
+func TestScanPresetFromArgs_BooleanFlagsBeforeInfrastructurePreset(t *testing.T) {
+	testCases := []struct {
+		name string
+		flag string
+	}{
+		{name: "verbose", flag: "--verbose"},
+		{name: "verbose shorthand", flag: "-v"},
+		{name: "tofu lockfile update", flag: "--tofu-update-lockfile"},
+		{name: "launcher version check", flag: "--no-launcher-version-check"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Given
+			args := []string{"install", testCase.flag, testLocalPresetName, "--help"}
+
+			// When
+			infraPreset, infraErr := scanInfrastructurePresetSelection(args)
+			installPreset, installErr := scanInstallationPresetSelection(args)
+
+			// Then
+			if infraErr != nil || infraPreset == nil {
+				t.Fatalf("unexpected infrastructure preset error: %v", infraErr)
+			}
+			if infraPreset.Name != testLocalPresetName || infraPreset.Path != "" {
+				t.Fatalf("unexpected infrastructure preset: %#v", infraPreset)
+			}
+			if installErr != nil || installPreset == nil {
+				t.Fatalf("unexpected installation preset error: %v", installErr)
+			}
+			if installPreset.Name != testLocalPresetName || installPreset.Path != "" {
+				t.Fatalf("unexpected installation preset: %#v", installPreset)
+			}
+		})
+	}
+}
+
+func TestScanPresetFromArgs_BooleanFlagWithoutInfrastructurePreset(t *testing.T) {
+	// Given
+	args := []string{"install", "--verbose", "--help"}
+
+	// When
+	infraPreset, infraErr := scanInfrastructurePresetSelection(args)
+	installPreset, installErr := scanInstallationPresetSelection(args)
+
+	// Then
+	if infraErr == nil || infraPreset != nil {
+		t.Fatalf("expected missing infrastructure preset, got %#v and %v", infraPreset, infraErr)
+	}
+	if installErr == nil || installPreset != nil {
+		t.Fatalf("expected missing installation preset, got %#v and %v", installPreset, installErr)
+	}
+}
+
+func TestScanPresetFromArgs_BooleanFlagBeforeExplicitInstallationPreset(t *testing.T) {
+	// Given
+	args := []string{
+		"install", "--verbose", testLocalPresetName, testLocalPresetName, "--help",
+	}
+
+	// When
+	infraPreset, infraErr := scanInfrastructurePresetSelection(args)
+	installPreset, installErr := scanInstallationPresetSelection(args)
+
+	// Then
+	if infraErr != nil || infraPreset == nil {
+		t.Fatalf("unexpected infrastructure preset error: %v", infraErr)
+	}
+	if infraPreset.Name != testLocalPresetName || infraPreset.Path != "" {
+		t.Fatalf("unexpected infrastructure preset: %#v", infraPreset)
+	}
+	if installErr != nil || installPreset == nil {
+		t.Fatalf("unexpected installation preset error: %v", installErr)
+	}
+	if installPreset.Name != testLocalPresetName || installPreset.Path != "" {
+		t.Fatalf("unexpected installation preset: %#v", installPreset)
 	}
 }
 
