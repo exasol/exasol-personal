@@ -24,3 +24,9 @@
 - [x] 5.1 Run the full local deployment lifecycle on Linux and macOS with runtime-specific shell capability assertions while retaining macOS guards for VM-only behavior
 - [x] 5.2 Remove the local marker from the COS-only diagnostic and delete the obsolete unsupported-platform escape-hatch test and helpers
 - [x] 5.3 Verify local test collection, the real Linux lifecycle, the local-install integration subset, strict OpenSpec validation, and required repository checks
+
+## 6. Non-VM Startup Stabilization
+
+- [x] 6.1 Classify wrapped non-VM connection-reset errors as refused and add focused unit coverage for the observed dial-error shape
+- [x] 6.2 Run 30 consecutive Linux local lifecycle iterations with temporary diagnostics and remove the diagnostics afterward
+- [x] 6.3 Rebuild without diagnostics and run focused runtime, formatting, and strict OpenSpec checks

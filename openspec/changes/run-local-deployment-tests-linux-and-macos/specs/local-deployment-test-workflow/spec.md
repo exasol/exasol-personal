@@ -37,6 +37,10 @@ The local deployment test suite SHALL run portable lifecycle coverage on every e
 - **WHEN** the Linux AMD64 local row runs the full local deployment lifecycle
 - **THEN** initialization, deployment, query, stop, start, and cleanup execute against the Linux host runtime and the published connection metadata does not advertise shell access
 
+#### Scenario: Non-VM port forwarding resets before the database listens
+- **WHEN** a non-VM local runtime's published database port resets a readiness connection during startup
+- **THEN** the launcher treats the reset as a transient refused connection and continues database readiness waiting instead of reporting a blocked network path
+
 #### Scenario: Portable lifecycle runs on macOS
 - **WHEN** the macOS ARM64 local row runs the full local deployment lifecycle
 - **THEN** initialization, deployment, query, stop, start, and cleanup execute against the macOS VM runtime and the published connection metadata reports shell access as supported

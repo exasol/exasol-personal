@@ -9,6 +9,7 @@ The manual deployment-test workflow runs real local deployment tests only on the
 - Reject an exclusively requested local platform when no supported local row matches, while allowing the combined suite to run whichever rows match.
 - Keep the workflow manually dispatched, run portable lifecycle coverage on both local runtimes, and preserve skips only for macOS VM-specific behavior.
 - Exclude tests that are incompatible with local deployments from the local suite while retaining manually supplied custom-SLC coverage.
+- Treat transient connection resets from non-VM local runtimes during database startup as refused connections so readiness waiting can continue.
 - Document the expanded local deployment test coverage and runner behavior.
 
 ## Capabilities
@@ -23,4 +24,4 @@ None.
 
 ## Impact
 
-The deployment-test GitHub Actions workflow, local test selection and platform guards, its shared composite action inputs, Task descriptions, and CI/testing documentation are affected. Launcher runtime behavior, public CLI behavior, cloud credentials, and automatic pull-request CI are unchanged.
+The deployment-test GitHub Actions workflow, local test selection and platform guards, its shared composite action inputs, non-VM local-runtime reachability classification, Task descriptions, and CI/testing documentation are affected. Public CLI behavior, cloud credentials, and automatic pull-request CI are unchanged.
