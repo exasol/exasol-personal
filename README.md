@@ -187,6 +187,16 @@ CREATE OR REPLACE TABLE PRODUCT_REVIEWS AS (
 
 Exasol infers the table schema directly from the Parquet files, so there's no need to define columns up front.
 
+For a Parquet file on your computer, use the bundled SQL client and the `LOCAL` form:
+
+```sql
+CREATE TABLE LOCAL_PRODUCTS AS (
+    IMPORT FROM LOCAL PARQUET FILE '/path/to/products.parquet'
+);
+```
+
+Run this statement with `exasol connect -c` or from a SQL file passed to `exasol connect -f`. The file is read from the client machine and the local import supports one Parquet file per statement. This launcher support does not change engine-side Parquet semantics or add cloud/object-storage import behavior.
+
 | Table | Rows | Size |
 |---|---|---|
 | `PRODUCTS` | 1,000,000 | 27.3 MiB |

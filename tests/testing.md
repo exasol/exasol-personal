@@ -30,12 +30,14 @@ Read-only connect / query / output workflows against the running deployment.
 | `test_invalid_sql_does_not_crash_shell` | local, cloud | Verifies an invalid statement reports an error but keeps the shell alive |
 | `test_many_statements_remain_stable` | local, cloud | Runs 50 small statements in one session to confirm no crash or hang |
 
-`tests/tests/e2e/test_import_local_csv.py`
+`tests/tests/e2e/test_import_local_data.py`
 
 | Test | Targets | Description |
 |------|---------|-------------|
 | `test_import_csv_missing_file_reports_client_side` | local, cloud | Verifies a missing CSV path fails client-side with a clear "file not found" error |
 | `test_import_csv_uses_local_filesystem` | local, cloud | Verifies `IMPORT FROM LOCAL CSV` reads from the client filesystem, not the database node |
+| `test_import_parquet_uses_local_filesystem` | local, cloud | Verifies `IMPORT FROM LOCAL PARQUET` reads a Parquet file from the client filesystem and imports its rows |
+| `test_import_parquet_missing_file_reports_client_side` | local, cloud | Verifies a missing local Parquet path fails client-side with a clear "file not found" error |
 | `test_import_large_csv_completes_or_fails_actionably` | local, cloud | Verifies a large CSV import either completes or fails with actionable guidance; size and timeout are tunable via `EXASOL_STRESS_CSV_MB` and `EXASOL_STRESS_TIMEOUT_S` |
 
 ## Deployment Testing
