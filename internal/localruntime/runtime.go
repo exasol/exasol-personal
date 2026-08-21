@@ -66,6 +66,23 @@ var (
 	)
 )
 
+type PortState string
+
+const (
+	PortStateReachable PortState = "reachable"
+	PortStateRefused   PortState = "refused"
+	PortStateBlocked   PortState = "blocked"
+	PortStateTimeout   PortState = "timeout"
+)
+
+type PortHealth struct {
+	State PortState `json:"state"`
+}
+
+type HealthCheckResult struct {
+	Ports map[string]PortHealth `json:"ports"`
+}
+
 // Runtime is the generic local runtime interface.
 // It intentionally owns the complete lifecycle and durability contract.
 // nolint: interfacebloat
