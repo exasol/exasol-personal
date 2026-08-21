@@ -169,7 +169,7 @@ func (m *Manager) Get(
 	// identity of whatever was actually embedded (e.g. FileSource.Identify
 	// hashes a path, not file content).
 	switch {
-	case def.Embed:
+	case def.Embed != EmbedNever:
 		if hash, ok := lookupEmbeddedHash(resourceID); ok {
 			artifact.Sha256 = hash
 		}
@@ -561,7 +561,7 @@ func (m *Manager) resolveEntry(
 	// because its live source is already a bare directory needing no
 	// extraction to read.
 	extract := def.Extract
-	if def.Glob && def.Embed {
+	if def.Glob && def.Embed != EmbedNever {
 		extract = true
 	}
 
@@ -611,7 +611,7 @@ func (m *Manager) resolveEntry(
 		DownloadPath: downloadPath,
 		ResourcePath: resourcePath,
 		Extract:      extract,
-		Embed:        def.Embed,
+		Embed:        def.Embed != EmbedNever,
 	}, nil
 }
 
@@ -697,7 +697,7 @@ func checksumMismatchError(expected, actual string) error {
 
 func urlBasename(rawURL string) string {
 	rawPath := rawURL
-	if after, ok := strings.CutPrefix(rawPath, "file://"); ok {
+	if after, ok := strings.CutPrefix(rawPath, FileURLScheme); ok {
 		rawPath = after
 	} else if idx := strings.Index(rawPath, "://"); idx >= 0 {
 		rawPath = rawPath[idx+3:]

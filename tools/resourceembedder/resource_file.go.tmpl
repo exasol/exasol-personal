@@ -20,6 +20,9 @@ var {{.VarName}} []byte
 func init() {
 {{- range .Resources}}
 	runtimeartifacts.Register({{printf "%q" .ResourceID}}, {{.VarName}}, {{printf "%q" .Hash}})
+{{- if .Members}}
+	runtimeartifacts.RegisterGroupMembers({{printf "%q" .ResourceID}}, []string{ {{- range .Members}}{{printf "%q" .}}, {{end -}} })
+{{- end}}
 {{- end}}
 }
 {{end -}}

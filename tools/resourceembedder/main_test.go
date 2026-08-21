@@ -14,9 +14,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
@@ -44,6 +46,26 @@ func sha256Hex(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func TestDataFileName_ReplacesHyphensWithUnderscores(t *testing.T) {
+	t.Parallel()
+
+	got := dataFileName("infrastructure-presets", "linux", "amd64")
+	want := "infrastructure_presets_linux_amd64.bin"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestGoIdentifier_CamelCasesAKebabCaseResourceID(t *testing.T) {
+	t.Parallel()
+
+	got := goIdentifier("infrastructure-presets")
+	want := "infrastructurePresets"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
 func TestGeneratePlatform_WritesRealDataForDeclaredPlatform(t *testing.T) {
 	t.Parallel()
 
@@ -51,7 +73,7 @@ func TestGeneratePlatform_WritesRealDataForDeclaredPlatform(t *testing.T) {
 	content := []byte("runner binary bytes")
 	server := newFixtureServer(t, "artifact.bin", content)
 	def := runtimeartifacts.ResourceDefinition{
-		Embed: true,
+		Embed: runtimeartifacts.EmbedDefault,
 		Artifact: map[string]runtimeartifacts.ArtifactSpec{
 			"darwin/arm64": {
 				URL:    server.URL + "/artifact.bin",
@@ -101,7 +123,7 @@ func TestGeneratePlatform_WritesPlaceholderForUndeclaredPlatform(t *testing.T) {
 
 	// Given
 	def := runtimeartifacts.ResourceDefinition{
-		Embed: true,
+		Embed: runtimeartifacts.EmbedDefault,
 		Artifact: map[string]runtimeartifacts.ArtifactSpec{
 			"darwin/arm64": {
 				URL:    "https://example.com/artifact.bin",
@@ -146,7 +168,7 @@ func TestGeneratePlatform_SkipEmbedNeverFetchesEvenOnDeclaredPlatform(t *testing
 
 	// Given
 	def := runtimeartifacts.ResourceDefinition{
-		Embed: true,
+		Embed: runtimeartifacts.EmbedDefault,
 		Artifact: map[string]runtimeartifacts.ArtifactSpec{
 			"darwin/arm64": {
 				// A URL that would fail loudly if ever dialed, proving
@@ -179,6 +201,45 @@ func TestGeneratePlatform_SkipEmbedNeverFetchesEvenOnDeclaredPlatform(t *testing
 	}
 }
 
+func TestGeneratePlatform_SkipEmbedStillEmbedsWhenAlways(t *testing.T) {
+	t.Parallel()
+
+	// Given a resource declaring embed: always, e.g. the small, locally
+	// sourced preset directories that unit tests must resolve by name even
+	// under SKIP_EMBED.
+	content := []byte("preset directory bytes")
+	server := newFixtureServer(t, "artifact.bin", content)
+	def := runtimeartifacts.ResourceDefinition{
+		Embed: runtimeartifacts.EmbedAlways,
+		Artifact: map[string]runtimeartifacts.ArtifactSpec{
+			"darwin/arm64": {
+				URL:    server.URL + "/artifact.bin",
+				Sha256: sha256Hex(content),
+			},
+		},
+	}
+	spec := runtimeartifacts.ResourceSpec{"embed-gen-test": def}
+	cacheDir := t.TempDir()
+	outputDir := t.TempDir()
+	manager := runtimeartifacts.NewResourceManagerForPlatform(spec, cacheDir, "darwin", "arm64")
+	g := &generator{manager: manager, outputDir: outputDir, goos: "darwin", goarch: "arm64", skipEmbed: true}
+
+	// When
+	err := g.generatePlatform(context.Background(), spec)
+
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	goSource, err := os.ReadFile(filepath.Join(outputDir, "resources_darwin_arm64.go"))
+	if err != nil {
+		t.Fatalf("expected generated .go file, got %v", err)
+	}
+	if !strings.Contains(string(goSource), "go:embed") {
+		t.Fatalf("expected embed: always to embed real data despite skipEmbed, got:\n%s", goSource)
+	}
+}
+
 func TestGeneratePlatform_DoesNotTouchOtherPlatformsFile(t *testing.T) {
 	t.Parallel()
 
@@ -186,7 +247,7 @@ func TestGeneratePlatform_DoesNotTouchOtherPlatformsFile(t *testing.T) {
 	content := []byte("runner binary bytes")
 	server := newFixtureServer(t, "artifact.bin", content)
 	def := runtimeartifacts.ResourceDefinition{
-		Embed: true,
+		Embed: runtimeartifacts.EmbedDefault,
 		Artifact: map[string]runtimeartifacts.ArtifactSpec{
 			"darwin/arm64": {
 				URL:    server.URL + "/artifact.bin",
@@ -230,19 +291,19 @@ func TestGeneratePlatform_CombinesMultipleResourcesIntoOneFile(t *testing.T) {
 	secondServer := newFixtureServer(t, "second.bin", secondContent)
 	spec := runtimeartifacts.ResourceSpec{
 		"embed-gen-first": {
-			Embed: true,
+			Embed: runtimeartifacts.EmbedDefault,
 			Artifact: map[string]runtimeartifacts.ArtifactSpec{
 				"darwin/arm64": {URL: server.URL + "/first.bin", Sha256: sha256Hex(firstContent)},
 			},
 		},
 		"embed-gen-second": {
-			Embed: true,
+			Embed: runtimeartifacts.EmbedDefault,
 			Artifact: map[string]runtimeartifacts.ArtifactSpec{
 				"darwin/arm64": {URL: secondServer.URL + "/second.bin", Sha256: sha256Hex(secondContent)},
 			},
 		},
 		"embed-gen-not-declared": {
-			Embed: true,
+			Embed: runtimeartifacts.EmbedDefault,
 			Artifact: map[string]runtimeartifacts.ArtifactSpec{
 				"linux/amd64": {URL: "https://example.com/artifact.bin", Sha256: "deadbeef"},
 			},
@@ -338,7 +399,7 @@ func TestGeneratePlatform_EmbedsRawArchiveWhenResourcePathIsDeclared(t *testing.
 	server := newFixtureServer(t, "artifact.zip", archive)
 	def := runtimeartifacts.ResourceDefinition{
 		Extract: true,
-		Embed:   true,
+		Embed:   runtimeartifacts.EmbedDefault,
 		Artifact: map[string]runtimeartifacts.ArtifactSpec{
 			"darwin/arm64": {
 				URL:          server.URL + "/artifact.zip",
@@ -374,5 +435,288 @@ func TestGeneratePlatform_EmbedsRawArchiveWhenResourcePathIsDeclared(t *testing.
 	// resource_path on its own copy, not on the shared spec.
 	if got := spec["embed-extract-test"].Artifact["darwin/arm64"].ResourcePath; got != "launcher" {
 		t.Errorf("expected the spec's resource_path to be left alone, got %q", got)
+	}
+}
+//nolint:paralleltest // changes the process's working directory.
+func TestResolveRelativeLocalArtifacts_GenerationIsIdenticalFromAnyWorkingDirectory(t *testing.T) {
+	// Given: a resource whose artifact is a relative bare local path.
+	root := t.TempDir()
+	fixtureDir := filepath.Join(root, "assets", "fixture")
+	if err := os.MkdirAll(fixtureDir, dirPerm); err != nil {
+		t.Fatalf("failed to create fixture directory: %v", err)
+	}
+	fixturePath := filepath.Join(fixtureDir, "artifact.bin")
+	if err := os.WriteFile(fixturePath, []byte("fixture content"), filePerm); err != nil {
+		t.Fatalf("failed to write fixture file: %v", err)
+	}
+	spec := runtimeartifacts.ResourceSpec{
+		"fixture-resource": {
+			Embed: runtimeartifacts.EmbedDefault,
+			Artifact: map[string]runtimeartifacts.ArtifactSpec{
+				"linux/amd64": {URL: "assets/fixture/artifact.bin"},
+			},
+		},
+	}
+
+	generateFrom := func(cwd string) []byte {
+		t.Helper()
+
+		original, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to resolve current working directory: %v", err)
+		}
+		if err := os.Chdir(cwd); err != nil {
+			t.Fatalf("failed to change to fixture working directory: %v", err)
+		}
+		defer func() {
+			if err := os.Chdir(original); err != nil {
+				t.Fatalf("failed to restore working directory: %v", err)
+			}
+		}()
+
+		resolved := resolveRelativeLocalArtifacts(root, spec)
+		outputDir := t.TempDir()
+		manager := runtimeartifacts.NewResourceManagerForPlatform(resolved, t.TempDir(), "linux", "amd64")
+		g := &generator{manager: manager, outputDir: outputDir, goos: "linux", goarch: "amd64"}
+		if err := g.generatePlatform(context.Background(), resolved); err != nil {
+			t.Fatalf("expected no error generating from %q, got %v", cwd, err)
+		}
+		data, err := os.ReadFile(filepath.Join(outputDir, "resources_linux_amd64.go"))
+		if err != nil {
+			t.Fatalf("expected generated file, got %v", err)
+		}
+
+		return data
+	}
+
+	// When
+	first := generateFrom(t.TempDir())
+	second := generateFrom(t.TempDir())
+
+	// Then
+	if string(first) != string(second) {
+		t.Fatalf(
+			"expected identical generated output regardless of working directory, got:\n%s\nvs\n%s",
+			first, second,
+		)
+	}
+}
+
+//nolint:paralleltest // registers process-global embedded data via runtimeartifacts.Register.
+func TestGeneratePlatform_EmbedsADirectoryAsAnExtractableArchive(t *testing.T) {
+	// Given: an extract:true directory resource, matching how a built-in
+	// preset directory is declared in resources.yaml.
+	fixtureDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fixtureDir, "main.tf"), []byte("main"), filePerm); err != nil {
+		t.Fatalf("failed to write fixture file: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(fixtureDir, "files"), dirPerm); err != nil {
+		t.Fatalf("failed to create nested fixture directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fixtureDir, "files", "config"), []byte("config"), filePerm); err != nil {
+		t.Fatalf("failed to write nested fixture file: %v", err)
+	}
+	def := runtimeartifacts.ResourceDefinition{
+		Extract: true,
+		Embed:   runtimeartifacts.EmbedDefault,
+		Artifact: map[string]runtimeartifacts.ArtifactSpec{
+			"any": {URL: "file://" + fixtureDir, DownloadPath: "dir-embed-test.tar.gz"},
+		},
+	}
+	spec := runtimeartifacts.ResourceSpec{"dir-embed-test": def}
+	outputDir := t.TempDir()
+	manager := runtimeartifacts.NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+	g := &generator{manager: manager, outputDir: outputDir, goos: "linux", goarch: "amd64"}
+
+	// When: the generator embeds the directory.
+	err := g.generatePlatform(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(outputDir, "dir_embed_test_linux_amd64.bin"))
+	if err != nil {
+		t.Fatalf("expected embedded data file, got %v", err)
+	}
+
+	// Then: registering those bytes and resolving through a fresh manager
+	// (as the real running binary would) reproduces the original directory.
+	runtimeartifacts.Register("dir-embed-test", data, sha256Hex(data))
+	runtimeManager := runtimeartifacts.NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+	path, err := runtimeManager.Get(context.Background(), def, "dir-embed-test")
+	if err != nil {
+		t.Fatalf("expected the embedded archive to extract, got %v", err)
+	}
+	mainContent, err := os.ReadFile(filepath.Join(path, "main.tf"))
+	if err != nil || string(mainContent) != "main" {
+		t.Fatalf("expected extracted main.tf content, got %q, err %v", mainContent, err)
+	}
+	configContent, err := os.ReadFile(filepath.Join(path, "files", "config"))
+	if err != nil || string(configContent) != "config" {
+		t.Fatalf(
+			"expected extracted nested files/config content, got %q, err %v", configContent, err,
+		)
+	}
+}
+
+//nolint:paralleltest // registers process-global embedded data via runtimeartifacts.Register.
+func TestResolveResourceEmbed_GlobEmbedsMatchesNestedBelowRoot(t *testing.T) {
+	// Given: a pattern nested below the resolved root's own top level, as
+	// opposed to a bare "*" matching root's immediate children — the match
+	// name ("aws") differs from the directory WalkDir must descend through
+	// to reach it ("modules").
+	fixtureDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(fixtureDir, "modules", "aws"), dirPerm); err != nil {
+		t.Fatalf("failed to create fixture subdirectory: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(fixtureDir, "modules", "aws", "main.tf"), []byte("aws module"), filePerm,
+	); err != nil {
+		t.Fatalf("failed to write fixture file: %v", err)
+	}
+	def := runtimeartifacts.ResourceDefinition{
+		Glob:  true,
+		Embed: runtimeartifacts.EmbedAlways,
+		Artifact: map[string]runtimeartifacts.ArtifactSpec{
+			"any": {
+				URL:          "file://" + fixtureDir,
+				ResourcePath: "modules/*",
+				DownloadPath: "nested-glob-test.tar.gz",
+			},
+		},
+	}
+	spec := runtimeartifacts.ResourceSpec{"nested-glob-test": def}
+	outputDir := t.TempDir()
+	manager := runtimeartifacts.NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+	g := &generator{manager: manager, outputDir: outputDir, goos: "linux", goarch: "amd64"}
+
+	// When
+	embed, err := g.resolveResourceEmbed(context.Background(), "nested-glob-test", def)
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if embed == nil || !slices.Contains(embed.Members, "aws") {
+		t.Fatalf("expected member %q, got %v", "aws", embed)
+	}
+
+	// And: registering those bytes and resolving through a fresh manager (as
+	// the real running binary would) reproduces the matched directory's own
+	// content — a regression here previously embedded an empty archive,
+	// since "modules" itself never matched the "aws" member filter.
+	data, err := os.ReadFile(filepath.Join(outputDir, embed.DataFile))
+	if err != nil {
+		t.Fatalf("failed to read staged embed data: %v", err)
+	}
+	runtimeartifacts.Register("nested-glob-test", data, sha256Hex(data))
+	runtimeManager := runtimeartifacts.NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+	path, err := runtimeManager.RequestMember(context.Background(), "nested-glob-test", "aws")
+	if err != nil {
+		t.Fatalf("expected the embedded archive to resolve member %q, got %v", "aws", err)
+	}
+	content, err := os.ReadFile(filepath.Join(path, "main.tf"))
+	if err != nil || string(content) != "aws module" {
+		t.Fatalf("expected extracted main.tf content, got %q, err %v", content, err)
+	}
+}
+
+//nolint:paralleltest // registers process-global embedded data via runtimeartifacts.Register.
+func TestResolveResourceEmbed_GlobArchivesSymlinksInsteadOfFailing(t *testing.T) {
+	// Given: a matched directory containing a relative symlink, the way a
+	// cloned git repository's own modules commonly do.
+	fixtureDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(fixtureDir, "aws"), dirPerm); err != nil {
+		t.Fatalf("failed to create fixture subdirectory: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(fixtureDir, "aws", "main.tf"), []byte("aws module"), filePerm,
+	); err != nil {
+		t.Fatalf("failed to write fixture file: %v", err)
+	}
+	if err := os.Symlink("main.tf", filepath.Join(fixtureDir, "aws", "link.tf")); err != nil {
+		t.Fatalf("failed to create fixture symlink: %v", err)
+	}
+	def := runtimeartifacts.ResourceDefinition{
+		Glob:  true,
+		Embed: runtimeartifacts.EmbedAlways,
+		Artifact: map[string]runtimeartifacts.ArtifactSpec{
+			"any": {
+				URL:          "file://" + fixtureDir,
+				ResourcePath: "*",
+				DownloadPath: "symlink-glob-test.tar.gz",
+			},
+		},
+	}
+	spec := runtimeartifacts.ResourceSpec{"symlink-glob-test": def}
+	outputDir := t.TempDir()
+	manager := runtimeartifacts.NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+	g := &generator{manager: manager, outputDir: outputDir, goos: "linux", goarch: "amd64"}
+
+	// When
+	embed, err := g.resolveResourceEmbed(context.Background(), "symlink-glob-test", def)
+	// Then: generation succeeds instead of failing with "write too long".
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// And: the running binary materializes the symlink itself, not a
+	// truncated copy of its target.
+	data, err := os.ReadFile(filepath.Join(outputDir, embed.DataFile))
+	if err != nil {
+		t.Fatalf("failed to read staged embed data: %v", err)
+	}
+	runtimeartifacts.Register("symlink-glob-test", data, sha256Hex(data))
+	runtimeManager := runtimeartifacts.NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+	path, err := runtimeManager.RequestMember(context.Background(), "symlink-glob-test", "aws")
+	if err != nil {
+		t.Fatalf("expected the embedded archive to resolve member %q, got %v", "aws", err)
+	}
+	linkTarget, err := os.Readlink(filepath.Join(path, "link.tf"))
+	if err != nil || linkTarget != "main.tf" {
+		t.Fatalf("expected link.tf to be a symlink to main.tf, got %q, err %v", linkTarget, err)
+	}
+}
+
+func TestResolveResourceEmbed_RealPresetDirectoriesGlobToDeclaredMembers(t *testing.T) {
+	t.Parallel()
+
+	// Given: the real repository's own resources.yaml and directory tree.
+	root, err := repoRoot()
+	if err != nil {
+		t.Fatalf("failed to resolve repository root: %v", err)
+	}
+	spec, err := runtimeartifacts.ParseSpec(resources.ResourcesYAML)
+	if err != nil {
+		t.Fatalf("failed to parse resources.yaml: %v", err)
+	}
+	spec = resolveRelativeLocalArtifacts(root, spec)
+	manager := runtimeartifacts.NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+	g := &generator{manager: manager, outputDir: t.TempDir(), goos: "linux", goarch: "amd64"}
+
+	// When
+	infra, err := g.resolveResourceEmbed(context.Background(), "infrastructure-presets", spec["infrastructure-presets"])
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if infra == nil {
+		t.Fatal("expected infrastructure-presets to embed for linux/amd64")
+	}
+	for _, want := range []string{"aws", "azure", "exoscale", "stackit", "local"} {
+		if !slices.Contains(infra.Members, want) {
+			t.Fatalf("expected member %q, got %v", want, infra.Members)
+		}
+	}
+
+	install, err := g.resolveResourceEmbed(context.Background(), "installation-presets", spec["installation-presets"])
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if install == nil {
+		t.Fatal("expected installation-presets to embed for linux/amd64")
+	}
+	for _, want := range []string{"ubuntu", "local"} {
+		if !slices.Contains(install.Members, want) {
+			t.Fatalf("expected member %q, got %v", want, install.Members)
+		}
 	}
 }
