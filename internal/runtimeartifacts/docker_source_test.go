@@ -232,16 +232,6 @@ func TestDockerSource_Fetch_LocalOCIImages(t *testing.T) {
 				t.Fatalf("parse Docker source URL: %v", err)
 			}
 			dstPath := filepath.Join(t.TempDir(), "download.tar")
-			t.Cleanup(func() {
-				_ = exec.CommandContext(
-					t.Context(),
-					"podman",
-					"image",
-					"rm",
-					"--force",
-					parsedReference.destinationImage,
-				).Run()
-			})
 
 			// When
 			if _, err := src.Fetch(context.Background(), url, dstPath); err != nil {
@@ -331,10 +321,19 @@ func createTestContainerImage(t *testing.T) string {
 	image := fmt.Sprintf("runtimeartifacts-test-%d", time.Now().UnixNano())
 	runPodman(t, "build", "--tag", image, contextDir)
 	t.Cleanup(func() {
-		_ = exec.CommandContext(t.Context(), "podman", "image", "rm", "--force", image).Run()
+		removePodmanImage(t, image)
 	})
 
 	return image
+}
+
+func removePodmanImage(t *testing.T, image string) {
+	t.Helper()
+
+	cmd := exec.CommandContext(context.Background(), "podman", "image", "rm", "--force", image)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Errorf("remove test image %q: %v\n%s", image, err, output)
+	}
 }
 
 func runPodman(t *testing.T, args ...string) string {
