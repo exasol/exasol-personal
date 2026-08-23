@@ -166,6 +166,7 @@ func runInstallPersistentPostRun(cmd *cobra.Command, _ []string) error {
 	deployment := commonFlags.Deployment()
 	if err := deploy.Deploy(
 		cmd.Context(),
+		cmd.InOrStdin(),
 		deployment,
 		commonFlags.DeployVerbose,
 		deploy.DeployOptions{

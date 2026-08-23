@@ -142,6 +142,26 @@ func TestLocalReachabilityMessageForLinuxHostDoesNotUseMacOSGuidance(t *testing.
 	}
 }
 
+func TestLocalReachabilityMessageForWindowsHostDoesNotUseMacOSGuidance(t *testing.T) {
+	t.Parallel()
+
+	localRuntime := localruntime.NewHostWindowsRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+
+	message := localReachabilityMessageForRuntime(localRuntime)
+
+	if message != windowsHostReachabilityMessage {
+		t.Fatalf("expected Windows Podman guidance, got %q", message)
+	}
+	if strings.Contains(message, "Local Network") ||
+		strings.Contains(message, "System Settings") {
+		t.Fatalf("Windows guidance must not contain macOS advice: %q", message)
+	}
+	if !strings.Contains(message, "rootful") ||
+		!strings.Contains(message, "Windows Firewall") {
+		t.Fatalf("Windows guidance must mention rootful and firewall: %q", message)
+	}
+}
+
 func skipOnWindows(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {

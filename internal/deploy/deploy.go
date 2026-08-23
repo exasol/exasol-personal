@@ -74,6 +74,7 @@ func deployFailureResourceHintSuffix(deployment config.DeploymentDir) string {
 //nolint:revive
 func Deploy(
 	ctx context.Context,
+	in io.Reader,
 	deployment config.DeploymentDir,
 	verbose bool,
 	options DeployOptions,
@@ -81,7 +82,7 @@ func Deploy(
 	slog.Debug("Running deploy")
 
 	// Execute according to infrastructure/installation manifests instead of exasolConfig.yaml
-	return deployFromManifests(ctx, deployment, verbose, options)
+	return deployFromManifests(ctx, in, deployment, verbose, options)
 }
 
 func WorkflowStatePermitsDeploy(
@@ -123,18 +124,20 @@ func WorkflowStatePermitsDeploy(
 //nolint:revive
 func deployFromManifests(
 	ctx context.Context,
+	in io.Reader,
 	deployment config.DeploymentDir,
 	verbose bool,
 	options DeployOptions,
 ) error {
 	return withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			return deployLocked(ctx, deployment, verbose, options)
+			return deployLocked(ctx, in, deployment, verbose, options)
 		})
 }
 
 func deployLocked(
 	ctx context.Context,
+	in io.Reader,
 	deployment config.DeploymentDir,
 	verbose bool,
 	options DeployOptions,
@@ -156,7 +159,7 @@ func deployLocked(
 		slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 	}
 
-	return runDeployBackend(ctx, exasolState, deployment, verbose, options)
+	return runDeployBackend(ctx, in, exasolState, deployment, verbose, options)
 }
 
 // runDeployBackend registers the interruption signal handler, runs the
@@ -168,6 +171,7 @@ func deployLocked(
 //nolint:revive // verbose mirrors the command-level --verbose flag.
 func runDeployBackend(
 	ctx context.Context,
+	in io.Reader,
 	exasolState *config.ExasolPersonalState,
 	deployment config.DeploymentDir,
 	verbose bool,
@@ -210,6 +214,7 @@ func runDeployBackend(
 
 	if err := backend.Deploy(
 		ctx,
+		in,
 		externalCommandOutput,
 		externalCommandOutput,
 		options,

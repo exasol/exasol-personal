@@ -206,6 +206,7 @@ func (install *PodmanInstall) Start(
 		"-p", fmt.Sprintf("%d:%d", startConfig.ContainerDBPort, nanoInternalDBPort),
 		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
 	}
+	args = append(args, startConfig.ExtraRunArgs...)
 	for _, slc := range availableSLCs {
 		args = append(args,
 			"--mount",

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -58,7 +59,7 @@ func (runtime *LinuxHostRuntime) Deployment() config.DeploymentDir {
 
 // VM sizing (CPU/memory/data disk) is not a Prepare concern: it's passed
 // directly as RunCommand args for "start".
-func (runtime *LinuxHostRuntime) Prepare(_ context.Context, _, _ io.Writer) error {
+func (runtime *LinuxHostRuntime) Prepare(_ context.Context, _ io.Reader, _, _ io.Writer) error {
 	if _, err := exec.LookPath("podman"); err != nil {
 		return fmt.Errorf("'podman' is required to run exasol locally on this platform: %w", err)
 	}
@@ -193,6 +194,12 @@ func classifyHostPortHealth(err error) PortState {
 	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) {
 		return PortStateRefused
 	}
+	// The error slipped past every well-known classifier. This is where
+	// Windows-specific errnos (WSAENOTCONN, WSAECONNABORTED, etc.) end
+	// up today; logging the underlying error keeps future occurrences
+	// diagnosable from deployment.log alone.
+	slog.Debug("classifying host port dial error as blocked",
+		"error", err.Error(), "errorType", fmt.Sprintf("%T", err))
 
 	return PortStateBlocked
 }
@@ -211,7 +218,7 @@ func (runtime *LinuxHostRuntime) runCmd() []string {
 func (runtime *LinuxHostRuntime) podmanStartConfig(
 	runtimeConfig RuntimeConfig,
 ) (localinstall.StartConfig, error) {
-	hostDBPort, err := resolveLinuxHostDBPort(runtimeConfig.Ports)
+	hostDBPort, err := resolveHostPodmanDBPort(runtimeConfig.Ports)
 	if err != nil {
 		return localinstall.StartConfig{}, err
 	}
@@ -225,7 +232,7 @@ func (runtime *LinuxHostRuntime) podmanStartConfig(
 	}, nil
 }
 
-func resolveLinuxHostDBPort(ports string) (int, error) {
+func resolveHostPodmanDBPort(ports string) (int, error) {
 	hostDBPort := nanoDBPort
 	dbPortConfigured := false
 	if strings.TrimSpace(ports) == "" {

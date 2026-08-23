@@ -355,6 +355,7 @@ func ctyScalarToGoValue(value cty.Value) (any, error) {
 
 func (b *tofuBackend) Deploy(
 	ctx context.Context,
+	_ io.Reader,
 	out, outErr io.Writer,
 	options DeployOptions,
 ) error {
@@ -402,6 +403,7 @@ func (b *tofuBackend) Deploy(
 
 func (b *tofuBackend) Start(
 	ctx context.Context,
+	_ io.Reader,
 	out, outErr io.Writer,
 	waitTimeoutSeconds int,
 ) error {

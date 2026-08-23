@@ -84,7 +84,7 @@ func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
 		return install, nil
 	}
 
-	if err := localRuntime.Prepare(context.Background(), nil, nil); err != nil {
+	if err := localRuntime.Prepare(context.Background(), nil, nil, nil); err != nil {
 		t.Fatalf("prepare failed: %v", err)
 	}
 	if err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
@@ -155,7 +155,7 @@ func TestMacVMRuntimeStartStopsVMWhenInstallFails(t *testing.T) {
 			startErr:   errors.New("podman failed"),
 		}, nil
 	}
-	if err := localRuntime.Prepare(context.Background(), nil, nil); err != nil {
+	if err := localRuntime.Prepare(context.Background(), nil, nil, nil); err != nil {
 		t.Fatalf("prepare failed: %v", err)
 	}
 

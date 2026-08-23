@@ -92,6 +92,11 @@ tasks:
       DEBUG_BUILD: '{{default "false" .DEBUG_BUILD}}'
       TARGET_GOARCH: '{{default "amd64" .GOARCH}}'
       OUTPUT_NAME: '{{.COMMAND_NAME}}.exe'
+    deps:
+      - task: generate
+        vars:
+          TARGET_GOOS: windows
+          TARGET_GOARCH: '{{default "amd64" .GOARCH}}'
     env:
       GOOS: windows
       GOARCH: '{{.TARGET_GOARCH}}'

@@ -28,6 +28,7 @@ var deployCmd = &cobra.Command{
 
 		if err := deploy.Deploy(
 			cmd.Context(),
+			cmd.InOrStdin(),
 			deployment,
 			commonFlags.DeployVerbose,
 			deploy.DeployOptions{

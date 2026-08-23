@@ -144,6 +144,16 @@ func TestNewLocalRuntimeForPlatform_SelectsRuntime(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "windows amd64",
+			goos: localWindowsOS, goarch: localWindowsAMD64,
+			assert: func(t *testing.T, selected localruntime.Runtime) {
+				t.Helper()
+				if _, ok := selected.(*localruntime.WindowsHostRuntime); !ok {
+					t.Fatalf("expected WindowsHostRuntime, got %T", selected)
+				}
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -160,11 +170,11 @@ func TestNewLocalRuntimeForPlatform_SelectsRuntime(t *testing.T) {
 	}
 }
 
-func TestNewLocalRuntimeForPlatform_RejectsWindows(t *testing.T) {
+func TestNewLocalRuntimeForPlatform_RejectsUnsupportedPlatform(t *testing.T) {
 	t.Parallel()
 
 	_, err := newLocalRuntimeForPlatform(
-		config.NewDeploymentDir(t.TempDir()), nil, "windows", "amd64",
+		config.NewDeploymentDir(t.TempDir()), nil, "freebsd", "amd64",
 	)
 	if !errors.Is(err, errUnsupportedLocalPlatform) {
 		t.Fatalf("expected unsupported platform error, got %v", err)

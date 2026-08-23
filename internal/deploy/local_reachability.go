@@ -41,6 +41,24 @@ const linuxHostReachabilityMessage = "could not reach the local database endpoin
 	"Inspect the deployment container with `podman ps -a` and `podman logs`, then check for " +
 	"a host firewall rule or another process using the configured database port."
 
+const windowsHostReachabilityMessage = "could not reach the local database endpoint published " +
+	"by podman-for-windows.\n\n" +
+	"On Windows the database port is forwarded from the Nano container, through the WSL2 podman " +
+	"machine, out to 127.0.0.1 on the host. If every forwarded port is unreachable the break is " +
+	"almost always in that host-to-VM path rather than in the database itself.\n\n" +
+	"Likely causes, in decreasing order of frequency:\n" +
+	"  1. The podman machine is rootless. Rootless podman-for-windows uses `pasta` networking, " +
+	"which resets long-lived TCP/TLS connections and can drop the DB port entirely. Verify with " +
+	"`podman machine inspect --format {{.Rootful}} podman-machine-default`; convert with " +
+	"`podman machine stop && podman machine set --rootful && podman machine start` and retry.\n" +
+	"  2. Windows Firewall or a third-party security product is blocking loopback traffic to the " +
+	"forwarded port. Temporarily allow the port and retry.\n" +
+	"  3. Another process (Docker Desktop, a running server, an older Exasol container) is " +
+	"already bound to the configured port. Use `netstat -ano | findstr <port>` to check.\n" +
+	"  4. The podman machine stopped between start and health-check. Run " +
+	"`podman machine ls` and start it if needed.\n\n" +
+	"Diagnostic commands: `podman ps -a`, `podman logs <container>`, `podman machine inspect`."
+
 // classifyLocalReachability inspects the local runtime's forwarded-port
 // health and returns a localReachabilityError when every forwarded port is
 // unreachable, which points at a network-wide problem rather than one
@@ -84,6 +102,9 @@ func classifyLocalReachability(ctx context.Context, runtime localruntime.Runtime
 func localReachabilityMessageForRuntime(runtime localruntime.Runtime) string {
 	if _, isLinuxHost := runtime.(*localruntime.LinuxHostRuntime); isLinuxHost {
 		return linuxHostReachabilityMessage
+	}
+	if _, isWindowsHost := runtime.(*localruntime.WindowsHostRuntime); isWindowsHost {
+		return windowsHostReachabilityMessage
 	}
 
 	return localReachabilityMessage

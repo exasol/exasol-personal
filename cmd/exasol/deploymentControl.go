@@ -57,6 +57,7 @@ var startCmd = &cobra.Command{
 
 		if err := deploy.Start(
 			cmd.Context(),
+			cmd.InOrStdin(),
 			deployment,
 			commonFlags.DeployVerbose,
 			waitTimeoutSeconds,

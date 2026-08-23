@@ -171,13 +171,14 @@ func markOperationInterrupted(
 //nolint:revive
 func Start(
 	ctx context.Context,
+	in io.Reader,
 	deployment config.DeploymentDir,
 	verbose bool,
 	waitTimeoutSeconds int,
 ) error {
 	err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			return startLocked(ctx, deployment, verbose, waitTimeoutSeconds)
+			return startLocked(ctx, in, deployment, verbose, waitTimeoutSeconds)
 		})
 	if errors.Is(err, ErrDeploymentDirectoryLocked) {
 		slog.Warn(err.Error())
@@ -189,6 +190,7 @@ func Start(
 
 func startLocked(
 	ctx context.Context,
+	in io.Reader,
 	deployment config.DeploymentDir,
 	verbose bool,
 	waitTimeoutSeconds int,
@@ -224,7 +226,7 @@ func startLocked(
 		slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 	}
 
-	return runStartBackend(ctx, exasolState, deployment, verbose, waitTimeoutSeconds)
+	return runStartBackend(ctx, in, exasolState, deployment, verbose, waitTimeoutSeconds)
 }
 
 // runStartBackend registers the interruption signal handler, invokes the
@@ -236,6 +238,7 @@ func startLocked(
 //nolint:revive // verbose mirrors the command-level --verbose flag.
 func runStartBackend(
 	ctx context.Context,
+	in io.Reader,
 	exasolState *config.ExasolPersonalState,
 	deployment config.DeploymentDir,
 	verbose bool,
@@ -270,6 +273,7 @@ func runStartBackend(
 
 	if err := backend.Start(
 		ctx,
+		in,
 		externalCommandOutput,
 		externalCommandOutput,
 		waitTimeoutSeconds,

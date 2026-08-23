@@ -161,6 +161,17 @@ func unexpectedRunningVMWarning(deployment config.DeploymentDir) string {
 	return "a local VM process is running, but the recorded deployment state does not " +
 		"expect one. This is likely a process orphaned by an earlier crash or a manually " +
 		"killed launcher invocation, and can cause a future start/install to fail with a " +
-		"VM storage conflict. Look for a `mac-runner` process for this deployment and stop " +
-		"it, then retry."
+		"VM storage conflict. " + orphanedRuntimeAdvice()
+}
+
+// orphanedRuntimeAdvice returns the platform-specific tail of
+// unexpectedRunningVMWarning: on macOS look for a mac-runner process, on
+// Linux/Windows look for a stray podman container.
+func orphanedRuntimeAdvice() string {
+	if runtime.GOOS == "darwin" {
+		return "Look for a `mac-runner` process for this deployment and stop it, then retry."
+	}
+
+	return "Look for a stray container with `podman ps -a` (name starts with " +
+		"`exasol-db-`) and remove it with `podman rm -f <name>`, then retry."
 }

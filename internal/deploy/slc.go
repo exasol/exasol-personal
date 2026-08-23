@@ -544,7 +544,10 @@ func applySLCChange(
 		if err := Stop(ctx, deployment, verbose); err != nil {
 			return 0, err
 		}
-		if err := Start(ctx, deployment, verbose, StartedDefaultTimeoutSeconds); err != nil {
+		// SLC restarts happen after the initial Prepare's consent
+		// moment. Podman and the machine are already set up; no prompt
+		// should ever fire during Start here.
+		if err := Start(ctx, nil, deployment, verbose, StartedDefaultTimeoutSeconds); err != nil {
 			return 0, err
 		}
 
@@ -555,7 +558,7 @@ func applySLCChange(
 		return SLCApplyDeferred, nil
 	}
 
-	if err := Start(ctx, deployment, verbose, StartedDefaultTimeoutSeconds); err != nil {
+	if err := Start(ctx, nil, deployment, verbose, StartedDefaultTimeoutSeconds); err != nil {
 		return 0, err
 	}
 

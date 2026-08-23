@@ -88,7 +88,7 @@ type HealthCheckResult struct {
 // nolint: interfacebloat
 type Runtime interface {
 	Deployment() config.DeploymentDir
-	Prepare(ctx context.Context, out, outErr io.Writer) error
+	Prepare(ctx context.Context, in io.Reader, out, outErr io.Writer) error
 	Start(ctx context.Context, out, outErr io.Writer, runtimeConfig VMConfig) error
 	Stop(ctx context.Context, out, outErr io.Writer) error
 	Status(ctx context.Context) (*RuntimeStatus, error)

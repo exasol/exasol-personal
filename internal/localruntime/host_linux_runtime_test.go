@@ -345,7 +345,7 @@ func TestResolveLinuxHostDBPort_RejectsInvalidMappings(t *testing.T) {
 			t.Parallel()
 
 			// Given / When
-			_, err := resolveLinuxHostDBPort(test.ports)
+			_, err := resolveHostPodmanDBPort(test.ports)
 
 			// Then
 			if err == nil {

@@ -106,7 +106,9 @@ func (runtime *MacVMRuntime) Deployment() config.DeploymentDir {
 	return runtime.deployment
 }
 
-func (runtime *MacVMRuntime) Prepare(ctx context.Context, out, outErr io.Writer) error {
+func (runtime *MacVMRuntime) Prepare(
+	ctx context.Context, _ io.Reader, out, outErr io.Writer,
+) error {
 	if err := os.MkdirAll(runtime.paths.WorkDir, dirMode); err != nil {
 		return fmt.Errorf("failed to create local runtime directory: %w", err)
 	}

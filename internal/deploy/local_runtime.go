@@ -28,12 +28,13 @@ const currentJavaMountTarget = slc.SLCMountRoot + "/current-java"
 
 func startLocalRuntime(
 	ctx context.Context,
+	in io.Reader,
 	runtime localruntime.Runtime,
 	runtimeConfig localRuntimeConfig,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
-	if err := runtime.Prepare(ctx, out, outErr); err != nil {
+	if err := runtime.Prepare(ctx, in, out, outErr); err != nil {
 		return err
 	}
 

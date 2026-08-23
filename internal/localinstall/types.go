@@ -14,6 +14,10 @@ type StartConfig struct {
 	VersionCheck         VersionCheckConfig
 	SLCs                 []SLCConfig
 	LegacyContainerNames []string
+	// ExtraRunArgs are appended to `podman run` before the image name.
+	// Used on Windows rootless to inject pasta network flags that work around
+	// the gvproxy multi-segment TLS handshake abort (see ROOTLESS_PODMAN_REPORT.md).
+	ExtraRunArgs []string
 }
 
 type VersionCheckConfig struct {
