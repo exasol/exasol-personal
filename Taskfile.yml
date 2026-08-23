@@ -92,6 +92,11 @@ tasks:
       DEBUG_BUILD: '{{default "false" .DEBUG_BUILD}}'
       TARGET_GOARCH: '{{default "amd64" .GOARCH}}'
       OUTPUT_NAME: '{{.COMMAND_NAME}}.exe'
+    deps:
+      - task: generate
+        vars:
+          TARGET_GOOS: windows
+          TARGET_GOARCH: '{{default "amd64" .GOARCH}}'
     env:
       GOOS: windows
       GOARCH: '{{.TARGET_GOARCH}}'
@@ -228,7 +233,7 @@ tasks:
         poetry run pytest -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra={{.INFRA}} {{if .STACKIT_PROJECT_ID}}--stackit-project-id={{.STACKIT_PROJECT_ID}}{{end}} -m "installation_e2e" {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}deployment {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}e2e {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}chaos
 
   tests-deployment-local:
-    desc: Run local deployment tests on supported Linux and macOS hosts
+    desc: Run local deployment tests on supported Linux, Windows, and macOS hosts
     deps: [tests-setup]
     dir: '{{.TESTS_DIR}}'
     vars:

@@ -108,7 +108,12 @@ func (runtime *MacVMRuntime) Deployment() config.DeploymentDir {
 }
 
 // Prepare initializes the local runtime without starting the VM.
-func (runtime *MacVMRuntime) Prepare(ctx context.Context, out, outErr io.Writer) error {
+//
+// The macOS runtime needs no approval-gated host changes: Podman ships
+// inside the managed VM, so nothing outside the deployment is touched.
+func (runtime *MacVMRuntime) Prepare(
+	ctx context.Context, out, outErr io.Writer, _ PrepareOptions,
+) error {
 	if err := os.MkdirAll(runtime.paths.WorkDir, dirMode); err != nil {
 		return fmt.Errorf("failed to create local runtime directory: %w", err)
 	}
@@ -195,6 +200,13 @@ func (runtime *MacVMRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
 	runtime.endpoint = endpoint
 
 	return &VMRuntimeEndpoint{RuntimeEndpoint: *endpoint}, nil
+}
+
+// EnsureQueryable is a no-op for the VM runtime. Its runner is a host-side
+// binary that reports VM state whether or not the VM is running, so Status
+// can always answer and nothing has to be started to observe it.
+func (*MacVMRuntime) EnsureQueryable(context.Context, io.Writer, io.Writer) error {
+	return nil
 }
 
 func (runtime *MacVMRuntime) Status(ctx context.Context) (*RuntimeStatus, error) {

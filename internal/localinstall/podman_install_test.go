@@ -47,7 +47,8 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 		"<sync>",
 		"<podman><run><-d><--replace><--name><" + testContainerName + ">" +
 			"<--shm-size=512mb><--pids-limit=-1><--security-opt><unmask=ALL>" +
-			"<--restart><always><-p><28563:8563><-v><" + startConfig.DataDir + ":/exa:Z>" +
+			"<--restart><always><-p><127.0.0.1:28563:8563>" +
+			"<-v><" + startConfig.DataDir + ":/exa:Z>" +
 			"<" + testLoadedImage + "><init><params=maxConnectionsLicenseLimit=20>" +
 			"<VERSION_CHECK_ENABLED=0>",
 	})
@@ -228,7 +229,9 @@ func TestPodmanInstallStart_ReturnsWhenContainerAlreadyRunning(t *testing.T) {
 	writeTestFile(
 		t,
 		filepath.Join(fixture.scenarioDir, "mounts-output"),
-		fmt.Sprintf(`[{"Source":%q,"Destination":"/exa"}]`, startConfig.DataDir),
+		fmt.Sprintf(
+			`[{"Type":"bind","Source":%q,"Destination":"/exa"}]`, startConfig.DataDir,
+		),
 	)
 	install.resolveImage = nil
 

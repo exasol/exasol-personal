@@ -8,10 +8,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 )
 
+const podmanBindMountType = "bind"
+
 type podmanMount struct {
+	//nolint:tagliatelle // Podman inspect emits this exact field name.
+	Type string `json:"Type"`
 	//nolint:tagliatelle // Podman inspect emits this exact field name.
 	Source string `json:"Source"`
 	//nolint:tagliatelle // Podman inspect emits this exact field name.
@@ -27,11 +32,11 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	if !containerStatus.Exists {
 		return false, nil
 	}
-	usesDataDir, err := install.containerUsesDataDir(ctx, outErr, containerName, dataDir)
+	persistent, err := install.containerHasPersistentExaMount(ctx, outErr, containerName)
 	if err != nil {
 		return false, install.failureWithDiagnostics(ctx, outErr, containerName, err)
 	}
-	if usesDataDir {
+	if persistent {
 		return false, nil
 	}
 
@@ -76,7 +81,7 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 		out,
 		outErr,
 		"cp",
-		containerName+":/exa/.",
+		containerName+":"+nanoDataMountPath+"/.",
 		stagingDir,
 	); err != nil {
 		_ = install.environment.RemoveAll(ctx, stagingDir)
@@ -128,10 +133,25 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	return true, nil
 }
 
-func (install *PodmanInstall) containerUsesDataDir(
+// containerHasPersistentExaMount reports whether the container keeps /exa on a
+// bind mount, meaning its data already lives outside the container's overlay
+// filesystem and needs no migration.
+//
+// It deliberately does not compare the mount source against the deployment's
+// data directory. Podman reports the source as the container engine sees it,
+// which on Windows is the path inside the Podman machine
+// (/mnt/c/Users/... for C:\Users\...), so no amount of path cleaning makes
+// the two comparable. Treating that mismatch as "not persistent" made every
+// Windows container look like a legacy overlay one, and the migration then
+// refused to overwrite the deployment's own data.
+//
+// A source that differs from the current data directory is not a problem
+// either way: the container is recreated against the configured directory on
+// every start, so the mount is corrected without copying anything.
+func (install *PodmanInstall) containerHasPersistentExaMount(
 	ctx context.Context,
 	outErr io.Writer,
-	containerName, dataDir string,
+	containerName string,
 ) (bool, error) {
 	output, err := install.runPodmanOutput(
 		ctx,
@@ -155,8 +175,10 @@ func (install *PodmanInstall) containerUsesDataDir(
 		)
 	}
 	for _, mount := range mounts {
-		if mount.Destination == "/exa" &&
-			filepath.Clean(mount.Source) == filepath.Clean(dataDir) {
+		if mount.Destination == nanoDataMountPath && mount.Type == podmanBindMountType {
+			slog.Debug("Nano container has a bind-mounted /exa; skipping overlay migration",
+				"container", containerName, "source", mount.Source)
+
 			return true, nil
 		}
 	}

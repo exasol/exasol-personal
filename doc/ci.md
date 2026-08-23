@@ -13,7 +13,9 @@ Runs automatically on every push to `main` and on pull requests targeting `main`
 - **Go Linting** - Runs `golangci-lint` and `tflint`
 - **Python Linting** - Runs `ruff` and `mypy` on test code
 - **Unit Tests** - Runs Go unit tests with coverage
-- **Integration Tests** - Runs Python integration tests
+- **Integration Tests** - Runs Python integration tests on Linux and Windows
+
+Build and integration tests run on both `ubuntu-latest` and `windows-latest`, so Windows-only behavior — including Windows local deployments — is covered on every pull request. Unit tests and linting run on Linux only.
 
 This is the only workflow that runs contributor code in pull request context. It is intentionally non-privileged and does not use deployment/release credentials.
 All CI jobs declare explicit minimal permissions.
@@ -90,9 +92,11 @@ Workflow input:
   - Exoscale runs `tests-deployment-infrastructure`
 - Current enabled local rows:
   - Linux AMD64 runs `tests-deployment-local` on `ubuntu-latest`
+  - Windows AMD64 runs `tests-deployment-local` on `windows-latest`
   - macOS ARM64 runs `tests-deployment-local` on the self-hosted virtualization runner
-  - Linux ARM64 coverage is deferred; Windows local deployments are unsupported.
-- After pushing a branch, dispatch one local row with `task github:trigger-deployment-tests SUITE=local OS=ubuntu-latest` or `task github:trigger-deployment-tests SUITE=local OS=macos-latest`, then verify deployment, tests, cleanup, and the final commit status.
+  - Linux ARM64 coverage is deferred.
+  - The Windows row runs most of the local suite. Two pseudo-terminal cases remain POSIX-only, and the VM sizing cases remain macOS-only, so Windows covers 22 of the 27 selected tests.
+- After pushing a branch, dispatch one local row with `task github:trigger-deployment-tests SUITE=local OS=ubuntu-latest` (or `OS=windows-latest`, `OS=macos-latest`), then verify deployment, tests, cleanup, and the final commit status.
 - Credential bootstrap:
   - AWS via OIDC role assumption
   - Azure via OIDC (`azure/login`)
@@ -100,6 +104,19 @@ Workflow input:
   - Azure identifiers are sourced from GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
 
 **Warning:** Cloud rows create real infrastructure and incur costs; local rows create a real database deployment on the selected runner.
+
+### Integration Tests (`tests-integration.yml`)
+
+The same integration suite the CI pipeline runs, dispatchable on its own when a targeted run is wanted without pushing a new commit or opening a pull request.
+
+**Trigger manually via:**
+- GitHub Actions UI: [tests-integration.yml](https://github.com/exasol/exasol-personal/actions/workflows/tests-integration.yml) → "Run workflow"
+- After pushing a branch: `task github:trigger-integration-tests OS=windows-latest`
+
+Workflow input:
+- `os`: OS selector (`all`, `ubuntu-latest`, `windows-latest`; default `all`)
+
+On Windows, a failing run also uploads Podman machine state, container inspection and logs, listening ports, and the test deployment directory as a diagnostics artifact.
 
 ## AWS Identity Provider and IAM Role for Deployment Tests
 

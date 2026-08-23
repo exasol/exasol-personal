@@ -30,12 +30,15 @@ const (
 	nanoPIDsLimit             = "-1"
 	nanoSecurityOpt           = "unmask=ALL"
 	nanoRestartPolicy         = "always"
-	nanoDataMountTarget       = "/exa:Z"
-	podmanDiagnosticsTimeout  = 10 * time.Second
-	nanoVersionCheckDefault   = 86400
-	nanoVersionCheckMin       = 60
-	nanoVersionCheckMax       = 604800
-	nanoVersionCheckRetryMax  = 86400
+	// nanoDataMountPath is where Nano expects its persistent data inside the
+	// container; the target adds SELinux relabelling for the bind mount.
+	nanoDataMountPath        = "/exa"
+	nanoDataMountTarget      = nanoDataMountPath + ":Z"
+	podmanDiagnosticsTimeout = 10 * time.Second
+	nanoVersionCheckDefault  = 86400
+	nanoVersionCheckMin      = 60
+	nanoVersionCheckMax      = 604800
+	nanoVersionCheckRetryMax = 86400
 )
 
 type PodmanInstall struct {
@@ -204,7 +207,17 @@ func (install *PodmanInstall) Start(
 		"--pids-limit=" + nanoPIDsLimit,
 		"--security-opt", nanoSecurityOpt,
 		"--restart", nanoRestartPolicy,
-		"-p", fmt.Sprintf("%d:%d", startConfig.ContainerDBPort, nanoInternalDBPort),
+		// Publish on 127.0.0.1 rather than the wildcard. On Windows the
+		// WSL2 podman machine has no IPv6 route, but pasta still creates a
+		// dual-stack published listener, and WSL's NAT localhost relay
+		// mirrors that as [::1] only. Clients then prefer the IPv6 path,
+		// connect successfully, and get reset because pasta cannot forward
+		// to the container's IPv4-only listener. Binding IPv4 explicitly
+		// keeps the relay on 127.0.0.1. See
+		// https://github.com/microsoft/WSL/issues/6387 and
+		// https://github.com/microsoft/WSL/blob/master/doc/docs/
+		// technical-documentation/localhost.md
+		"-p", fmt.Sprintf("127.0.0.1:%d:%d", startConfig.ContainerDBPort, nanoInternalDBPort),
 		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
 	}
 	for _, slc := range availableSLCs {

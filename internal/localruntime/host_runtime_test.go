@@ -6,6 +6,7 @@ package localruntime
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -345,7 +346,7 @@ func TestResolveLinuxHostDBPort_RejectsInvalidMappings(t *testing.T) {
 			t.Parallel()
 
 			// Given / When
-			_, err := resolveLinuxHostDBPort(test.ports)
+			_, err := resolveHostPodmanDBPort(test.ports)
 
 			// Then
 			if err == nil {
@@ -355,5 +356,23 @@ func TestResolveLinuxHostDBPort_RejectsInvalidMappings(t *testing.T) {
 				t.Fatalf("expected contextual local port error, got %v", err)
 			}
 		})
+	}
+}
+
+// Linux needs no readying step: Podman on PATH does not stop being reachable,
+// so EnsureQueryable must not invoke it at all.
+//
+//nolint:paralleltest // The test replaces process-wide PATH with fake binary shims.
+func TestLinuxEnsureQueryable_InvokesNothing(t *testing.T) {
+	dir := newIsolatedShimDir(t)
+	logPath := dropShim(t, dir, "podman", `exit 1`)
+
+	hostRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+
+	if err := hostRuntime.EnsureQueryable(context.Background(), nil, nil); err != nil {
+		t.Fatalf("EnsureQueryable() unexpected error: %v", err)
+	}
+	if _, err := os.Stat(logPath); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Linux must not invoke podman to become queryable (err=%v)", err)
 	}
 }

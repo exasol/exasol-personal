@@ -11,7 +11,6 @@ local path or an https URL.
 
 import json
 import os
-import sys
 import textwrap
 from collections.abc import Iterator
 from pathlib import Path
@@ -128,9 +127,6 @@ def _assert_python_udf_is_unavailable(deployment: Deployment, schema: str) -> No
     assert "hi" not in _run_scalar_udf(deployment, PYTHON_ALIAS, schema)
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_slc_list_reports_catalog_containers(slc_deployment: Deployment) -> None:
@@ -152,9 +148,6 @@ def test_slc_list_reports_catalog_containers(slc_deployment: Deployment) -> None
     assert PYTHON_ALIAS in python["aliases"]
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_slc_install_rejects_unknown_alias(slc_deployment: Deployment) -> None:
@@ -173,9 +166,6 @@ def test_slc_install_rejects_unknown_alias(slc_deployment: Deployment) -> None:
     assert _is_alias_installed(slc_deployment, PYTHON_ALIAS) == was_installed
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_slc_remove_when_not_installed_is_noop(slc_deployment: Deployment) -> None:
@@ -188,9 +178,6 @@ def test_slc_remove_when_not_installed_is_noop(slc_deployment: Deployment) -> No
     assert "nothing to remove" in result.stdout
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_official_slc_install_runs_udf(slc_deployment: Deployment) -> None:
@@ -208,9 +195,6 @@ def test_official_slc_install_runs_udf(slc_deployment: Deployment) -> None:
     assert _is_alias_installed(slc_deployment, PYTHON_ALIAS)
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_official_slc_remove_uninstalls_language(slc_deployment: Deployment) -> None:
@@ -228,9 +212,6 @@ def test_official_slc_remove_uninstalls_language(slc_deployment: Deployment) -> 
     _assert_python_udf_is_unavailable(slc_deployment, "slc_e2e_remove")
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_slc_install_no_restart_activates_on_next_start(
@@ -254,9 +235,6 @@ def test_slc_install_no_restart_activates_on_next_start(
     assert "hi" in _run_scalar_udf(slc_deployment, PYTHON_ALIAS, "slc_e2e_defer")
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_slc_update_when_current_is_noop(slc_deployment: Deployment) -> None:
@@ -274,9 +252,6 @@ def test_slc_update_when_current_is_noop(slc_deployment: Deployment) -> None:
     assert "hi" in _run_scalar_udf(slc_deployment, PYTHON_ALIAS, "slc_e2e_update")
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_custom_slc_rejects_invalid_input(slc_deployment: Deployment) -> None:
@@ -306,9 +281,6 @@ def test_custom_slc_rejects_invalid_input(slc_deployment: Deployment) -> None:
     assert _custom_status(slc_deployment, CUSTOM_ALIAS) is None
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_custom_slc_rejects_invalid_container(
@@ -341,9 +313,6 @@ def test_custom_slc_rejects_invalid_container(
     assert _custom_status(slc_deployment, CUSTOM_ALIAS) is None
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_custom_slc_install_runs_udf(slc_deployment: Deployment) -> None:
@@ -366,9 +335,6 @@ def test_custom_slc_install_runs_udf(slc_deployment: Deployment) -> None:
     assert "hi" in _run_scalar_udf(slc_deployment, CUSTOM_ALIAS, "slc_e2e_custom")
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_custom_slc_reinstall_and_update_are_noops(slc_deployment: Deployment) -> None:
@@ -398,9 +364,6 @@ def test_custom_slc_reinstall_and_update_are_noops(slc_deployment: Deployment) -
     assert "hi" in _run_scalar_udf(slc_deployment, CUSTOM_ALIAS, "slc_e2e_custom_noop")
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_slc_remove_handles_a_custom_alias(slc_deployment: Deployment) -> None:
@@ -418,9 +381,6 @@ def test_slc_remove_handles_a_custom_alias(slc_deployment: Deployment) -> None:
     )
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_custom_slc_remove_uninstalls_language(slc_deployment: Deployment) -> None:
@@ -447,9 +407,6 @@ def test_custom_slc_remove_uninstalls_language(slc_deployment: Deployment) -> No
     assert "nothing to remove" in again.stdout
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_custom_slc_no_restart_activates_on_next_start(

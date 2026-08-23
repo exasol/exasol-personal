@@ -4,7 +4,6 @@
 """Tests specific to local deployments."""
 
 import json
-import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Final
@@ -39,9 +38,6 @@ def local_ports_deployment(
         deployment.cleanup()
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_ports_override_sets_db_port(
@@ -61,9 +57,6 @@ def test_ports_override_sets_db_port(
     assert "DUMMY" in proc.stdout
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_ports_override_stable_across_restarts(

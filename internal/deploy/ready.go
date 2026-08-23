@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	exasolerrors "github.com/exasol/exasol-driver-go/pkg/errors"
 	"github.com/exasol/exasol-personal/internal/config"
@@ -84,11 +85,28 @@ func WaitForDatabaseStarted(
 	)
 }
 
+// localReachabilityRecheckDelay absorbs a transient container-startup race
+// in which the runtime's port forwarder is briefly in an ambiguous state
+// (accepts SYN but has no listener behind it yet) and returns errors that
+// classifyHostPortHealth cannot map to "refused" on Windows.
+const localReachabilityRecheckDelay = 3 * time.Second
+
 func WaitForLocalDatabaseStarted(ctx context.Context, runtime localruntime.Runtime) error {
-	// Fail fast on an already-blocked network path instead of waiting out the
-	// whole backoff window on a problem that will never resolve on its own.
+	// Fail fast on a *persistently* blocked network path instead of waiting
+	// out the whole backoff window. A single classification failure is not
+	// enough: container startup can transiently look blocked before the
+	// forwarder settles. Re-check once after a short delay before giving up.
 	if err := classifyLocalReachability(ctx, runtime); err != nil {
-		return err
+		slog.Debug("initial local reachability check reported network blocked; retrying",
+			"error", err, "retryAfter", localReachabilityRecheckDelay)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(localReachabilityRecheckDelay):
+		}
+		if err := classifyLocalReachability(ctx, runtime); err != nil {
+			return err
+		}
 	}
 
 	return waitForDatabaseStartedWithBackoff(
