@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 	"github.com/exasol/exasol-personal/internal/task_runner"
@@ -67,6 +68,16 @@ func newTofuBackend(
 	}
 
 	return b
+}
+
+// Cloud deployments have no host prerequisites to satisfy.
+func (*tofuBackend) Prepare(
+	context.Context,
+	io.Writer,
+	io.Writer,
+	localruntime.PrepareOptions,
+) error {
+	return nil
 }
 
 func (*tofuBackend) ValidateEnvironment() error {

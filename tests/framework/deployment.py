@@ -32,6 +32,7 @@ class Deployment:
     DESTROY_RETRY_INITIAL_DELAY_SECONDS: Final = 15.0
     DESTROY_RETRY_MAX_DELAY_SECONDS: Final = 200.0
     DESTROY_RETRY_JITTER_FACTOR: Final = 0.20
+    UNATTENDED_FLAG: Final = "--auto-approve"
 
     def __init__(
         self,
@@ -160,14 +161,31 @@ class Deployment:
         """Return true when the destroy failure is considered transient."""
         return self.AZURE_NIC_RESERVATION_ERROR in log_tail
 
+    def _unattended(self, args: tuple[str, ...]) -> list[str]:
+        """Add --auto-approve unless the caller already supplied it.
+
+        Deployment tests run without a user. On platforms where the launcher
+        must change the host to satisfy prerequisites — installing Podman on
+        Windows — an unapproved deploy fails instead of proceeding. The flag is
+        inert for backends that request no host changes.
+        """
+        if self.UNATTENDED_FLAG in args:
+            return list(args)
+
+        return [*args, self.UNATTENDED_FLAG]
+
     def deploy(self, *args: str) -> CompletedProcess[str]:
-        return self.launcher.deploy(self.deployment_dir.name, *args)
+        return self.launcher.deploy(self.deployment_dir.name, *self._unattended(args))
 
     def deploy_no_block(self, *args: str) -> Popen[str]:
-        return self.launcher.deploy_no_block(self.deployment_dir.name, *args)
+        return self.launcher.deploy_no_block(
+            self.deployment_dir.name, *self._unattended(args)
+        )
 
     def start_no_block(self, *args: str) -> Popen[str]:
-        return self.launcher.start_no_block(self.deployment_dir.name, *args)
+        return self.launcher.start_no_block(
+            self.deployment_dir.name, *self._unattended(args)
+        )
 
     def stop_no_block(self, *args: str) -> Popen[str]:
         return self.launcher.stop_no_block(self.deployment_dir.name, *args)
@@ -177,7 +195,7 @@ class Deployment:
 
     def start(self, *args: str) -> CompletedProcess[str]:
         """Start the deployment (power on)."""
-        return self.launcher.start(self.deployment_dir.name, *args)
+        return self.launcher.start(self.deployment_dir.name, *self._unattended(args))
 
     def stop(self, *args: str) -> CompletedProcess[str]:
         """Stop the deployment (power off)."""

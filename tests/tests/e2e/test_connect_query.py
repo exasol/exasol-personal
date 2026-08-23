@@ -24,6 +24,7 @@ import pytest
 
 from framework.deployment import Deployment
 from framework.launcher import Launcher
+from tests.testcase_helpers import requires_posix_pty
 
 if not sys.platform.startswith("win"):
     import fcntl
@@ -170,9 +171,7 @@ def test_file_import(reusable_deployment: Deployment) -> None:
     assert stdout.strip("\n") == expected.strip("\n")
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
+@requires_posix_pty
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_connect_table_width(reusable_deployment: Deployment) -> None:
@@ -235,9 +234,7 @@ def test_connect_table_width(reusable_deployment: Deployment) -> None:
     assert output == expected.strip("\n")
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
+@requires_posix_pty
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_connect_interactive_shows_version_and_exit_hint(
@@ -342,9 +339,6 @@ def test_diag_cos_runs_confd_client(
     assert "command not found" not in output.lower()
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
-)
 @pytest.mark.installation_e2e
 @pytest.mark.local_e2e
 def test_license_session_limit(reusable_deployment: Deployment) -> None:

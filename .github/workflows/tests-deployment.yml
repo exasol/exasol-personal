@@ -77,6 +77,13 @@ jobs:
               "status_context": "tests-deployment-local-linux-amd64"
             },
             {
+              "os": "windows-latest",
+              "platform": "windows-amd64",
+              "runner": ["windows-latest"],
+              "system_python": "false",
+              "status_context": "tests-deployment-local-windows-amd64"
+            },
+            {
               "os": "macos-latest",
               "platform": "macos-arm64",
               "runner": ["self-hosted", "macOS", "ARM64", "virtualization"],
@@ -114,7 +121,7 @@ jobs:
           fi
 
           if [ "${selected_suite}" = "local" ] && [ "${local_count}" -eq 0 ]; then
-            echo "No supported local deployment test row matches os=${selected_os}; use ubuntu-latest, macos-latest, or all." >&2
+            echo "No supported local deployment test row matches os=${selected_os}; use ubuntu-latest, windows-latest, macos-latest, or all." >&2
             exit 1
           fi
 

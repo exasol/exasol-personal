@@ -112,7 +112,9 @@ func TestPodmanInstallStart_AdoptsLegacyNamedContainerUsingPersistentData(t *tes
 	writeTestFile(
 		t,
 		filepath.Join(fixture.scenarioDir, "mounts-output"),
-		fmt.Sprintf(`[{"Source":%q,"Destination":"/exa"}]`, startConfig.DataDir),
+		fmt.Sprintf(
+			`[{"Type":"bind","Source":%q,"Destination":"/exa"}]`, startConfig.DataDir,
+		),
 	)
 
 	// When
@@ -288,4 +290,79 @@ func migrationStagingDirs(t *testing.T, dataDir string) []string {
 	}
 
 	return paths
+}
+
+// Regression: on Windows the data directory is a host path bind-mounted into
+// the Podman machine, and Podman reports the source as the machine sees it
+// (/mnt/c/...). Comparing that against the Windows data directory always
+// failed, so every surviving container looked like a legacy overlay one and
+// the migration refused to overwrite the deployment's own data.
+func TestPodmanInstallStart_TreatsTranslatedBindMountAsPersistent(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given a running container whose /exa bind mount is reported with a
+	// machine-side path that cannot be compared to the host data directory,
+	// and a data directory that already holds data
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "running"), testContainerName+"\n")
+	writeTestFile(t, filepath.Join(startConfig.DataDir, "storage", "data"), "preserved")
+	writeTestFile(
+		t,
+		filepath.Join(fixture.scenarioDir, "mounts-output"),
+		`[{"Type":"bind",`+
+			`"Source":"/mnt/c/Users/someone/deployment/local/runtime/exa",`+
+			`"Destination":"/exa"}]`,
+	)
+	install.resolveImage = nil
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	// Then the start succeeds rather than refusing to overwrite the data
+	if err != nil {
+		t.Fatalf("expected a translated bind mount to count as persistent: %v", err)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	for _, command := range commands {
+		if strings.Contains(command, "<cp>") {
+			t.Fatalf("no migration copy should occur, got %#v", commands)
+		}
+	}
+	// And the existing data is untouched
+	content, readErr := os.ReadFile(
+		filepath.Join(startConfig.DataDir, "storage", "data"),
+	) //nolint:gosec // test-owned path
+	if readErr != nil || string(content) != "preserved" {
+		t.Fatalf("expected the existing data to survive, got %q, %v", content, readErr)
+	}
+}
+
+// A non-bind mount at /exa is not deployment-owned persistent storage, so a
+// volume-backed container must still be migrated.
+func TestPodmanInstallStart_MigratesVolumeBackedExaData(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	install, startConfig, fixture := newLegacyOverlayFixture(t)
+	writeTestFile(
+		t,
+		filepath.Join(fixture.scenarioDir, "mounts-output"),
+		`[{"Type":"volume","Source":"exa-data","Destination":"/exa"}]`,
+	)
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "cp-source", "exasol.conf"), "migrated")
+
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	if err != nil {
+		t.Fatalf("expected volume-backed data to migrate: %v", err)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	migrated := false
+	for _, command := range commands {
+		if strings.Contains(command, "<cp><"+testContainerName+":/exa/.><") {
+			migrated = true
+		}
+	}
+	if !migrated {
+		t.Fatalf("expected a migration copy for volume-backed data, got %#v", commands)
+	}
 }

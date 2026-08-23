@@ -9,7 +9,7 @@
 
 **The Analytics Database for Agentic AI — Free for Personal Use**
 
-*Run a full Exasol database locally on macOS or Linux, or deploy to your own cloud*
+*Run a full Exasol database locally on macOS, Linux, or Windows, or deploy to your own cloud*
 
 [![Documentation](https://img.shields.io/badge/docs-exasol.com-blue)](https://docs.exasol.com/db/latest/home.htm)
 [![Community](https://img.shields.io/badge/community-exasol-green)](https://community.exasol.com)
@@ -21,7 +21,7 @@
 
 ## 🔥 Key Features
 
-- 💻 **Runs Locally in Seconds** — Spin up a full Exasol database on macOS or Linux with one command
+- 💻 **Runs Locally in Seconds** — Spin up a full Exasol database on macOS, Linux, or Windows with one command
 - 🤖 **Built for Agentic AI** — Connect AI agents and LLM tools directly through a scriptable CLI
 - 🧠 **Built-in AI Functions** — Leverage native AI/ML capabilities with GPU acceleration, right where your data lives
 - 🏎️ **In-Memory Performance** — Run complex analytics at in-memory speed with Exasol's industry-leading analytics engine
@@ -38,8 +38,9 @@
 
 - **macOS:** Apple Silicon with at least 8 GB RAM. Podman is included in the managed VM; no host Podman installation is required.
 - **Linux:** amd64 or arm64 with Podman installed and available on `PATH`.
+- **Windows:** amd64 with Windows Package Manager (`winget`) and the prerequisites for a Podman machine. If Podman is missing, the launcher offers to install it; that installation may request administrator approval.
 
-Local deployments are not supported on Windows; use a cloud deployment instead.
+On Windows the launcher also creates or starts Podman's default machine, and leaves an existing machine's configuration alone. Installing Podman changes state shared beyond the deployment, so the launcher shows the exact command and asks first. Pass `--auto-approve` to `install`, `deploy`, or `start` for unattended setup; without it, commands that cannot prompt refuse the change rather than assuming consent. Windows arm64 is not supported for local deployments.
 
 **Cloud deployment:** an account on one of the supported providers, with permission to provision compute instances:
 
@@ -66,7 +67,7 @@ Verify the installation with `exasol version`.
 
 ## 🏎️ Quick Start — Run Exasol Locally
 
-The fastest way to try Exasol: a full database running on your own macOS or Linux machine.
+The fastest way to try Exasol: a full database running on your own macOS, Linux, or Windows machine.
 
 With the launcher installed (see **Install the Launcher** above), start a local Exasol database:
 ```bash
@@ -260,7 +261,7 @@ exasol start
 ```
 The IP addresses of the nodes will change when you restart Exasol Personal. Check the output of the `start` command to know how to connect to the deployment after a restart.
 
-On macOS, the launcher manages a local VM and runs the same Podman-based database installation used on Linux inside it. If you do not configure VM memory explicitly, it defaults to about 50% of detected host memory; configured VM memory must be at least 4096 MB. On Linux, the database runs directly in Podman and can use unrestricted host CPU, memory, and storage resources, so VM sizing options do not apply. The initial local database credentials are `sys` / `exasol`. The `exasol shell host` and `exasol shell container` commands are available for macOS local deployments but are not supported on Linux.
+On macOS, the launcher manages a local VM and runs the same Podman-based database installation used on the other platforms inside it. If you do not configure VM memory explicitly, it defaults to about 50% of detected host memory; configured VM memory must be at least 4096 MB. On Linux and Windows, the database runs directly through host Podman and uses host-managed resources, so VM sizing options do not apply. On Windows those containers run inside Podman's default machine, which is shared host-wide: stopping or destroying a deployment leaves that machine running. The initial local database credentials are `sys` / `exasol`. The `exasol shell host` and `exasol shell container` commands are available for macOS local deployments but are not supported on Linux or Windows.
 
 If a local deployment does not behave as expected, `exasol diag local` prints a JSON snapshot of its runtime state, bound host ports, reachability, and database readiness. It is safe to run whether or not the deployment is currently running.
 
@@ -410,6 +411,7 @@ Where the database runs depends on the deployment type:
 - **Cloud deployments** — the database runs on your provider's infrastructure, so any supported launcher platform above works. The launcher provisions **Ubuntu 22.04 LTS (x86-64)** compute instances on all cloud providers.
 - **Local deployments on macOS** — the database runs with the bundled Podman installation in a managed VM and requires macOS 15 (Sequoia) or later on Apple Silicon, with at least 8 GB RAM.
 - **Local deployments on Linux** — the database runs in Podman on amd64 or arm64 and uses host resources without launcher-managed limits.
+- **Local deployments on Windows** — the database runs through host Podman on amd64, inside Podman's default machine. The launcher can install Podman and prepare that machine, asking before it changes the host.
 
 ## 🚧 Limitations
 

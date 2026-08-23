@@ -482,7 +482,15 @@ func (runtime *endpointRuntimeStub) Deployment() config.DeploymentDir {
 	return runtime.deployment
 }
 
-func (*endpointRuntimeStub) Prepare(context.Context, io.Writer, io.Writer) error {
+func (*endpointRuntimeStub) EnsureQueryable(
+	context.Context, io.Writer, io.Writer,
+) error {
+	return nil
+}
+
+func (*endpointRuntimeStub) Prepare(
+	context.Context, io.Writer, io.Writer, localruntime.PrepareOptions,
+) error {
 	return nil
 }
 

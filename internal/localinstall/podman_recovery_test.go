@@ -24,7 +24,9 @@ func TestPodmanInstallStart_QuarantinesInterruptedInitialCreate(t *testing.T) {
 	writeTestFile(
 		t,
 		filepath.Join(fixture.scenarioDir, "mounts-output"),
-		fmt.Sprintf(`[{"Source":%q,"Destination":"/exa"}]`, startConfig.DataDir),
+		fmt.Sprintf(
+			`[{"Type":"bind","Source":%q,"Destination":"/exa"}]`, startConfig.DataDir,
+		),
 	)
 
 	// When

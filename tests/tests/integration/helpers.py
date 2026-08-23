@@ -15,14 +15,31 @@ import pytest
 def run_command(
     command: list[str], env: dict[str, str] | None = None
 ) -> CompletedProcess[str]:
-    """Run CLI commands in integration tests."""
-    return subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        check=True,
-        env=env if env is not None else os.environ.copy(),
-    )
+    """Run CLI commands in integration tests.
+
+    Output is captured, so an unexpected failure would otherwise report only an
+    exit code. The captured streams are attached as exception notes, which
+    pytest prints with the traceback, so the launcher's own error is visible
+    without re-running the command by hand.
+    """
+    try:
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            # The launcher writes UTF-8 on every platform, including the Unicode
+            # box drawing in rendered tables. Without this, Windows decodes with
+            # the locale code page and a table crashes the reader thread, which
+            # surfaces as an empty stdout rather than a decode error.
+            encoding="utf-8",
+            check=True,
+            env=env if env is not None else os.environ.copy(),
+        )
+    except subprocess.CalledProcessError as error:
+        error.add_note(f"command: {' '.join(command)}")
+        error.add_note(f"stdout:\n{error.stdout or '<empty>'}")
+        error.add_note(f"stderr:\n{error.stderr or '<empty>'}")
+        raise
 
 
 def first_preset_id_or_skip(exasol_path: str, preset_type: str) -> str:

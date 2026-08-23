@@ -26,20 +26,6 @@ const localSkipDatabaseWaitEnv = "EXASOL_LOCAL_SKIP_DB_WAIT"
 // mount remains available for Java UDF aliases.
 const currentJavaMountTarget = slc.SLCMountRoot + "/current-java"
 
-func startLocalRuntime(
-	ctx context.Context,
-	runtime localruntime.Runtime,
-	runtimeConfig localRuntimeConfig,
-	waitTimeoutSeconds int,
-	out, outErr io.Writer,
-) error {
-	if err := runtime.Prepare(ctx, out, outErr); err != nil {
-		return err
-	}
-
-	return startPreparedLocalRuntime(ctx, runtime, runtimeConfig, waitTimeoutSeconds, out, outErr)
-}
-
 func startPreparedLocalRuntime(
 	ctx context.Context,
 	runtime localruntime.Runtime,
@@ -116,6 +102,16 @@ func reconcileLocalVMState(
 		slog.Warn("could not select local runtime during reconciliation", "error", err)
 		return nil
 	}
+	// Make the runtime observable first. A Podman machine stopped outside the
+	// launcher leaves Status unable to answer, and a swallowed status error
+	// used to leave the stale "running" state in place — which then blocked
+	// the very start that would have restarted the machine. Best-effort: if
+	// this fails, Status is still worth attempting.
+	if err := selectedRuntime.EnsureQueryable(ctx, os.Stderr, os.Stderr); err != nil {
+		slog.Warn("could not make local runtime queryable during reconciliation",
+			"error", err)
+	}
+
 	runtimeStatus, err := selectedRuntime.Status(ctx)
 	if err != nil {
 		slog.Warn("could not determine local runtime status during reconciliation", "error", err)

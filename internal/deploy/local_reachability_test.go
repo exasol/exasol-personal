@@ -32,6 +32,11 @@ const runnerZipEntryName = "launcher"
 // ResourceSpec.
 const exasolLocalRunnerResourceID = "exasol-local-runner"
 
+// fakeRunnerRunningStatus is the `status` response a fixture must return for
+// classifyLocalReachability to get as far as the health-check: the classifier
+// skips the diagnosis entirely unless the runtime reports itself running.
+const fakeRunnerRunningStatus = `{"running":true}`
+
 type localRuntimeTestPaths struct {
 	Root      string
 	WorkDir   string
@@ -56,7 +61,7 @@ func TestClassifyLocalReachability_AllPortsBlocked(t *testing.T) {
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
 	blockedJSON := `{"ports":{"ssh":{"state":"blocked"},"db":{"state":"blocked"}}}`
-	manager := writeFakeCombinedRunner(t, "", blockedJSON)
+	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, blockedJSON)
 	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
 
 	err := classifyLocalReachability(context.Background(), localRuntime)
@@ -77,7 +82,7 @@ func TestClassifyLocalReachability_OnlyDatabasePortBlocked(t *testing.T) {
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
 	mixedJSON := `{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}`
-	manager := writeFakeCombinedRunner(t, "", mixedJSON)
+	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, mixedJSON)
 	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
 
 	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
@@ -115,12 +120,104 @@ func TestClassifyLocalReachability_HealthCheckUnavailableIsNoop(t *testing.T) {
 	// should stand instead.
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	runnerScript := "#!/bin/sh\necho 'Unknown command: health-check' >&2\nexit 1\n"
+	// Status must succeed so the classifier actually reaches the health-check;
+	// only health-check is unsupported, as on an old runner daemon.
+	runnerScript := "#!/bin/sh\n" +
+		"if [ \"$1\" = status ]; then echo '" + fakeRunnerRunningStatus + "'; exit 0; fi\n" +
+		"if [ \"$1\" = run ]; then\n" +
+		"  shift; [ \"$1\" = -- ]; shift\n" +
+		"  if [ \"$1 $2 $3\" = 'podman container exists' ]; then exit 0; fi\n" +
+		"  if [ \"$1 $2 $3\" = 'podman container inspect' ]; then echo true; exit 0; fi\n" +
+		"fi\n" +
+		"echo 'Unknown command: health-check' >&2\nexit 1\n"
 	manager := newTestManagerForRunner(t, []byte(runnerScript))
 	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
 
 	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no-op when health-check is unavailable, got %v", err)
+	}
+}
+
+// Regression: the diagnosis used to return the reachability guidance and drop
+// the error the runtime actually reported. A container that fails to start
+// publishes no ports, so the classifier fires and the real cause — a Podman
+// failure, say — became invisible behind a network story.
+func TestDiagnoseLocalFailurePreservesCausalError(t *testing.T) {
+	t.Parallel()
+	skipOnWindows(t)
+
+	deployment := newLocalTestDeployment(t)
+	ensureLocalRuntimeWorkDir(t, deployment)
+	blockedJSON := `{"ports":{"ssh":{"state":"blocked"},"db":{"state":"blocked"}}}`
+	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, blockedJSON)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
+
+	cause := errors.New("failed to remove Nano container exasol-db-649d54af: exit status 125")
+
+	err := diagnoseLocalFailure(context.Background(), localRuntime, cause)
+	if err == nil {
+		t.Fatal("expected a diagnosis for a failure with every port blocked")
+	}
+	// The guidance is still reachable by sentinel...
+	if !errors.Is(err, ErrLocalReachability) {
+		t.Errorf("expected errors.Is(err, ErrLocalReachability), got %v", err)
+	}
+	// ...and the causal error survives, both by identity and in the message.
+	if !errors.Is(err, cause) {
+		t.Errorf("expected the causal error to remain matchable, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "exit status 125") {
+		t.Errorf("expected the causal error in the message, got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "could not reach the local database endpoint") {
+		t.Errorf("expected the reachability guidance to be retained, got %q", err.Error())
+	}
+}
+
+// When the ports look fine the diagnosis must not editorialise at all.
+func TestDiagnoseLocalFailureReturnsCauseUnchangedWhenReachable(t *testing.T) {
+	t.Parallel()
+	skipOnWindows(t)
+
+	deployment := newLocalTestDeployment(t)
+	ensureLocalRuntimeWorkDir(t, deployment)
+	mixedJSON := `{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}`
+	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, mixedJSON)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
+
+	cause := errors.New("podman run failed")
+
+	err := diagnoseLocalFailure(context.Background(), localRuntime, cause)
+	if !errors.Is(err, cause) {
+		t.Fatalf("expected the causal error, got %v", err)
+	}
+	if errors.Is(err, ErrLocalReachability) {
+		t.Errorf("expected no reachability guidance when a port is reachable, got %v", err)
+	}
+}
+
+// A container that is not running publishes no ports, which is
+// indistinguishable from a blocked network path by port health alone. The
+// diagnosis must stay silent there rather than send the user after firewalls
+// and port conflicts when the real fault is that nothing started.
+func TestDiagnoseLocalFailureSkipsGuidanceWhenRuntimeNotRunning(t *testing.T) {
+	t.Parallel()
+	skipOnWindows(t)
+
+	deployment := newLocalTestDeployment(t)
+	ensureLocalRuntimeWorkDir(t, deployment)
+	blockedJSON := `{"ports":{"ssh":{"state":"blocked"},"db":{"state":"blocked"}}}`
+	manager := writeFakeCombinedRunner(t, `{"running":false}`, blockedJSON)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
+
+	cause := errors.New("failed to remove Nano container exasol-db-649d54af: exit status 125")
+
+	err := diagnoseLocalFailure(context.Background(), localRuntime, cause)
+	if !errors.Is(err, cause) {
+		t.Fatalf("expected the causal error, got %v", err)
+	}
+	if errors.Is(err, ErrLocalReachability) {
+		t.Errorf("expected no reachability guidance for a stopped runtime, got %v", err)
 	}
 }
 
@@ -139,6 +236,29 @@ func TestLocalReachabilityMessageForLinuxHostDoesNotUseMacOSGuidance(t *testing.
 	}
 	if strings.Contains(message, "Local Network") || strings.Contains(message, "host-to-VM") {
 		t.Fatalf("Linux guidance must not contain macOS VM advice: %q", message)
+	}
+}
+
+func TestLocalReachabilityMessageForWindowsHostDoesNotUseMacOSGuidance(t *testing.T) {
+	t.Parallel()
+
+	localRuntime := localruntime.NewHostWindowsRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+
+	message := localReachabilityMessageForRuntime(localRuntime)
+
+	if message != windowsHostReachabilityMessage {
+		t.Fatalf("expected Windows Podman guidance, got %q", message)
+	}
+	if strings.Contains(message, "Local Network") ||
+		strings.Contains(message, "System Settings") {
+		t.Fatalf("Windows guidance must not contain macOS advice: %q", message)
+	}
+	if !strings.Contains(message, "Windows Firewall") ||
+		!strings.Contains(message, "podman machine") {
+		t.Fatalf("Windows guidance must mention the firewall and the podman machine: %q", message)
+	}
+	if strings.Contains(message, "set --rootful") {
+		t.Fatalf("Windows guidance must not advise converting to rootful: %q", message)
 	}
 }
 

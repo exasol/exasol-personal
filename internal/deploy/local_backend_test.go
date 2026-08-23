@@ -61,11 +61,19 @@ func TestValidateLocalPlatform_AcceptsLinux(t *testing.T) {
 	}
 }
 
+func TestValidateLocalPlatform_AcceptsWindowsAMD64(t *testing.T) {
+	t.Parallel()
+
+	if err := validateLocalPlatform(localWindowsOS, localWindowsAMD64); err != nil {
+		t.Fatalf("expected windows/amd64 to be accepted, got %v", err)
+	}
+}
+
 func TestValidateLocalPlatform_RejectsUnsupportedPlatform(t *testing.T) {
 	t.Parallel()
 
 	// Given / When
-	err := validateLocalPlatform("windows", "amd64")
+	err := validateLocalPlatform("freebsd", "amd64")
 
 	// Then
 	if !errors.Is(err, errUnsupportedLocalPlatform) {
