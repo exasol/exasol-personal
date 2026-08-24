@@ -236,6 +236,89 @@ printf 'host-stderr' >&2
 	}
 }
 
+//nolint:paralleltest // test runner scripts fork executable fixtures.
+func TestMacVMRuntimeOpenContainerShellDelegatesToRunner(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	state := &config.ExasolPersonalState{DeploymentId: "shell-test"}
+	if err := state.SetWorkflowStateAndWrite(
+		&config.WorkflowStateRunning{}, deployment,
+	); err != nil {
+		t.Fatalf("failed to write deployment state: %v", err)
+	}
+	observationsDir := t.TempDir()
+	argsPath := filepath.Join(observationsDir, "container-args")
+	workingDirPath := filepath.Join(observationsDir, "container-working-dir")
+	stdinPath := filepath.Join(observationsDir, "container-stdin")
+	runnerScript := fmt.Sprintf(`#!/bin/sh
+set -eu
+: > %q
+for arg do printf '%%s\n' "$arg" >> %q; done
+printf '%%s' "$PWD" > %q
+cat > %q
+printf 'container-stdout'
+printf 'container-stderr' >&2
+`, argsPath, argsPath, workingDirPath, stdinPath)
+	localRuntime := NewMacVMRuntime(
+		deployment, newTestManagerForRunner(t, []byte(runnerScript)),
+	)
+	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
+		t.Fatalf("failed to create runtime work dir: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+
+	// When
+	if err := localRuntime.OpenContainerShell(
+		context.Background(), strings.NewReader("container-input\n"), &stdout, &stderr,
+	); err != nil {
+		t.Fatalf("container shell failed: %v", err)
+	}
+
+	// Then
+	args, err := os.ReadFile(argsPath)
+	wantArgs := strings.Join([]string{
+		"run",
+		"--tty",
+		"--",
+		"sh",
+		"-c",
+		containerShellScript,
+		"sh",
+		"exasol-db-shell-test",
+		"",
+	}, "\n")
+	if err != nil || string(args) != wantArgs {
+		t.Fatalf("container shell args = %q, err=%v; want %q", args, err, wantArgs)
+	}
+	workingDir, err := os.ReadFile(workingDirPath)
+	if err != nil || string(workingDir) != localRuntime.paths.WorkDir {
+		t.Fatalf(
+			"container shell working directory = %q, err=%v; want %q",
+			workingDir,
+			err,
+			localRuntime.paths.WorkDir,
+		)
+	}
+	stdin, err := os.ReadFile(stdinPath)
+	if err != nil || string(stdin) != "container-input\n" {
+		t.Fatalf(
+			"container shell stdin = %q, err=%v; want %q",
+			stdin,
+			err,
+			"container-input\n",
+		)
+	}
+	if stdout.String() != "container-stdout" || stderr.String() != "container-stderr" {
+		t.Fatalf(
+			"unexpected container shell streams stdout=%q stderr=%q",
+			stdout.String(),
+			stderr.String(),
+		)
+	}
+}
+
 func fakeV2RunnerScript(eventsPath string, hostDBPort int) string {
 	return fmt.Sprintf(`#!/bin/sh
 set -eu
