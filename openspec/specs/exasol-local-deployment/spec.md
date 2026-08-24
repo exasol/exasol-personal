@@ -139,15 +139,23 @@ The system SHALL support standard lifecycle commands for local deployments.
 - **THEN** the launcher removes the disposable container, stops its execution environment if needed, deletes runtime data and connection artifacts, and records the deployment as initialized
 
 ### Requirement: Local shell access
-The system SHALL provide shell access for local deployments through the selected local runtime.
+
+The CLI SHALL provide `exasol shell host` and `exasol shell container` for supported local deployments and SHALL report the shell-specific cause as the authoritative error when a requested shell cannot be opened.
 
 #### Scenario: Host shell
+
 - **WHEN** a macOS local deployment is running and the user runs `exasol shell host`
-- **THEN** the runtime opens an interactive shell in the VM without exposing the underlying transport
+- **THEN** the command opens an interactive shell in the environment hosting the local deployment
 
 #### Scenario: Container shell
+
 - **WHEN** a macOS local deployment is running and the user runs `exasol shell container`
-- **THEN** the runtime opens an interactive VM shell against the deployment's mounted Nano rootfs and container namespaces without exposing the underlying transport
+- **THEN** the command opens an interactive shell in the local deployment's database container environment
+
+#### Scenario: Shell launch fails
+
+- **WHEN** a supported local shell command cannot open the requested environment
+- **THEN** the command fails and reports the shell-specific cause as the authoritative error
 
 ### Requirement: macOS local VM memory default
 The system SHALL default local deployment VM memory on macOS to approximately 50% of total host memory when the user has not configured local VM memory explicitly.
@@ -201,15 +209,18 @@ The system SHALL derive Linux runtime status from the exact Podman deployment co
 - **THEN** diagnostics describe the Linux host-container failure without macOS host-to-VM guidance
 
 ### Requirement: Linux local shell commands fail explicitly
-The system SHALL return platform-specific unsupported errors for host and container shell commands when the selected runtime cannot provide shell access.
+
+The CLI SHALL report host and container shell commands as unsupported for Linux local deployments.
 
 #### Scenario: Host shell requested on Linux
+
 - **WHEN** a user runs `exasol shell host` for a Linux local deployment
-- **THEN** the command fails with an explicit Linux host-runtime unsupported message
+- **THEN** the command fails with an explicit error identifying host shell access as unsupported on Linux
 
 #### Scenario: Container shell requested on Linux
+
 - **WHEN** a user runs `exasol shell container` for a Linux local deployment
-- **THEN** the command fails with an explicit Linux host-runtime unsupported message
+- **THEN** the command fails with an explicit error identifying container shell access as unsupported on Linux
 
 ### Requirement: Historical local data remains persistent during adoption
 

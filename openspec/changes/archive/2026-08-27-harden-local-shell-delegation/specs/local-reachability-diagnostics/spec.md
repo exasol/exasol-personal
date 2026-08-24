@@ -1,8 +1,5 @@
-# local-reachability-diagnostics Specification
+## ADDED Requirements
 
-## Purpose
-TBD - created by archiving change improve-local-reachability-diagnostics. Update Purpose after archive.
-## Requirements
 ### Requirement: Local command failures are actionable and accurate
 
 The CLI SHALL identify recognized connectivity problems affecting a local deployment, provide platform-appropriate corrective guidance, include the operation's actual failure, and treat command-specific failures as authoritative when connectivity is not established as a relevant cause.
@@ -45,3 +42,29 @@ The CLI SHALL provide a read-only `exasol diag local` command that summarizes wh
 
 - **WHEN** local deployment resources remain active even though the recorded deployment state does not expect them
 - **THEN** `exasol diag local` reports an explicit warning and corrective guidance before the user retries a lifecycle command
+
+## REMOVED Requirements
+
+### Requirement: Local diagnostics command
+
+**Reason**: The requirement encodes runtime, VM, transport, and individual port details instead of the durable diagnostic outcome visible to users.
+
+**Migration**: Use `Local diagnostics report deployment usability`, which summarizes platform support, deployment state, exposed-service reachability, database readiness, and corrective guidance through `exasol diag local`.
+
+### Requirement: Local network reachability failures are classified distinctly
+
+**Reason**: The requirement enumerates commands and transport observations instead of specifying the durable user-facing error behavior.
+
+**Migration**: Use `Local command failures are actionable and accurate`, which requires recognized connectivity failures to provide corrective guidance without masking the operation failure.
+
+### Requirement: Reachability error explains the macOS Local Network permission cause
+
+**Reason**: Platform-specific guidance remains required, but its permanent requirement does not need to encode the current forwarding architecture or fixed endpoint details.
+
+**Migration**: Use `Local command failures are actionable and accurate`; macOS guidance continues to direct users to grant Local Network access to the invoking application when that is the recognized cause.
+
+### Requirement: Reachability classification distinguishes network-wide from database-specific problems
+
+**Reason**: Endpoint comparison and classification states are internal diagnostic policy rather than behavior consumed through the CLI.
+
+**Migration**: Use `Local command failures are actionable and accurate`, which preserves unrelated failures whenever blocked access is not established as a relevant cause.
