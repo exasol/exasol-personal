@@ -440,19 +440,11 @@ func (b *localBackend) OpenHostShell(
 	ctx context.Context,
 	_ string,
 ) error {
-	if err := b.runtime.OpenHostShell(ctx, os.Stdin, os.Stdout, os.Stderr); err != nil {
-		return diagnoseLocalFailure(ctx, b.runtime, err)
-	}
-
-	return nil
+	return b.runtime.OpenHostShell(ctx, os.Stdin, os.Stdout, os.Stderr)
 }
 
 func (b *localBackend) OpenCOSShell(ctx context.Context) error {
-	if err := b.runtime.OpenContainerShell(ctx, os.Stdin, os.Stdout, os.Stderr); err != nil {
-		return diagnoseLocalFailure(ctx, b.runtime, err)
-	}
-
-	return nil
+	return b.runtime.OpenContainerShell(ctx, os.Stdin, os.Stdout, os.Stderr)
 }
 
 type localRuntimeConfig struct {
