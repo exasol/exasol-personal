@@ -5,6 +5,7 @@ package localruntime
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -178,49 +179,63 @@ func TestMacVMRuntimeStartStopsVMWhenInstallFails(t *testing.T) {
 }
 
 //nolint:paralleltest // test runner scripts fork executable fixtures.
-func TestMacVMRuntimeShellsDelegateToRunner(t *testing.T) {
+func TestMacVMRuntimeOpenHostShellDelegatesToRunner(t *testing.T) {
 	requirePOSIXRunnerTest(t)
 
+	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	state := &config.ExasolPersonalState{DeploymentId: "shell-test"}
-	if err := state.SetWorkflowStateAndWrite(
-		&config.WorkflowStateRunning{}, deployment,
-	); err != nil {
-		t.Fatalf("failed to write deployment state: %v", err)
-	}
-	logPath := filepath.Join(t.TempDir(), "runner-args")
+	observationsDir := t.TempDir()
+	argsPath := filepath.Join(observationsDir, "host-args")
+	workingDirPath := filepath.Join(observationsDir, "host-working-dir")
+	stdinPath := filepath.Join(observationsDir, "host-stdin")
 	runnerScript := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$*" >> %q
-`, logPath)
+set -eu
+: > %q
+for arg do printf '%%s\n' "$arg" >> %q; done
+printf '%%s' "$PWD" > %q
+cat > %q
+printf 'host-stdout'
+printf 'host-stderr' >&2
+`, argsPath, argsPath, workingDirPath, stdinPath)
 	localRuntime := NewMacVMRuntime(
 		deployment, newTestManagerForRunner(t, []byte(runnerScript)),
 	)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
 		t.Fatalf("failed to create runtime work dir: %v", err)
 	}
+	var stdout, stderr bytes.Buffer
 
+	// When
 	if err := localRuntime.OpenHostShell(
-		context.Background(), strings.NewReader(""), io.Discard, io.Discard,
+		context.Background(), strings.NewReader("host-input\n"), &stdout, &stderr,
 	); err != nil {
 		t.Fatalf("host shell failed: %v", err)
 	}
-	if err := localRuntime.OpenContainerShell(
-		context.Background(), strings.NewReader(""), io.Discard, io.Discard,
-	); err != nil {
-		t.Fatalf("container shell failed: %v", err)
-	}
 
-	args, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("failed to read runner args: %v", err)
+	// Then
+	args, err := os.ReadFile(argsPath)
+	if err != nil || string(args) != "run\n" {
+		t.Fatalf("host shell args = %q, err=%v; want %q", args, err, "run\n")
 	}
-	want := strings.Join([]string{
-		"run",
-		"run --tty -- sh -c " + containerShellScript + " sh exasol-db-shell-test",
-		"",
-	}, "\n")
-	if string(args) != want {
-		t.Fatalf("runner shell args = %q, want %q", args, want)
+	workingDir, err := os.ReadFile(workingDirPath)
+	if err != nil || string(workingDir) != localRuntime.paths.WorkDir {
+		t.Fatalf(
+			"host shell working directory = %q, err=%v; want %q",
+			workingDir,
+			err,
+			localRuntime.paths.WorkDir,
+		)
+	}
+	stdin, err := os.ReadFile(stdinPath)
+	if err != nil || string(stdin) != "host-input\n" {
+		t.Fatalf("host shell stdin = %q, err=%v; want %q", stdin, err, "host-input\n")
+	}
+	if stdout.String() != "host-stdout" || stderr.String() != "host-stderr" {
+		t.Fatalf(
+			"unexpected host shell streams stdout=%q stderr=%q",
+			stdout.String(),
+			stderr.String(),
+		)
 	}
 }
 
