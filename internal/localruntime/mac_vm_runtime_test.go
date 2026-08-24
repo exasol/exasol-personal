@@ -36,6 +36,9 @@ func TestReadRunnerStateUsesLabeledForwardsWithoutTransportMetadata(t *testing.T
 	if err != nil || endpoint.DBPort != 28563 {
 		t.Fatalf("unexpected endpoint %#v, err=%v", endpoint, err)
 	}
+	if !endpoint.ShellSupported {
+		t.Fatalf("expected runner endpoint to advertise shell support, got %#v", endpoint)
+	}
 }
 
 func TestReadRunnerStateRejectsMissingOrWrongDatabaseForward(t *testing.T) {
