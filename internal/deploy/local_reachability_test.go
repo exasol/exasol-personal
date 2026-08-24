@@ -60,7 +60,7 @@ func TestClassifyLocalReachability_AllPortsBlocked(t *testing.T) {
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	blockedJSON := `{"ports":{"ssh":{"state":"blocked"},"db":{"state":"blocked"}}}`
+	blockedJSON := `{"ports":{"db":{"state":"blocked"},"ui":{"state":"blocked"}}}`
 	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, blockedJSON)
 	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
 
@@ -77,11 +77,11 @@ func TestClassifyLocalReachability_OnlyDatabasePortBlocked(t *testing.T) {
 	t.Parallel()
 	skipOnWindows(t)
 
-	// A reachable SSH port alongside a blocked database port means the
-	// network path itself is fine; the problem is database-specific.
+	// A reachable application endpoint alongside a blocked database endpoint means
+	// the network path itself is fine; the problem is database-specific.
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	mixedJSON := `{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}`
+	mixedJSON := `{"ports":{"db":{"state":"blocked"},"ui":{"state":"reachable"}}}`
 	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, mixedJSON)
 	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
 
@@ -148,7 +148,7 @@ func TestDiagnoseLocalFailurePreservesCausalError(t *testing.T) {
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	blockedJSON := `{"ports":{"ssh":{"state":"blocked"},"db":{"state":"blocked"}}}`
+	blockedJSON := `{"ports":{"ui":{"state":"blocked"},"db":{"state":"blocked"}}}`
 	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, blockedJSON)
 	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
 
@@ -181,7 +181,7 @@ func TestDiagnoseLocalFailureReturnsCauseUnchangedWhenReachable(t *testing.T) {
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	mixedJSON := `{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}`
+	mixedJSON := `{"ports":{"ui":{"state":"reachable"},"db":{"state":"blocked"}}}`
 	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, mixedJSON)
 	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
 
@@ -206,7 +206,7 @@ func TestDiagnoseLocalFailureSkipsGuidanceWhenRuntimeNotRunning(t *testing.T) {
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	blockedJSON := `{"ports":{"ssh":{"state":"blocked"},"db":{"state":"blocked"}}}`
+	blockedJSON := `{"ports":{"ui":{"state":"blocked"},"db":{"state":"blocked"}}}`
 	manager := writeFakeCombinedRunner(t, `{"running":false}`, blockedJSON)
 	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
 
@@ -316,7 +316,6 @@ func writeFakeCombinedRunner(
 	script := "#!/bin/sh\n" +
 		"if [ \"$1\" = status ]; then echo '" + statusJSON + "'; exit 0; fi\n" +
 		"if [ \"$1\" = health-check ]; then echo '" + healthCheckJSON + "'; exit 0; fi\n" +
-		"if [ \"$1\" = stop ]; then exit 0; fi\n" +
 		"if [ \"$1\" = run ]; then\n" +
 		"  shift; [ \"$1\" = -- ]; shift\n" +
 		"  if [ \"$1 $2 $3\" = 'podman container exists' ]; then exit 0; fi\n" +
