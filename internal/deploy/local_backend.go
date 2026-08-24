@@ -219,6 +219,7 @@ func validateLocalInitMemory(
 	)
 }
 
+// nolint: unparam
 func validateLocalInitMemoryForPlatform(
 	ctx context.Context,
 	manifest *presets.InfrastructureManifest,
