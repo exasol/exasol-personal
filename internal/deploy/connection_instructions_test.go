@@ -216,3 +216,42 @@ func TestRenderConnectionInstructionsText_IncludesAdminUIWhenMetadataPresent(t *
 		}
 	}
 }
+
+func TestRenderConnectionInstructionsText_IncludesSSHAlternativeWhenAvailable(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	report := &DeploymentInfoReport{
+		DeploymentDir:   "/deployment",
+		DeploymentID:    "test-deployment",
+		DeploymentState: StatusRunning,
+		Deployment: &config.DeploymentInfo{
+			ClusterSize:  1,
+			ClusterState: StatusRunning,
+		},
+		Connection: &ConnectionDetails{
+			DisplayHost:     "db.example.local",
+			PublicIp:        "192.0.2.10",
+			DBPort:          8563,
+			Username:        "sys",
+			SecretsFilePath: "/deployment/secrets.json",
+			ShellSupported:  true,
+			SSHCommand:      "ssh -i /deployment/id_rsa user@192.0.2.10",
+		},
+	}
+
+	// When
+	content, err := RenderConnectionInstructionsText(report)
+	// Then
+	if err != nil {
+		t.Fatalf("expected deployment info to render: %v", err)
+	}
+	for _, expected := range []string{
+		"=== SSH Connection Instructions ===",
+		"Alternative: ssh -i /deployment/id_rsa user@192.0.2.10",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("expected instructions to contain %q, got %q", expected, content)
+		}
+	}
+}
