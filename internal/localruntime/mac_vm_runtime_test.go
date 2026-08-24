@@ -135,6 +135,54 @@ func TestMaterializeFileAtomicallyStagesAndReusesUnchangedArtifact(t *testing.T)
 	}
 }
 
+func TestMaterializeFileAtomicallyRepairsWrongModeWithoutContentChange(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "source.tar")
+	targetPath := filepath.Join(root, "share", "nano.tar")
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o750); err != nil {
+		t.Fatalf("failed to create target directory: %v", err)
+	}
+	content := []byte("image")
+	if err := os.WriteFile(sourcePath, content, 0o600); err != nil {
+		t.Fatalf("failed to write source: %v", err)
+	}
+	if err := os.WriteFile(targetPath, content, 0o600); err != nil {
+		t.Fatalf("failed to write target: %v", err)
+	}
+	modTime := time.Unix(1_700_000_000, 123)
+	if err := os.Chtimes(sourcePath, modTime, modTime); err != nil {
+		t.Fatalf("failed to set source time: %v", err)
+	}
+	if err := os.Chtimes(targetPath, modTime, modTime); err != nil {
+		t.Fatalf("failed to set target time: %v", err)
+	}
+
+	// When
+	if err := materializeFileAtomically(sourcePath, targetPath); err != nil {
+		t.Fatalf("failed to repair staged artifact: %v", err)
+	}
+
+	// Then
+	targetInfo, err := os.Stat(targetPath)
+	if err != nil {
+		t.Fatalf("failed to stat repaired target: %v", err)
+	}
+	if targetInfo.Mode().Perm() != artifactFileMode {
+		t.Fatalf(
+			"expected repaired mode %o, got %o",
+			artifactFileMode,
+			targetInfo.Mode().Perm(),
+		)
+	}
+	actualContent, err := os.ReadFile(targetPath)
+	if err != nil || string(actualContent) != string(content) {
+		t.Fatalf("repaired content = %q, err=%v; want %q", actualContent, err, content)
+	}
+}
+
 func TestMaterializeFileAtomicallyRejectsDirectorySource(t *testing.T) {
 	t.Parallel()
 
