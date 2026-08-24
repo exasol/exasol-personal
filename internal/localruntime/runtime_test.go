@@ -125,13 +125,8 @@ func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
 			t.Fatalf("missing %q in lifecycle events:\n%s", event, events)
 		}
 	}
-	if strings.Index(
-		string(events),
-		"install-stop",
-	) > strings.Index(
-		string(events),
-		"runner-stop",
-	) {
+	if strings.Index(string(events), "install-stop") >
+		strings.Index(string(events), "runner-stop") {
 		t.Fatalf("expected container cleanup before VM stop:\n%s", events)
 	}
 
@@ -176,6 +171,53 @@ func TestMacVMRuntimeStartStopsVMWhenInstallFails(t *testing.T) {
 	}
 	if !strings.Contains(string(events), "install-start\nrunner-stop\n") {
 		t.Fatalf("expected failed installation to stop VM, got:\n%s", events)
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable fixtures.
+func TestMacVMRuntimeShellsDelegateToRunner(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	state := &config.ExasolPersonalState{DeploymentId: "shell-test"}
+	if err := state.SetWorkflowStateAndWrite(
+		&config.WorkflowStateRunning{}, deployment,
+	); err != nil {
+		t.Fatalf("failed to write deployment state: %v", err)
+	}
+	logPath := filepath.Join(t.TempDir(), "runner-args")
+	runnerScript := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$*" >> %q
+`, logPath)
+	localRuntime := NewMacVMRuntime(
+		deployment, newTestManagerForRunner(t, []byte(runnerScript)),
+	)
+	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
+		t.Fatalf("failed to create runtime work dir: %v", err)
+	}
+
+	if err := localRuntime.OpenHostShell(
+		context.Background(), strings.NewReader(""), io.Discard, io.Discard,
+	); err != nil {
+		t.Fatalf("host shell failed: %v", err)
+	}
+	if err := localRuntime.OpenContainerShell(
+		context.Background(), strings.NewReader(""), io.Discard, io.Discard,
+	); err != nil {
+		t.Fatalf("container shell failed: %v", err)
+	}
+
+	args, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("failed to read runner args: %v", err)
+	}
+	want := strings.Join([]string{
+		"run",
+		"run --tty -- sh -c " + containerShellScript + " sh exasol-db-shell-test",
+		"",
+	}, "\n")
+	if string(args) != want {
+		t.Fatalf("runner shell args = %q, want %q", args, want)
 	}
 }
 
@@ -263,7 +305,9 @@ func (install *recordingLocalInstall) Destroy(ctx context.Context, out, outErr i
 }
 
 func (install *recordingLocalInstall) record(event string) {
-	file, err := os.OpenFile(install.eventsPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	file, err := os.OpenFile(
+		install.eventsPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600,
+	)
 	if err != nil {
 		return
 	}
