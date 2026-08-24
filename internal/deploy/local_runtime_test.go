@@ -220,6 +220,9 @@ func TestWriteLocalDeploymentArtifacts_OmitsLocalOnlyCloudMetadataInJSON(t *test
 	if _, exists := connection["uiPort"]; exists {
 		t.Fatalf("expected local deployment JSON to omit uiPort, got %s", string(data))
 	}
+	if shellSupported, ok := connection["shellSupported"].(bool); !ok || !shellSupported {
+		t.Fatalf("expected local deployment JSON to enable shell support, got %s", string(data))
+	}
 	if _, exists := connection["sshPort"]; exists {
 		t.Fatalf("expected local deployment JSON to omit sshPort, got %s", string(data))
 	}
