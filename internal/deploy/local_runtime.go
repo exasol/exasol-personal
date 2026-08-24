@@ -60,7 +60,9 @@ func startPreparedLocalRuntime(
 		return err
 	}
 
-	return writeLocalRuntimeArtifactsAndWait(ctx, runtime, endpoint, waitTimeoutSeconds)
+	return writeLocalRuntimeArtifactsAndWait(
+		ctx, runtime, endpoint, waitTimeoutSeconds, out, outErr,
+	)
 }
 
 // Must run after the caller commits its workflow state: that write serialises a copy read
@@ -251,6 +253,7 @@ func writeLocalRuntimeArtifactsAndWait(
 	runtime localruntime.Runtime,
 	endpoint *localruntime.VMRuntimeEndpoint,
 	waitTimeoutSeconds int,
+	out, outErr io.Writer,
 ) error {
 	if err := writeLocalDeploymentArtifacts(runtime.Deployment(), endpoint); err != nil {
 		return err
@@ -262,10 +265,32 @@ func writeLocalRuntimeArtifactsAndWait(
 	if waitTimeoutSeconds <= 0 {
 		waitTimeoutSeconds = LocalDatabaseStartedDefaultTimeoutSeconds
 	}
+
+	return waitForLocalDatabaseAndSync(
+		ctx,
+		runtime,
+		waitTimeoutSeconds,
+		out,
+		outErr,
+		WaitForLocalDatabaseStarted,
+	)
+}
+
+func waitForLocalDatabaseAndSync(
+	ctx context.Context,
+	runtime localruntime.Runtime,
+	waitTimeoutSeconds int,
+	out, outErr io.Writer,
+	waitForDatabase func(context.Context, localruntime.Runtime) error,
+) error {
 	waitCtx, cancel := context.WithTimeout(ctx, time.Duration(waitTimeoutSeconds)*time.Second)
 	defer cancel()
 
-	return WaitForLocalDatabaseStarted(waitCtx, runtime)
+	if err := waitForDatabase(waitCtx, runtime); err != nil {
+		return err
+	}
+
+	return runtime.WorkaroundNanoStartupDurability(ctx, out, outErr)
 }
 
 func writeLocalDeploymentArtifacts(
