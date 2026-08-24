@@ -56,6 +56,16 @@ Runs automatically on every push to `main`:
 
 This ensures multi-platform compatibility is validated on the main branch.
 
+### Orphaned Deployment Cleanup (`cleanup-orphaned-deployments.yml`)
+
+Runs nightly (and on manual dispatch) to delete cloud resources left behind by failed or interrupted deployment tests, using the [cleanup tool](../tools/cleanup/README.md).
+Deployments older than the configured age threshold are removed across AWS, Azure, and Exoscale.
+
+Deployments in the region CI currently deploys to (`AWS_REGION`) are removed once they are a day old, as are Azure and Exoscale deployments.
+AWS resources outlive a change of deployment region, so the regions CI deployed to previously are swept as well, but on a longer grace period of three days, since nothing left there belongs to a recent test run.
+Each region runs as its own job with its own threshold, so add the outgoing region as a row whenever `AWS_REGION` changes, and drop a row once its region is known to be empty.
+Splitting by region also keeps a deployment from matching two search targets at once, which the cleanup tool rejects: AWS reports global resources such as IAM roles in `us-east-1` regardless of which region holds the deployment's instances.
+
 ## Manual Workflows
 
 ### Deployment Tests (`tests-deployment.yml`)
@@ -102,7 +112,7 @@ Where it’s used in CI:
 Maintenance tips:
 - Prefer least privilege: attach only the permissions required for deployment tests to the IAM role.
 - Scope trust policies narrowly to this repository/branch/environment using the `sub` claim; adjust as the workflow structure evolves.
-- When rotating roles or changing account setup, update the `AWS_CI_ROLE_PLATFORM` variable with the new role ARN; for region changes, update `AWS_REGION`.
+- When rotating roles or changing account setup, update the `AWS_CI_ROLE_PLATFORM` variable with the new role ARN; for region changes, update `AWS_REGION` and add the outgoing region to the cleanup workflow's matrix.
 - Audit and monitor with AWS CloudTrail; review trust and permission policies regularly.
 
 Authoritative references:
