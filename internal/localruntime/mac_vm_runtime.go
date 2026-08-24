@@ -336,6 +336,22 @@ func (runtime *MacVMRuntime) Destroy(ctx context.Context, out, outErr io.Writer)
 	return nil
 }
 
+func (runtime *MacVMRuntime) WorkaroundNanoStartupDurability(
+	ctx context.Context,
+	out, outErr io.Writer,
+) error {
+	runnerPath, err := runtime.resolveRunnerPath(ctx)
+	if err != nil {
+		return err
+	}
+	environment := newRunnerExecutionEnvironment(runnerPath, runtime.paths.WorkDir)
+	if err := environment.Sync(ctx, out, outErr); err != nil {
+		return fmt.Errorf("failed to apply Nano startup durability workaround: %w", err)
+	}
+
+	return nil
+}
+
 func (runtime *MacVMRuntime) stopAfterStartFailure(
 	ctx context.Context,
 	runnerPath string,

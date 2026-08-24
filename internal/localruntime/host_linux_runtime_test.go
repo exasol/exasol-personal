@@ -4,6 +4,7 @@
 package localruntime
 
 import (
+	"bytes"
 	"context"
 	"net"
 	"os"
@@ -110,6 +111,41 @@ func TestLinuxHostReadEndpoint_RejectsReadBeforeStart(t *testing.T) {
 	// Then
 	if err == nil || !strings.Contains(err.Error(), "endpoint is unavailable") {
 		t.Fatalf("expected endpoint availability error, got %v", err)
+	}
+}
+
+func TestLinuxHostWorkaroundNanoStartupDurabilityDelegatesToExecutionEnvironment(
+	t *testing.T,
+) {
+	t.Parallel()
+	if os.PathSeparator == '\\' {
+		t.Skip("fake sync executable is a POSIX shell script")
+	}
+
+	root := t.TempDir()
+	logPath := filepath.Join(root, "sync-args")
+	scriptPath := filepath.Join(root, "fake-sync.sh")
+	writeLinuxRuntimeTestFile(t, scriptPath, `#!/bin/sh
+printf '%s' "$*" > "$1"
+printf 'sync-out'
+printf 'sync-err' >&2
+`)
+	localRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	localRuntime.runtimeExec = []string{"/bin/sh", scriptPath, logPath}
+	var stdout, stderr bytes.Buffer
+
+	err := localRuntime.WorkaroundNanoStartupDurability(
+		context.Background(), &stdout, &stderr,
+	)
+	if err != nil {
+		t.Fatalf("expected host sync to succeed, got %v", err)
+	}
+	args, readErr := os.ReadFile(logPath)
+	if readErr != nil || string(args) != logPath+" sync" {
+		t.Fatalf("expected host sync command, got %q, %v", string(args), readErr)
+	}
+	if stdout.String() != "sync-out" || stderr.String() != "sync-err" {
+		t.Fatalf("unexpected sync output stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
 

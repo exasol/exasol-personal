@@ -4,6 +4,7 @@
 package deploy
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -264,6 +265,84 @@ func TestStartPreparedLocalRuntime_WritesHostEndpointArtifacts(t *testing.T) {
 	}
 }
 
+func TestWaitForLocalDatabaseAndSyncRunsSyncAfterReadiness(t *testing.T) {
+	t.Parallel()
+
+	runtime := &endpointRuntimeStub{deployment: newTestDeploymentWithState(t)}
+	var stdout, stderr bytes.Buffer
+	waitCalls := 0
+	waitForDatabase := func(context.Context, localruntime.Runtime) error {
+		waitCalls++
+		if runtime.syncCalls != 0 {
+			t.Fatal("storage synchronized before database readiness")
+		}
+
+		return nil
+	}
+
+	err := waitForLocalDatabaseAndSync(
+		context.Background(), runtime, 1, &stdout, &stderr, waitForDatabase,
+	)
+	if err != nil {
+		t.Fatalf("expected post-ready sync to succeed, got %v", err)
+	}
+	if waitCalls != 1 || runtime.syncCalls != 1 {
+		t.Fatalf(
+			"expected one readiness check and sync, got wait=%d sync=%d",
+			waitCalls,
+			runtime.syncCalls,
+		)
+	}
+	if runtime.syncOut != &stdout || runtime.syncOutErr != &stderr {
+		t.Fatal("expected startup output writers to be forwarded to sync")
+	}
+}
+
+func TestWaitForLocalDatabaseAndSyncPreservesFailures(t *testing.T) {
+	t.Parallel()
+
+	t.Run("readiness", func(t *testing.T) {
+		t.Parallel()
+		expectedErr := errors.New("database did not become ready")
+		runtime := &endpointRuntimeStub{deployment: newTestDeploymentWithState(t)}
+
+		err := waitForLocalDatabaseAndSync(
+			context.Background(), runtime, 1, nil, nil,
+			func(context.Context, localruntime.Runtime) error { return expectedErr },
+		)
+
+		if !errors.Is(err, expectedErr) || runtime.syncCalls != 0 {
+			t.Fatalf(
+				"expected readiness failure without sync, got err=%v sync=%d",
+				err,
+				runtime.syncCalls,
+			)
+		}
+	})
+
+	t.Run("sync", func(t *testing.T) {
+		t.Parallel()
+		expectedErr := errors.New("storage sync failed")
+		runtime := &endpointRuntimeStub{
+			deployment: newTestDeploymentWithState(t),
+			syncErr:    expectedErr,
+		}
+
+		err := waitForLocalDatabaseAndSync(
+			context.Background(), runtime, 1, nil, nil,
+			func(context.Context, localruntime.Runtime) error { return nil },
+		)
+
+		if !errors.Is(err, expectedErr) || runtime.syncCalls != 1 {
+			t.Fatalf(
+				"expected sync failure after readiness, got err=%v sync=%d",
+				err,
+				runtime.syncCalls,
+			)
+		}
+	})
+}
+
 func TestStartPreparedLocalRuntime_PreservesHostStartFailure(t *testing.T) {
 	t.Parallel()
 
@@ -393,6 +472,10 @@ type endpointRuntimeStub struct {
 	deployment config.DeploymentDir
 	endpoint   *localruntime.RuntimeEndpoint
 	startErr   error
+	syncErr    error
+	syncCalls  int
+	syncOut    io.Writer
+	syncOutErr io.Writer
 }
 
 func (runtime *endpointRuntimeStub) Deployment() config.DeploymentDir {
@@ -422,6 +505,17 @@ func (*endpointRuntimeStub) Status(context.Context) (*localruntime.RuntimeStatus
 
 func (*endpointRuntimeStub) Destroy(context.Context, io.Writer, io.Writer) error {
 	return nil
+}
+
+func (runtime *endpointRuntimeStub) WorkaroundNanoStartupDurability(
+	_ context.Context,
+	out, outErr io.Writer,
+) error {
+	runtime.syncCalls++
+	runtime.syncOut = out
+	runtime.syncOutErr = outErr
+
+	return runtime.syncErr
 }
 
 func (runtime *endpointRuntimeStub) ReadEndpoints() (*localruntime.VMRuntimeEndpoint, error) {
