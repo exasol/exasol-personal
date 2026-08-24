@@ -250,22 +250,30 @@ func (runtime *HostRuntime) HealthCheck(ctx context.Context) (*HealthCheckResult
 	}}, nil
 }
 
-func (*HostRuntime) OpenHostShell(
+func (runtime *HostRuntime) OpenHostShell(
 	context.Context,
 	io.Reader,
 	io.Writer,
 	io.Writer,
 ) error {
-	return ErrHostShellUnsupported
+	return fmt.Errorf(
+		"%s host runtime does not support host shells: %w",
+		runtime.Platform(),
+		ErrHostShellUnsupported,
+	)
 }
 
-func (*HostRuntime) OpenContainerShell(
+func (runtime *HostRuntime) OpenContainerShell(
 	context.Context,
 	io.Reader,
 	io.Writer,
 	io.Writer,
 ) error {
-	return ErrContainerShellUnsupported
+	return fmt.Errorf(
+		"%s host runtime does not support container shells: %w",
+		runtime.Platform(),
+		ErrContainerShellUnsupported,
+	)
 }
 
 func classifyHostPortHealth(err error) PortState {

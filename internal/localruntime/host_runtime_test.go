@@ -119,6 +119,50 @@ func TestLinuxHostReadEndpoint_RejectsReadBeforeStart(t *testing.T) {
 	}
 }
 
+func TestLinuxHostShellErrorsPreserveUnsupportedIdentity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		openShell func(*HostRuntime) error
+		sentinel  error
+	}{
+		{
+			name: "host shell",
+			openShell: func(runtime *HostRuntime) error {
+				return runtime.OpenHostShell(context.Background(), nil, nil, nil)
+			},
+			sentinel: ErrHostShellUnsupported,
+		},
+		{
+			name: "container shell",
+			openShell: func(runtime *HostRuntime) error {
+				return runtime.OpenContainerShell(context.Background(), nil, nil, nil)
+			},
+			sentinel: ErrContainerShellUnsupported,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given
+			runtime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+
+			// When
+			err := test.openShell(runtime)
+
+			// Then
+			if !errors.Is(err, test.sentinel) {
+				t.Fatalf("expected unsupported shell identity, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "linux host runtime") {
+				t.Fatalf("expected Linux host-runtime context, got %v", err)
+			}
+		})
+	}
+}
+
 func TestLinuxHostWorkaroundNanoStartupDurabilityDelegatesToExecutionEnvironment(
 	t *testing.T,
 ) {
