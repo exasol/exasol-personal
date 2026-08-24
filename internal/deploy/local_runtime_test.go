@@ -469,13 +469,17 @@ func newTestDeploymentWithState(t *testing.T) config.DeploymentDir {
 }
 
 type endpointRuntimeStub struct {
-	deployment config.DeploymentDir
-	endpoint   *localruntime.RuntimeEndpoint
-	startErr   error
-	syncErr    error
-	syncCalls  int
-	syncOut    io.Writer
-	syncOutErr io.Writer
+	deployment        config.DeploymentDir
+	endpoint          *localruntime.RuntimeEndpoint
+	startErr          error
+	syncErr           error
+	syncCalls         int
+	syncOut           io.Writer
+	syncOutErr        io.Writer
+	healthResult      *localruntime.HealthCheckResult
+	healthCalls       int
+	hostShellErr      error
+	containerShellErr error
 }
 
 func (runtime *endpointRuntimeStub) Deployment() config.DeploymentDir {
@@ -530,27 +534,40 @@ func (runtime *endpointRuntimeStub) ReadEndpoints() (*localruntime.VMRuntimeEndp
 	return &localruntime.VMRuntimeEndpoint{RuntimeEndpoint: *runtime.endpoint}, nil
 }
 
-func (*endpointRuntimeStub) HealthCheck(
+func (runtime *endpointRuntimeStub) HealthCheck(
 	context.Context,
 ) (*localruntime.HealthCheckResult, error) {
+	runtime.healthCalls++
+	if runtime.healthResult != nil {
+		return runtime.healthResult, nil
+	}
+
 	return nil, errors.New("not implemented")
 }
 
-func (*endpointRuntimeStub) OpenHostShell(
+func (runtime *endpointRuntimeStub) OpenHostShell(
 	context.Context,
 	io.Reader,
 	io.Writer,
 	io.Writer,
 ) error {
+	if runtime.hostShellErr != nil {
+		return runtime.hostShellErr
+	}
+
 	return localruntime.ErrHostShellUnsupported
 }
 
-func (*endpointRuntimeStub) OpenContainerShell(
+func (runtime *endpointRuntimeStub) OpenContainerShell(
 	context.Context,
 	io.Reader,
 	io.Writer,
 	io.Writer,
 ) error {
+	if runtime.containerShellErr != nil {
+		return runtime.containerShellErr
+	}
+
 	return localruntime.ErrContainerShellUnsupported
 }
 

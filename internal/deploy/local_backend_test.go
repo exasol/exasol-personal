@@ -607,6 +607,77 @@ func TestLocalBackend_LinuxShellsAreUnsupported(t *testing.T) {
 	}
 }
 
+func TestLocalBackendShellErrorsBypassReachabilityClassification(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		openShell      func(*localBackend) error
+		configureError func(*endpointRuntimeStub, error)
+	}{
+		{
+			name: "host shell",
+			openShell: func(backend *localBackend) error {
+				return backend.OpenHostShell(context.Background(), "")
+			},
+			configureError: func(runtime *endpointRuntimeStub, err error) {
+				runtime.hostShellErr = err
+			},
+		},
+		{
+			name: "container shell",
+			openShell: func(backend *localBackend) error {
+				return backend.OpenCOSShell(context.Background())
+			},
+			configureError: func(runtime *endpointRuntimeStub, err error) {
+				runtime.containerShellErr = err
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given
+			deployment := newLocalTestDeployment(t)
+			shellErr := errors.New("runtime shell failed")
+			runtime := &endpointRuntimeStub{
+				deployment: deployment,
+				healthResult: &localruntime.HealthCheckResult{
+					Ports: map[string]localruntime.PortHealth{
+						"db": {State: localruntime.PortStateBlocked},
+					},
+				},
+			}
+			test.configureError(runtime, shellErr)
+			backend := newLocalBackendForPlatform(
+				deployment,
+				&presets.InfrastructureManifest{Backend: backendTypeLocal},
+				runtime,
+				localMacOS,
+				localMacArch,
+			)
+
+			// When
+			err := test.openShell(backend)
+
+			// Then
+			if !errors.Is(err, shellErr) {
+				t.Fatalf("expected runtime shell error, got %v", err)
+			}
+			if errors.Is(err, ErrLocalReachability) {
+				t.Fatalf("runtime shell error was replaced by reachability error: %v", err)
+			}
+			if runtime.healthCalls != 0 {
+				t.Fatalf(
+					"expected shell failure not to query endpoint health, got %d calls",
+					runtime.healthCalls,
+				)
+			}
+		})
+	}
+}
+
 func assertConfigValue(
 	t *testing.T,
 	values []DeploymentConfigValue,
