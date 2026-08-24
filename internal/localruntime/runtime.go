@@ -5,6 +5,7 @@ package localruntime
 
 import (
 	"context"
+	"errors"
 	"io"
 	"path/filepath"
 
@@ -16,12 +17,11 @@ const (
 	dirName        = "local"
 	runtimeDirName = "runtime"
 
-	vmDirName          = "vm"
-	sharedDirName      = "vm-shared"
-	vmStateFileName    = "vm-state.json"
-	PrivateKeyFileName = "node_access.pem"
-	slcStagingDirName  = "slc-packages"
-	slcStatusFileName  = "slc-status.json"
+	vmDirName         = "vm"
+	sharedDirName     = "vm-shared"
+	vmStateFileName   = "vm-state.json"
+	slcStagingDirName = "slc-packages"
+	slcStatusFileName = "slc-status.json"
 	// runnerVersionMarkerFileName records the semver of the runner this
 	// deployment was last prepared/started with. It's a launcher-owned file,
 	// distinct from vm-state.json, whose schema is dictated by the runner's
@@ -47,22 +47,24 @@ type RuntimeStatus struct {
 	Running bool `json:"running"`
 }
 
-// RuntimeEndpoint describes the host endpoints published by a local runtime.
-// SSH fields are optional because host-container runtimes expose the database
-// directly and do not provide a separate runtime shell endpoint.
+// RuntimeEndpoint describes application endpoints and capabilities published
+// by a local runtime without exposing its command transport.
 type RuntimeEndpoint struct {
-	DBPort int
-	UIPort int
+	DBPort         int
+	UIPort         int
+	ShellSupported bool
 }
 
 type VMRuntimeEndpoint struct {
 	RuntimeEndpoint
-
-	VMIP                   string
-	SSHPort                int
-	PrivateKeyPath         string
-	PrivateKeyRelativePath string
 }
+
+var (
+	ErrHostShellUnsupported      = errors.New("host shell is not supported by this local runtime")
+	ErrContainerShellUnsupported = errors.New(
+		"container shell is not supported by this local runtime",
+	)
+)
 
 // Runtime is the generic local runtime interface.
 type Runtime interface {
@@ -75,6 +77,8 @@ type Runtime interface {
 
 	ReadEndpoints() (*VMRuntimeEndpoint, error)
 	HealthCheck(ctx context.Context) (*HealthCheckResult, error)
+	OpenHostShell(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) error
+	OpenContainerShell(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) error
 }
 
 type runtimePaths struct {
@@ -98,7 +102,6 @@ type vmRuntimePaths struct {
 	VMDir                   string
 	SharedDir               string
 	StatePath               string
-	PrivateKeyPath          string
 	RunnerVersionMarkerPath string
 }
 
@@ -110,15 +113,8 @@ func newVMRuntimePaths(deployment config.DeploymentDir) vmRuntimePaths {
 		VMDir:                   filepath.Join(rtPaths.WorkDir, vmDirName),
 		SharedDir:               filepath.Join(rtPaths.WorkDir, sharedDirName),
 		StatePath:               filepath.Join(rtPaths.WorkDir, vmStateFileName),
-		PrivateKeyPath:          filepath.Join(rtPaths.Root, PrivateKeyFileName),
 		RunnerVersionMarkerPath: filepath.Join(rtPaths.WorkDir, runnerVersionMarkerFileName),
 	}
-}
-
-// DefaultVMPrivateKeyPath returns the runtime-managed key path used in
-// deployment connection metadata.
-func DefaultVMPrivateKeyPath(deployment config.DeploymentDir) string {
-	return newVMRuntimePaths(deployment).PrivateKeyPath
 }
 
 func SharedDir(deployment config.DeploymentDir) string {

@@ -83,8 +83,9 @@ func TestRunnerExecutionEnvironmentFilesystemOperations(t *testing.T) {
 	}
 
 	filePath := filepath.Join(directory, "state file")
-	err := environment.WriteFileAtomically(ctx, filePath, []byte("state\n"), 0o750, 0o640)
-	if err != nil {
+	if err := environment.WriteFileAtomically(
+		ctx, filePath, []byte("state\n"), 0o750, 0o640,
+	); err != nil {
 		t.Fatalf("atomic write failed: %v", err)
 	}
 	if populated, err := environment.DirectoryHasEntries(ctx, directory); err != nil || !populated {

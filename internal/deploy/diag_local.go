@@ -20,7 +20,6 @@ type LocalDiagnostics struct {
 	Platform          string            `json:"platform"`
 	PlatformSupported bool              `json:"platformSupported"`
 	VMRunning         *bool             `json:"vmRunning,omitempty"`
-	GuestIP           string            `json:"guestIp,omitempty"`
 	Ports             map[string]int    `json:"ports,omitempty"`
 	PortHealth        map[string]string `json:"portHealth,omitempty"`
 	DatabaseReady     *bool             `json:"databaseReady,omitempty"`
@@ -103,13 +102,9 @@ func diagnoseLocalUnsafe(
 
 	if endpoint, err := localRuntime.ReadEndpoints(); err == nil {
 		diagnostics.Ports = map[string]int{"db": endpoint.DBPort}
-		if endpoint.SSHPort != 0 {
-			diagnostics.Ports["ssh"] = endpoint.SSHPort
-		}
 		if endpoint.UIPort != 0 {
 			diagnostics.Ports["ui"] = endpoint.UIPort
 		}
-		diagnostics.GuestIP = endpoint.VMIP
 	}
 
 	if health, err := localRuntime.HealthCheck(ctx); err == nil {

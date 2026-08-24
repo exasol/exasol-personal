@@ -94,8 +94,8 @@ func TestLinuxHostReadEndpoint_ReturnsPublishedDatabasePort(t *testing.T) {
 	if endpoint.DBPort != 28563 {
 		t.Fatalf("expected published DB port 28563, got %#v", endpoint)
 	}
-	if endpoint.SSHPort != 0 || endpoint.PrivateKeyRelativePath != "" {
-		t.Fatalf("expected no VM-only endpoint details, got %#v", endpoint)
+	if endpoint.ShellSupported {
+		t.Fatalf("expected Linux host shell to be unsupported, got %#v", endpoint)
 	}
 }
 

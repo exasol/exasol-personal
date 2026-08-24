@@ -33,10 +33,9 @@ const runnerZipEntryName = "launcher"
 const exasolLocalRunnerResourceID = "exasol-local-runner"
 
 type localRuntimeTestPaths struct {
-	Root           string
-	WorkDir        string
-	StatePath      string
-	PrivateKeyPath string
+	Root      string
+	WorkDir   string
+	StatePath string
 }
 
 func newLocalRuntimeTestPaths(deployment config.DeploymentDir) localRuntimeTestPaths {
@@ -44,10 +43,9 @@ func newLocalRuntimeTestPaths(deployment config.DeploymentDir) localRuntimeTestP
 	workDir := filepath.Join(root, "runtime")
 
 	return localRuntimeTestPaths{
-		Root:           root,
-		WorkDir:        workDir,
-		StatePath:      filepath.Join(workDir, "vm-state.json"),
-		PrivateKeyPath: filepath.Join(root, localruntime.PrivateKeyFileName),
+		Root:      root,
+		WorkDir:   workDir,
+		StatePath: filepath.Join(workDir, "vm-state.json"),
 	}
 }
 
@@ -198,6 +196,7 @@ func writeFakeCombinedRunner(
 	script := "#!/bin/sh\n" +
 		"if [ \"$1\" = status ]; then echo '" + statusJSON + "'; exit 0; fi\n" +
 		"if [ \"$1\" = health-check ]; then echo '" + healthCheckJSON + "'; exit 0; fi\n" +
+		"if [ \"$1\" = stop ]; then exit 0; fi\n" +
 		"if [ \"$1\" = run ]; then\n" +
 		"  shift; [ \"$1\" = -- ]; shift\n" +
 		"  if [ \"$1 $2 $3\" = 'podman container exists' ]; then exit 0; fi\n" +

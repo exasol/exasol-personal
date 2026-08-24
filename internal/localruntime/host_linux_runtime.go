@@ -149,6 +149,24 @@ func (runtime *LinuxHostRuntime) HealthCheck(ctx context.Context) (*HealthCheckR
 	}}, nil
 }
 
+func (*LinuxHostRuntime) OpenHostShell(
+	context.Context,
+	io.Reader,
+	io.Writer,
+	io.Writer,
+) error {
+	return ErrHostShellUnsupported
+}
+
+func (*LinuxHostRuntime) OpenContainerShell(
+	context.Context,
+	io.Reader,
+	io.Writer,
+	io.Writer,
+) error {
+	return ErrContainerShellUnsupported
+}
+
 func classifyHostPortHealth(err error) PortState {
 	if err == nil {
 		return PortStateReachable

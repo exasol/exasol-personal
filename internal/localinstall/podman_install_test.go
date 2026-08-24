@@ -62,8 +62,8 @@ func TestPodmanInstallStart_LoadsNanoFromRuntimePath(t *testing.T) {
 	skipPodmanInstallTestOnWindows(t)
 
 	// Given
-	install, startConfig, fixture := newPodmanInstallFixture(t)
 	const runtimeImagePath = "/mnt/host/runtime-artifacts/nano.tar"
+	install, startConfig, fixture := newPodmanInstallFixture(t)
 	install.resolveImage = func(context.Context) (RuntimePath, error) {
 		return RuntimePath{
 			HostPath:    fixture.imagePath,
