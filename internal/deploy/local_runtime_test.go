@@ -19,10 +19,9 @@ import (
 )
 
 const (
-	localTestDeploymentID     = "exasol-local-test"
-	localTestClusterIdentity  = "exasol-personal;exasol-local-test;local;local"
-	localTestDatabasePort     = 28563
-	localTestSSHForwardedPort = 20022
+	localTestDeploymentID    = "exasol-local-test"
+	localTestClusterIdentity = "exasol-personal;exasol-local-test;local;local"
+	localTestDatabasePort    = 28563
 )
 
 func TestToLocalRuntimeConfig_TranslatesPortableStartupState(t *testing.T) {
