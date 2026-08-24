@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1672,4 +1673,275 @@ func writeZipArchiveFixture(t *testing.T, dir, archiveName, entryName, content s
 	return writeZipFixtureEntries(t, dir, archiveName, map[string]string{
 		entryName: content,
 	})
+}
+
+func TestGlobMatches_MatchesFilesAndDirectoriesAlike(t *testing.T) {
+	t.Parallel()
+
+	// Given: a plain-file match alongside a directory match — GlobMatches
+	// makes no assumption that a match must be a directory.
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "aws"), dirPerm); err != nil {
+		t.Fatalf("failed to create fixture subdirectory: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, "azure.txt"), []byte("azure"), filePerm,
+	); err != nil {
+		t.Fatalf("failed to write fixture file: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, "README.md"), []byte("not a module"), filePerm,
+	); err != nil {
+		t.Fatalf("failed to write fixture file: %v", err)
+	}
+
+	// When
+	matches, err := GlobMatches(root, "*")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(matches) != 3 {
+		t.Fatalf("expected 3 matches, got %v", matches)
+	}
+	if matches["aws"] != filepath.Join(root, "aws") {
+		t.Fatalf("expected the aws subdirectory match, got %v", matches)
+	}
+	if matches["azure.txt"] != filepath.Join(root, "azure.txt") {
+		t.Fatalf("expected the azure.txt file match, got %v", matches)
+	}
+}
+
+func TestGlobMatches_MatchesWithinASubdirectory(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "modules", "aws"), dirPerm); err != nil {
+		t.Fatalf("failed to create fixture subdirectory: %v", err)
+	}
+
+	matches, err := GlobMatches(root, "modules/*")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if matches["aws"] != filepath.Join(root, "modules", "aws") {
+		t.Fatalf("expected the nested aws match, got %v", matches)
+	}
+}
+
+func TestGlobMatches_RejectsMatchesSharingAMemberName(t *testing.T) {
+	t.Parallel()
+
+	// Given: two directories under different parents share a basename, so a
+	// pattern spanning both would otherwise silently drop one via overwrite.
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "aws", "config"), dirPerm); err != nil {
+		t.Fatalf("failed to create fixture subdirectory: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "azure", "config"), dirPerm); err != nil {
+		t.Fatalf("failed to create fixture subdirectory: %v", err)
+	}
+
+	// When
+	_, err := GlobMatches(root, "*/config")
+	// Then
+	if err == nil {
+		t.Fatal("expected an error for a pattern matching duplicate member names, got none")
+	}
+}
+
+func TestGlobMatches_ExcludesGitMetadataDirectory(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), dirPerm); err != nil {
+		t.Fatalf("failed to create fixture .git directory: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "aws"), dirPerm); err != nil {
+		t.Fatalf("failed to create fixture subdirectory: %v", err)
+	}
+
+	matches, err := GlobMatches(root, "*")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if _, ok := matches[".git"]; ok {
+		t.Fatalf("expected .git to be excluded, got %v", matches)
+	}
+}
+
+func TestGlobMatches_PropagatesAMissingPatternError(t *testing.T) {
+	t.Parallel()
+
+	if _, err := GlobMatches(t.TempDir(), ""); err == nil {
+		t.Fatal("expected an error for an empty pattern, got none")
+	}
+}
+
+func TestManager_RequestMember_ResolvesAMatchWithinALocalDirectory(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	srcDir := t.TempDir()
+	for _, name := range []string{"aws", "azure"} {
+		if err := os.MkdirAll(filepath.Join(srcDir, name), dirPerm); err != nil {
+			t.Fatalf("failed to create fixture subdirectory: %v", err)
+		}
+	}
+	if err := os.WriteFile(
+		filepath.Join(srcDir, "README.md"), []byte("not a module"), filePerm,
+	); err != nil {
+		t.Fatalf("failed to write fixture file: %v", err)
+	}
+	spec := ResourceSpec{
+		"shared-modules": {
+			Glob:     true,
+			Artifact: map[string]ArtifactSpec{anyPlatformKey: {URL: srcDir, ResourcePath: "*"}},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+
+	// When
+	path, err := manager.RequestMember(context.Background(), "shared-modules", "aws")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if path != filepath.Join(srcDir, "aws") {
+		t.Fatalf("expected the aws subdirectory path, got %q", path)
+	}
+}
+
+func TestManager_RequestMember_ResolvesAMatchWithinAnExtractedArchive(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	srcDir := t.TempDir()
+	archivePath := writeTarGzMultiFixture(t, srcDir, "presets.tar.gz", map[string]tarFixtureEntry{
+		"aws/main.tf":   {Content: "aws module"},
+		"azure/main.tf": {Content: "azure module"},
+		"README.md":     {Content: "not a module"},
+	})
+	spec := ResourceSpec{
+		"shared-modules": {
+			Extract: true,
+			Glob:    true,
+			Artifact: map[string]ArtifactSpec{
+				anyPlatformKey: {URL: "file://" + archivePath, ResourcePath: "*"},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+
+	// When
+	path, err := manager.RequestMember(context.Background(), "shared-modules", "aws")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(path, "main.tf")); err != nil {
+		t.Fatalf("expected main.tf inside matched %q, got %v", path, err)
+	}
+}
+
+func TestManager_RequestMember_ReturnsErrorForUnknownMember(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	srcDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(srcDir, "aws"), dirPerm); err != nil {
+		t.Fatalf("failed to create fixture subdirectory: %v", err)
+	}
+	spec := ResourceSpec{
+		"shared-modules": {
+			Glob:     true,
+			Artifact: map[string]ArtifactSpec{anyPlatformKey: {URL: srcDir, ResourcePath: "*"}},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+
+	// When
+	_, err := manager.RequestMember(context.Background(), "shared-modules", "azure")
+	// Then
+	if !errors.Is(err, ErrUnknownMember) {
+		t.Fatalf("expected ErrUnknownMember, got %v", err)
+	}
+}
+
+//nolint:paralleltest // embeddedGroupMembers is shared; concurrent Register calls aren't safe.
+func TestManager_GroupMembers_ReturnsNamesRegisteredAtBuildTime(t *testing.T) {
+	// Given
+	const group = "infrastructure-presets"
+	t.Cleanup(func() { delete(embeddedGroupMembers, group) })
+	RegisterGroupMembers(group, []string{"aws", "azure"})
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+
+	// When
+	members := manager.GroupMembers(group)
+	// Then
+	if !slices.Equal(members, []string{"aws", "azure"}) {
+		t.Fatalf("expected the registered member names, got %v", members)
+	}
+}
+
+func TestManager_GroupMembers_EmptyWhenNeverRegistered(t *testing.T) {
+	t.Parallel()
+
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+
+	if members := manager.GroupMembers("never-registered"); len(members) != 0 {
+		t.Fatalf("expected no members, got %v", members)
+	}
+}
+
+// A Glob:true resource whose live source is a bare directory declares
+// extract: false, since there is nothing to unpack to read it live. Once
+// embedded, its bytes are always an archive, so resolving it from embedded
+// data must still extract regardless of that declared value.
+//
+//nolint:paralleltest // embeddedResources/embeddedHashes are shared; concurrent Register isn't.
+func TestManager_RequestMember_EmbeddedGlobResourceIsExtractedForMatching(t *testing.T) {
+	// Given: a directory archived exactly as resourceembedder would for a
+	// Glob:true, embedded resource — download_path names it as an archive so
+	// Manager's extractor lookup recognizes the embedded blob.
+	const resourceID = "embedded-glob-test"
+	t.Cleanup(func() {
+		delete(embeddedResources, resourceID)
+		delete(embeddedHashes, resourceID)
+	})
+	archiveDir := t.TempDir()
+	archivePath := writeTarGzMultiFixture(
+		t, archiveDir, "embedded-glob-test.tar.gz", map[string]tarFixtureEntry{
+			"aws/main.tf": {Content: "aws module"},
+		},
+	)
+	data, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("failed to read fixture archive: %v", err)
+	}
+	Register(resourceID, data, sha256OfBytes(data))
+	spec := ResourceSpec{
+		resourceID: {
+			Glob:  true,
+			Embed: true,
+			Artifact: map[string]ArtifactSpec{
+				anyPlatformKey: {
+					URL:          "https://example.com/" + resourceID + ".tar.gz",
+					ResourcePath: "*",
+					DownloadPath: resourceID + ".tar.gz",
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
+
+	// When
+	path, err := manager.RequestMember(context.Background(), resourceID, "aws")
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(path, "main.tf")); err != nil {
+		t.Fatalf("expected main.tf inside the extracted match %q, got %v", path, err)
+	}
 }
