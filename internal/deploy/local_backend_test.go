@@ -597,12 +597,23 @@ func TestLocalBackend_LinuxShellsAreUnsupported(t *testing.T) {
 		localruntime.NewHostLinuxRuntime(deployment, nil),
 		localLinuxOS, localLinuxAMD64,
 	)
-	if err := backend.OpenHostShell(context.Background(), ""); err == nil ||
-		!strings.Contains(err.Error(), "host shell is not supported") {
+	if err := backend.OpenHostShell(
+		context.Background(),
+		"",
+	); !errors.Is(
+		err,
+		localruntime.ErrHostShellUnsupported,
+	) ||
+		!strings.Contains(err.Error(), "linux host runtime") {
 		t.Fatalf("expected explicit Linux host shell error, got %v", err)
 	}
-	if err := backend.OpenCOSShell(context.Background()); err == nil ||
-		!strings.Contains(err.Error(), "container shell is not supported") {
+	if err := backend.OpenCOSShell(
+		context.Background(),
+	); !errors.Is(
+		err,
+		localruntime.ErrContainerShellUnsupported,
+	) ||
+		!strings.Contains(err.Error(), "linux host runtime") {
 		t.Fatalf("expected explicit Linux container shell error, got %v", err)
 	}
 }
