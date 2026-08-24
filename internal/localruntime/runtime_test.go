@@ -5,52 +5,51 @@ package localruntime
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/x509"
-	"encoding/json"
-	"encoding/pem"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
-	"golang.org/x/crypto/ssh"
 )
 
-// Tests in this package are intentionally serial (no t.Parallel): they write
-// local-runner executables and fork/exec them, which in parallel intermittently
-// fails with "text file busy" (ETXTBSY) when a concurrent open-for-write
-// descriptor is inherited by another goroutine's fork/exec. The reconcile tests
-// also share the process-global EXASOL_LOCAL_FORCE_RUNNER_RECONCILIATION env var
-// (set via t.Setenv). Revisit if runner write/exec and the env override become
-// isolated per test.
+const (
+	windowsGOOS        = "windows"
+	runnerZipEntryName = "launcher"
+)
 
-const windowsGOOS = "windows"
-
-// runnerZipEntryName matches resources.yaml's resource_path for
-// exasol-local-runner, so these tests exercise the same extract +
-// resource_path shape production resolves through.
-const runnerZipEntryName = "launcher"
-
-// newTestManagerForRunner builds a Manager whose "exasol-local-runner"
-// resource resolves through the same extract: true / resource_path shape the
-// real resources.yaml entry uses: scriptContent is packed into a minimal,
-// single-entry zip (mirroring the real release archive), and FileSource's
-// local-path redirect + the existing ZipExtractor unpack it, preserving the
-// executable mode recorded in the zip entry.
 func newTestManagerForRunner(t *testing.T, scriptContent []byte) *runtimeartifacts.Manager {
 	t.Helper()
 
-	zipPath := writeRunnerZip(t, scriptContent)
+	zipPath := filepath.Join(t.TempDir(), "runner.zip")
+	file, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("failed to create runner zip: %v", err)
+	}
+	writer := zip.NewWriter(file)
+	header := &zip.FileHeader{Name: runnerZipEntryName, Method: zip.Deflate}
+	header.SetMode(0o755)
+	entry, err := writer.CreateHeader(header)
+	if err != nil {
+		t.Fatalf("failed to create runner entry: %v", err)
+	}
+	if _, err := entry.Write(scriptContent); err != nil {
+		t.Fatalf("failed to write runner entry: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("failed to close runner zip: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("failed to close runner fixture: %v", err)
+	}
+
 	spec := runtimeartifacts.ResourceSpec{
 		exasolLocalRunnerResourceID: {
 			Extract: true,
@@ -65,580 +64,209 @@ func newTestManagerForRunner(t *testing.T, scriptContent []byte) *runtimeartifac
 	)
 }
 
-func writeRunnerZip(t *testing.T, scriptContent []byte) string {
-	t.Helper()
-
-	zipPath := filepath.Join(t.TempDir(), "runner.zip")
-	file, err := os.Create(zipPath)
-	if err != nil {
-		t.Fatalf("failed to create runner zip fixture: %v", err)
-	}
-	defer file.Close()
-
-	writer := zip.NewWriter(file)
-	header := &zip.FileHeader{Name: runnerZipEntryName, Method: zip.Deflate}
-	header.SetMode(0o755)
-	entry, err := writer.CreateHeader(header)
-	if err != nil {
-		t.Fatalf("failed to create runner zip entry: %v", err)
-	}
-	if _, err := entry.Write(scriptContent); err != nil {
-		t.Fatalf("failed to write runner zip entry: %v", err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("failed to close runner zip fixture: %v", err)
-	}
-
-	return zipPath
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestReadRunnerState_ParsesForwardedPorts(t *testing.T) {
-	// Given
-	statePath := filepath.Join(t.TempDir(), "vm-state.json")
-	writeRunnerStateFile(t, statePath, map[string]any{
-		"vm_name": "exasol-local-vm",
-		"vm_ip":   "192.168.64.2",
-		"ports": map[string]any{
-			"ssh": 20022,
-			"db":  28563,
-			"ui":  28443,
-		},
-	})
-
-	// When
-	state, err := readRunnerState(statePath)
-	// Then
-	if err != nil {
-		t.Fatalf("expected state to parse, got %v", err)
-	}
-	if state.Ports.SSH != 20022 || state.Ports.DB != 28563 || state.Ports.UI != 28443 {
-		t.Fatalf("unexpected ports: %#v", state.Ports)
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestReadRunnerState_AcceptsMissingUIPort(t *testing.T) {
-	// Given
-	statePath := filepath.Join(t.TempDir(), "vm-state.json")
-	writeRunnerStateFile(t, statePath, map[string]any{
-		"vm_name": "exasol-local-vm",
-		"vm_ip":   "192.168.64.2",
-		"ports": map[string]any{
-			"ssh": 20022,
-			"db":  28563,
-			"ui":  0,
-		},
-	})
-
-	// When
-	state, err := readRunnerState(statePath)
-	// Then
-	if err != nil {
-		t.Fatalf("expected state to parse with no UI port, got %v", err)
-	}
-	if state.Ports.SSH != 20022 || state.Ports.DB != 28563 || state.Ports.UI != 0 {
-		t.Fatalf("unexpected ports: %#v", state.Ports)
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestReadRunnerState_RejectsInvalidPorts(t *testing.T) {
-	// Given
-	statePath := filepath.Join(t.TempDir(), "vm-state.json")
-	writeRunnerStateFile(t, statePath, map[string]any{
-		"ports": map[string]any{
-			"ssh": 0,
-			"db":  28563,
-			"ui":  28443,
-		},
-	})
-
-	// When
-	_, err := readRunnerState(statePath)
-
-	// Then
-	if err == nil {
-		t.Fatal("expected invalid port error, got nil")
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestDestroy_RemovesLocalRuntime(t *testing.T) {
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	paths := newVMRuntimePaths(deployment)
-	if err := os.MkdirAll(paths.Root, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime root: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(paths.Root, "disk.img"), []byte("x"), 0o600); err != nil {
-		t.Fatalf("failed to write test runtime file: %v", err)
-	}
-
-	// When: paths.VMDir was never created, so Destroy never needs to resolve
-	// a runner, and a nil manager is safe here.
-	err := NewMacVMRuntime(deployment, nil).Destroy(context.Background(), nil, nil)
-	// Then
-	if err != nil {
-		t.Fatalf("expected destroy cleanup to succeed, got %v", err)
-	}
-	if _, statErr := os.Stat(paths.Root); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("expected %s to be removed, got stat error %v", paths.Root, statErr)
-	}
-}
-
-// TestResolveRunnerPath_OverrideEnvBypassesManager uses a nil manager, so
-// resolving through it would panic on a nil dereference -- proving the
-// override truly bypasses the Manager rather than merely taking priority
-// over some registered value.
-func TestResolveRunnerPath_OverrideEnvBypassesManager(t *testing.T) {
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("fake local runner script is POSIX-only")
-	}
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewMacVMRuntime(deployment, nil)
-	runnerPath := writeRunnerScript(t, "1.0.0")
-	t.Setenv(runnerOverridePathEnv, runnerPath)
-
-	// When
-	resolved, err := localRuntime.resolveRunnerPath(context.Background())
-	// Then
-	if err != nil {
-		t.Fatalf("expected override to resolve without a manager, got %v", err)
-	}
-	if resolved != runnerPath {
-		t.Fatalf("expected resolved path %q, got %q", runnerPath, resolved)
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestPrepare_ResolvesRunnerAndRunsInitWithSSHKey(t *testing.T) {
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("fake local runner script is POSIX-only")
-	}
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	runnerScript := `#!/bin/sh
-set -eu
-case "$1" in
-  version)
-    printf 'v1.0.0\n'
-    ;;
-  init)
-    if [ "$2" != "--ssh-key" ] || [ ! -f "$3" ]; then
-      echo "expected init --ssh-key <private-key>, got: $*" >&2
-      exit 4
-    fi
-    printf '%s' "$3" > init-key
-    mkdir -p vm
-    ;;
-  *)
-    echo "unexpected command: $1" >&2
-    exit 2
-    ;;
-esac
-`
-	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime := NewMacVMRuntime(deployment, manager)
-
-	// When
-	err := localRuntime.Prepare(context.Background(), nil, nil)
-	// Then
-	if err != nil {
-		t.Fatalf("expected prepare to succeed, got %v", err)
-	}
-	keyPath, err := os.ReadFile(filepath.Join(localRuntime.paths.WorkDir, "init-key"))
-	if err != nil {
-		t.Fatalf("expected runner init key marker, got %v", err)
-	}
-	if string(keyPath) != localRuntime.paths.PrivateKeyPath {
-		t.Fatalf("expected init key %q, got %q", localRuntime.paths.PrivateKeyPath, string(keyPath))
-	}
-	markerVersion, err := readRunnerVersionMarker(localRuntime.paths.RunnerVersionMarkerPath)
-	if err != nil {
-		t.Fatalf("expected a version marker to be recorded, got %v", err)
-	}
-	if markerVersion.String() != "1.0.0" {
-		t.Fatalf("expected recorded version 1.0.0, got %s", markerVersion.String())
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestPrepare_SkipsInitWhenVMAlreadyInitialized(t *testing.T) {
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("fake local runner script is POSIX-only")
-	}
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewMacVMRuntime(deployment, nil)
-	if err := os.MkdirAll(localRuntime.paths.VMDir, 0o750); err != nil {
-		t.Fatalf("failed to create local VM directory: %v", err)
-	}
-	runnerScript := `#!/bin/sh
-case "$1" in
-  version)
-    printf 'v1.0.0\n'
-    ;;
-  *)
-    echo "unexpected command: $1 (init should have been skipped)" >&2
-    exit 2
-    ;;
-esac
-`
-	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime = NewMacVMRuntime(deployment, manager)
-
-	// When
-	err := localRuntime.Prepare(context.Background(), nil, nil)
-	// Then
-	if err != nil {
-		t.Fatalf("expected prepare to skip init and succeed, got %v", err)
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestEnsureSSHKey_PreservesExistingPrivateKey(t *testing.T) {
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewMacVMRuntime(deployment, nil)
-	existingKey := generateOpenSSHPrivateKey(t)
-	if err := os.MkdirAll(filepath.Dir(localRuntime.paths.PrivateKeyPath), 0o750); err != nil {
-		t.Fatalf("failed to create local key directory: %v", err)
-	}
-	if err := os.WriteFile(localRuntime.paths.PrivateKeyPath, existingKey, 0o600); err != nil {
-		t.Fatalf("failed to write existing private key: %v", err)
-	}
-
-	// When
-	if err := localRuntime.ensureSSHKey(); err != nil {
-		t.Fatalf("expected SSH key setup to succeed, got %v", err)
-	}
-	if err := localRuntime.ensureSSHKey(); err != nil {
-		t.Fatalf("expected repeated SSH key setup to succeed, got %v", err)
-	}
-
-	// Then
-	data, err := os.ReadFile(localRuntime.paths.PrivateKeyPath)
-	if err != nil {
-		t.Fatalf("expected private key to be readable, got %v", err)
-	}
-	if string(data) != string(existingKey) {
-		t.Fatalf("expected private key to be preserved, got %q", string(data))
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestEnsureSSHKey_GeneratesEd25519Key(t *testing.T) {
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewMacVMRuntime(deployment, nil)
-
-	// When
-	if err := localRuntime.ensureSSHKey(); err != nil {
-		t.Fatalf("expected SSH key setup to succeed, got %v", err)
-	}
-
-	// Then
-	privateKey, err := os.ReadFile(localRuntime.paths.PrivateKeyPath)
-	if err != nil {
-		t.Fatalf("expected generated SSH private key to be readable, got %v", err)
-	}
-	signer, err := ssh.ParsePrivateKey(privateKey)
-	if err != nil {
-		t.Fatalf("expected generated SSH private key to parse, got %v", err)
-	}
-	if signer.PublicKey().Type() != ssh.KeyAlgoED25519 {
-		t.Fatalf("expected ED25519 SSH key, got %q", signer.PublicKey().Type())
-	}
-	block, _ := pem.Decode(privateKey)
-	if block == nil || block.Type != openSSHKeyPEMType {
-		t.Fatalf("expected OpenSSH private key PEM, got %#v", block)
-	}
-
-	if _, err := os.Stat(filepath.Join(localRuntime.paths.WorkDir, "vm-shared")); err == nil {
-		t.Fatal("expected SSH key setup not to create managed share")
-	} else if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("failed to inspect managed share: %v", err)
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestEnsureSSHKey_ReplacesLegacyPKCS8PrivateKey(t *testing.T) {
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewMacVMRuntime(deployment, nil)
-	legacyKey := generatePKCS8PrivateKey(t)
-	if err := os.MkdirAll(filepath.Dir(localRuntime.paths.PrivateKeyPath), 0o750); err != nil {
-		t.Fatalf("failed to create local key directory: %v", err)
-	}
-	if err := os.WriteFile(localRuntime.paths.PrivateKeyPath, legacyKey, 0o600); err != nil {
-		t.Fatalf("failed to write legacy private key: %v", err)
-	}
-
-	// When
-	if err := localRuntime.ensureSSHKey(); err != nil {
-		t.Fatalf("expected SSH key setup to succeed, got %v", err)
-	}
-
-	// Then
-	privateKey, err := os.ReadFile(localRuntime.paths.PrivateKeyPath)
-	if err != nil {
-		t.Fatalf("expected generated SSH private key to be readable, got %v", err)
-	}
-	if string(privateKey) == string(legacyKey) {
-		t.Fatal("expected legacy private key to be replaced")
-	}
-	block, _ := pem.Decode(privateKey)
-	if block == nil || block.Type != openSSHKeyPEMType {
-		t.Fatalf("expected replacement key in OpenSSH format, got %#v", block)
-	}
-	if _, err := ssh.ParsePrivateKey(privateKey); err != nil {
-		t.Fatalf("expected replacement key to parse, got %v", err)
-	}
-}
-
-func generateOpenSSHPrivateKey(t *testing.T) []byte {
-	t.Helper()
-
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("failed to generate test SSH key: %v", err)
-	}
-	block, err := ssh.MarshalPrivateKey(privateKey, "")
-	if err != nil {
-		t.Fatalf("failed to marshal test SSH key: %v", err)
-	}
-
-	return pem.EncodeToMemory(block)
-}
-
-func generatePKCS8PrivateKey(t *testing.T) []byte {
-	t.Helper()
-
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("failed to generate test SSH key: %v", err)
-	}
-	data, err := x509.MarshalPKCS8PrivateKey(privateKey)
-	if err != nil {
-		t.Fatalf("failed to marshal test PKCS8 key: %v", err)
-	}
-
-	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: data})
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestStop_InvokesResolvedRunnerStop(t *testing.T) {
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("fake local runner script is POSIX-only")
-	}
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewMacVMRuntime(deployment, nil)
-	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
-	}
-
-	markerPath := filepath.Join(localRuntime.paths.WorkDir, "stop-called")
-	runnerScript := "#!/bin/sh\nprintf '%s %s\\n' \"$0\" \"$*\" > stop-called\n"
-	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime = NewMacVMRuntime(deployment, manager)
-
-	// When
-	err := localRuntime.Stop(context.Background(), nil, nil)
-	// Then
-	if err != nil {
-		t.Fatalf("expected runner stop to succeed, got %v", err)
-	}
-	marker, err := os.ReadFile(markerPath)
-	if err != nil {
-		t.Fatalf("expected runner stop marker, got %v", err)
-	}
-	markerText := string(marker)
-	if !strings.Contains(markerText, " stop") {
-		t.Fatalf("expected stop argument to be passed, got %q", markerText)
-	}
-	if !strings.HasSuffix(
-		strings.Fields(markerText)[0],
-		string(filepath.Separator)+runnerZipEntryName,
-	) {
-		t.Fatalf("expected stop to run through the resolved, extracted runner, got %q", markerText)
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestDestroy_StopsRunningVMBeforeRemoving(t *testing.T) {
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("fake local runner script is POSIX-only")
-	}
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	paths := newVMRuntimePaths(deployment)
-	if err := os.MkdirAll(paths.VMDir, 0o750); err != nil {
-		t.Fatalf("failed to create local VM directory: %v", err)
-	}
-	runnerScript := "#!/bin/sh\nprintf 'stop-invoked %s\\n' \"$*\"\n"
-	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime := NewMacVMRuntime(deployment, manager)
-	var out bytes.Buffer
-
-	// When
-	err := localRuntime.Destroy(context.Background(), &out, nil)
-	// Then
-	if err != nil {
-		t.Fatalf("expected destroy to succeed, got %v", err)
-	}
-	if !strings.Contains(out.String(), "stop-invoked stop") {
-		t.Fatalf(
-			"expected destroy to resolve and stop the running VM before removing it, got output %q",
-			out.String(),
-		)
-	}
-	if _, statErr := os.Stat(paths.Root); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("expected %s to be removed, got stat error %v", paths.Root, statErr)
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestHealthCheck_ParsesPortStates(t *testing.T) {
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("fake local runner script is POSIX-only")
-	}
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewMacVMRuntime(deployment, nil)
-	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
-	}
-
-	runnerScript := `#!/bin/sh
-echo '{"ports":{"ssh":{"state":"reachable"},"db":{"state":"blocked"}}}'
-`
-	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime = NewMacVMRuntime(deployment, manager)
-
-	// When
-	result, err := localRuntime.HealthCheck(context.Background())
-	// Then
-	if err != nil {
-		t.Fatalf("expected health-check to succeed, got %v", err)
-	}
-	if result.Ports["ssh"].State != PortStateReachable {
-		t.Fatalf("ssh state = %q, want %q", result.Ports["ssh"].State, PortStateReachable)
-	}
-	if result.Ports["db"].State != PortStateBlocked {
-		t.Fatalf("db state = %q, want %q", result.Ports["db"].State, PortStateBlocked)
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestHealthCheck_ReturnsErrorOnRunnerFailure(t *testing.T) {
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("fake local runner script is POSIX-only")
-	}
-
-	// Given: an old runner that does not understand "health-check" yet.
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewMacVMRuntime(deployment, nil)
-	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
-	}
-
-	runnerScript := "#!/bin/sh\necho 'Unknown command: health-check' >&2\nexit 1\n"
-	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime = NewMacVMRuntime(deployment, manager)
-
-	// When
-	_, err := localRuntime.HealthCheck(context.Background())
-	// Then
-	if err == nil {
-		t.Fatal("expected health-check against an unsupporting runner to fail")
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestWaitForDaemonExit_IgnoresMissingPIDFile(t *testing.T) {
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewMacVMRuntime(deployment, nil)
-	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
-	}
-
-	// When
-	err := localRuntime.waitForDaemonExit(context.Background())
-	// Then
-	if err != nil {
-		t.Fatalf("expected missing PID file to be treated as stopped, got %v", err)
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestWaitForDaemonExit_RejectsStillRunningPID(t *testing.T) {
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("process signal checks are POSIX-only")
-	}
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewMacVMRuntime(deployment, nil)
-	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(localRuntime.paths.WorkDir, vmPIDFileName),
-		[]byte(strconv.Itoa(os.Getpid())),
-		0o600,
-	); err != nil {
-		t.Fatalf("failed to write PID file: %v", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-
-	// When
-	err := localRuntime.waitForDaemonExit(ctx)
-
-	// Then
-	if err == nil {
-		t.Fatal("expected still-running PID to prevent stop completion")
-	}
-}
-
-func writeRunnerStateFile(t *testing.T, path string, state map[string]any) {
-	t.Helper()
-
-	writeJSONFile(t, path, state)
-}
-
-func writeJSONFile(t *testing.T, path string, value any) {
-	t.Helper()
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		t.Fatalf("failed to create parent directory for %s: %v", path, err)
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		t.Fatalf("failed to marshal JSON value: %v", err)
-	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatalf("failed to write JSON file %s: %v", path, err)
-	}
-}
-
 func writeExecutableTestFile(t *testing.T, path string, content []byte) {
 	t.Helper()
+	if err := os.WriteFile(path, content, executableFileMode); err != nil {
+		t.Fatalf("failed to write executable fixture: %v", err)
+	}
+}
 
-	if err := os.WriteFile(path, content, privateFileMode); err != nil {
-		t.Fatalf("failed to write executable test file %s: %v", path, err)
+//nolint:paralleltest // test runner scripts share process environment and fork executable files.
+func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	runnerScript := fakeV2RunnerScript(eventsPath, 28563)
+	localRuntime := NewMacVMRuntime(deployment, newTestManagerForRunner(t, []byte(runnerScript)))
+	install := &recordingLocalInstall{eventsPath: eventsPath, running: true}
+	localRuntime.installFactory = func(string) (localinstall.LocalInstall, error) {
+		return install, nil
 	}
-	if err := os.Chmod(path, executableFileMode); err != nil {
-		t.Fatalf("failed to mark executable test file %s executable: %v", path, err)
+
+	if err := localRuntime.Prepare(context.Background(), nil, nil); err != nil {
+		t.Fatalf("prepare failed: %v", err)
 	}
+	if err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
+		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
+		CPUCount:      4,
+		MemoryMB:      8192,
+		DataSizeGB:    100,
+	}); err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	if install.startConfig.ContainerDBPort != nanoDBPort ||
+		install.startConfig.DataDir != vmNanoDataDir {
+		t.Fatalf("unexpected guest Podman config: %#v", install.startConfig)
+	}
+	if len(install.startConfig.LegacyContainerNames) != 1 ||
+		install.startConfig.LegacyContainerNames[0] != legacyNanoContainer {
+		t.Fatalf("expected legacy container migration config, got %#v", install.startConfig)
+	}
+	endpoint, err := localRuntime.ReadEndpoints()
+	if err != nil || endpoint.DBPort != 28563 {
+		t.Fatalf("unexpected endpoint %#v, err=%v", endpoint, err)
+	}
+	status, err := localRuntime.Status(context.Background())
+	if err != nil || !status.Running {
+		t.Fatalf("expected combined running status, got %#v err=%v", status, err)
+	}
+	if err := localRuntime.Stop(context.Background(), nil, nil); err != nil {
+		t.Fatalf("stop failed: %v", err)
+	}
+
+	events, err := os.ReadFile(eventsPath)
+	if err != nil {
+		t.Fatalf("failed to read lifecycle events: %v", err)
+	}
+	want := []string{"runner-init", "runner-start", "install-start", "install-stop", "runner-stop"}
+	for _, event := range want {
+		if !strings.Contains(string(events), event+"\n") {
+			t.Fatalf("missing %q in lifecycle events:\n%s", event, events)
+		}
+	}
+	if strings.Index(
+		string(events),
+		"install-stop",
+	) > strings.Index(
+		string(events),
+		"runner-stop",
+	) {
+		t.Fatalf("expected container cleanup before VM stop:\n%s", events)
+	}
+
+	args, err := os.ReadFile(filepath.Join(localRuntime.paths.WorkDir, "start-args"))
+	if err != nil {
+		t.Fatalf("failed to read start args: %v", err)
+	}
+	if string(args) != "--forward db:8563:28563 4 8192 100" {
+		t.Fatalf("unexpected v2 runner start args %q", args)
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable files.
+func TestMacVMRuntimeStartStopsVMWhenInstallFails(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	localRuntime := NewMacVMRuntime(
+		deployment,
+		newTestManagerForRunner(t, []byte(fakeV2RunnerScript(eventsPath, 28563))),
+	)
+	localRuntime.installFactory = func(string) (localinstall.LocalInstall, error) {
+		return &recordingLocalInstall{
+			eventsPath: eventsPath,
+			startErr:   errors.New("podman failed"),
+		}, nil
+	}
+	if err := localRuntime.Prepare(context.Background(), nil, nil); err != nil {
+		t.Fatalf("prepare failed: %v", err)
+	}
+
+	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
+		CPUCount: 2, MemoryMB: 4096, DataSizeGB: 100,
+	})
+	if err == nil || !strings.Contains(err.Error(), "podman failed") {
+		t.Fatalf("expected install failure, got %v", err)
+	}
+	events, readErr := os.ReadFile(eventsPath)
+	if readErr != nil {
+		t.Fatalf("failed to read lifecycle events: %v", readErr)
+	}
+	if !strings.Contains(string(events), "install-start\nrunner-stop\n") {
+		t.Fatalf("expected failed installation to stop VM, got:\n%s", events)
+	}
+}
+
+func fakeV2RunnerScript(eventsPath string, hostDBPort int) string {
+	return fmt.Sprintf(`#!/bin/sh
+set -eu
+events=%q
+case "$1" in
+  version)
+    printf 'v2.0.0-dev\n'
+    ;;
+  init)
+    mkdir -p vm vm-shared
+    printf 'runner-init\n' >> "$events"
+    ;;
+  start)
+    shift
+    printf '%%s' "$*" > start-args
+    touch running
+    printf 'runner-start\n' >> "$events"
+    cat > vm-state.json <<'EOF'
+{
+  "vm_name":"test-vm",
+  "shared_dir":"./vm-shared",
+  "forwards":{"db":{"guest_port":8563,"host_port":%d}}
+}
+EOF
+    ;;
+  status)
+    if [ -f running ]; then printf '{"running":true}\n'; else printf '{"running":false}\n'; fi
+    ;;
+  stop)
+    rm -f running vm-state.json
+    printf 'runner-stop\n' >> "$events"
+    ;;
+  health-check)
+    printf '{"ports":{"db":{"state":"reachable"}}}\n'
+    ;;
+  *)
+    printf 'unexpected command: %%s\n' "$1" >&2
+    exit 2
+    ;;
+esac
+`, eventsPath, hostDBPort)
+}
+
+type recordingLocalInstall struct {
+	eventsPath  string
+	startConfig localinstall.StartConfig
+	startErr    error
+	running     bool
+}
+
+func (install *recordingLocalInstall) Start(
+	_ context.Context,
+	_, _ io.Writer,
+	startConfig localinstall.StartConfig,
+) error {
+	install.startConfig = startConfig
+	install.record("install-start")
+	if install.startErr == nil {
+		install.running = true
+	}
+
+	return install.startErr
+}
+
+func (install *recordingLocalInstall) Stop(context.Context, io.Writer, io.Writer) error {
+	install.record("install-stop")
+	install.running = false
+
+	return nil
+}
+
+func (install *recordingLocalInstall) Status(
+	context.Context,
+	io.Writer,
+	io.Writer,
+) (*localinstall.InstallStatus, error) {
+	return &localinstall.InstallStatus{Running: install.running}, nil
+}
+
+func (install *recordingLocalInstall) Destroy(ctx context.Context, out, outErr io.Writer) error {
+	return install.Stop(ctx, out, outErr)
+}
+
+func (install *recordingLocalInstall) record(event string) {
+	file, err := os.OpenFile(install.eventsPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer func() { _ = file.Close() }()
+	_, _ = fmt.Fprintln(file, event)
 }
