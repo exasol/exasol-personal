@@ -336,7 +336,13 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 	if err := os.MkdirAll(paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime work dir: %v", err)
 	}
-	manager := newTestManagerForRunner(t, []byte("#!/bin/sh\nexit 0\n"))
+	manager := newTestManagerForRunner(t, []byte(`#!/bin/sh
+case "$1" in
+  status) printf '{"running":false}\n' ;;
+  stop) exit 0 ;;
+  *) exit 2 ;;
+esac
+`))
 	if err := config.WriteDeploymentInfo(deployment.Root(), &config.DeploymentInfo{
 		Backend:         localDeploymentBackend,
 		DeploymentId:    localTestDeploymentID,

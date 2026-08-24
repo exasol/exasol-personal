@@ -4,191 +4,146 @@
 package localruntime
 
 import (
-	"bytes"
-	"context"
 	"os"
-	"reflect"
-	"runtime"
+	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/localinstall"
+	"time"
 )
 
-const (
-	localTestDeploymentID     = "exasol-local-test"
-	localTestClusterIdentity  = "exasol-personal;exasol-local-test;local;local"
-	localTestDatabasePort     = 28563
-	localTestSSHForwardedPort = 20022
-)
-
-func TestLocalRunnerVersionCheckArgs_PassesLauncherVersionCheckSettings(t *testing.T) {
+func TestReadRunnerStateUsesLabeledForwardsWithoutTransportMetadata(t *testing.T) {
 	t.Parallel()
 
-	// Given
-	const expectedURL = "https://example.test/v1/version-check"
-	versionCheck := localinstall.VersionCheckConfig{
-		Enabled:  true,
-		URL:      expectedURL,
-		Identity: localTestClusterIdentity,
+	statePath := filepath.Join(t.TempDir(), "vm-state.json")
+	state := []byte(`{
+  "vm_name": "exasol-local-vm",
+  "shared_dir": "./vm-shared",
+  "forwards": {"db": {"guest_port": 8563, "host_port": 28563}}
+}`)
+	if err := os.WriteFile(statePath, state, 0o600); err != nil {
+		t.Fatalf("failed to write state: %v", err)
 	}
 
-	// When
-	args, err := localRunnerVersionCheckArgs(versionCheck)
-	// Then
+	parsed, err := readRunnerState(statePath)
 	if err != nil {
-		t.Fatalf("expected version-check args, got %v", err)
+		t.Fatalf("failed to parse state: %v", err)
 	}
-	expected := []string{
-		"--version-check-enabled=true",
-		"--version-check-url", expectedURL,
-		"--version-check-identity", localTestClusterIdentity,
-	}
-	if !reflect.DeepEqual(args, expected) {
-		t.Fatalf("expected args %#v, got %#v", expected, args)
+	endpoint, err := runtimeEndpointFromRunnerState(parsed)
+	if err != nil || endpoint.DBPort != 28563 {
+		t.Fatalf("unexpected endpoint %#v, err=%v", endpoint, err)
 	}
 }
 
-func TestLocalRunnerVersionCheckArgs_DisablesRunnerWhenLauncherVersionCheckDisabled(
-	t *testing.T,
-) {
+func TestReadRunnerStateRejectsMissingOrWrongDatabaseForward(t *testing.T) {
 	t.Parallel()
 
-	// Given
-	// When
-	args, err := localRunnerVersionCheckArgs(localinstall.VersionCheckConfig{})
-	// Then
-	if err != nil {
-		t.Fatalf("expected disabled version-check args, got %v", err)
+	tests := map[string]string{
+		"missing":      `{"forwards":{}}`,
+		"wrong guest":  `{"forwards":{"db":{"guest_port":9999,"host_port":28563}}}`,
+		"invalid host": `{"forwards":{"db":{"guest_port":8563,"host_port":0}}}`,
 	}
-	expected := []string{"--version-check-enabled=false"}
-	if !reflect.DeepEqual(args, expected) {
-		t.Fatalf("expected args %#v, got %#v", expected, args)
+	for name, state := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			statePath := filepath.Join(t.TempDir(), "vm-state.json")
+			if err := os.WriteFile(statePath, []byte(state), 0o600); err != nil {
+				t.Fatalf("failed to write state: %v", err)
+			}
+			if _, err := readRunnerState(statePath); err == nil {
+				t.Fatal("expected invalid state to fail")
+			}
+		})
 	}
 }
 
-func newTestDeploymentWithVersionCheckState(
-	t *testing.T,
-	versionCheckEnabled bool,
-	clusterIdentity string,
-) config.DeploymentDir {
-	t.Helper()
-
-	deployment := config.NewDeploymentDir(t.TempDir())
-	state := &config.ExasolPersonalState{
-		DeploymentId:        localTestDeploymentID,
-		ClusterIdentity:     clusterIdentity,
-		VersionCheckEnabled: versionCheckEnabled,
-		DeploymentVersion:   "0.0.0",
-	}
-	workflowState := &config.WorkflowStateInitialized{}
-	if err := state.SetWorkflowStateAndWrite(workflowState, deployment); err != nil {
-		t.Fatalf("failed to write launcher state: %v", err)
-	}
-
-	return deployment
-}
-
-func TestLocalRunnerSlcArgsFromState(t *testing.T) {
+func TestResolveMacHostDBPort(t *testing.T) {
 	t.Parallel()
 
-	slcs := []localinstall.SLCConfig{
-		{Image: "docker.io/x:pytag", Target: "/exa/slc/python-3.12"},
-		{Image: "docker.io/x:javatag", Target: "/exa/slc/java-17"},
+	tests := []struct {
+		ports string
+		want  int
+	}{
+		{ports: "", want: 8563},
+		{ports: "auto", want: 0},
+		{ports: "db:0", want: 0},
+		{ports: "db:28563", want: 28563},
+		{ports: "ssh:20022, db:28563", want: 28563},
+	}
+	for _, test := range tests {
+		actual, err := resolveMacHostDBPort(test.ports)
+		if err != nil || actual != test.want {
+			t.Fatalf(
+				"resolveMacHostDBPort(%q) = %d, %v; want %d",
+				test.ports,
+				actual,
+				err,
+				test.want,
+			)
+		}
 	}
 
-	args := localRunnerSlcArgs(slcs)
-
-	want := []string{
-		"--slc", "docker.io/x:pytag=/exa/slc/python-3.12",
-		"--slc", "docker.io/x:javatag=/exa/slc/java-17",
-	}
-	if len(args) != len(want) {
-		t.Fatalf("args = %v, want %v", args, want)
-	}
-	for i := range want {
-		if args[i] != want[i] {
-			t.Errorf("args[%d] = %q, want %q", i, args[i], want[i])
+	for _, ports := range []string{"db", "db:-1", "db:65536", "db:1,db:2"} {
+		if _, err := resolveMacHostDBPort(ports); err == nil {
+			t.Fatalf("expected invalid mapping %q to fail", ports)
 		}
 	}
 }
 
-func TestLocalRunnerSlcArgsIncludesCustomMountAndPackage(t *testing.T) {
+func TestMaterializeFileAtomicallyStagesAndReusesUnchangedArtifact(t *testing.T) {
 	t.Parallel()
 
-	// Given
-	slcs := []localinstall.SLCConfig{
-		{Image: "img:py", Target: "/exa/slc/py"},
-		{
-			Image:   "custom:mypy3-abc",
-			Target:  "/exa/slc/custom-mypy3",
-			Package: "custom-mypy3-abc.tar.gz",
-		},
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "source.tar")
+	targetPath := filepath.Join(root, "share", "nano.tar")
+	if err := os.WriteFile(sourcePath, []byte("image"), 0o600); err != nil {
+		t.Fatalf("failed to write source: %v", err)
 	}
-
-	// When
-	args := localRunnerSlcArgs(slcs)
-	// Then
-
-	want := []string{
-		"--slc", "img:py=/exa/slc/py",
-		"--slc", "custom:mypy3-abc=/exa/slc/custom-mypy3",
-		"--slc-package", "custom:mypy3-abc=custom-mypy3-abc.tar.gz",
+	modTime := time.Unix(1_700_000_000, 123)
+	if err := os.Chtimes(sourcePath, modTime, modTime); err != nil {
+		t.Fatalf("failed to set source time: %v", err)
 	}
-	if strings.Join(args, " ") != strings.Join(want, " ") {
-		t.Fatalf("expected official and custom args, got %v", args)
+	if err := materializeFileAtomically(sourcePath, targetPath); err != nil {
+		t.Fatalf("failed to stage artifact: %v", err)
 	}
-}
-
-func TestLocalRunnerSlcArgsOmitsPackageForOfficialSLCs(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	slcs := []localinstall.SLCConfig{
-		{Image: "img:py", Target: "/exa/slc/py"},
-	}
-
-	// When
-	args := localRunnerSlcArgs(slcs)
-	// Then
-	for _, arg := range args {
-		if arg == "--slc-package" {
-			t.Fatalf("official SLCs must not be import-delivered: %v", args)
-		}
-	}
-}
-
-//nolint:paralleltest // serial package; see note at top of file
-func TestStart_InvokesResolvedRunnerWithArgs(t *testing.T) {
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("fake local runner script is POSIX-only")
-	}
-
-	// Given
-	deployment := newTestDeploymentWithVersionCheckState(t, false, "")
-	localRuntime := NewMacVMRuntime(deployment, nil)
-	if err := os.MkdirAll(localRuntime.paths.WorkDir, 0o750); err != nil {
-		t.Fatalf("failed to create local runtime directory: %v", err)
-	}
-	runnerScript := "#!/bin/sh\nprintf '%s\\n' \"$*\"\n"
-	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime = NewMacVMRuntime(deployment, manager)
-	var out bytes.Buffer
-
-	// When
-	err := localRuntime.Start(context.Background(), &out, nil, VMConfig{
-		RuntimeConfig: RuntimeConfig{Ports: "auto"},
-		CPUCount:      2,
-		MemoryMB:      4096,
-		DataSizeGB:    100,
-	})
-	// Then
+	firstInfo, err := os.Stat(targetPath)
 	if err != nil {
-		t.Fatalf("expected Start to succeed, got %v", err)
+		t.Fatalf("failed to stat target: %v", err)
 	}
-	const expected = "start --version-check-enabled=false --ports auto 2 4096 100"
-	if strings.TrimSpace(out.String()) != expected {
-		t.Fatalf("expected args %q, got %q", expected, out.String())
+	if firstInfo.Mode().Perm() != 0o640 || !firstInfo.ModTime().Equal(modTime) {
+		t.Fatalf(
+			"unexpected staged metadata: mode=%o time=%s",
+			firstInfo.Mode().Perm(),
+			firstInfo.ModTime(),
+		)
+	}
+	if err := materializeFileAtomically(sourcePath, targetPath); err != nil {
+		t.Fatalf("failed to reuse staged artifact: %v", err)
+	}
+	secondInfo, err := os.Stat(targetPath)
+	if err != nil {
+		t.Fatalf("failed to stat reused target: %v", err)
+	}
+	if !os.SameFile(firstInfo, secondInfo) {
+		t.Fatal("expected unchanged staged artifact not to be replaced")
+	}
+}
+
+func TestMaterializeFileAtomicallyRejectsDirectorySource(t *testing.T) {
+	t.Parallel()
+
+	err := materializeFileAtomically(t.TempDir(), filepath.Join(t.TempDir(), "target"))
+	if err == nil || !strings.Contains(err.Error(), "directory") {
+		t.Fatalf("expected directory source error, got %v", err)
+	}
+}
+
+func TestValidatePort(t *testing.T) {
+	t.Parallel()
+
+	if err := validatePort("database", 8563); err != nil {
+		t.Fatalf("expected valid port: %v", err)
+	}
+	if err := validatePort("database", 0); err == nil {
+		t.Fatalf("expected invalid port error, got %v", err)
 	}
 }

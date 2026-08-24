@@ -163,6 +163,12 @@ name: Test Infrastructure
 description: test infrastructure
 backend: local
 `)
+	state := &config.ExasolPersonalState{DeploymentId: "local-test"}
+	if err := state.SetWorkflowStateAndWrite(
+		&config.WorkflowStateInitialized{}, deployment,
+	); err != nil {
+		t.Fatalf("failed to write local deployment state: %v", err)
+	}
 
 	return deployment
 }
@@ -192,6 +198,11 @@ func writeFakeCombinedRunner(
 	script := "#!/bin/sh\n" +
 		"if [ \"$1\" = status ]; then echo '" + statusJSON + "'; exit 0; fi\n" +
 		"if [ \"$1\" = health-check ]; then echo '" + healthCheckJSON + "'; exit 0; fi\n" +
+		"if [ \"$1\" = run ]; then\n" +
+		"  shift; [ \"$1\" = -- ]; shift\n" +
+		"  if [ \"$1 $2 $3\" = 'podman container exists' ]; then exit 0; fi\n" +
+		"  if [ \"$1 $2 $3\" = 'podman container inspect' ]; then echo true; exit 0; fi\n" +
+		"fi\n" +
 		"exit 1\n"
 
 	return newTestManagerForRunner(t, []byte(script))
