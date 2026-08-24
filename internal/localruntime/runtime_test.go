@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -319,6 +320,36 @@ printf 'container-stderr' >&2
 			stdout.String(),
 			stderr.String(),
 		)
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable fixtures.
+func TestMacVMRuntimeOpenHostShellPreservesRunnerFailure(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	runnerScript := []byte("#!/bin/sh\nexit 23\n")
+	localRuntime := NewMacVMRuntime(deployment, newTestManagerForRunner(t, runnerScript))
+	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
+		t.Fatalf("failed to create runtime work dir: %v", err)
+	}
+
+	// When
+	err := localRuntime.OpenHostShell(
+		context.Background(), strings.NewReader(""), io.Discard, io.Discard,
+	)
+
+	// Then
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected underlying command failure, got %v", err)
+	}
+	if exitErr.ExitCode() != 23 {
+		t.Fatalf("expected runner exit code 23, got %d", exitErr.ExitCode())
+	}
+	if !strings.Contains(err.Error(), `local runner command "run" failed`) {
+		t.Fatalf("expected contextual runner error, got %v", err)
 	}
 }
 
