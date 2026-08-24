@@ -53,7 +53,14 @@ Run cleanup (dry-run by default):
 ./bin/exasol-cleanup run exasol-123ad553 --execute
 ./bin/exasol-cleanup run --owner=* exasol-123ad553 --execute
 ./bin/exasol-cleanup run --types=ec2-instance,ebs-volume exasol-123ad553 --execute
+# Every deployment left over for more than a day, in one call:
+./bin/exasol-cleanup run --all --older-than=24h --owner=*
+./bin/exasol-cleanup run --all --older-than=24h --owner=* --execute
 ```
+
+`--all` cleans up every deployment the search finds instead of ids you name, which saves discovering first and feeding the ids back in. Narrow it with `--older-than`, a duration such as `24h` or `90m`; `discover` accepts the same flag for listing. A deployment whose creation time cannot be derived from tags or resources counts as old enough, so it does not survive indefinitely. Because `--all` decides what to delete from filters rather than from ids, it refuses to be combined with explicit ids, and `--older-than` is rejected without it. `--execute` remains the safety switch either way.
+
+`run` exits non-zero when a deployment could not be processed *or* when an individual resource action failed, so automation can rely on the exit code instead of inspecting results. Skipped actions are a normal outcome for protected resources and are not failures.
 
 `show` and `run` are intentionally different: `show` lists the resources currently associated with each deployment, while `run` plans ordered cleanup actions and optionally executes them. Because `run` is destructive in execute mode, `--execute` remains the safety switch.
 

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 	"github.com/spf13/cobra"
@@ -45,6 +46,7 @@ var cleanupDiscoverCmd = &cobra.Command{
 			scopedCollector.Scope.Reason = ""
 			res = append(res, summaries...)
 		}
+		res = shared.FilterSummariesOlderThan(res, cleanupOpts.OlderThan, time.Now())
 
 		if !cleanupOpts.JSON {
 			renderCleanupScope(cmd.OutOrStdout(), plan.Scope)
@@ -245,6 +247,7 @@ func registerCleanupDiscoverFlags(cmd *cobra.Command) {
 			" Default: state,created,resources")
 	cmd.Flags().BoolVar(&cleanupDiscoverOpts.Legacy, "legacy", false,
 		"Discover legacy deployments (ignore mandatory Project=exasol-personal)")
+	registerAgeFilterFlag(cmd)
 }
 
 // nolint: gochecknoinits

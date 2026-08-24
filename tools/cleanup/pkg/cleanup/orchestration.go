@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 const (
@@ -59,6 +60,7 @@ type Plan struct {
 type LookupMatch struct {
 	Collector ProviderCollector
 	Resolved  ResolvedDeployment
+	Summary   DeploymentSummary
 }
 
 type ResolvedDeployment struct {
@@ -142,6 +144,7 @@ func CollectLookupIndex(ctx context.Context, plan *Plan) LookupIndex {
 					Provider:   summary.Provider,
 					Location:   summary.Region,
 				},
+				Summary: summary,
 			})
 		}
 	}
@@ -233,4 +236,53 @@ func shouldUseProvider(providerName string, selectedProviders []string) bool {
 		}
 	}
 	return false
+}
+
+// IsOlderThan reports whether createdAt lies further back than age. A zero
+// createdAt counts as older, so deployments with no derivable creation time
+// still get cleaned up.
+func IsOlderThan(createdAt time.Time, age time.Duration, now time.Time) bool {
+	if age <= 0 {
+		return true
+	}
+
+	return createdAt.Before(now.Add(-age))
+}
+
+// FilterSummariesOlderThan keeps the summaries of deployments older than age.
+func FilterSummariesOlderThan(
+	summaries []DeploymentSummary,
+	age time.Duration,
+	now time.Time,
+) []DeploymentSummary {
+	if age <= 0 {
+		return summaries
+	}
+
+	filtered := make([]DeploymentSummary, 0, len(summaries))
+	for _, summary := range summaries {
+		if IsOlderThan(summary.CreatedAt, age, now) {
+			filtered = append(filtered, summary)
+		}
+	}
+
+	return filtered
+}
+
+// StaleDeploymentIDs returns the ids older than age, sorted for a stable
+// cleanup order. A deployment in several locations is stale if any one is.
+func StaleDeploymentIDs(index LookupIndex, age time.Duration, now time.Time) []string {
+	ids := make([]string, 0, len(index.Matches))
+	for id, matches := range index.Matches {
+		for _, match := range matches {
+			if IsOlderThan(match.Summary.CreatedAt, age, now) {
+				ids = append(ids, id)
+
+				break
+			}
+		}
+	}
+	slices.Sort(ids)
+
+	return ids
 }

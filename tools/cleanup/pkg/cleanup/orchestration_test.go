@@ -161,3 +161,69 @@ func TestFilterDeploymentDetailsByTypesReturnsTypedCopy(t *testing.T) {
 		t.Fatalf("original summary resources = %d, want unchanged 2", details.Summary.Resources)
 	}
 }
+
+func TestIsOlderThanTreatsUndatedDeploymentsAsStale(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+
+	// Given a deployment age threshold
+	// When the creation time is unknown, recent, or well past the threshold
+	// Then only the recent deployment survives, and an unknown time counts as stale
+	if !IsOlderThan(time.Time{}, time.Hour, now) {
+		t.Fatal("deployment without a creation time should count as stale")
+	}
+	if IsOlderThan(now.Add(-30*time.Minute), time.Hour, now) {
+		t.Fatal("deployment younger than the threshold should not count as stale")
+	}
+	if !IsOlderThan(now.Add(-2*time.Hour), time.Hour, now) {
+		t.Fatal("deployment older than the threshold should count as stale")
+	}
+	if !IsOlderThan(now, 0, now) {
+		t.Fatal("a zero threshold should select every deployment")
+	}
+}
+
+func TestFilterSummariesOlderThanKeepsOnlyStaleDeployments(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	summaries := []DeploymentSummary{
+		{ID: "dep-fresh", CreatedAt: now.Add(-time.Hour)},
+		{ID: "dep-stale", CreatedAt: now.Add(-48 * time.Hour)},
+	}
+
+	// Given deployments of differing age
+	// When a threshold is applied
+	// Then only the deployments past it remain, and no threshold keeps them all
+	filtered := FilterSummariesOlderThan(summaries, 24*time.Hour, now)
+	if len(filtered) != 1 || filtered[0].ID != "dep-stale" {
+		t.Fatalf("filtered = %v, want [dep-stale]", filtered)
+	}
+
+	if got := FilterSummariesOlderThan(summaries, 0, now); len(got) != 2 {
+		t.Fatalf("unfiltered = %v, want both summaries", got)
+	}
+}
+
+func TestStaleDeploymentIDsSortsAndDeduplicatesLocations(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	index := LookupIndex{Matches: map[string][]LookupMatch{
+		"dep-b": {{Summary: DeploymentSummary{ID: "dep-b", CreatedAt: now.Add(-48 * time.Hour)}}},
+		"dep-a": {
+			{Summary: DeploymentSummary{ID: "dep-a", CreatedAt: now.Add(-time.Minute)}},
+			{Summary: DeploymentSummary{ID: "dep-a", CreatedAt: now.Add(-72 * time.Hour)}},
+		},
+		"dep-fresh": {{Summary: DeploymentSummary{ID: "dep-fresh", CreatedAt: now}}},
+	}}
+
+	// Given deployments found once or in several locations
+	// When stale ids are selected
+	// Then each id appears once, sorted, and one stale location is enough
+	ids := StaleDeploymentIDs(index, 24*time.Hour, now)
+	if len(ids) != 2 || ids[0] != "dep-a" || ids[1] != "dep-b" {
+		t.Fatalf("ids = %v, want [dep-a dep-b]", ids)
+	}
+}
