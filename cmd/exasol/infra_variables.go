@@ -103,27 +103,21 @@ func prepareInfrastructureVariableFlags(args []string) error {
 }
 
 func prepareConfigSetInfrastructureVariableFlags(args []string) error {
+	if rawArgsRequestHelp(args) {
+		return nil
+	}
+
 	if !preregisteredCommandIs(args, configSetCmd) {
 		return nil
 	}
 
 	deployment, err := deploymentDirFromRawArgs(args)
 	if err != nil {
-		if rawArgsRequestHelp(args) {
-			return nil
-		}
-
 		return fmt.Errorf("cannot determine deployment directory for `config set`: %w", err)
 	}
 
 	resolution, resolveErr := resolveInfrastructureVariablesFromDeployment(deployment)
 	if resolveErr != nil {
-		// Keep `config set --help` working even when options cannot be loaded:
-		// render the base help instead of failing.
-		if rawArgsRequestHelp(args) {
-			return nil
-		}
-
 		// Fail with a clear message instead of silently registering no flags. Otherwise the
 		// supplied options fail Cobra's flag parsing later as a misleading "unknown flag"
 		// error before the initialized-deployment pre-run gate can explain the problem.
