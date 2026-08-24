@@ -4,6 +4,8 @@
 package main
 
 import (
+	"time"
+
 	"fmt"
 	"io"
 	"slices"
@@ -48,6 +50,7 @@ var cleanupOpts = struct {
 	AzureSubscriptionID string
 	Providers           []string
 	OwnerFilter         string
+	OlderThan           time.Duration
 	JSON                bool
 	Verbose             bool
 }{}
@@ -83,6 +86,14 @@ func shouldUseProvider(providerName string) bool {
 		}
 	}
 	return false
+}
+
+// registerAgeFilterFlag adds --older-than. Not a common flag: show and
+// providers have nothing for it to narrow.
+func registerAgeFilterFlag(cmd *cobra.Command) {
+	cmd.Flags().
+		DurationVar(&cleanupOpts.OlderThan, "older-than", 0,
+			"Only consider deployments created longer ago than this duration (e.g. 24h, 90m)")
 }
 
 func registerCommonFlags(cmd *cobra.Command, options cleanupFlagOptions) {

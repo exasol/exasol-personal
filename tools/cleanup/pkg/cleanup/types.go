@@ -54,6 +54,14 @@ type Action struct {
 	Reason string      `json:"reason"` // why skip or additional context
 }
 
+// Result statuses reported for a planned or executed action.
+const (
+	ResultStatusPlanned = "planned"
+	ResultStatusSuccess = "success"
+	ResultStatusFailed  = "failed"
+	ResultStatusSkipped = "skipped"
+)
+
 // Result captures execution outcome of an action.
 type Result struct {
 	Action Action `json:"action"`

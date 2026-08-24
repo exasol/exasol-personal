@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	shared "github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup"
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 
 var cleanupRunOpts = struct {
 	Execute bool
+	All     bool
 	Types   []string
 }{}
 
@@ -23,9 +25,12 @@ const cleanupRunShort = "Run ordered cleanup (dry-run by default) for one or mor
 var cleanupRunCmd = &cobra.Command{
 	Use:    "run <deployment-id>...",
 	Short:  cleanupRunShort,
-	Args:   cobra.MinimumNArgs(1),
+	Args:   cobra.ArbitraryArgs,
 	PreRun: func(_ *cobra.Command, _ []string) { configureLogger() },
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := validateCleanupRunSelection(args); err != nil {
+			return err
+		}
 		cmd.SilenceUsage = true
 
 		plan := buildCleanupPlan(cmd.Context(), false)
@@ -67,9 +72,15 @@ var cleanupRunCmd = &cobra.Command{
 			return err
 		}
 
-		results := make([]cleanupRunDeploymentJSONOutput, 0, len(args))
+		deploymentIDs := selectCleanupRunDeployments(args, lookupIndex)
+		if !cleanupOpts.JSON && len(deploymentIDs) == 0 {
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No deployments selected for cleanup.")
+		}
+
+		results := make([]cleanupRunDeploymentJSONOutput, 0, len(deploymentIDs))
 		failureCount := 0
-		for i, deploymentID := range args {
+		resourceFailures := 0
+		for i, deploymentID := range deploymentIDs {
 			if !cleanupOpts.JSON && i > 0 {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout())
 			}
@@ -85,6 +96,7 @@ var cleanupRunCmd = &cobra.Command{
 				continue
 			}
 
+			resourceFailures += countFailedResults(result.Results)
 			if !cleanupOpts.JSON {
 				renderCleanupRunResult(cmd, *result.Resolved, result.Results, execution)
 			}
@@ -99,29 +111,83 @@ var cleanupRunCmd = &cobra.Command{
 			)
 		}
 
+		outcomeCode, outcomeErr := cleanupRunOutcome(failureCount, resourceFailures)
 		if cleanupOpts.JSON {
 			payload := cleanupRunJSONOutput{
 				Scope:       plan.Scope,
 				Execution:   execution,
 				Deployments: results,
 			}
-			if failureCount > 0 {
-				payload.Error = commandError(
-					"deployment_requests_failed",
-					fmt.Errorf("%d deployment requests failed", failureCount),
-				)
+			if outcomeErr != nil {
+				payload.Error = commandError(outcomeCode, outcomeErr)
 			}
 			if encodeErr := encodeJSONOutput(cmd.OutOrStdout(), payload); encodeErr != nil {
 				return encodeErr
 			}
 		}
 
-		if failureCount > 0 {
-			return fmt.Errorf("%d deployment requests failed", failureCount)
-		}
-
-		return nil
+		return outcomeErr
 	},
+}
+
+// validateCleanupRunSelection rejects ambiguous targeting: ids and --all are
+// alternatives, and --older-than does nothing without --all.
+func validateCleanupRunSelection(args []string) error {
+	switch {
+	case cleanupRunOpts.All && len(args) > 0:
+		return fmt.Errorf("--all cannot be combined with deployment ids")
+	case !cleanupRunOpts.All && len(args) == 0:
+		return fmt.Errorf("provide at least one deployment id, or --all to select every discovered deployment")
+	case !cleanupRunOpts.All && cleanupOpts.OlderThan > 0:
+		return fmt.Errorf("--older-than only applies together with --all")
+	}
+
+	return nil
+}
+
+// selectCleanupRunDeployments resolves the run targets: the given ids, or the
+// stale deployments already in the index when --all is set.
+func selectCleanupRunDeployments(args []string, lookupIndex cleanupLookupIndex) []string {
+	if !cleanupRunOpts.All {
+		return args
+	}
+
+	selected := shared.StaleDeploymentIDs(lookupIndex, cleanupOpts.OlderThan, time.Now())
+	slog.Info("selected deployments", "count", len(selected), "older_than", cleanupOpts.OlderThan.String())
+
+	return selected
+}
+
+// countFailedResults counts failed actions. Skipped is a normal outcome for
+// protected resources, not a failure.
+func countFailedResults(results []shared.Result) int {
+	failed := 0
+	for _, result := range results {
+		if result.Status == shared.ResultStatusFailed {
+			failed++
+		}
+	}
+
+	return failed
+}
+
+// cleanupRunOutcome maps run tallies onto an error code and error. Failed
+// resource actions count too, so callers can rely on the exit code alone.
+func cleanupRunOutcome(deploymentFailures, resourceFailures int) (string, error) {
+	switch {
+	case deploymentFailures > 0 && resourceFailures > 0:
+		return "run_failed", fmt.Errorf(
+			"%d deployment requests failed, %d resource actions failed",
+			deploymentFailures,
+			resourceFailures,
+		)
+	case deploymentFailures > 0:
+		return "deployment_requests_failed", fmt.Errorf("%d deployment requests failed", deploymentFailures)
+	case resourceFailures > 0:
+		return "resource_actions_failed", fmt.Errorf("%d resource actions failed", resourceFailures)
+	}
+
+	return "", nil
 }
 
 func loadCleanupRunResult(
@@ -242,6 +308,10 @@ func runMode(execute bool) string {
 func registerCleanupRunFlags(cmd *cobra.Command) {
 	cmd.Flags().
 		BoolVar(&cleanupRunOpts.Execute, "execute", false, "Execute deletions instead of dry-run")
+	cmd.Flags().
+		BoolVar(&cleanupRunOpts.All, "all", false,
+			"Clean up every discovered deployment instead of named ids (combine with --older-than)")
+	registerAgeFilterFlag(cmd)
 	cmd.Flags().
 		StringSliceVar(&cleanupRunOpts.Types, "types", nil,
 			"Optional comma-separated resource types to limit (e.g. ec2-instance,ebs-volume)")
