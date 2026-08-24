@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -22,6 +23,15 @@ const (
 	filePerm       = 0o600
 	extractRelPath = "unpack"
 )
+
+// ErrUnknownMember marks a Request/RequestMember/RequestMemberCopy failure
+// caused by nothing matching what was asked for: an undeclared resourceID,
+// or a member not matching its group's pattern. It is deliberately distinct
+// from a resolution failure (fetch, cache I/O, extraction) for a resourceID
+// or member that does exist. Callers that translate failures into a
+// caller-facing "does not exist" error must check for this specifically,
+// not any error.
+var ErrUnknownMember = errors.New("unknown member")
 
 type Platform struct {
 	GOOS   string
@@ -189,12 +199,80 @@ func (m *Manager) Get(
 
 // Request looks up a definition from the static spec by ID and resolves it.
 func (m *Manager) Request(ctx context.Context, resourceID string) (string, error) {
+	return m.RequestMember(ctx, resourceID, "")
+}
+
+// RequestMember treats an empty member as plain Request. Otherwise it
+// matches member against the resolved group's own resource_path pattern:
+// never an independent fetch, cache entry, or embed, only a subpath of the
+// already-resolved group.
+func (m *Manager) RequestMember(ctx context.Context, resourceID, member string) (string, error) {
 	def, ok := m.spec[resourceID]
 	if !ok {
-		return "", fmt.Errorf("unknown runtime artifact %q", resourceID)
+		return "", fmt.Errorf("%w: unknown runtime artifact %q", ErrUnknownMember, resourceID)
+	}
+	if member == "" {
+		return m.Get(ctx, def, resourceID)
 	}
 
-	return m.Get(ctx, def, resourceID)
+	artifact, err := def.Resolve(m.platform.GOOS, m.platform.GOARCH)
+	if err != nil {
+		return "", err
+	}
+	root, err := m.Get(ctx, def, resourceID)
+	if err != nil {
+		return "", err
+	}
+	matches, err := GlobMatches(root, artifact.ResourcePath)
+	if err != nil {
+		return "", err
+	}
+	path, ok := matches[member]
+	if !ok {
+		return "", fmt.Errorf("%w %q of group %q", ErrUnknownMember, member, resourceID)
+	}
+
+	return path, nil
+}
+
+// GroupMembers reports the names matched at build time, without
+// re-globbing or extracting the embedded archive live.
+func (*Manager) GroupMembers(group string) []string {
+	members, _ := lookupEmbeddedGroupMembers(group)
+
+	return slices.Clone(members)
+}
+
+// GlobMatches always excludes a matched ".git" directory, since a pattern
+// of "*" at a cloned repository's own root would otherwise match its
+// metadata directory like any other top-level entry.
+func GlobMatches(root, pattern string) (map[string]string, error) {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return nil, errors.New("must define resource_path with a glob pattern")
+	}
+
+	globMatches, err := filepath.Glob(filepath.Join(root, pattern))
+	if err != nil {
+		return nil, err
+	}
+
+	matches := make(map[string]string, len(globMatches))
+	for _, match := range globMatches {
+		base := filepath.Base(match)
+		if base == ".git" {
+			continue
+		}
+		if existing, ok := matches[base]; ok {
+			return nil, fmt.Errorf(
+				"pattern %q matches %q and %q, which share the member name %q",
+				pattern, existing, match, base,
+			)
+		}
+		matches[base] = match
+	}
+
+	return matches, nil
 }
 
 // resolveUnderLock resolves the cached path for an artifact, refreshing it if
@@ -472,12 +550,26 @@ func (m *Manager) resolveEntry(
 	if err != nil {
 		return cacheIndexEntry{}, err
 	}
+	if def.Glob {
+		// resource_path is a match pattern applied after Get returns here,
+		// not a literal subdirectory to select.
+		resourcePath = ""
+	}
+
+	// A Glob:true resource's embedded bytes are always an archive of its
+	// matched entries, even when the group's own declared extract is false
+	// because its live source is already a bare directory needing no
+	// extraction to read.
+	extract := def.Extract
+	if def.Glob && def.Embed {
+		extract = true
+	}
 
 	platform := platformKey(m.platform.GOOS, m.platform.GOARCH)
 	cacheKey, err := artifactIdentity(
 		resourceID,
 		platform,
-		def.Extract,
+		extract,
 		artifact,
 		downloadPath,
 		resourcePath,
@@ -504,7 +596,7 @@ func (m *Manager) resolveEntry(
 	}
 
 	resolvedRelPath, err := m.resolveResolvedPath(
-		def, entryPath, artifactAbsPath, artifactRelPath, resourcePath,
+		extract, entryPath, artifactAbsPath, artifactRelPath, resourcePath,
 	)
 	if err != nil {
 		return cacheIndexEntry{}, err
@@ -518,7 +610,7 @@ func (m *Manager) resolveEntry(
 		ResolvedPath: resolvedRelPath,
 		DownloadPath: downloadPath,
 		ResourcePath: resourcePath,
-		Extract:      def.Extract,
+		Extract:      extract,
 		Embed:        def.Embed,
 	}, nil
 }
@@ -569,15 +661,15 @@ func (m *Manager) returnPath(entry cacheIndexEntry) (string, error) {
 // artifact path itself otherwise. A non-empty resource_path selects a
 // subdirectory within that root, applying uniformly regardless of source kind.
 func (m *Manager) resolveResolvedPath(
-	def ResourceDefinition,
+	extract bool,
 	entryPath, artifactAbsPath, artifactRelPath, resourcePath string,
 ) (string, error) {
 	root := artifactAbsPath
-	if def.Extract {
+	if extract {
 		root = filepath.Join(entryPath, extractRelPath)
 	}
 	if strings.TrimSpace(resourcePath) == "" {
-		if def.Extract {
+		if extract {
 			return m.cache.relativePath(root)
 		}
 

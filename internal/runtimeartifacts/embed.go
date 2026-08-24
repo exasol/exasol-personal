@@ -16,6 +16,10 @@ var embeddedResources = map[string][]byte{}
 // different embedded content always resolves to its own cache entry.
 var embeddedHashes = map[string]string{}
 
+// embeddedGroupMembers holds member names matched at build time, avoiding a
+// live re-glob of the embedded archive just to list them.
+var embeddedGroupMembers = map[string][]string{}
+
 // Register makes data available for resourceID's embedded resolution, along
 // with the content hash the generator computed over it at build time.
 // Called from generated files' init() functions. A call with empty data is a
@@ -30,6 +34,12 @@ func Register(resourceID string, data []byte, sha256Hex string) {
 	embeddedHashes[resourceID] = sha256Hex
 }
 
+// RegisterGroupMembers records the member names resourceembedder found when
+// it globbed resourceID's own resolved directory at build time.
+func RegisterGroupMembers(resourceID string, members []string) {
+	embeddedGroupMembers[resourceID] = members
+}
+
 func lookupEmbedded(resourceID string) ([]byte, bool) {
 	data, ok := embeddedResources[resourceID]
 
@@ -40,4 +50,10 @@ func lookupEmbeddedHash(resourceID string) (string, bool) {
 	hash, ok := embeddedHashes[resourceID]
 
 	return hash, ok
+}
+
+func lookupEmbeddedGroupMembers(resourceID string) ([]string, bool) {
+	members, ok := embeddedGroupMembers[resourceID]
+
+	return members, ok
 }
