@@ -4,9 +4,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -72,16 +72,10 @@ func init() {
 	requireDefaultDeploymentCompatibility(initCmd)
 	requireDeploymentFileLogging(initCmd)
 
-	// Augment long help with embedded preset names so users know what they can pass.
-	initCmd.Long = strings.TrimRight(initCmdLongDesc, "\n") +
-		"\n\t" + presetNamesForHelp(presets.PresetTypeInfrastructure,
-		presets.ListEmbeddedInfrastructuresPresets()) +
-		"\n\t" + presetNamesForHelp(presets.PresetTypeInstallation,
-		presets.ListEmbeddedInstallationsPresets())
-
-	if matrix := embeddedPresetCompatibilityMatrix(); matrix != "" {
-		initCmd.Long += "\n\n\t" + strings.ReplaceAll(matrix, "\n", "\n\t")
-	}
+	// Embedded preset names and the compatibility matrix are appended to help
+	// text lazily (see deferPresetHelpText) since resolving them needs a
+	// request context this package-init function doesn't have.
+	deferPresetHelpText(initCmd)
 
 	initCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
@@ -141,6 +135,7 @@ func runInitForInitializedDeployment(
 	installVars map[string]string,
 ) error {
 	if err := ensureRequestedPresetsMatchInitializedDeployment(
+		cmd.Context(),
 		deployment,
 		infraPreset,
 		installPreset,
@@ -200,15 +195,17 @@ func runInitForFreshDeployment(
 }
 
 func ensureRequestedPresetsMatchInitializedDeployment(
+	ctx context.Context,
 	deployment config.DeploymentDir,
 	infraPreset deploy.PresetRef,
 	installPreset deploy.PresetRef,
 ) error {
-	if err := deploy.ValidatePresetSelection(infraPreset, installPreset); err != nil {
+	if err := deploy.ValidatePresetSelection(ctx, infraPreset, installPreset); err != nil {
 		return err
 	}
 
 	return deploy.EnsureDeploymentPresetIdentityMatches(
+		ctx,
 		deployment,
 		infraPreset,
 		installPreset,

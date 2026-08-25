@@ -133,10 +133,11 @@ func getDeploymentInfoReportWithExistingLock(
 		return nil, fmt.Errorf("failed to get status: %w", err)
 	}
 
-	return deploymentInfoReportFromState(deployment, deploymentStatus.Status)
+	return deploymentInfoReportFromState(ctx, deployment, deploymentStatus.Status)
 }
 
 func deploymentInfoReportFromState(
+	ctx context.Context,
 	deployment config.DeploymentDir,
 	deploymentState string,
 ) (*DeploymentInfoReport, error) {
@@ -145,7 +146,7 @@ func deploymentInfoReportFromState(
 		return report, nil
 	}
 
-	if err := addDeploymentIdentity(deployment, report); err != nil {
+	if err := addDeploymentIdentity(ctx, deployment, report); err != nil {
 		if deploymentState == StatusOperationInProgress {
 			return report, nil
 		}
@@ -182,6 +183,7 @@ func minimalDeploymentInfoReport(
 }
 
 func addDeploymentIdentity(
+	ctx context.Context,
 	deployment config.DeploymentDir,
 	report *DeploymentInfoReport,
 ) error {
@@ -190,7 +192,7 @@ func addDeploymentIdentity(
 		return err
 	}
 	report.DeploymentID = exasolState.DeploymentId
-	configuration, err := readDeploymentConfiguration(deployment)
+	configuration, err := readDeploymentConfiguration(ctx, deployment)
 	if err != nil {
 		return err
 	}

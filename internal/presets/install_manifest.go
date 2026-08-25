@@ -5,6 +5,7 @@ package presets
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/exasol/exasol-personal/assets"
 	"gopkg.in/yaml.v3"
 )
 
@@ -245,16 +245,15 @@ type LocalCommandTask struct {
 	RegexLog    []*RegexLog `yaml:"regexLog"`
 }
 
-// ReadInstallManifest loads the installation manifest from embedded assets.
-func ReadInstallManifest(installName string) (*InstallManifest, error) {
-	manifestRaw, err := assets.InstallationAssets.ReadFile(
-		assets.InstallationAssetDir + "/" + installName + "/" + InstallationManifestFilename,
-	)
+// ReadInstallManifest loads the named embedded installation preset's
+// manifest, resolved through the resource cache.
+func ReadInstallManifest(ctx context.Context, installName string) (*InstallManifest, error) {
+	dir, err := presetDir(ctx, Installation, installName)
 	if err != nil {
 		return nil, err
 	}
 
-	return parseInstallManifest(manifestRaw)
+	return ReadInstallManifestFromDir(dir)
 }
 
 // ReadInstallManifestFromDir loads the installation manifest from a preset directory on disk.

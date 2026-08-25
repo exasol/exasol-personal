@@ -27,7 +27,7 @@ const testLocalPresetName = "local"
 // behind an interface that can be tested without Cobra's global command state.
 
 func TestScanInfrastructurePresetFromArgs_Defaults(t *testing.T) {
-	preset, _ := scanInfrastructurePresetSelection([]string{"init"})
+	preset, _ := scanInfrastructurePresetSelection(testManagerContext(t), []string{"init"})
 	if preset != nil {
 		t.Fatalf("expected no preset selection, got: %#v", preset)
 	}
@@ -35,7 +35,7 @@ func TestScanInfrastructurePresetFromArgs_Defaults(t *testing.T) {
 
 func TestScanInfrastructurePresetFromArgs_PositionalName(t *testing.T) {
 	preset, err := scanInfrastructurePresetSelection(
-		[]string{"init", presets.DefaultInfrastructure},
+		testManagerContext(t), []string{"init", presets.DefaultInfrastructure},
 	)
 	if err != nil || preset == nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -55,7 +55,10 @@ func TestScanInfrastructurePresetFromArgs_PositionalPath(t *testing.T) {
 		t.Fatalf("write manifest: %v", err)
 	}
 
-	preset, err := scanInfrastructurePresetSelection([]string{"init", presetDir})
+	preset, err := scanInfrastructurePresetSelection(
+		testManagerContext(t),
+		[]string{"init", presetDir},
+	)
 	if err != nil || preset == nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -66,7 +69,7 @@ func TestScanInfrastructurePresetFromArgs_PositionalPath(t *testing.T) {
 
 func TestScanInfrastructurePresetFromArgs_SkipsUnrelatedFlags(t *testing.T) {
 	preset, err := scanInfrastructurePresetSelection(
-		[]string{
+		testManagerContext(t), []string{
 			"--log-level",
 			"debug",
 			"init",
@@ -85,6 +88,9 @@ func TestScanInfrastructurePresetFromArgs_SkipsUnrelatedFlags(t *testing.T) {
 
 func TestScanInfrastructurePresetFromArgs_InstallCommand(t *testing.T) {
 	preset, err := scanInfrastructurePresetSelection(
+		testManagerContext(
+			t,
+		),
 		[]string{"install", presets.DefaultInfrastructure, presets.DefaultInstallation},
 	)
 	if err != nil || preset == nil {
@@ -112,8 +118,9 @@ func TestScanPresetFromArgs_BooleanFlagsBeforeInfrastructurePreset(t *testing.T)
 			args := []string{"install", testCase.flag, testLocalPresetName, "--help"}
 
 			// When
-			infraPreset, infraErr := scanInfrastructurePresetSelection(args)
-			installPreset, installErr := scanInstallationPresetSelection(args)
+			ctx := testManagerContext(t)
+			infraPreset, infraErr := scanInfrastructurePresetSelection(ctx, args)
+			installPreset, installErr := scanInstallationPresetSelection(ctx, args)
 
 			// Then
 			if infraErr != nil || infraPreset == nil {
@@ -137,8 +144,9 @@ func TestScanPresetFromArgs_BooleanFlagWithoutInfrastructurePreset(t *testing.T)
 	args := []string{"install", "--verbose", "--help"}
 
 	// When
-	infraPreset, infraErr := scanInfrastructurePresetSelection(args)
-	installPreset, installErr := scanInstallationPresetSelection(args)
+	ctx := testManagerContext(t)
+	infraPreset, infraErr := scanInfrastructurePresetSelection(ctx, args)
+	installPreset, installErr := scanInstallationPresetSelection(ctx, args)
 
 	// Then
 	if infraErr == nil || infraPreset != nil {
@@ -156,8 +164,9 @@ func TestScanPresetFromArgs_BooleanFlagBeforeExplicitInstallationPreset(t *testi
 	}
 
 	// When
-	infraPreset, infraErr := scanInfrastructurePresetSelection(args)
-	installPreset, installErr := scanInstallationPresetSelection(args)
+	ctx := testManagerContext(t)
+	infraPreset, infraErr := scanInfrastructurePresetSelection(ctx, args)
+	installPreset, installErr := scanInstallationPresetSelection(ctx, args)
 
 	// Then
 	if infraErr != nil || infraPreset == nil {
@@ -176,7 +185,7 @@ func TestScanPresetFromArgs_BooleanFlagBeforeExplicitInstallationPreset(t *testi
 
 func TestScanInstallationPresetFromArgs_DefaultFromInfrastructure(t *testing.T) {
 	preset, err := scanInstallationPresetSelection(
-		[]string{"install", presets.DefaultInfrastructure},
+		testManagerContext(t), []string{"install", presets.DefaultInfrastructure},
 	)
 	if err != nil || preset == nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -197,7 +206,7 @@ func TestScanInstallationPresetFromArgs_ExplicitInstallation(t *testing.T) {
 	}
 
 	preset, err := scanInstallationPresetSelection(
-		[]string{"install", presets.DefaultInfrastructure, presetDir},
+		testManagerContext(t), []string{"install", presets.DefaultInfrastructure, presetDir},
 	)
 	if err != nil || preset == nil {
 		t.Fatalf("unexpected error: %v", err)

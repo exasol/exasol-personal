@@ -5,7 +5,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -59,18 +58,11 @@ func init() {
 	rootCmd.AddCommand(installCmd)
 }
 
-// appendInstallCmdPresetHelp adds the list of embedded presets and their
-// compatibility matrix to the command's long description.
+// appendInstallCmdPresetHelp defers appending the list of embedded presets and
+// their compatibility matrix to the command's long description (see
+// deferPresetHelpText).
 func appendInstallCmdPresetHelp() {
-	installCmd.Long = strings.TrimRight(installCmd.Long, "\n") +
-		"\n\t" + presetNamesForHelp(presets.PresetTypeInfrastructure,
-		presets.ListEmbeddedInfrastructuresPresets()) +
-		"\n\t" + presetNamesForHelp(presets.PresetTypeInstallation,
-		presets.ListEmbeddedInstallationsPresets())
-
-	if matrix := embeddedPresetCompatibilityMatrix(); matrix != "" {
-		installCmd.Long += "\n\n\t" + strings.ReplaceAll(matrix, "\n", "\n\t")
-	}
+	deferPresetHelpText(installCmd)
 }
 
 func runInstallPreRun(cmd *cobra.Command, args []string) error {
@@ -195,6 +187,7 @@ func prepareInitializedInstall(
 	installVars map[string]string,
 ) error {
 	if err := ensureRequestedPresetsMatchInitializedDeployment(
+		cmd.Context(),
 		deployment,
 		infraPreset,
 		installPreset,

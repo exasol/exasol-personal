@@ -73,7 +73,7 @@ func GetDeploymentConfiguration(
 	var configuration DeploymentConfiguration
 	err := withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
 		var err error
-		configuration, err = readDeploymentConfiguration(deployment)
+		configuration, err = readDeploymentConfiguration(ctx, deployment)
 		if err != nil {
 			return err
 		}
@@ -174,7 +174,7 @@ func resetDeploymentConfigurationLocked(
 		return err
 	}
 
-	configuration, err := readDeploymentConfiguration(deployment)
+	configuration, err := readDeploymentConfiguration(ctx, deployment)
 	if err != nil {
 		return err
 	}
@@ -211,13 +211,14 @@ func applyConfigurationReset(
 }
 
 func readDeploymentConfiguration(
+	ctx context.Context,
 	deployment config.DeploymentDir,
 ) (DeploymentConfiguration, error) {
 	infraManifest, installManifest, err := readExtractedManifests(deployment)
 	if err != nil {
 		return DeploymentConfiguration{}, err
 	}
-	backend, err := newDeploymentBackend(deployment, infraManifest)
+	backend, err := newDeploymentBackend(ctx, deployment, infraManifest)
 	if err != nil {
 		return DeploymentConfiguration{}, err
 	}
@@ -233,7 +234,7 @@ func readDeploymentConfiguration(
 	if err != nil {
 		return DeploymentConfiguration{}, err
 	}
-	presetIdentities, backfilled, err := resolvePresetIdentity(exasolState, deployment)
+	presetIdentities, backfilled, err := resolvePresetIdentity(ctx, exasolState, deployment)
 	if err != nil {
 		return DeploymentConfiguration{}, err
 	}
@@ -477,7 +478,7 @@ func writeDeploymentConfigurationPatch(
 	infraVars map[string]string,
 	installVars map[string]string,
 ) error {
-	configuration, err := readDeploymentConfiguration(deployment)
+	configuration, err := readDeploymentConfiguration(ctx, deployment)
 	if err != nil {
 		return err
 	}

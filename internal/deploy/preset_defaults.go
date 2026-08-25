@@ -4,18 +4,22 @@
 package deploy
 
 import (
+	"context"
 	"fmt"
 	"slices"
 
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
-func ResolveDefaultInstallationPreset(infrastructurePreset PresetRef) (PresetRef, error) {
-	if err := validateInfrastructurePreset(infrastructurePreset); err != nil {
+func ResolveDefaultInstallationPreset(
+	ctx context.Context,
+	infrastructurePreset PresetRef,
+) (PresetRef, error) {
+	if err := validateInfrastructurePreset(ctx, infrastructurePreset); err != nil {
 		return PresetRef{}, err
 	}
 
-	infrastructureManifest, err := readInfrastructureManifestFromPreset(infrastructurePreset)
+	infrastructureManifest, err := readInfrastructureManifestFromPreset(ctx, infrastructurePreset)
 	if err != nil {
 		return PresetRef{}, fmt.Errorf(
 			"failed to load infrastructure preset %q: %w",
@@ -24,9 +28,9 @@ func ResolveDefaultInstallationPreset(infrastructurePreset PresetRef) (PresetRef
 		)
 	}
 
-	for _, installName := range compatibleDefaultInstallationCandidates() {
+	for _, installName := range compatibleDefaultInstallationCandidates(ctx) {
 		installationPreset := PresetRef{Name: installName}
-		installManifest, err := readInstallManifestFromPreset(installationPreset)
+		installManifest, err := readInstallManifestFromPreset(ctx, installationPreset)
 		if err != nil {
 			continue
 		}
@@ -47,9 +51,9 @@ func ResolveDefaultInstallationPreset(infrastructurePreset PresetRef) (PresetRef
 	)
 }
 
-func compatibleDefaultInstallationCandidates() []string {
+func compatibleDefaultInstallationCandidates(ctx context.Context) []string {
 	candidates := []string{presets.DefaultInstallation}
-	for _, name := range presets.ListEmbeddedInstallationsPresets() {
+	for _, name := range presets.ListEmbeddedPresets(ctx, presets.Installation) {
 		if !slices.Contains(candidates, name) {
 			candidates = append(candidates, name)
 		}

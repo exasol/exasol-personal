@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -52,7 +53,10 @@ func embeddedPresetExists(ids []string, name string) bool {
 	return slices.Contains(ids, needle)
 }
 
-func resolveEmbeddedPresetHandler(presetName, typeOpt string) (*presetTypeHandler, error) {
+func resolveEmbeddedPresetHandler(
+	ctx context.Context,
+	presetName, typeOpt string,
+) (*presetTypeHandler, error) {
 	needle := strings.TrimSpace(presetName)
 	if needle == "" {
 		return nil, errors.New("missing preset name")
@@ -68,7 +72,7 @@ func resolveEmbeddedPresetHandler(presetName, typeOpt string) (*presetTypeHandle
 				allowedPresetTypes(),
 			)
 		}
-		if !embeddedPresetExists(handler.ListEmbedded(), needle) {
+		if !embeddedPresetExists(presets.ListEmbeddedPresets(ctx, handler.Kind), needle) {
 			return nil, fmt.Errorf("unknown %s preset %q", handler.Type, needle)
 		}
 
@@ -78,7 +82,7 @@ func resolveEmbeddedPresetHandler(presetName, typeOpt string) (*presetTypeHandle
 	matches := make([]*presetTypeHandler, 0, 1)
 	for i := range presetTypeHandlers {
 		handler := &presetTypeHandlers[i]
-		if embeddedPresetExists(handler.ListEmbedded(), needle) {
+		if embeddedPresetExists(presets.ListEmbeddedPresets(ctx, handler.Kind), needle) {
 			matches = append(matches, handler)
 		}
 	}
@@ -125,13 +129,17 @@ By default, the current working directory is used.
 			return err
 		}
 
-		handler, err := resolveEmbeddedPresetHandler(presetName, presetsExportFlags.Type)
+		handler, err := resolveEmbeddedPresetHandler(
+			cmd.Context(),
+			presetName,
+			presetsExportFlags.Type,
+		)
 		if err != nil {
 			return err
 		}
 
 		ref := presets.PresetRef{Name: presetName}
-		if err := presets.ExtractPreset(ref, target, handler.WriteDir); err != nil {
+		if err := presets.WriteDir(cmd.Context(), handler.Kind, ref, target); err != nil {
 			return fmt.Errorf("failed to export preset %q: %w", presetName, err)
 		}
 

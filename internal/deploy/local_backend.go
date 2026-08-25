@@ -300,7 +300,9 @@ func (b *localBackend) ReadDeploymentConfigVariables() (
 	map[string]ConfigVariableDefinition,
 	error,
 ) {
-	return localConfigVariableDefinitionsForPlatform(b.manifest, b.goos, b.goarch), nil
+	return localConfigVariableDefinitionsForPlatform(
+		context.Background(), b.manifest, b.goos, b.goarch,
+	), nil
 }
 
 func validateLocalPlatform(goos, goarch string) error {
@@ -364,14 +366,16 @@ func localIntConfigValue(name string, value, defaultValue int) DeploymentConfigV
 }
 
 func localConfigVariableDefinitions(
+	ctx context.Context,
 	manifest *presets.InfrastructureManifest,
 ) map[string]ConfigVariableDefinition {
 	return localConfigVariableDefinitionsForPlatform(
-		manifest, runtime.GOOS, runtime.GOARCH,
+		ctx, manifest, runtime.GOOS, runtime.GOARCH,
 	)
 }
 
 func localConfigVariableDefinitionsForPlatform(
+	ctx context.Context,
 	manifest *presets.InfrastructureManifest,
 	goos, goarch string,
 ) map[string]ConfigVariableDefinition {
@@ -386,7 +390,7 @@ func localConfigVariableDefinitionsForPlatform(
 		return definitions
 	}
 
-	detectedHostMemoryMB := detectLocalHostMemoryMB(context.Background())
+	detectedHostMemoryMB := detectLocalHostMemoryMB(ctx)
 	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
 		manifest, detectedHostMemoryMB, goos, goarch,
 	)

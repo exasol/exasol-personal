@@ -4,6 +4,7 @@
 package deploy
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -35,13 +36,14 @@ type ConfigVariableResolution struct {
 }
 
 func ResolveInfrastructureConfigVariables(
+	ctx context.Context,
 	preset PresetRef,
 ) (ConfigVariableResolution, error) {
-	manifest, label, err := readInfrastructureManifestForPreset(preset)
+	manifest, label, err := readInfrastructureManifestForPreset(ctx, preset)
 	if err != nil {
 		return ConfigVariableResolution{PresetLabel: label}, err
 	}
-	variables, err := readInfrastructurePresetConfigVariables(preset, manifest)
+	variables, err := readInfrastructurePresetConfigVariables(ctx, preset, manifest)
 	if err != nil {
 		return ConfigVariableResolution{PresetLabel: label}, err
 	}
@@ -50,13 +52,14 @@ func ResolveInfrastructureConfigVariables(
 }
 
 func ResolveInfrastructureConfigVariablesFromDeployment(
+	ctx context.Context,
 	deployment config.DeploymentDir,
 ) (ConfigVariableResolution, error) {
 	manifest, err := config.ReadInfrastructureManifest(deployment)
 	if err != nil {
 		return ConfigVariableResolution{}, err
 	}
-	backend, err := newDeploymentBackend(deployment, manifest)
+	backend, err := newDeploymentBackend(ctx, deployment, manifest)
 	if err != nil {
 		return ConfigVariableResolution{PresetLabel: manifest.Name}, err
 	}
@@ -69,6 +72,7 @@ func ResolveInfrastructureConfigVariablesFromDeployment(
 }
 
 func readInfrastructureManifestForPreset(
+	ctx context.Context,
 	preset PresetRef,
 ) (*presets.InfrastructureManifest, string, error) {
 	if preset.IsPath() {
@@ -84,7 +88,7 @@ func readInfrastructureManifestForPreset(
 		return manifest, preset.Path, nil
 	}
 
-	manifest, err := presets.ReadInfrastructureManifest(preset.Name)
+	manifest, err := presets.ReadInfrastructureManifest(ctx, preset.Name)
 	if err != nil {
 		return nil, preset.Name, fmt.Errorf(
 			"failed to read manifest for infrastructure %q: %w",

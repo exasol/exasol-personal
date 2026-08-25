@@ -10,12 +10,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
+
+	"github.com/exasol/exasol-personal/internal/util"
 )
 
 const (
@@ -117,6 +120,19 @@ func NewResourceManagerWithSpec(rawSpec []byte) (*Manager, error) {
 	}
 
 	return NewResourceManager(spec)
+}
+
+// NewResourceManagerWithSpecForPlatform mirrors NewResourceManagerWithSpec
+// for an explicit target platform rather than the host's own.
+func NewResourceManagerWithSpecForPlatform(
+	rawSpec []byte, cacheRoot, goos, goarch string,
+) (*Manager, error) {
+	spec, err := ParseSpec(rawSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewResourceManagerForPlatform(spec, cacheRoot, goos, goarch), nil
 }
 
 func NewResourceManagerWithCache(spec ResourceSpec, cache *Cache) *Manager {
@@ -233,6 +249,71 @@ func (m *Manager) RequestMember(ctx context.Context, resourceID, member string) 
 	}
 
 	return path, nil
+}
+
+// RequestCopy is RequestMemberCopy with an empty member.
+func (m *Manager) RequestCopy(ctx context.Context, resourceID, destDir string) error {
+	return m.RequestMemberCopy(ctx, resourceID, "", destDir)
+}
+
+// RequestMemberCopy mirrors RequestCopy, resolving via RequestMember.
+func (m *Manager) RequestMemberCopy(ctx context.Context, resourceID, member, destDir string) error {
+	path, err := m.RequestMember(ctx, resourceID, member)
+	if err != nil {
+		return err
+	}
+
+	return copyResolvedPath(path, destDir)
+}
+
+// GetCopy mirrors RequestCopy for a runtime-constructed definition, the way
+// Get mirrors Request.
+func (m *Manager) GetCopy(
+	ctx context.Context, def ResourceDefinition, resourceID, destDir string,
+) error {
+	path, err := m.Get(ctx, def, resourceID)
+	if err != nil {
+		return err
+	}
+
+	return copyResolvedPath(path, destDir)
+}
+
+func copyResolvedPath(path, destDir string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+
+	if info.IsDir() {
+		return util.CopyDir(path, destDir)
+	}
+
+	if err := os.MkdirAll(destDir, dirPerm); err != nil {
+		return err
+	}
+
+	return copyFileInto(path, destDir)
+}
+
+func copyFileInto(srcPath, destDir string) error {
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dst, err := os.Create(filepath.Join(destDir, filepath.Base(srcPath)))
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, src); err != nil {
+		return err
+	}
+
+	return dst.Close()
 }
 
 // GroupMembers reports the names matched at build time, without

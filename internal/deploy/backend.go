@@ -10,16 +10,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
-
-func newResourceManager() (*runtimeartifacts.Manager, error) {
-	return runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
-}
 
 const (
 	backendTypeTofu  = "tofu"
@@ -104,6 +99,7 @@ func resolveBackendKind(manifest *presets.InfrastructureManifest) (string, error
 }
 
 func newDeploymentBackendForDeployment(
+	ctx context.Context,
 	deployment config.DeploymentDir,
 ) (deploymentBackend, error) {
 	manifest, err := config.ReadInfrastructureManifest(deployment)
@@ -111,10 +107,11 @@ func newDeploymentBackendForDeployment(
 		return nil, err
 	}
 
-	return newDeploymentBackend(deployment, manifest)
+	return newDeploymentBackend(ctx, deployment, manifest)
 }
 
 func newDeploymentBackend(
+	ctx context.Context,
 	deployment config.DeploymentDir,
 	manifest *presets.InfrastructureManifest,
 ) (deploymentBackend, error) {
@@ -123,10 +120,7 @@ func newDeploymentBackend(
 		return nil, err
 	}
 
-	manager, err := newResourceManager()
-	if err != nil {
-		return nil, err
-	}
+	manager := runtimeartifacts.FromContext(ctx)
 
 	switch kind {
 	case backendTypeTofu:
@@ -149,6 +143,7 @@ func newDeploymentBackend(
 // It is used by the CLI to render preset-specific flags on `init` and
 // `install`, before any deployment exists.
 func readInfrastructurePresetConfigVariables(
+	ctx context.Context,
 	preset PresetRef,
 	manifest *presets.InfrastructureManifest,
 ) (map[string]ConfigVariableDefinition, error) {
@@ -163,9 +158,9 @@ func readInfrastructurePresetConfigVariables(
 			return map[string]ConfigVariableDefinition{}, nil
 		}
 
-		return readTofuPresetConfigVariables(preset, *manifest.Tofu)
+		return readTofuPresetConfigVariables(ctx, preset, *manifest.Tofu)
 	case backendTypeLocal:
-		return localConfigVariableDefinitions(manifest), nil
+		return localConfigVariableDefinitions(ctx, manifest), nil
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnknownDeploymentType, kind)
 	}

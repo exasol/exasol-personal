@@ -25,6 +25,7 @@ var installFlagToVarName = map[string]string{}
 const installPresetLabelAnnotationKey = "exasol.installationPresetLabel"
 
 func resolveInstallationVariables(
+	ctx context.Context,
 	installPresetName, installPresetPath string,
 ) (map[string]*presets.VariableDef, string, error) {
 	var (
@@ -39,7 +40,7 @@ func resolveInstallationVariables(
 		manifest, err = presets.ReadInstallManifestFromDir(installPresetPath)
 	} else {
 		label = installPresetName
-		manifest, err = presets.ReadInstallManifest(installPresetName)
+		manifest, err = presets.ReadInstallManifest(ctx, installPresetName)
 	}
 	if err != nil {
 		return nil, label, err
@@ -57,14 +58,14 @@ func resolveInstallationVariables(
 //
 // We scan the raw args for the selected installation preset so that we can register
 // only that preset's variables before Cobra parses.
-func prepareInstallationVariableFlags(args []string) error {
+func prepareInstallationVariableFlags(ctx context.Context, args []string) error {
 	// Be tolerant and avoid hard failures before Cobra runs.
-	preset, err := scanInstallationPresetSelection(args)
+	preset, err := scanInstallationPresetSelection(ctx, args)
 	if err != nil {
 		return prepareConfigSetInstallationVariableFlags(args)
 	}
 	if preset != nil {
-		vars, label, err := resolveInstallationVariables(preset.Name, preset.Path)
+		vars, label, err := resolveInstallationVariables(ctx, preset.Name, preset.Path)
 		if err == nil {
 			if err := registerInstallationVariableFlags(
 				[]*cobra.Command{initCmd, installCmd},
@@ -221,7 +222,9 @@ func collectInstallationVariableOverrides(cmd *cobra.Command) map[string]string 
 	return overrides
 }
 
-func scanInstallationPresetSelection(args []string) (*deploy.PresetRef, error) {
+func scanInstallationPresetSelection(
+	ctx context.Context, args []string,
+) (*deploy.PresetRef, error) {
 	if len(args) > 0 && args[0] == helpCommandName {
 		args = args[1:]
 	}
@@ -241,7 +244,7 @@ func scanInstallationPresetSelection(args []string) (*deploy.PresetRef, error) {
 
 	if len(positionals) > 1 {
 		ref, err := resolvePresetRef(
-			context.Background(), positionals[1], presets.PresetTypeInstallation,
+			ctx, positionals[1], presets.PresetTypeInstallation,
 		)
 		if err != nil {
 			return nil, err
@@ -251,12 +254,12 @@ func scanInstallationPresetSelection(args []string) (*deploy.PresetRef, error) {
 	}
 
 	infraRef, err := resolvePresetRef(
-		context.Background(), positionals[0], presets.PresetTypeInfrastructure,
+		ctx, positionals[0], presets.PresetTypeInfrastructure,
 	)
 	if err != nil {
 		return nil, err
 	}
-	ref, err := deploy.ResolveDefaultInstallationPreset(infraRef)
+	ref, err := deploy.ResolveDefaultInstallationPreset(ctx, infraRef)
 	if err != nil {
 		return nil, err
 	}

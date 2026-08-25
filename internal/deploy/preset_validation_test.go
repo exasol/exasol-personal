@@ -4,7 +4,6 @@
 package deploy
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,7 +21,7 @@ func TestValidatePresetSelection_AcceptsDefaultEmbeddedPair(t *testing.T) {
 	installationPreset := PresetRef{Name: presets.DefaultInstallation}
 
 	// When
-	err := ValidatePresetSelection(infrastructurePreset, installationPreset)
+	err := ValidatePresetSelection(testManagerContext(t), infrastructurePreset, installationPreset)
 	// Then
 	if err != nil {
 		t.Fatalf("expected default preset pair to be valid, got %v", err)
@@ -56,7 +55,7 @@ install: []
 
 	// When
 	err := InitDeployment(
-		context.Background(),
+		testManagerContext(t),
 		config.NewDeploymentDir(deploymentDir),
 		InitOptions{
 			InfrastructurePreset: PresetRef{Path: infrastructureDir},
@@ -94,7 +93,10 @@ func TestResolveDefaultInstallationPreset_UsesCompatibleEmbeddedDefault(t *testi
 	infrastructurePreset := PresetRef{Name: presets.DefaultInfrastructure}
 
 	// When
-	installationPreset, err := ResolveDefaultInstallationPreset(infrastructurePreset)
+	installationPreset, err := ResolveDefaultInstallationPreset(
+		testManagerContext(t),
+		infrastructurePreset,
+	)
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

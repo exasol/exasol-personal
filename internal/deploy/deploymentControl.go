@@ -220,7 +220,7 @@ func startLocked(
 	if err != nil {
 		return err
 	}
-	backend, err := newDeploymentBackend(deployment, manifest)
+	backend, err := newDeploymentBackend(ctx, deployment, manifest)
 	if err != nil {
 		return err
 	}
@@ -454,7 +454,7 @@ func runStopBackend(
 	if err != nil {
 		return err
 	}
-	backend, err := newDeploymentBackend(deployment, manifest)
+	backend, err := newDeploymentBackend(ctx, deployment, manifest)
 	if err != nil {
 		return err
 	}

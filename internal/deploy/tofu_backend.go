@@ -230,6 +230,7 @@ func (b *tofuBackend) ReadDeploymentConfigVariables() (
 // readTofuPresetConfigVariables loads the configurable infrastructure
 // variables declared by a preset without consulting any deployment directory.
 func readTofuPresetConfigVariables(
+	ctx context.Context,
 	preset PresetRef,
 	tofuManifest presets.InfrastructureTofu,
 ) (map[string]ConfigVariableDefinition, error) {
@@ -244,7 +245,7 @@ func readTofuPresetConfigVariables(
 		variableData, err = os.ReadFile(filename)
 	} else {
 		filename = tofuManifest.VariablesFile
-		variableData, err = presets.ReadInfrastructureFile(preset.Name, filename)
+		variableData, err = presets.ReadInfrastructureFile(ctx, preset.Name, filename)
 	}
 	if err != nil {
 		return nil, err

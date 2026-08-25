@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/directorymutex"
+	"github.com/exasol/exasol-personal/internal/launcherpaths"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -133,11 +133,11 @@ func DefaultCacheRoot() (string, error) {
 		return "", fmt.Errorf("resolve user cache directory: %w", err)
 	}
 
-	return filepath.Join(config.LauncherDirPath(cacheDir), runtimeArtifactsDirName), nil
+	return filepath.Join(launcherpaths.DirPath(cacheDir), runtimeArtifactsDirName), nil
 }
 
 func DefaultConfigPath() (string, error) {
-	rootDir, err := config.LauncherRootDirPath()
+	rootDir, err := launcherpaths.RootDirPath()
 	if err != nil {
 		return "", err
 	}

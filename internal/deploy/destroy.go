@@ -73,7 +73,7 @@ func runDestroyBackend(
 	if err != nil {
 		return markDestroyInterrupted(exasolState, deployment, err)
 	}
-	backend, err := newDeploymentBackend(deployment, manifest)
+	backend, err := newDeploymentBackend(ctx, deployment, manifest)
 	if err != nil {
 		return markDestroyInterrupted(exasolState, deployment, err)
 	}

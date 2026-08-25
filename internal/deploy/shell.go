@@ -22,7 +22,7 @@ func OpenHostShell(
 	selectedNode string,
 ) error {
 	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
-		backend, err := newDeploymentBackendForDeployment(deployment)
+		backend, err := newDeploymentBackendForDeployment(ctx, deployment)
 		if err != nil {
 			return err
 		}
@@ -34,7 +34,7 @@ func OpenHostShell(
 // OpenCOSShell opens an interactive COS session via the access node (n11).
 func OpenCOSShell(ctx context.Context, deployment config.DeploymentDir) error {
 	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
-		backend, err := newDeploymentBackendForDeployment(deployment)
+		backend, err := newDeploymentBackendForDeployment(ctx, deployment)
 		if err != nil {
 			return err
 		}

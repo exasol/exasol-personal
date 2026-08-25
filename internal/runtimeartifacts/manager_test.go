@@ -1945,3 +1945,107 @@ func TestManager_RequestMember_EmbeddedGlobResourceIsExtractedForMatching(t *tes
 		t.Fatalf("expected main.tf inside the extracted match %q, got %v", path, err)
 	}
 }
+
+func TestManager_RequestCopyWritesAPlainFile(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deploymentDir := t.TempDir()
+	server := newArtifactServer(t, "tool.bin", []byte("tool-content"))
+	spec := ResourceSpec{
+		"copy-file-test": {
+			Artifact: map[string]ArtifactSpec{
+				anyPlatformKey: {
+					URL:    server.URL + "/tool.bin",
+					Sha256: sha256OfBytes([]byte("tool-content")),
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, deploymentDir, "linux", "amd64")
+	destDir := filepath.Join(t.TempDir(), "nested", "destination")
+
+	// When
+	err := manager.RequestCopy(context.Background(), "copy-file-test", destDir)
+	// Then
+	if err != nil {
+		t.Fatalf("expected materialization to succeed, got %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(destDir, "tool.bin"))
+	if err != nil {
+		t.Fatalf("expected materialized file to exist, got %v", err)
+	}
+	if string(data) != "tool-content" {
+		t.Fatalf("expected materialized content %q, got %q", "tool-content", data)
+	}
+}
+
+func TestManager_RequestCopyExtractsAnArchive(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deploymentDir := t.TempDir()
+	archivePath := writeZipFixture(t, deploymentDir, "artifact.zip", map[string]string{
+		"launcher": "runner-content",
+	})
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("failed to read artifact fixture: %v", err)
+	}
+	server := newArtifactServer(t, "artifact.zip", archiveData)
+	spec := ResourceSpec{
+		"copy-archive-test": {
+			Extract: true,
+			Artifact: map[string]ArtifactSpec{
+				anyPlatformKey: {
+					URL:    server.URL + "/artifact.zip",
+					Sha256: sha256OfTestFile(t, archivePath),
+				},
+			},
+		},
+	}
+	manager := NewResourceManagerForPlatform(spec, deploymentDir, "linux", "amd64")
+	destDir := filepath.Join(t.TempDir(), "destination")
+
+	// When
+	err = manager.RequestCopy(context.Background(), "copy-archive-test", destDir)
+	// Then
+	if err != nil {
+		t.Fatalf("expected materialization to succeed, got %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(destDir, "launcher"))
+	if err != nil {
+		t.Fatalf("expected extracted file to exist under destDir, got %v", err)
+	}
+	if string(data) != "runner-content" {
+		t.Fatalf("expected extracted content %q, got %q", "runner-content", data)
+	}
+}
+
+func TestManager_GetCopyMaterializesARuntimeConstructedDefinition(t *testing.T) {
+	t.Parallel()
+
+	// Given: an ad-hoc definition never registered in the manager's own spec,
+	// the way an external preset path is resolved.
+	srcDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(srcDir, "preset.yaml"),
+		[]byte("content"),
+		filePerm,
+	); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	def := ResourceDefinition{Artifact: map[string]ArtifactSpec{anyPlatformKey: {URL: srcDir}}}
+	destDir := filepath.Join(t.TempDir(), "destination")
+
+	// When
+	err := manager.GetCopy(context.Background(), def, "external-preset", destDir)
+	// Then
+	if err != nil {
+		t.Fatalf("expected materialization to succeed, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(destDir, "preset.yaml")); err != nil {
+		t.Fatalf("expected copied file to exist, got %v", err)
+	}
+}

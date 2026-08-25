@@ -154,7 +154,7 @@ func deployLocked(
 	if err != nil {
 		return err
 	}
-	backend, err := newDeploymentBackend(deployment, infrastructureManifest)
+	backend, err := newDeploymentBackend(ctx, deployment, infrastructureManifest)
 	if err != nil {
 		return err
 	}
