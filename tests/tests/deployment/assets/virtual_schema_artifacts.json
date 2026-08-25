@@ -1,0 +1,13 @@
+{
+  "postgres_image": "docker.io/library/postgres:16",
+  "adapter": {
+    "filename": "virtual-schema-dist-14.0.2-postgresql-4.0.0.jar",
+    "url": "https://github.com/exasol/postgresql-virtual-schema/releases/download/4.0.0/virtual-schema-dist-14.0.2-postgresql-4.0.0.jar",
+    "sha256": "b326aba1668575bba26292c540fd89de0516c153fbb43cc00ce4585eaaa12098"
+  },
+  "driver": {
+    "filename": "postgresql-42.7.13.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/postgresql/postgresql/42.7.13/postgresql-42.7.13.jar",
+    "sha256": "6e0e4cc2d8cae902084f8a2b18728b073a6fd9d1f87c9d8bff8f298c18185b93"
+  }
+}
