@@ -175,17 +175,16 @@ func (preparer windowsHostEnvironmentPreparer) ensureDefaultMachine(
 	options PrepareOptions,
 ) error {
 	machines, err := preparer.runner.Output(ctx, hostCommand(
-		"podman", "machine", "list", "--format", "{{.Name}}",
+		"podman", "machine", "inspect", "--format", "{{.Name}}",
 	))
 	if err != nil {
 		return err
 	}
 	if !containsLine(machines, windowsDefaultMachineName) {
-		writePreparationProgress(options.Progress, "Creating a rootful Podman machine...")
+		writePreparationProgress(options.Progress, "Creating a Podman machine...")
 		if err := preparer.runner.Run(ctx, options.Progress, hostCommand(
 			"podman", "machine", "init",
 			"--disk-size", windowsMachineDiskSizeGB,
-			"--rootful",
 		)); err != nil {
 			return err
 		}
@@ -193,67 +192,20 @@ func (preparer windowsHostEnvironmentPreparer) ensureDefaultMachine(
 		return preparer.startDefaultMachine(ctx, options.Progress)
 	}
 
-	rootful, err := preparer.machineRootful(ctx)
-	if err != nil {
-		return err
-	}
 	state, err := preparer.machineState(ctx)
 	if err != nil {
 		return err
 	}
-	if rootful {
-		if strings.EqualFold(state, "running") {
-			return nil
-		}
 
-		return preparer.startDefaultMachine(ctx, options.Progress)
-	}
-
-	commands := []HostCommand{}
-	if strings.EqualFold(state, "running") {
-		commands = append(commands, hostCommand(
-			"podman", "machine", "stop", windowsDefaultMachineName,
-		))
-	}
-	commands = append(commands,
-		hostCommand(
-			"podman", "machine", "set", "--rootful", windowsDefaultMachineName,
-		),
-		hostCommand("podman", "machine", "start", windowsDefaultMachineName),
-	)
-	if err := requireHostChangeApproval(ctx, options, HostChangeRequest{
-		Kind: HostChangeEnablePrivilegedRuntime, Commands: commands,
-	}); err != nil {
-		return err
-	}
-	writePreparationProgress(options.Progress, "Converting the Podman machine to rootful mode...")
-	for _, command := range commands {
-		if err := preparer.runner.Run(ctx, options.Progress, command); err != nil {
+	if ! strings.EqualFold(state, "running") {
+		if err := preparer.runner.Run(ctx, options.Progress, hostCommand(
+			"podman", "machine", "start", windowsDefaultMachineName,
+		)); err != nil {
 			return err
 		}
 	}
 
 	return nil
-}
-
-func (preparer windowsHostEnvironmentPreparer) machineRootful(
-	ctx context.Context,
-) (bool, error) {
-	value, err := preparer.runner.Output(ctx, hostCommand(
-		"podman", "machine", "inspect",
-		"--format", "{{.Rootful}}", windowsDefaultMachineName,
-	))
-	if err != nil {
-		return false, err
-	}
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "true":
-		return true, nil
-	case "false":
-		return false, nil
-	default:
-		return false, fmt.Errorf("unexpected Podman machine rootful value %q", value)
-	}
 }
 
 func (preparer windowsHostEnvironmentPreparer) machineState(ctx context.Context) (string, error) {
