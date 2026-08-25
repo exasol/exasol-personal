@@ -23,30 +23,26 @@ The system SHALL reuse an available Podman installation, SHALL refresh the launc
 - **WHEN** Podman is unavailable and approval is declined or cannot be obtained non-interactively
 - **THEN** preparation fails before changing deployment workflow state and explains how to approve or perform the setup manually
 
-### Requirement: Windows default Podman machine is ready and rootful
-The system SHALL use the default Podman machine, SHALL create it rootful when absent, SHALL start it when stopped, and SHALL require approval before converting an existing rootless machine.
+### Requirement: Windows default Podman machine is ready
+The system SHALL use the default Podman machine regardless of whether it operates rootless or rootful, SHALL initialize it using Podman's default mode when absent, and SHALL start it when stopped.
 
 #### Scenario: Default machine is absent
 - **WHEN** Podman is available but its default machine does not exist
-- **THEN** the launcher initializes that machine rootful with a 40 GB disk and starts it
+- **THEN** the launcher initializes that machine with a 40 GB disk using Podman's default mode and starts it
 
-#### Scenario: Rootful default machine is stopped
-- **WHEN** the default machine is rootful but not running
-- **THEN** the launcher starts it without requesting approval
+#### Scenario: Default machine is stopped
+- **WHEN** the default machine exists but is not running
+- **THEN** the launcher starts it without changing its rootful or rootless mode
 
-#### Scenario: Rootless conversion is approved
-- **WHEN** the default machine is rootless and the user approves conversion
-- **THEN** the launcher stops it when necessary, sets it rootful, and starts it
-
-#### Scenario: Rootless conversion is not approved
-- **WHEN** the default machine is rootless and approval is declined or unavailable
-- **THEN** preparation fails before changing deployment workflow state and leaves the machine mode unchanged
+#### Scenario: Default machine is already running
+- **WHEN** the default machine is already running in either rootful or rootless mode
+- **THEN** preparation makes no changes to the machine
 
 ### Requirement: Windows host preparation is retry-safe
 The system SHALL make repeated successful preparation calls safe and SHALL preserve actionable errors for partial prerequisite failures.
 
 #### Scenario: Prepared host is checked again
-- **WHEN** Podman and the rootful default machine are already ready
+- **WHEN** Podman and the default machine are already ready
 - **THEN** preparation performs only readiness checks and makes no host changes
 
 #### Scenario: A prerequisite command fails
