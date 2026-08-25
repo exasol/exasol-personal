@@ -64,8 +64,6 @@ func hostChangeExplanation(kind localruntime.HostChangeKind) string {
 	switch kind {
 	case localruntime.HostChangeInstallContainerRuntime:
 		return "Podman is required for local deployments but is not available."
-	case localruntime.HostChangeEnablePrivilegedRuntime:
-		return "The default Podman machine must be converted to rootful mode."
 	default:
 		return "The local runtime requires a host environment change."
 	}

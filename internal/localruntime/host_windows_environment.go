@@ -17,7 +17,6 @@ import (
 
 const (
 	HostChangeInstallContainerRuntime HostChangeKind = "install-container-runtime"
-	HostChangeEnablePrivilegedRuntime HostChangeKind = "enable-privileged-runtime"
 
 	windowsDefaultMachineName = "podman-machine-default"
 	windowsMachineDiskSizeGB  = "40"
@@ -174,13 +173,14 @@ func (preparer windowsHostEnvironmentPreparer) ensureDefaultMachine(
 	ctx context.Context,
 	options PrepareOptions,
 ) error {
-	machines, err := preparer.runner.Output(ctx, hostCommand(
+	machine, err := preparer.runner.Output(ctx, hostCommand(
 		"podman", "machine", "inspect", "--format", "{{.Name}}",
+		windowsDefaultMachineName,
 	))
 	if err != nil {
 		return err
 	}
-	if !containsLine(machines, windowsDefaultMachineName) {
+	if strings.TrimSpace(machine) != windowsDefaultMachineName {
 		writePreparationProgress(options.Progress, "Creating a Podman machine...")
 		if err := preparer.runner.Run(ctx, options.Progress, hostCommand(
 			"podman", "machine", "init",
@@ -197,15 +197,11 @@ func (preparer windowsHostEnvironmentPreparer) ensureDefaultMachine(
 		return err
 	}
 
-	if ! strings.EqualFold(state, "running") {
-		if err := preparer.runner.Run(ctx, options.Progress, hostCommand(
-			"podman", "machine", "start", windowsDefaultMachineName,
-		)); err != nil {
-			return err
-		}
+	if strings.EqualFold(state, "running") {
+		return nil
 	}
 
-	return nil
+	return preparer.startDefaultMachine(ctx, options.Progress)
 }
 
 func (preparer windowsHostEnvironmentPreparer) machineState(ctx context.Context) (string, error) {
@@ -251,16 +247,6 @@ func hostCommand(name string, args ...string) HostCommand {
 
 func formatHostCommand(command HostCommand) string {
 	return strings.TrimSpace(strings.Join(append([]string{command.Name}, command.Args...), " "))
-}
-
-func containsLine(value, expected string) bool {
-	for _, line := range strings.Split(value, "\n") {
-		if strings.TrimSpace(line) == expected {
-			return true
-		}
-	}
-
-	return false
 }
 
 func mergeWindowsPath(current, registered string) string {

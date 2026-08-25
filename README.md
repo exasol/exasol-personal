@@ -40,7 +40,7 @@
 - **Linux:** amd64 or arm64 with Podman installed and available on `PATH`.
 - **Windows:** Windows 10 or later on amd64, with Windows Package Manager (`winget`) and the prerequisites for a Podman machine provider. If Podman is missing, the launcher can install it after confirmation; the installation may request administrator approval.
 
-On Windows, the launcher also creates or starts the default Podman machine in rootful mode. Converting an existing rootless default machine changes a shared host resource, so the launcher shows the exact commands and asks before doing so. Pass `--auto-approve` to `install`, `deploy`, or `start` for unattended host preparation; without it, non-interactive commands refuse changes safely. Windows arm64 is not supported for local deployments.
+On Windows, the launcher also creates or starts the default Podman machine. If Podman must be installed, the launcher shows the Windows Package Manager command and asks before running it. Pass `--auto-approve` to `install`, `deploy`, or `start` for unattended installation; without it, non-interactive commands refuse that host change safely. Windows arm64 is not supported for local deployments.
 
 **Cloud deployment:** an account on one of the supported providers, with permission to provision compute instances:
 

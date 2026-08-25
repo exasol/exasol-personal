@@ -581,14 +581,14 @@ def test_install_local_windows_lifecycle(exasol_path: str, tmp_path: Path) -> No
                 "machine",
                 "inspect",
                 "--format",
-                "{{.Rootful}} {{.State}}",
+                "{{.State}}",
                 "podman-machine-default",
             ],
             capture_output=True,
             text=True,
             check=True,
         )
-        assert machine.stdout.strip().lower() == "true running"
+        assert machine.stdout.strip().lower() == "running"
 
         run_command(
             [

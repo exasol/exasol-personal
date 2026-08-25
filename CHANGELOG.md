@@ -26,7 +26,7 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 - Added local Parquet support via `exasol connect`
 
-- Added support for "local" deployments on Windows. This require `podman` to be available. The launcher can install Podman with Windows Package Manager, refresh `PATH`, and prepare the default rootful Podman machine after explicit approval for host changes.
+- Added support for "local" deployments on Windows. This requires `podman` to be available. The launcher can install Podman with Windows Package Manager after explicit approval, refresh `PATH`, and prepare the default Podman machine.
 
 ### Changed
 

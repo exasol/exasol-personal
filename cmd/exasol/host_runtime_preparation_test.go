@@ -51,9 +51,9 @@ func TestHostChangeApprover_DisplaysExactCommandsOnStderr(t *testing.T) {
 	cmd.SetIn(strings.NewReader("yes\n"))
 	approver := hostChangeApprover(cmd, false, true)
 	request := localruntime.HostChangeRequest{
-		Kind: localruntime.HostChangeEnablePrivilegedRuntime,
+		Kind: localruntime.HostChangeInstallContainerRuntime,
 		Commands: []localruntime.HostCommand{{
-			Name: "runtime-tool", Args: []string{"machine", "set", "--privileged"},
+			Name: "runtime-tool", Args: []string{"install", "container-runtime"},
 		}},
 	}
 
@@ -62,7 +62,7 @@ func TestHostChangeApprover_DisplaysExactCommandsOnStderr(t *testing.T) {
 	if err != nil || !approved {
 		t.Fatalf("expected interactive approval, approved=%t err=%v", approved, err)
 	}
-	if !strings.Contains(output.String(), "runtime-tool machine set --privileged") ||
+	if !strings.Contains(output.String(), "runtime-tool install container-runtime") ||
 		!strings.Contains(output.String(), "Continue? [y/N]") {
 		t.Fatalf("expected exact command prompt on stderr, got %q", output.String())
 	}

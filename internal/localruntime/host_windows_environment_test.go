@@ -107,11 +107,8 @@ func newReadyWindowsRunner() *fakeWindowsHostCommandRunner {
 	return &fakeWindowsHostCommandRunner{
 		outputs: map[string][]windowsCommandOutput{
 			"podman --version": {{value: "podman version 5"}},
-			"podman machine list --format {{.Name}}": {{
+			"podman machine inspect --format {{.Name}} " + windowsDefaultMachineName: {{
 				value: windowsDefaultMachineName,
-			}},
-			"podman machine inspect --format {{.Rootful}} " + windowsDefaultMachineName: {{
-				value: "true",
 			}},
 			"podman machine inspect --format {{.State}} " + windowsDefaultMachineName: {{
 				value: "Running",
@@ -254,17 +251,18 @@ func TestWindowsHostEnvironmentPrepare_InstallFailureCanBeRetried(t *testing.T) 
 	}
 }
 
-func TestWindowsHostEnvironmentPrepare_CreatesMissingRootfulMachine(t *testing.T) {
+func TestWindowsHostEnvironmentPrepare_CreatesMissingMachineUsingDefaultMode(t *testing.T) {
 	t.Parallel()
 	runner := newReadyWindowsRunner()
-	runner.outputs["podman machine list --format {{.Name}}"] = []windowsCommandOutput{{}}
+	nameCommand := "podman machine inspect --format {{.Name}} " + windowsDefaultMachineName
+	runner.outputs[nameCommand] = []windowsCommandOutput{{}}
 	preparer := windowsHostEnvironmentPreparer{runner: runner}
 
 	if err := preparer.EnsureReady(context.Background(), PrepareOptions{}); err != nil {
 		t.Fatalf("expected machine creation, got %v", err)
 	}
 	want := []HostCommand{
-		hostCommand("podman", "machine", "init", "--disk-size", "40", "--rootful"),
+		hostCommand("podman", "machine", "init", "--disk-size", "40"),
 		hostCommand("podman", "machine", "start", windowsDefaultMachineName),
 	}
 	if !reflect.DeepEqual(runner.runs, want) {
@@ -272,7 +270,7 @@ func TestWindowsHostEnvironmentPrepare_CreatesMissingRootfulMachine(t *testing.T
 	}
 }
 
-func TestWindowsHostEnvironmentPrepare_StartsStoppedRootfulMachine(t *testing.T) {
+func TestWindowsHostEnvironmentPrepare_StartsStoppedMachineWithoutChangingMode(t *testing.T) {
 	t.Parallel()
 	runner := newReadyWindowsRunner()
 	stateCommand := "podman machine inspect --format {{.State}} " + windowsDefaultMachineName
@@ -287,60 +285,6 @@ func TestWindowsHostEnvironmentPrepare_StartsStoppedRootfulMachine(t *testing.T)
 	}
 	if !reflect.DeepEqual(runner.runs, want) {
 		t.Fatalf("unexpected machine commands %#v", runner.runs)
-	}
-}
-
-func TestWindowsHostEnvironmentPrepare_ApprovedRootlessConversion(t *testing.T) {
-	t.Parallel()
-	runner := newReadyWindowsRunner()
-	rootfulCommand := "podman machine inspect --format {{.Rootful}} " +
-		windowsDefaultMachineName
-	runner.outputs[rootfulCommand] = []windowsCommandOutput{{value: "false"}}
-	var request HostChangeRequest
-	options := PrepareOptions{ApproveHostChange: func(
-		_ context.Context,
-		actual HostChangeRequest,
-	) (bool, error) {
-		request = actual
-
-		return true, nil
-	}}
-	preparer := windowsHostEnvironmentPreparer{runner: runner}
-
-	if err := preparer.EnsureReady(context.Background(), options); err != nil {
-		t.Fatalf("expected rootless conversion, got %v", err)
-	}
-	want := []HostCommand{
-		hostCommand("podman", "machine", "stop", windowsDefaultMachineName),
-		hostCommand("podman", "machine", "set", "--rootful", windowsDefaultMachineName),
-		hostCommand("podman", "machine", "start", windowsDefaultMachineName),
-	}
-	if request.Kind != HostChangeEnablePrivilegedRuntime ||
-		!reflect.DeepEqual(request.Commands, want) || !reflect.DeepEqual(runner.runs, want) {
-		t.Fatalf("unexpected conversion request=%#v runs=%#v", request, runner.runs)
-	}
-}
-
-func TestWindowsHostEnvironmentPrepare_DeclinedRootlessConversionMakesNoChange(t *testing.T) {
-	t.Parallel()
-	runner := newReadyWindowsRunner()
-	rootfulCommand := "podman machine inspect --format {{.Rootful}} " +
-		windowsDefaultMachineName
-	runner.outputs[rootfulCommand] = []windowsCommandOutput{{value: "false"}}
-	options := PrepareOptions{ApproveHostChange: func(
-		context.Context, HostChangeRequest,
-	) (bool, error) {
-		return false, nil
-	}}
-	preparer := windowsHostEnvironmentPreparer{runner: runner}
-
-	err := preparer.EnsureReady(context.Background(), options)
-
-	if err == nil || !strings.Contains(err.Error(), "was not approved") {
-		t.Fatalf("expected declined conversion error, got %v", err)
-	}
-	if len(runner.runs) != 0 {
-		t.Fatalf("expected no conversion commands, ran %#v", runner.runs)
 	}
 }
 
