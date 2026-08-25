@@ -4,7 +4,6 @@
 package deploy
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +25,7 @@ func TestInitDeployment_CreatesTfVarsWhenTofuConfigured(t *testing.T) {
 
 	// When the deployment is intialized
 	err := InitDeployment(
-		context.Background(),
+		testManagerContext(t),
 		deployment,
 		InitOptions{
 			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
@@ -194,7 +193,7 @@ func TestInitDeployment_CreatesDeploymentDir(t *testing.T) {
 
 	// When
 	err := InitDeployment(
-		context.Background(),
+		testManagerContext(t),
 		deployment,
 		InitOptions{
 			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
@@ -254,7 +253,7 @@ func TestInitDeployment_ErrWhenDirNotEmpty(t *testing.T) {
 
 	// When
 	err := InitDeployment(
-		context.Background(),
+		testManagerContext(t),
 		deployment,
 		InitOptions{
 			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},

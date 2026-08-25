@@ -18,39 +18,37 @@ type presetTypeHandler struct {
 	// Header is used for human-readable list output.
 	Header string
 
+	// Kind selects which preset catalog (used by presets list, export, and
+	// JSON output) this handler's ListEmbedded/WriteDir calls apply to.
+	Kind presets.PresetKind
+
 	// Catalog accessors (used by presets list and JSON output).
 	GetFromCatalog func(PresetCatalog) []Preset
 	SetOnCatalog   func(*PresetCatalog, []Preset)
-
-	// Embedded preset accessors (used by presets export).
-	ListEmbedded func() []string
-	WriteDir     func(name string, outDir string) error
 }
 
 var presetTypeHandlers = []presetTypeHandler{
 	{
 		Type:   presets.PresetTypeInfrastructure,
 		Header: "Infrastructure presets:",
+		Kind:   presets.Infrastructure,
 		GetFromCatalog: func(cat PresetCatalog) []Preset {
 			return cat.Infrastructures
 		},
 		SetOnCatalog: func(cat *PresetCatalog, list []Preset) {
 			cat.Infrastructures = list
 		},
-		ListEmbedded: presets.ListEmbeddedInfrastructuresPresets,
-		WriteDir:     presets.WriteInfrastructureDir,
 	},
 	{
 		Type:   presets.PresetTypeInstallation,
 		Header: "Installation presets:",
+		Kind:   presets.Installation,
 		GetFromCatalog: func(cat PresetCatalog) []Preset {
 			return cat.Installations
 		},
 		SetOnCatalog: func(cat *PresetCatalog, list []Preset) {
 			cat.Installations = list
 		},
-		ListEmbedded: presets.ListEmbeddedInstallationsPresets,
-		WriteDir:     presets.WriteInstallDir,
 	},
 }
 

@@ -4,6 +4,7 @@
 package deploy
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -11,16 +12,17 @@ import (
 )
 
 func ValidatePresetSelection(
+	ctx context.Context,
 	infrastructurePreset, installationPreset PresetRef,
 ) error {
-	if err := validateInfrastructurePreset(infrastructurePreset); err != nil {
+	if err := validateInfrastructurePreset(ctx, infrastructurePreset); err != nil {
 		return err
 	}
-	if err := validateInstallationPreset(installationPreset); err != nil {
+	if err := validateInstallationPreset(ctx, installationPreset); err != nil {
 		return err
 	}
 
-	infrastructureManifest, err := readInfrastructureManifestFromPreset(infrastructurePreset)
+	infrastructureManifest, err := readInfrastructureManifestFromPreset(ctx, infrastructurePreset)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to load infrastructure preset %q: %w",
@@ -32,7 +34,7 @@ func ValidatePresetSelection(
 		return err
 	}
 
-	installManifest, err := readInstallManifestFromPreset(installationPreset)
+	installManifest, err := readInstallManifestFromPreset(ctx, installationPreset)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to load installation preset %q: %w",
@@ -50,23 +52,25 @@ func ValidatePresetSelection(
 }
 
 func readInfrastructureManifestFromPreset(
+	ctx context.Context,
 	infrastructurePreset PresetRef,
 ) (*presets.InfrastructureManifest, error) {
 	if infrastructurePreset.IsPath() {
 		return presets.ReadInfrastructureManifestFromDir(infrastructurePreset.Path)
 	}
 
-	return presets.ReadInfrastructureManifest(infrastructurePreset.Name)
+	return presets.ReadInfrastructureManifest(ctx, infrastructurePreset.Name)
 }
 
 func readInstallManifestFromPreset(
+	ctx context.Context,
 	installationPreset PresetRef,
 ) (*presets.InstallManifest, error) {
 	if installationPreset.IsPath() {
 		return presets.ReadInstallManifestFromDir(installationPreset.Path)
 	}
 
-	return presets.ReadInstallManifest(installationPreset.Name)
+	return presets.ReadInstallManifest(ctx, installationPreset.Name)
 }
 
 func validatePresetCompatibility(

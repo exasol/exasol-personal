@@ -5,6 +5,7 @@ package main
 
 import (
 	"cmp"
+	"context"
 	"slices"
 	"sync"
 
@@ -32,22 +33,22 @@ var (
 	presetCatalog     PresetCatalog
 )
 
-func GetPresetCatalog() PresetCatalog {
+func GetPresetCatalog(ctx context.Context) PresetCatalog {
 	presetCatalogOnce.Do(func() {
 		presetCatalog = PresetCatalog{
-			Infrastructures: loadInfrastructurePresets(),
-			Installations:   loadInstallationPresets(),
+			Infrastructures: loadInfrastructurePresets(ctx),
+			Installations:   loadInstallationPresets(ctx),
 		}
 	})
 
 	return presetCatalog
 }
 
-func loadInfrastructurePresets() []Preset {
-	ids := presets.ListEmbeddedInfrastructuresPresets()
+func loadInfrastructurePresets(ctx context.Context) []Preset {
+	ids := presets.ListEmbeddedPresets(ctx, presets.Infrastructure)
 	presetList := make([]Preset, 0, len(ids))
 	for _, presetId := range ids {
-		info, err := deploy.GetInfrastructureInfo(presetId)
+		info, err := deploy.GetInfrastructureInfo(ctx, presetId)
 		if err != nil {
 			// If a manifest cannot be read, skip it for help rendering.
 			continue
@@ -62,11 +63,11 @@ func loadInfrastructurePresets() []Preset {
 	return presetList
 }
 
-func loadInstallationPresets() []Preset {
-	ids := presets.ListEmbeddedInstallationsPresets()
+func loadInstallationPresets(ctx context.Context) []Preset {
+	ids := presets.ListEmbeddedPresets(ctx, presets.Installation)
 	presetList := make([]Preset, 0, len(ids))
 	for _, presetId := range ids {
-		manifest, err := presets.ReadInstallManifest(presetId)
+		manifest, err := presets.ReadInstallManifest(ctx, presetId)
 		if err != nil {
 			continue
 		}

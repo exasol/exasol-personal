@@ -4,7 +4,6 @@
 package deploy
 
 import (
-	"context"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -18,7 +17,7 @@ func TestGetDeploymentInfoReportInitializedIncludesOverviewAndPresets(t *testing
 	initDeploymentForInfoTest(t, deployment)
 
 	// When
-	report, err := GetDeploymentInfoReport(context.Background(), deployment)
+	report, err := GetDeploymentInfoReport(testManagerContext(t), deployment)
 	// Then
 	if err != nil {
 		t.Fatalf("expected initialized deployment info report, got error: %v", err)
@@ -54,6 +53,7 @@ func TestDeploymentInfoReportOperationInProgressOmitsPartialDeploymentDetails(t 
 
 	// When
 	report, err := deploymentInfoReportFromState(
+		testManagerContext(t),
 		deployment,
 		StatusOperationInProgress,
 	)
@@ -83,6 +83,7 @@ func TestDeploymentInfoReportOperationInProgressToleratesMissingIdentity(t *test
 
 	// When
 	report, err := deploymentInfoReportFromState(
+		testManagerContext(t),
 		deployment,
 		StatusOperationInProgress,
 	)
@@ -114,7 +115,7 @@ func TestGetDeploymentInfoReportNotInitializedIncludesStructuredState(t *testing
 	deployment := config.NewDeploymentDir(t.TempDir())
 
 	// When
-	report, err := GetDeploymentInfoReport(context.Background(), deployment)
+	report, err := GetDeploymentInfoReport(testManagerContext(t), deployment)
 	// Then
 	if err != nil {
 		t.Fatalf("expected missing deployment info to resolve without error, got: %v", err)
@@ -147,7 +148,7 @@ func TestGetDeploymentInfoReportNotInitializedHandlesMissingDirectory(t *testing
 	deployment := config.NewDeploymentDir(t.TempDir() + "/missing")
 
 	// When
-	report, err := GetDeploymentInfoReport(context.Background(), deployment)
+	report, err := GetDeploymentInfoReport(testManagerContext(t), deployment)
 	// Then
 	if err != nil {
 		t.Fatalf("expected missing deployment directory to resolve without error, got: %v", err)

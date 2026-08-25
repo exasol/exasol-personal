@@ -4,6 +4,7 @@
 package deploy
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/exasol/exasol-personal/internal/presets"
@@ -15,10 +16,13 @@ type InfrastructureInfo struct {
 	LongDescription  string
 }
 
-func GetInfrastructureInfo(infrastructureName string) (*InfrastructureInfo, error) {
+func GetInfrastructureInfo(
+	ctx context.Context,
+	infrastructureName string,
+) (*InfrastructureInfo, error) {
 	info := InfrastructureInfo{}
 
-	manifest, err := presets.ReadInfrastructureManifest(infrastructureName)
+	manifest, err := presets.ReadInfrastructureManifest(ctx, infrastructureName)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to read manifest for infrastructure %q: %w",
@@ -55,10 +59,13 @@ func GetInfrastructureInfoFromDir(dir string) (*InfrastructureInfo, error) {
 
 // GetInfrastructureInfoFromPreset returns infrastructure info for either an embedded preset
 // (by name) or a filesystem preset (by path). This keeps the selection logic in one place.
-func GetInfrastructureInfoFromPreset(p PresetRef) (*InfrastructureInfo, error) {
-	if p.IsPath() {
-		return GetInfrastructureInfoFromDir(p.Path)
+func GetInfrastructureInfoFromPreset(
+	ctx context.Context,
+	preset PresetRef,
+) (*InfrastructureInfo, error) {
+	if preset.IsPath() {
+		return GetInfrastructureInfoFromDir(preset.Path)
 	}
 
-	return GetInfrastructureInfo(p.Name)
+	return GetInfrastructureInfo(ctx, preset.Name)
 }

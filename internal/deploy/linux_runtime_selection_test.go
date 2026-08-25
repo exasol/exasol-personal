@@ -4,7 +4,6 @@
 package deploy
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,13 +17,14 @@ func TestLocalStatusUsesLinuxPodmanRuntime(t *testing.T) {
 	requireLinuxLocalPlatform(t)
 	deployment, state := newLinuxLocalWorkflowTestDeployment(t)
 	installFakePodmanStatus(t, fakePodmanContainerMissing)
+	ctx := testManagerContext(t)
 
-	status := localVMStoppedStatus(context.Background(), deployment)
+	status := localVMStoppedStatus(ctx, deployment)
 	if status == nil || status.Status != StatusStopped {
 		t.Fatalf("expected stopped local status, got %#v", status)
 	}
 
-	if err := reconcileLocalVMState(context.Background(), state, deployment); err != nil {
+	if err := reconcileLocalVMState(ctx, state, deployment); err != nil {
 		t.Fatalf("expected Linux reconciliation to succeed, got %v", err)
 	}
 	written, err := config.ReadExasolPersonalState(deployment)
@@ -46,7 +46,7 @@ func TestLocalSLCRestartCheckUsesLinuxPodmanRuntime(t *testing.T) {
 	deployment, _ := newLinuxLocalWorkflowTestDeployment(t)
 	installFakePodmanStatus(t, fakePodmanContainerRunning)
 
-	if !isLocalDeploymentRunning(context.Background(), deployment) {
+	if !isLocalDeploymentRunning(testManagerContext(t), deployment) {
 		t.Fatal("expected SLC restart check to report the Podman container running")
 	}
 }
@@ -57,7 +57,7 @@ func TestDiagnoseLocalUsesLinuxPodmanRuntime(t *testing.T) {
 	deployment, _ := newLinuxLocalWorkflowTestDeployment(t)
 	installFakePodmanStatus(t, fakePodmanContainerMissing)
 
-	diagnostics, err := DiagnoseLocal(context.Background(), deployment)
+	diagnostics, err := DiagnoseLocal(testManagerContext(t), deployment)
 	if err != nil {
 		t.Fatalf("expected Linux local diagnostics, got %v", err)
 	}

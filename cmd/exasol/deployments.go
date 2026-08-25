@@ -137,7 +137,7 @@ func deploymentListEntryFor(ctx context.Context, name, path string) deploymentLi
 		return entry
 	}
 
-	identity, err := deploy.ResolveDeploymentPresetIdentity(config.NewDeploymentDir(path))
+	identity, err := deploy.ResolveDeploymentPresetIdentity(ctx, config.NewDeploymentDir(path))
 	if err != nil {
 		return entry
 	}

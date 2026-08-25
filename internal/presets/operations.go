@@ -4,15 +4,22 @@
 package presets
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 
 	"github.com/exasol/exasol-personal/assets"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+)
+
+const (
+	infrastructurePresetsResource = "infrastructure-presets"
+	installationPresetsResource   = "installation-presets"
 )
 
 var (
@@ -20,97 +27,91 @@ var (
 	ErrUnknownInstallation   = errors.New("the specified installation preset does not exist")
 )
 
-func WriteInfrastructureDir(infrastructureName, outDir string) error {
-	entries, err := assets.InfrastructureAssets.ReadDir(assets.InfrastructureAssetDir)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() && entry.Name() == infrastructureName {
-			return writeDir(
-				assets.InfrastructureAssets,
-				assets.InfrastructureAssetDir+"/"+infrastructureName,
-				outDir)
-		}
-	}
-
-	return ErrUnknownInfrastructure
+// PresetKind identifies which preset catalog (infrastructure or
+// installation) an operation applies to.
+type PresetKind struct {
+	resourceGroup string
+	unknownErr    error
 }
 
-func WriteInstallDir(installName, outDir string) error {
-	entries, err := assets.InstallationAssets.ReadDir(assets.InstallationAssetDir)
-	if err != nil {
+var (
+	Infrastructure = PresetKind{infrastructurePresetsResource, ErrUnknownInfrastructure}
+	Installation   = PresetKind{installationPresetsResource, ErrUnknownInstallation}
+)
+
+// WriteDir materializes preset into outDir.
+func WriteDir(ctx context.Context, kind PresetKind, preset PresetRef, outDir string) error {
+	manager := runtimeartifacts.FromContext(ctx)
+	if preset.IsPath() {
+		def := runtimeartifacts.ResourceDefinition{
+			Artifact: map[string]runtimeartifacts.ArtifactSpec{"any": {URL: preset.Path}},
+		}
+
+		return manager.GetCopy(ctx, def, kind.resourceGroup, outDir)
+	}
+
+	if err := manager.RequestMemberCopy(ctx, kind.resourceGroup, preset.Name, outDir); err != nil {
+		if errors.Is(err, runtimeartifacts.ErrUnknownMember) {
+			return fmt.Errorf("%w: %s", kind.unknownErr, preset.Name)
+		}
+
 		return err
 	}
 
-	for _, entry := range entries {
-		if entry.IsDir() && entry.Name() == installName {
-			return writeDir(
-				assets.InstallationAssets,
-				assets.InstallationAssetDir+"/"+installName,
-				outDir)
-		}
-	}
-
-	return ErrUnknownInstallation
+	return nil
 }
 
 func WriteSharedDir(outDir string) error {
-	return writeDir(assets.SharedAssets, assets.SharedAssetDir, outDir)
+	return writeEmbeddedDir(assets.SharedAssets, assets.SharedAssetDir, outDir)
 }
 
-func ListEmbeddedInfrastructuresPresets() []string {
-	entries, err := assets.InfrastructureAssets.ReadDir(assets.InfrastructureAssetDir)
+// ListEmbeddedPresets lists every built-in preset name of kind.
+func ListEmbeddedPresets(ctx context.Context, kind PresetKind) []string {
+	return runtimeartifacts.FromContext(ctx).GroupMembers(kind.resourceGroup)
+}
+
+// ReadInfrastructureFile reads a file from the named embedded infrastructure
+// preset directory (resolved through the resource cache). relPath is
+// relative to the infrastructure preset directory.
+func ReadInfrastructureFile(
+	ctx context.Context,
+	infrastructureName, relPath string,
+) ([]byte, error) {
+	dir, err := presetDir(ctx, Infrastructure, infrastructureName)
 	if err != nil {
-		// If assets are not available, return an empty list instead of panicking.
-		// Callers can handle the absence of configs and surface a friendly error.
-		return []string{}
+		return nil, err
 	}
 
-	var infrastructures []string
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			infrastructures = append(infrastructures, entry.Name())
-		}
-	}
-	slices.Sort(infrastructures)
-
-	return infrastructures
-}
-
-func ListEmbeddedInstallationsPresets() []string {
-	entries, err := assets.InstallationAssets.ReadDir(assets.InstallationAssetDir)
+	root, err := os.OpenRoot(dir)
 	if err != nil {
-		// If assets are not available, return an empty list instead of panicking.
-		// Callers can handle the absence of configs and surface a friendly error.
-		return []string{}
+		return nil, err
 	}
+	defer func() { _ = root.Close() }()
 
-	var installs []string
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			installs = append(installs, entry.Name())
-		}
+	file, err := root.Open(relPath)
+	if err != nil {
+		return nil, err
 	}
+	defer func() { _ = file.Close() }()
 
-	slices.Sort(installs)
-
-	return installs
+	return io.ReadAll(file)
 }
 
-// ReadInfrastructureFile reads a file from the embedded infrastructure assets.
-// relPath is relative to the infrastructure preset directory.
-func ReadInfrastructureFile(infrastructureName, relPath string) ([]byte, error) {
-	return assets.InfrastructureAssets.ReadFile(
-		assets.InfrastructureAssetDir + "/" + infrastructureName + "/" + relPath,
-	)
+func presetDir(ctx context.Context, kind PresetKind, name string) (string, error) {
+	dir, err := runtimeartifacts.FromContext(ctx).RequestMember(ctx, kind.resourceGroup, name)
+	if err != nil {
+		if errors.Is(err, runtimeartifacts.ErrUnknownMember) {
+			return "", fmt.Errorf("%w: %s", kind.unknownErr, name)
+		}
+
+		return "", err
+	}
+
+	return dir, nil
 }
 
 // Write an embedded directory to the filesystem.
-func writeDir(filesys embed.FS, embeddedDirPath string, outputDir string) error {
+func writeEmbeddedDir(filesys embed.FS, embeddedDirPath string, outputDir string) error {
 	slog.Debug("writing directory", "path", embeddedDirPath)
 
 	entries, err := filesys.ReadDir(embeddedDirPath)
@@ -125,7 +126,7 @@ func writeDir(filesys embed.FS, embeddedDirPath string, outputDir string) error 
 		if entry.IsDir() {
 			embeddedSubDir := embeddedDirPath + "/" + entry.Name()
 			physicalSubDir := filepath.Join(outputDir, entry.Name())
-			if err := writeDir(
+			if err := writeEmbeddedDir(
 				filesys,
 				embeddedSubDir,
 				physicalSubDir,

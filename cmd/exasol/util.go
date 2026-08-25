@@ -82,10 +82,7 @@ func resolvePresetRef(
 		return deploy.PresetRef{Name: arg}, nil
 	}
 
-	manager, err := runtimeartifacts.NewManager()
-	if err != nil {
-		return deploy.PresetRef{}, err
-	}
+	manager := runtimeartifacts.FromContext(ctx)
 	resolvedPath, err := deploy.ResolvePreset(ctx, manager, arg, presetType)
 	if err != nil {
 		return deploy.PresetRef{}, err
@@ -104,7 +101,7 @@ func resolveInstallationPresetRef(
 		return resolvePresetRef(ctx, args[index], presets.PresetTypeInstallation)
 	}
 
-	return deploy.ResolveDefaultInstallationPreset(infrastructurePreset)
+	return deploy.ResolveDefaultInstallationPreset(ctx, infrastructurePreset)
 }
 
 func presetNamesForHelp(listname string, names []string) string {

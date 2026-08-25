@@ -4,6 +4,7 @@
 package deploy
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -47,6 +48,7 @@ func presetIdentityDisplay(identity string) string {
 // initialized by older launcher versions without persisted identity, it
 // backfills the identity from extracted manifests and persists the result.
 func EnsureDeploymentPresetIdentityMatches(
+	ctx context.Context,
 	deployment config.DeploymentDir,
 	infrastructurePreset PresetRef,
 	installationPreset PresetRef,
@@ -55,7 +57,7 @@ func EnsureDeploymentPresetIdentityMatches(
 	if err != nil {
 		return err
 	}
-	existing, backfilled, err := resolvePresetIdentity(state, deployment)
+	existing, backfilled, err := resolvePresetIdentity(ctx, state, deployment)
 	if err != nil {
 		return err
 	}
@@ -109,6 +111,7 @@ type PresetIdentityDisplay struct {
 // identity (such as `exasol deployments list`) must not carry a hidden write
 // side effect.
 func ResolveDeploymentPresetIdentity(
+	ctx context.Context,
 	deployment config.DeploymentDir,
 ) (PresetIdentityDisplay, error) {
 	state, err := config.ReadExasolPersonalState(deployment)
@@ -116,7 +119,7 @@ func ResolveDeploymentPresetIdentity(
 		return PresetIdentityDisplay{}, err
 	}
 
-	pair, _, err := resolvePresetIdentity(state, deployment)
+	pair, _, err := resolvePresetIdentity(ctx, state, deployment)
 	if err != nil {
 		return PresetIdentityDisplay{}, err
 	}
@@ -133,6 +136,7 @@ func ResolveDeploymentPresetIdentity(
 // via the second return value so the caller can decide whether to persist it.
 // resolvePresetIdentity itself never writes to the deployment's state file.
 func resolvePresetIdentity(
+	ctx context.Context,
 	state *config.ExasolPersonalState,
 	deployment config.DeploymentDir,
 ) (presetIdentityPair, bool, error) {
@@ -155,9 +159,9 @@ func resolvePresetIdentity(
 	pair := presetIdentityPair{
 		infrastructure: backfilledEmbeddedIdentity(
 			infraManifest.Name,
-			presets.ListEmbeddedInfrastructuresPresets(),
+			presets.ListEmbeddedPresets(ctx, presets.Infrastructure),
 			func(name string) (string, error) {
-				m, err := presets.ReadInfrastructureManifest(name)
+				m, err := presets.ReadInfrastructureManifest(ctx, name)
 				if err != nil {
 					return "", err
 				}
@@ -167,9 +171,9 @@ func resolvePresetIdentity(
 		),
 		installation: backfilledEmbeddedIdentity(
 			installManifest.Name,
-			presets.ListEmbeddedInstallationsPresets(),
+			presets.ListEmbeddedPresets(ctx, presets.Installation),
 			func(name string) (string, error) {
-				m, err := presets.ReadInstallManifest(name)
+				m, err := presets.ReadInstallManifest(ctx, name)
 				if err != nil {
 					return "", err
 				}

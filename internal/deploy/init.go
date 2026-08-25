@@ -32,27 +32,6 @@ A copy of the EULA is also included as 'eula.txt' in this directory.
 `
 )
 
-// ResolveInfrastructureInfo validates the infrastructure preset name and returns its info.
-func ResolveInfrastructureInfo(infrastructureName string) (*InfrastructureInfo, error) {
-	// Proactively validate against known infrastructures to produce a clearer error.
-	known := presets.ListEmbeddedInfrastructuresPresets()
-	found := slices.Contains(known, infrastructureName)
-	if !found {
-		return nil, fmt.Errorf("unknown infrastructure preset %q", infrastructureName)
-	}
-
-	info, err := GetInfrastructureInfo(infrastructureName)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to get infrastructure info for %q: %w",
-			infrastructureName,
-			err,
-		)
-	}
-
-	return info, nil
-}
-
 var (
 	ErrUnknownVariable             = errors.New("unknown variable")
 	ErrDeploymentDirectoryNotEmpty = errors.New("deployment directory is not empty")
@@ -108,12 +87,14 @@ func validateInitRequest(
 ) error {
 	slog.Info("validating presets")
 	if err := ValidatePresetSelection(
+		ctx,
 		options.InfrastructurePreset,
 		options.InstallationPreset,
 	); err != nil {
 		return err
 	}
 	infrastructureManifest, err := readInfrastructureManifestFromPreset(
+		ctx,
 		options.InfrastructurePreset,
 	)
 	if err != nil {
@@ -123,7 +104,7 @@ func validateInitRequest(
 			err,
 		)
 	}
-	backend, err := newDeploymentBackend(deployment, infrastructureManifest)
+	backend, err := newDeploymentBackend(ctx, deployment, infrastructureManifest)
 	if err != nil {
 		return err
 	}
@@ -173,6 +154,7 @@ func initializeDeploymentLocked(
 
 	// Copy the presets into the deployment directory
 	if err := extractPresets(
+		ctx,
 		options.InfrastructurePreset,
 		options.InstallationPreset,
 		deployment,
@@ -194,7 +176,7 @@ func initializeDeploymentLocked(
 	if err != nil {
 		return err
 	}
-	backend, err := newDeploymentBackend(deployment, infraManifest)
+	backend, err := newDeploymentBackend(ctx, deployment, infraManifest)
 	if err != nil {
 		return err
 	}
@@ -234,6 +216,7 @@ func initializeDeploymentLocked(
 // extractPresets writes infrastructure, installation,
 // and shared assets into the deployment directory.
 func extractPresets(
+	ctx context.Context,
 	infrastructurePreset PresetRef,
 	installationPreset PresetRef,
 	deployment config.DeploymentDir,
@@ -260,11 +243,7 @@ func extractPresets(
 
 	// Write infrastructure preset
 	slog.Debug("writing infrastructure preset to deployment directory", "path", infrastructureDir)
-	err = presets.ExtractPreset(
-		infrastructurePreset,
-		infrastructureDir,
-		presets.WriteInfrastructureDir,
-	)
+	err = presets.WriteDir(ctx, presets.Infrastructure, infrastructurePreset, infrastructureDir)
 	if err != nil {
 		slog.Error(
 			"Failed to write infrastructure preset",
@@ -278,7 +257,7 @@ func extractPresets(
 
 	// Write installation preset into installation directory
 	slog.Debug("writing installation preset to deployment directory", "path", installationDir)
-	err = presets.ExtractPreset(installationPreset, installationDir, presets.WriteInstallDir)
+	err = presets.WriteDir(ctx, presets.Installation, installationPreset, installationDir)
 	if err != nil {
 		slog.Error(
 			"Failed to write installation preset",
@@ -338,38 +317,32 @@ func newInitializedState(
 	}
 }
 
-func validateInfrastructurePreset(infrastructurePreset PresetRef) error {
-	if infrastructurePreset.IsPath() {
-		return validatePresetDir(infrastructurePreset.Path, "infrastructure.yaml")
-	}
-
-	known := presets.ListEmbeddedInfrastructuresPresets()
-	if slices.Contains(known, infrastructurePreset.Name) {
-		return nil
-	}
-
-	return fmt.Errorf(
-		"unknown infrastructure preset %q; available: %s",
-		infrastructurePreset.Name,
-		strings.Join(known, ", "),
+func validateInfrastructurePreset(ctx context.Context, infrastructurePreset PresetRef) error {
+	return validatePreset(
+		infrastructurePreset, "infrastructure.yaml", "infrastructure preset",
+		presets.ListEmbeddedPresets(ctx, presets.Infrastructure),
 	)
 }
 
-func validateInstallationPreset(installationPreset PresetRef) error {
-	if installationPreset.IsPath() {
-		return validatePresetDir(installationPreset.Path, "installation.yaml")
-	}
+func validateInstallationPreset(ctx context.Context, installationPreset PresetRef) error {
+	return validatePreset(
+		installationPreset, "installation.yaml", "installation preset",
+		presets.ListEmbeddedPresets(ctx, presets.Installation),
+	)
+}
 
-	known := presets.ListEmbeddedInstallationsPresets()
-	if slices.Contains(known, installationPreset.Name) {
+// validatePreset validates a preset reference: a path reference must point
+// at a directory containing requiredManifestFile; a named reference must
+// appear in known.
+func validatePreset(preset PresetRef, requiredManifestFile, label string, known []string) error {
+	if preset.IsPath() {
+		return validatePresetDir(preset.Path, requiredManifestFile)
+	}
+	if slices.Contains(known, preset.Name) {
 		return nil
 	}
 
-	return fmt.Errorf(
-		"unknown installation preset %q; available: %s",
-		installationPreset.Name,
-		strings.Join(known, ", "),
-	)
+	return fmt.Errorf("unknown %s %q; available: %s", label, preset.Name, strings.Join(known, ", "))
 }
 
 func validatePresetDir(dir, requiredFile string) error {

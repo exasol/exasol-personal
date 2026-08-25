@@ -4,7 +4,6 @@
 package deploy
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -39,7 +38,7 @@ func TestDeployPreparationFailurePreservesInitializedWorkflowState(t *testing.T)
 	deployment := newLocalTestDeployment(t)
 	t.Setenv("PATH", t.TempDir())
 
-	err := deployLocked(context.Background(), deployment, false, DeployOptions{})
+	err := deployLocked(testManagerContext(t), deployment, false, DeployOptions{})
 
 	if err == nil || !strings.Contains(err.Error(), "'podman' is required") {
 		t.Fatalf("expected a Podman preparation failure, got %v", err)
@@ -62,7 +61,7 @@ func TestStartPreparationFailurePreservesStoppedWorkflowState(t *testing.T) {
 	}
 	t.Setenv("PATH", t.TempDir())
 
-	err = startLocked(context.Background(), deployment, false, StartOptions{})
+	err = startLocked(testManagerContext(t), deployment, false, StartOptions{})
 
 	if err == nil || !strings.Contains(err.Error(), "'podman' is required") {
 		t.Fatalf("expected a Podman preparation failure, got %v", err)

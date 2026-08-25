@@ -72,7 +72,7 @@ func writeDeploymentConfiguration(
 	if err != nil {
 		return err
 	}
-	backend, err := newDeploymentBackend(deployment, infraManifest)
+	backend, err := newDeploymentBackend(ctx, deployment, infraManifest)
 	if err != nil {
 		return err
 	}

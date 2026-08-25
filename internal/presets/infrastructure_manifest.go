@@ -5,12 +5,12 @@ package presets
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/exasol/exasol-personal/assets"
 	"gopkg.in/yaml.v3"
 )
 
@@ -53,18 +53,17 @@ var (
 	ErrMissingDescription = errors.New("missing infrastructure description")
 )
 
-// ReadInfrastructureManifest loads and validates the infrastructure manifest from embedded assets.
-func ReadInfrastructureManifest(infrastructureName string) (*InfrastructureManifest, error) {
-	manifestRaw, err := assets.InfrastructureAssets.ReadFile(
-		assets.InfrastructureAssetDir + "/" +
-			infrastructureName + "/" +
-			InfrastructureManifestFilename,
-	)
+// ReadInfrastructureManifest loads and validates the named embedded
+// infrastructure preset's manifest, resolved through the resource cache.
+func ReadInfrastructureManifest(
+	ctx context.Context, infrastructureName string,
+) (*InfrastructureManifest, error) {
+	dir, err := presetDir(ctx, Infrastructure, infrastructureName)
 	if err != nil {
 		return nil, err
 	}
 
-	return parseInfrastructureManifest(manifestRaw)
+	return ReadInfrastructureManifestFromDir(dir)
 }
 
 // ReadInfrastructureManifestFromDir loads and validates the infrastructure manifest

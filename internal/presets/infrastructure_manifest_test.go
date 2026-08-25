@@ -4,6 +4,8 @@
 package presets
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -17,7 +19,9 @@ func TestBuiltInAdminUIPresetsDeclareCapability(t *testing.T) {
 			t.Parallel()
 
 			// Given / When
-			manifest, err := ReadInfrastructureManifest(presetName)
+			manifest, err := ReadInfrastructureManifestFromDir(
+				filepath.Join("..", "..", "assets", "infrastructure", presetName),
+			)
 			// Then
 			if err != nil {
 				t.Fatalf("failed to read infrastructure manifest: %v", err)
@@ -37,7 +41,9 @@ func TestBuiltInLocalPresetDoesNotDeclareAdminUICapability(t *testing.T) {
 	t.Parallel()
 
 	// Given / When
-	manifest, err := ReadInfrastructureManifest("local")
+	manifest, err := ReadInfrastructureManifestFromDir(
+		filepath.Join("..", "..", "assets", "infrastructure", "local"),
+	)
 	// Then
 	if err != nil {
 		t.Fatalf("failed to read local infrastructure manifest: %v", err)
@@ -64,7 +70,9 @@ func TestBuiltInCloudPresetsEmitAdminUIMetadata(t *testing.T) {
 			t.Parallel()
 
 			// Given / When
-			outputs, err := ReadInfrastructureFile(presetName, "outputs.tf")
+			outputs, err := os.ReadFile(
+				filepath.Join("..", "..", "assets", "infrastructure", presetName, "outputs.tf"),
+			)
 			// Then
 			if err != nil {
 				t.Fatalf("failed to read outputs.tf: %v", err)

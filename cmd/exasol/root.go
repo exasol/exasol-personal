@@ -4,14 +4,17 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
+	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 	"github.com/lmittmann/tint"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -162,12 +165,21 @@ func Execute() error {
 	resetTerminalMessages()
 	registerLogLevelFlag(rootCmd, commonFlags)
 
-	// Register infrastructure variable flags only for commands that need them.
-	// This must happen before Cobra parses arguments.
-	if err := prepareInfrastructureVariableFlags(os.Args[1:]); err != nil {
+	// One resource manager for the whole process, attached to the root
+	// context so every command reaches it via cmd.Context() instead of each
+	// building (and caching against) its own.
+	manager, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
+	if err != nil {
 		return err
 	}
-	if err := prepareInstallationVariableFlags(os.Args[1:]); err != nil {
+	ctx := runtimeartifacts.NewContext(context.Background(), manager)
+
+	// Register infrastructure variable flags only for commands that need them.
+	// This must happen before Cobra parses arguments.
+	if err := prepareInfrastructureVariableFlags(ctx, os.Args[1:]); err != nil {
+		return err
+	}
+	if err := prepareInstallationVariableFlags(ctx, os.Args[1:]); err != nil {
 		return err
 	}
 
@@ -191,7 +203,7 @@ func Execute() error {
 	// want to have the "Usage" text be capitalized.
 	addHelpFlag(rootCmd)
 
-	err := rootCmd.Execute()
+	err = rootCmd.ExecuteContext(ctx)
 	runDeploymentLogCleanup()
 	if err == nil {
 		printTerminalMessages()

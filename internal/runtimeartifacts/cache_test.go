@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/directorymutex"
+	"github.com/exasol/exasol-personal/internal/launcherpaths"
 )
 
 type testClock struct {
@@ -41,7 +41,7 @@ func TestDefaultCacheRootUsesLauncherRuntimeArtifactsNamespace(t *testing.T) {
 		t.Fatalf("expected cache root, got error: %v", err)
 	}
 
-	expected := filepath.Join(config.LauncherDirPath(cacheDir), runtimeArtifactsDirName)
+	expected := filepath.Join(launcherpaths.DirPath(cacheDir), runtimeArtifactsDirName)
 	if root != expected {
 		t.Fatalf("expected %q, got %q", expected, root)
 	}
@@ -57,7 +57,7 @@ func TestDefaultConfigPathUsesLauncherRootDirectory(t *testing.T) {
 		t.Fatalf("expected config path, got error: %v", err)
 	}
 
-	expected := filepath.Join(config.LauncherDirPath(home), cacheConfigFileName)
+	expected := filepath.Join(launcherpaths.DirPath(home), cacheConfigFileName)
 	if path != expected {
 		t.Fatalf("expected %q, got %q", expected, path)
 	}

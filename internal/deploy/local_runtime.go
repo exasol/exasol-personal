@@ -16,6 +16,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 	"github.com/exasol/exasol-personal/internal/slc"
 )
 
@@ -91,11 +92,7 @@ func reconcileLocalVMState(
 		return nil
 	}
 
-	manager, err := newResourceManager()
-	if err != nil {
-		slog.Warn("could not construct resource manager during reconciliation", "error", err)
-		return nil
-	}
+	manager := runtimeartifacts.FromContext(ctx)
 
 	selectedRuntime, err := newLocalRuntime(deployment, manager)
 	if err != nil {

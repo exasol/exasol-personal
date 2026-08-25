@@ -61,11 +61,12 @@ func (*numberFlag) Type() string {
 }
 
 func resolveInfrastructureVariables(
+	ctx context.Context,
 	infraPresetName, infraPresetPath string,
 ) (deploy.ConfigVariableResolution, error) {
 	preset := deploy.PresetRef{Name: infraPresetName, Path: infraPresetPath}
 
-	return deploy.ResolveInfrastructureConfigVariables(preset)
+	return deploy.ResolveInfrastructureConfigVariables(ctx, preset)
 }
 
 // prepareInfrastructureVariableFlags registers infrastructure variable flags
@@ -73,7 +74,7 @@ func resolveInfrastructureVariables(
 //
 // We scan the raw args for the selected infrastructure preset so that we can register
 // only that preset's variables before Cobra parses.
-func prepareInfrastructureVariableFlags(args []string) error {
+func prepareInfrastructureVariableFlags(ctx context.Context, args []string) error {
 	// Do not hard-fail before Cobra runs.
 	// Reasons:
 	//   - Users may ask for --help with an invalid preset value; help should still render.
@@ -82,12 +83,12 @@ func prepareInfrastructureVariableFlags(args []string) error {
 
 	// We avoid scanning tokens ourselves; instead we use pflag to parse the already-known
 	// flags (deployment-dir, log-level, etc.) and then scan the remaining positionals.
-	preset, err := scanInfrastructurePresetSelection(args)
+	preset, err := scanInfrastructurePresetSelection(ctx, args)
 	if err != nil {
-		return prepareConfigSetInfrastructureVariableFlags(args)
+		return prepareConfigSetInfrastructureVariableFlags(ctx, args)
 	}
 	if preset != nil {
-		resolution, err := resolveInfrastructureVariables(preset.Name, preset.Path)
+		resolution, err := resolveInfrastructureVariables(ctx, preset.Name, preset.Path)
 		if err == nil {
 			if err := registerInfrastructureVariableFlags(
 				[]*cobra.Command{initCmd, installCmd},
@@ -99,10 +100,10 @@ func prepareInfrastructureVariableFlags(args []string) error {
 		}
 	}
 
-	return prepareConfigSetInfrastructureVariableFlags(args)
+	return prepareConfigSetInfrastructureVariableFlags(ctx, args)
 }
 
-func prepareConfigSetInfrastructureVariableFlags(args []string) error {
+func prepareConfigSetInfrastructureVariableFlags(ctx context.Context, args []string) error {
 	if rawArgsRequestHelp(args) {
 		return nil
 	}
@@ -116,7 +117,7 @@ func prepareConfigSetInfrastructureVariableFlags(args []string) error {
 		return fmt.Errorf("cannot determine deployment directory for `config set`: %w", err)
 	}
 
-	resolution, resolveErr := resolveInfrastructureVariablesFromDeployment(deployment)
+	resolution, resolveErr := resolveInfrastructureVariablesFromDeployment(ctx, deployment)
 	if resolveErr != nil {
 		// Fail with a clear message instead of silently registering no flags. Otherwise the
 		// supplied options fail Cobra's flag parsing later as a misleading "unknown flag"
@@ -244,9 +245,10 @@ func infrastructureVariableFlagUsage(variable deploy.ConfigVariableDefinition) s
 }
 
 func resolveInfrastructureVariablesFromDeployment(
+	ctx context.Context,
 	deployment config.DeploymentDir,
 ) (deploy.ConfigVariableResolution, error) {
-	return deploy.ResolveInfrastructureConfigVariablesFromDeployment(deployment)
+	return deploy.ResolveInfrastructureConfigVariablesFromDeployment(ctx, deployment)
 }
 
 func collectInfrastructureVariableOverrides(cmd *cobra.Command) map[string]string {
@@ -268,7 +270,9 @@ func collectInfrastructureVariableOverrides(cmd *cobra.Command) map[string]strin
 	return overrides
 }
 
-func scanInfrastructurePresetSelection(args []string) (*deploy.PresetRef, error) {
+func scanInfrastructurePresetSelection(
+	ctx context.Context, args []string,
+) (*deploy.PresetRef, error) {
 	// Handle "exasol help init local" form: strip the leading "help" token so the
 	// preset scanner finds the actual command. Cobra registers its help subcommand
 	// lazily inside ExecuteC, so rootCmd.Find won't resolve it at this point.
@@ -290,7 +294,7 @@ func scanInfrastructurePresetSelection(args []string) (*deploy.PresetRef, error)
 	}
 
 	ref, err := resolvePresetRef(
-		context.Background(), positionals[0], presets.PresetTypeInfrastructure,
+		ctx, positionals[0], presets.PresetTypeInfrastructure,
 	)
 	if err != nil {
 		return nil, err

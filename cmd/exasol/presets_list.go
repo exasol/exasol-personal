@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,9 +19,9 @@ var presetsListFlags = struct {
 
 const embeddedPresetAppendixPartCount = 1
 
-func filterPresetCatalog(typeFilter string) (PresetCatalog, error) {
+func filterPresetCatalog(ctx context.Context, typeFilter string) (PresetCatalog, error) {
 	filter := normalizePresetTypeFilter(typeFilter)
-	cat := GetPresetCatalog()
+	cat := GetPresetCatalog(ctx)
 	filtered := PresetCatalog{}
 
 	if filter != "" {
@@ -90,7 +91,9 @@ func renderPresetSection(writer io.Writer, header string, presetsList []Preset) 
 	return nil
 }
 
-func renderPresetListText(writer io.Writer, typeFilter string, catalog PresetCatalog) error {
+func renderPresetListText(
+	ctx context.Context, writer io.Writer, typeFilter string, catalog PresetCatalog,
+) error {
 	filter := normalizePresetTypeFilter(typeFilter)
 	if err := validateRenderPresetTypeFilter(filter, typeFilter); err != nil {
 		return err
@@ -105,7 +108,7 @@ func renderPresetListText(writer io.Writer, typeFilter string, catalog PresetCat
 		return nil
 	}
 
-	return writePresetAppendix(writer, wroteAny)
+	return writePresetAppendix(ctx, writer, wroteAny)
 }
 
 func validateRenderPresetTypeFilter(filter, typeFilter string) error {
@@ -151,8 +154,8 @@ func writeFilteredPresetSections(
 }
 
 //nolint:revive // wroteAny reflects prior output state, not internal control coupling.
-func writePresetAppendix(writer io.Writer, wroteAny bool) error {
-	appendix := embeddedPresetAppendixText()
+func writePresetAppendix(ctx context.Context, writer io.Writer, wroteAny bool) error {
+	appendix := embeddedPresetAppendixText(ctx)
 	if appendix == "" {
 		return nil
 	}
@@ -167,10 +170,10 @@ func writePresetAppendix(writer io.Writer, wroteAny bool) error {
 	return err
 }
 
-func embeddedPresetAppendixText() string {
+func embeddedPresetAppendixText(ctx context.Context) string {
 	parts := make([]string, 0, embeddedPresetAppendixPartCount)
 
-	if matrix := embeddedPresetCompatibilityMatrix(); matrix != "" {
+	if matrix := embeddedPresetCompatibilityMatrix(ctx); matrix != "" {
 		parts = append(parts, matrix)
 	}
 
@@ -189,7 +192,7 @@ Use the '--json' option to print the output in JSON format.
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 
-		catalog, err := filterPresetCatalog(presetsListFlags.TypeFilter)
+		catalog, err := filterPresetCatalog(cmd.Context(), presetsListFlags.TypeFilter)
 		if err != nil {
 			return err
 		}
@@ -199,7 +202,7 @@ Use the '--json' option to print the output in JSON format.
 		}
 
 		return addRenderedTerminalOutput(func(writer io.Writer) error {
-			return renderPresetListText(writer, presetsListFlags.TypeFilter, catalog)
+			return renderPresetListText(cmd.Context(), writer, presetsListFlags.TypeFilter, catalog)
 		})
 	},
 }

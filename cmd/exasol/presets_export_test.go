@@ -45,7 +45,8 @@ func TestRequireEmptyDir_ErrOnNonEmptyDir(t *testing.T) {
 func TestExportEmbeddedPreset_Infrastructure_WritesManifest(t *testing.T) {
 	t.Parallel()
 
-	ids := presets.ListEmbeddedInfrastructuresPresets()
+	ctx := testManagerContext(t)
+	ids := presets.ListEmbeddedPresets(ctx, presets.Infrastructure)
 	if len(ids) == 0 {
 		t.Skip("no embedded infrastructure presets available")
 	}
@@ -59,12 +60,13 @@ func TestExportEmbeddedPreset_Infrastructure_WritesManifest(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	h, err := resolveEmbeddedPresetHandler(ids[0], presets.PresetTypeInfrastructure)
+	h, err := resolveEmbeddedPresetHandler(ctx, ids[0], presets.PresetTypeInfrastructure)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	presetRef := presets.PresetRef{Name: ids[0]}
-	if err := presets.ExtractPreset(presetRef, target, h.WriteDir); err != nil {
+	err = presets.WriteDir(ctx, h.Kind, presetRef, target)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -77,7 +79,8 @@ func TestExportEmbeddedPreset_Infrastructure_WritesManifest(t *testing.T) {
 func TestExportEmbeddedPreset_Installation_WritesManifest(t *testing.T) {
 	t.Parallel()
 
-	ids := presets.ListEmbeddedInstallationsPresets()
+	ctx := testManagerContext(t)
+	ids := presets.ListEmbeddedPresets(ctx, presets.Installation)
 	if len(ids) == 0 {
 		t.Skip("no embedded installation presets available")
 	}
@@ -91,12 +94,13 @@ func TestExportEmbeddedPreset_Installation_WritesManifest(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	handler, err := resolveEmbeddedPresetHandler(ids[0], presets.PresetTypeInstallation)
+	handler, err := resolveEmbeddedPresetHandler(ctx, ids[0], presets.PresetTypeInstallation)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	presetRef := presets.PresetRef{Name: ids[0]}
-	if err := presets.ExtractPreset(presetRef, target, handler.WriteDir); err != nil {
+	err = presets.WriteDir(ctx, handler.Kind, presetRef, target)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

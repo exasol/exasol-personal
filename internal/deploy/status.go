@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
 const (
@@ -232,15 +233,7 @@ func localVMStoppedStatus(ctx context.Context, deployment config.DeploymentDir) 
 		return nil
 	}
 
-	manager, err := newResourceManager()
-	if err != nil {
-		slog.Debug(
-			"failed to construct resource manager for local runtime status check",
-			"error", err,
-		)
-
-		return nil
-	}
+	manager := runtimeartifacts.FromContext(ctx)
 
 	selectedRuntime, err := newLocalRuntime(deployment, manager)
 	if err != nil {
