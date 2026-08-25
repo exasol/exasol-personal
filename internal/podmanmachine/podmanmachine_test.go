@@ -53,6 +53,7 @@ func readLog(t *testing.T, path string) string {
 	return string(data)
 }
 
+//nolint:paralleltest // The test replaces process-wide PATH with a fake podman shim.
 func TestMachineExists_ReturnsTrueWhenNameFound(t *testing.T) {
 	installFakePodmanMachineShim(t, `printf '`+DefaultMachineName+`\n'; exit 0`)
 
@@ -65,6 +66,7 @@ func TestMachineExists_ReturnsTrueWhenNameFound(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // The test replaces process-wide PATH with a fake podman shim.
 func TestMachineExists_ReturnsFalseWhenListEmpty(t *testing.T) {
 	installFakePodmanMachineShim(t, `exit 0`)
 
@@ -80,6 +82,8 @@ func TestMachineExists_ReturnsFalseWhenListEmpty(t *testing.T) {
 // Regression: on Windows, podman appends "*" to the currently-active
 // machine name even under --format "{{.Name}}". MachineExists must
 // treat "podman-machine-default*" as the default machine.
+//
+//nolint:paralleltest // The test replaces process-wide PATH with a fake podman shim.
 func TestMachineExists_TolerantOfActiveMachineAsterisk(t *testing.T) {
 	installFakePodmanMachineShim(t,
 		`printf '`+DefaultMachineName+`*\n'; exit 0`)
@@ -93,6 +97,7 @@ func TestMachineExists_TolerantOfActiveMachineAsterisk(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // The test replaces process-wide PATH with a fake podman shim.
 func TestMachineExists_PropagatesPodmanFailure(t *testing.T) {
 	installFakePodmanMachineShim(t, `echo "provider missing" >&2; exit 125`)
 
@@ -105,38 +110,7 @@ func TestMachineExists_PropagatesPodmanFailure(t *testing.T) {
 	}
 }
 
-func TestMachineIsRootful_TrueAndFalseValues(t *testing.T) {
-	for _, tc := range []struct {
-		out  string
-		want bool
-	}{
-		{"true", true},
-		{"false", false},
-	} {
-		installFakePodmanMachineShim(t, `printf '`+tc.out+`\n'; exit 0`)
-
-		got, err := MachineIsRootful(context.Background())
-		if err != nil {
-			t.Fatalf("%q: unexpected error: %v", tc.out, err)
-		}
-		if got != tc.want {
-			t.Errorf("%q: got %v want %v", tc.out, got, tc.want)
-		}
-	}
-}
-
-func TestMachineIsRootful_RejectsUnexpectedOutput(t *testing.T) {
-	installFakePodmanMachineShim(t, `printf 'maybe\n'; exit 0`)
-
-	_, err := MachineIsRootful(context.Background())
-	if err == nil {
-		t.Fatal("expected error on unexpected .Rootful value")
-	}
-	if !strings.Contains(err.Error(), "unexpected") {
-		t.Errorf("expected 'unexpected' in error, got %v", err)
-	}
-}
-
+//nolint:paralleltest // The test replaces process-wide PATH with a fake podman shim.
 func TestMachineState_ReturnsTrimmedValue(t *testing.T) {
 	installFakePodmanMachineShim(t, `printf '  Running  \n'; exit 0`)
 
@@ -149,24 +123,30 @@ func TestMachineState_ReturnsTrimmedValue(t *testing.T) {
 	}
 }
 
-func TestInitMachine_RootfulPassesRootfulFlag(t *testing.T) {
+//nolint:paralleltest // The test replaces process-wide PATH with a fake podman shim.
+func TestInitMachine_UsesExpectedArgv(t *testing.T) {
 	logPath := installFakePodmanMachineShim(t, `exit 0`)
 
-	err := InitMachine(context.Background(), &bytes.Buffer{}, &bytes.Buffer{}, true, 40)
+	err := InitMachine(context.Background(), &bytes.Buffer{}, &bytes.Buffer{}, 40)
 	if err != nil {
 		t.Fatalf("InitMachine error: %v", err)
 	}
 	got := readLog(t, logPath)
-	want := "podman machine init --disk-size 40 --rootful"
+	want := "podman machine init --disk-size 40"
 	if !strings.Contains(got, want) {
-		t.Errorf("argv did not include rootful flag:\n  got:  %q\n  want substring: %q", got, want)
+		t.Errorf("argv:\n  got:  %q\n  want substring: %q", got, want)
+	}
+	// The launcher never chooses a privilege mode; podman's default stands.
+	if strings.Contains(got, "--rootful") {
+		t.Errorf("init must not force a privilege mode, got %q", got)
 	}
 }
 
+//nolint:paralleltest // The test replaces process-wide PATH with a fake podman shim.
 func TestInitMachine_RejectsNonPositiveDiskSize(t *testing.T) {
 	installFakePodmanMachineShim(t, `exit 0`)
 
-	err := InitMachine(context.Background(), &bytes.Buffer{}, &bytes.Buffer{}, true, 0)
+	err := InitMachine(context.Background(), &bytes.Buffer{}, &bytes.Buffer{}, 0)
 	if err == nil {
 		t.Fatal("expected error on zero disk size")
 	}
@@ -175,110 +155,102 @@ func TestInitMachine_RejectsNonPositiveDiskSize(t *testing.T) {
 	}
 }
 
-func TestSetMachineRootful_UsesExpectedArgv(t *testing.T) {
-	logPath := installFakePodmanMachineShim(t, `exit 0`)
-
-	if err := SetMachineRootful(
-		context.Background(), &bytes.Buffer{}, &bytes.Buffer{},
-	); err != nil {
-		t.Fatalf("SetMachineRootful error: %v", err)
-	}
-	got := readLog(t, logPath)
-	want := "podman machine set --rootful"
-	if !strings.Contains(got, want) {
-		t.Errorf("argv:\n  got:  %q\n  want substring: %q", got, want)
-	}
-}
-
 // dispatchScript builds a shell dispatch that handles the subcommands
-// EnsureRootfulRunning invokes. The behavior for each subcommand is
+// EnsureMachineRunning invokes. The behavior for each subcommand is
 // injected via named parameters so tests can shape the machine's state.
+//
+// `machine stop` and `machine set` are deliberately dispatched to exit 64
+// rather than 0: the launcher must never mutate the user's machine, so a
+// call to either should fail the test loudly instead of passing silently.
 type dispatchScript struct {
 	// listOutput is what "podman machine list --format {{.Name}}" prints.
 	listOutput string
-	// rootfulOutput is what "podman machine inspect --format {{.Rootful}}" prints.
-	rootfulOutput string
 	// stateOutput is what "podman machine inspect --format {{.State}}" prints.
 	stateOutput string
 }
 
 func (d dispatchScript) render() string {
 	// $1 $2 identifies the subcommand family: `machine list`, `machine
-	// inspect`, `machine init`, `machine start`, `machine stop`, `machine set`.
-	// For `machine inspect`, $4 disambiguates {{.Rootful}} vs {{.State}}.
+	// inspect`, `machine init`, `machine start`.
 	return `if [ "$1 $2" = "machine list" ]; then printf '` +
 		d.listOutput + `\n'; exit 0; fi
-if [ "$1 $2" = "machine inspect" ] && [ "$4" = "{{.Rootful}}" ]; then printf '` +
-		d.rootfulOutput + `\n'; exit 0; fi
 if [ "$1 $2" = "machine inspect" ] && [ "$4" = "{{.State}}" ]; then printf '` +
 		d.stateOutput + `\n'; exit 0; fi
 if [ "$1 $2" = "machine init" ]; then exit 0; fi
 if [ "$1 $2" = "machine start" ]; then exit 0; fi
-if [ "$1 $2" = "machine stop" ]; then exit 0; fi
-if [ "$1 $2" = "machine set" ]; then exit 0; fi
 echo "unexpected podman command: $*" >&2
 exit 64
 `
 }
 
-func TestEnsureRootfulRunning_CreatesMachineWhenMissing(t *testing.T) {
+//nolint:paralleltest // The test replaces process-wide PATH with a fake podman shim.
+func TestEnsureMachineRunning_CreatesMachineWhenMissing(t *testing.T) {
 	logPath := installFakePodmanMachineShim(t, dispatchScript{
 		listOutput: "", // no machines
 	}.render())
 
 	var out, outErr bytes.Buffer
-	if err := EnsureRootfulRunning(context.Background(), nil, &out, &outErr); err != nil {
-		t.Fatalf("EnsureRootfulRunning error: %v", err)
+	if err := EnsureMachineRunning(context.Background(), &out, &outErr); err != nil {
+		t.Fatalf("EnsureMachineRunning error: %v", err)
 	}
 	log := readLog(t, logPath)
-	if !strings.Contains(log, "machine init --disk-size 40 --rootful") {
-		t.Errorf("expected rootful init in log:\n%s", log)
+	if !strings.Contains(log, "machine init --disk-size 40") {
+		t.Errorf("expected machine init in log:\n%s", log)
+	}
+	if strings.Contains(log, "--rootful") {
+		t.Errorf("fresh install must not force a privilege mode, log:\n%s", log)
 	}
 	if !strings.Contains(log, "machine start") {
 		t.Errorf("expected machine start in log:\n%s", log)
 	}
-	if !strings.Contains(out.String(), "Creating rootful podman machine") {
+	if !strings.Contains(out.String(), "Creating podman machine") {
 		t.Errorf("expected create messaging, got %q", out.String())
 	}
 }
 
-func TestEnsureRootfulRunning_NoOpWhenRootfulAndRunning(t *testing.T) {
+// The launcher keeps whatever privilege mode the machine already has: the
+// database port is published on 127.0.0.1 explicitly, so rootless works and
+// there is no reason to mutate a shared host resource. dispatchScript makes
+// `machine stop`/`machine set` fail, so a regression here surfaces as an
+// error rather than a silent conversion.
+//
+//nolint:paralleltest // The test replaces process-wide PATH with a fake podman shim.
+func TestEnsureMachineRunning_KeepsExistingMachineUntouched(t *testing.T) {
 	logPath := installFakePodmanMachineShim(t, dispatchScript{
-		listOutput:    DefaultMachineName,
-		rootfulOutput: "true",
-		stateOutput:   "running",
+		listOutput:  DefaultMachineName,
+		stateOutput: "running",
 	}.render())
 
 	var out, outErr bytes.Buffer
-	if err := EnsureRootfulRunning(context.Background(), nil, &out, &outErr); err != nil {
-		t.Fatalf("EnsureRootfulRunning error: %v", err)
+	if err := EnsureMachineRunning(context.Background(), &out, &outErr); err != nil {
+		t.Fatalf("EnsureMachineRunning error: %v", err)
 	}
 	log := readLog(t, logPath)
-	if strings.Contains(log, "machine init") {
-		t.Errorf("did not expect machine init, log:\n%s", log)
+	if strings.Contains(log, "machine init") || strings.Contains(log, "machine start") {
+		t.Errorf("no lifecycle changes should occur, log:\n%s", log)
 	}
-	if strings.Contains(log, "machine start") {
-		t.Errorf("did not expect machine start, log:\n%s", log)
+	if strings.Contains(log, "{{.Rootful}}") {
+		t.Errorf("privilege mode is irrelevant and must not be queried, log:\n%s", log)
 	}
 	if out.Len() != 0 {
 		t.Errorf("expected no user messaging on no-op path, got %q", out.String())
 	}
 }
 
-func TestEnsureRootfulRunning_StartsStoppedRootfulMachine(t *testing.T) {
+//nolint:paralleltest // The test replaces process-wide PATH with a fake podman shim.
+func TestEnsureMachineRunning_StartsStoppedMachine(t *testing.T) {
 	logPath := installFakePodmanMachineShim(t, dispatchScript{
-		listOutput:    DefaultMachineName,
-		rootfulOutput: "true",
-		stateOutput:   "stopped",
+		listOutput:  DefaultMachineName,
+		stateOutput: "stopped",
 	}.render())
 
 	var out, outErr bytes.Buffer
-	if err := EnsureRootfulRunning(context.Background(), nil, &out, &outErr); err != nil {
-		t.Fatalf("EnsureRootfulRunning error: %v", err)
+	if err := EnsureMachineRunning(context.Background(), &out, &outErr); err != nil {
+		t.Fatalf("EnsureMachineRunning error: %v", err)
 	}
 	log := readLog(t, logPath)
 	if !strings.Contains(log, "machine start") {
-		t.Errorf("expected machine start, log:\n%s", log)
+		t.Errorf("stopped machine must be started, log:\n%s", log)
 	}
 	if strings.Contains(log, "machine init") {
 		t.Errorf("did not expect machine init, log:\n%s", log)
@@ -288,131 +260,15 @@ func TestEnsureRootfulRunning_StartsStoppedRootfulMachine(t *testing.T) {
 	}
 }
 
-func TestEnsureRootfulRunning_ConvertsRootlessToRootful(t *testing.T) {
-	logPath := installFakePodmanMachineShim(t, dispatchScript{
-		listOutput:    DefaultMachineName,
-		rootfulOutput: "false",
-	}.render())
-
-	var out, outErr bytes.Buffer
-	if err := EnsureRootfulRunning(context.Background(), nil, &out, &outErr); err != nil {
-		t.Fatalf("EnsureRootfulRunning error: %v", err)
-	}
-	log := readLog(t, logPath)
-	// Order matters: stop, set --rootful, start.
-	stopIdx := strings.Index(log, "machine stop")
-	setIdx := strings.Index(log, "machine set --rootful")
-	startIdx := strings.Index(log, "machine start")
-	if stopIdx < 0 || setIdx < 0 || startIdx < 0 {
-		t.Fatalf("expected stop/set/start in log:\n%s", log)
-	}
-	if !(stopIdx < setIdx && setIdx < startIdx) {
-		t.Errorf("expected stop→set→start ordering, got:\n%s", log)
-	}
-	if !strings.Contains(out.String(), "Podman machine is now rootful") {
-		t.Errorf("expected conversion completion messaging, got %q", out.String())
-	}
-}
-
 // Regression: the deploy pipeline passes nil writers into Runtime.Prepare,
 // which then forwards them here. Previously we hit fmt.Fprintln(nil, ...)
 // on the "machine does not exist" branch and panicked with a nil deref.
-func TestEnsureRootfulRunning_TolerantOfNilWriters(t *testing.T) {
+//
+//nolint:paralleltest // The test replaces process-wide PATH with a fake podman shim.
+func TestEnsureMachineRunning_TolerantOfNilWriters(t *testing.T) {
 	installFakePodmanMachineShim(t, dispatchScript{}.render())
 
-	if err := EnsureRootfulRunning(context.Background(), nil, nil, nil); err != nil {
-		t.Fatalf("EnsureRootfulRunning with nil writers unexpected error: %v", err)
-	}
-}
-
-func TestEnsureMachineRunning_CreatesRootlessWhenMissing(t *testing.T) {
-	logPath := installFakePodmanMachineShim(t, dispatchScript{
-		listOutput: "", // no machines
-	}.render())
-
-	var out, outErr bytes.Buffer
-	status, err := EnsureMachineRunning(context.Background(), &out, &outErr)
-	if err != nil {
-		t.Fatalf("EnsureMachineRunning error: %v", err)
-	}
-	if status.Rootful {
-		t.Errorf("fresh install must produce rootless machine, got %+v", status)
-	}
-	log := readLog(t, logPath)
-	if !strings.Contains(log, "machine init --disk-size 40") {
-		t.Errorf("expected machine init in log:\n%s", log)
-	}
-	if strings.Contains(log, "--rootful") {
-		t.Errorf("fresh install must NOT pass --rootful, log:\n%s", log)
-	}
-}
-
-// The behavioural change from the "always convert rootless to rootful"
-// policy: an existing rootless machine is now kept rootless. The Windows
-// runtime layers container-level pasta workaround flags on top instead of
-// mutating the user's machine.
-func TestEnsureMachineRunning_KeepsExistingRootlessMachine(t *testing.T) {
-	logPath := installFakePodmanMachineShim(t, dispatchScript{
-		listOutput:    DefaultMachineName,
-		rootfulOutput: "false",
-		stateOutput:   "running",
-	}.render())
-
-	var out, outErr bytes.Buffer
-	status, err := EnsureMachineRunning(context.Background(), &out, &outErr)
-	if err != nil {
-		t.Fatalf("EnsureMachineRunning error: %v", err)
-	}
-	if status.Rootful {
-		t.Errorf("existing rootless machine must be reported as rootless, got %+v", status)
-	}
-	log := readLog(t, logPath)
-	if strings.Contains(log, "machine set --rootful") {
-		t.Errorf("must not convert existing rootless machine, log:\n%s", log)
-	}
-	if strings.Contains(log, "machine stop") {
-		t.Errorf("must not stop existing rootless machine, log:\n%s", log)
-	}
-}
-
-func TestEnsureMachineRunning_StartsStoppedRootfulMachine(t *testing.T) {
-	logPath := installFakePodmanMachineShim(t, dispatchScript{
-		listOutput:    DefaultMachineName,
-		rootfulOutput: "true",
-		stateOutput:   "stopped",
-	}.render())
-
-	var out, outErr bytes.Buffer
-	status, err := EnsureMachineRunning(context.Background(), &out, &outErr)
-	if err != nil {
-		t.Fatalf("EnsureMachineRunning error: %v", err)
-	}
-	if !status.Rootful {
-		t.Errorf("existing rootful machine must be reported as rootful, got %+v", status)
-	}
-	log := readLog(t, logPath)
-	if !strings.Contains(log, "machine start") {
-		t.Errorf("stopped machine must be started, log:\n%s", log)
-	}
-}
-
-func TestEnsureMachineRunning_NoOpOnRunningRootfulMachine(t *testing.T) {
-	logPath := installFakePodmanMachineShim(t, dispatchScript{
-		listOutput:    DefaultMachineName,
-		rootfulOutput: "true",
-		stateOutput:   "running",
-	}.render())
-
-	var out, outErr bytes.Buffer
-	status, err := EnsureMachineRunning(context.Background(), &out, &outErr)
-	if err != nil {
-		t.Fatalf("EnsureMachineRunning error: %v", err)
-	}
-	if !status.Rootful {
-		t.Errorf("running rootful machine must be reported as rootful, got %+v", status)
-	}
-	log := readLog(t, logPath)
-	if strings.Contains(log, "machine start") || strings.Contains(log, "machine init") {
-		t.Errorf("no lifecycle changes should occur, log:\n%s", log)
+	if err := EnsureMachineRunning(context.Background(), nil, nil); err != nil {
+		t.Fatalf("EnsureMachineRunning with nil writers unexpected error: %v", err)
 	}
 }

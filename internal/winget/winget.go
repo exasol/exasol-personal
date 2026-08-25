@@ -140,8 +140,8 @@ func InstallPodman(ctx context.Context, out, outErr io.Writer) error {
 // Entries already on the current process's PATH are preserved and not
 // duplicated; new entries are prepended so podman resolves before any
 // conflicting shim earlier in PATH.
-func EnsurePodmanOnPath() error {
-	additions, err := podmanPathAdditions()
+func EnsurePodmanOnPath(ctx context.Context) error {
+	additions, err := podmanPathAdditions(ctx)
 	if err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func EnsurePodmanOnPath() error {
 // process's PATH so podman becomes findable. On Windows this reads the
 // merged machine- + user-scope PATH from the registry via PowerShell.
 // On non-Windows the override env is required (test-only).
-func podmanPathAdditions() (string, error) {
+func podmanPathAdditions(ctx context.Context) (string, error) {
 	if override, ok := os.LookupEnv(podmanPathAdditionsOverrideEnv); ok {
 		return override, nil
 	}
@@ -168,19 +168,19 @@ func podmanPathAdditions() (string, error) {
 		)
 	}
 
-	return readWindowsRegistryPATH()
+	return readWindowsRegistryPATH(ctx)
 }
 
 // readWindowsRegistryPATH concatenates the machine- and user-scope Path
 // values from the Windows registry into a single OS-PATH string using
 // PowerShell. If a scope is empty it is skipped; if both are empty the
 // result is empty and EnsurePodmanOnPath no-ops.
-func readWindowsRegistryPATH() (string, error) {
+func readWindowsRegistryPATH(ctx context.Context) (string, error) {
 	// GetEnvironmentVariable expands REG_EXPAND_SZ automatically.
 	const script = `$m = [Environment]::GetEnvironmentVariable("Path", "Machine")
 $u = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($m -and $u) { "$m;$u" } elseif ($m) { $m } elseif ($u) { $u } else { "" }`
-	cmd := exec.Command("powershell.exe", "-NoProfile",
+	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile",
 		"-ExecutionPolicy", "Bypass", "-Command", script)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -207,8 +207,9 @@ func mergePATH(currentPATH, additional string) string {
 			have[strings.ToLower(trimmed)] = struct{}{}
 		}
 	}
-	var toAdd []string
-	for _, entry := range strings.Split(additional, sep) {
+	additionalEntries := strings.Split(additional, sep)
+	toAdd := make([]string, 0, len(additionalEntries))
+	for _, entry := range additionalEntries {
 		trimmed := strings.TrimSpace(entry)
 		if trimmed == "" {
 			continue

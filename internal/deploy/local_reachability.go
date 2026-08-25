@@ -47,16 +47,16 @@ const windowsHostReachabilityMessage = "could not reach the local database endpo
 	"machine, out to 127.0.0.1 on the host. If every forwarded port is unreachable the break is " +
 	"almost always in that host-to-VM path rather than in the database itself.\n\n" +
 	"Likely causes, in decreasing order of frequency:\n" +
-	"  1. The podman machine is rootless. Rootless podman-for-windows uses `pasta` networking, " +
-	"which resets long-lived TCP/TLS connections and can drop the DB port entirely. Verify with " +
-	"`podman machine inspect --format {{.Rootful}} podman-machine-default`; convert with " +
-	"`podman machine stop && podman machine set --rootful && podman machine start` and retry.\n" +
-	"  2. Windows Firewall or a third-party security product is blocking loopback traffic to the " +
+	"  1. Windows Firewall or a third-party security product is blocking loopback traffic to the " +
 	"forwarded port. Temporarily allow the port and retry.\n" +
-	"  3. Another process (Docker Desktop, a running server, an older Exasol container) is " +
+	"  2. Another process (Docker Desktop, a running server, an older Exasol container) is " +
 	"already bound to the configured port. Use `netstat -ano | findstr <port>` to check.\n" +
-	"  4. The podman machine stopped between start and health-check. Run " +
-	"`podman machine ls` and start it if needed.\n\n" +
+	"  3. The podman machine stopped between start and health-check. Run " +
+	"`podman machine ls` and start it if needed.\n" +
+	"  4. The port is published on IPv6 only. WSL's localhost relay mirrors a dual-stack " +
+	"listener as [::1] and cannot forward it to the container's IPv4 listener. Check with " +
+	"`netstat -ano | findstr <port>`: the launcher publishes on 127.0.0.1 explicitly, so a " +
+	"[::1]-only binding means the container was not started by this launcher.\n\n" +
 	"Diagnostic commands: `podman ps -a`, `podman logs <container>`, `podman machine inspect`."
 
 // classifyLocalReachability inspects the local runtime's forwarded-port
@@ -99,15 +99,21 @@ func classifyLocalReachability(ctx context.Context, runtime localruntime.Runtime
 	return &localReachabilityError{message: localReachabilityMessageForRuntime(runtime)}
 }
 
+// Both direct-host platforms share one runtime type, so the guidance is
+// selected on the reported platform rather than on a concrete Go type.
 func localReachabilityMessageForRuntime(runtime localruntime.Runtime) string {
-	if _, isLinuxHost := runtime.(*localruntime.LinuxHostRuntime); isLinuxHost {
+	hostRuntime, isHostRuntime := runtime.(*localruntime.HostRuntime)
+	if !isHostRuntime {
+		return localReachabilityMessage
+	}
+	switch hostRuntime.Platform() {
+	case localruntime.HostPlatformLinux:
 		return linuxHostReachabilityMessage
-	}
-	if _, isWindowsHost := runtime.(*localruntime.WindowsHostRuntime); isWindowsHost {
+	case localruntime.HostPlatformWindows:
 		return windowsHostReachabilityMessage
+	default:
+		return localReachabilityMessage
 	}
-
-	return localReachabilityMessage
 }
 
 // diagnoseLocalFailure re-classifies a local-deployment operation failure

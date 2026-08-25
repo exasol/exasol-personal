@@ -29,12 +29,58 @@ const (
 
 var nanoInitParams = []string{"maxConnectionsLicenseLimit=20"}
 
-// LinuxHostRuntime owns Linux-specific prerequisites and delegates the database
-// container lifecycle to localinstall.
-type LinuxHostRuntime struct {
+// hostRuntimeEnvironmentPreparer supplies everything that differs between
+// direct-host platforms, so the container lifecycle below stays free of
+// platform branching. Each platform contributes three things:
+//
+//   - EnsureReady: satisfy prerequisites, requesting approval for any step
+//     that mutates the host.
+//   - EnsureStartable: re-check the cheap, approval-free prerequisites that
+//     can lapse between Prepare and Start.
+//   - NewExecutionEnvironment: build the environment PodmanInstall runs
+//     through, which is where a platform redirects individual commands.
+type hostRuntimeEnvironmentPreparer interface {
+	Platform() HostPlatform
+	EnsureReady(ctx context.Context, options PrepareOptions) error
+	EnsureStartable(ctx context.Context, out, outErr io.Writer) error
+	NewExecutionEnvironment(runtimeExec []string) localinstall.ExecutionEnvironment
+}
+
+// linuxHostEnvironmentPreparer requires nothing but a Podman on PATH: the
+// host kernel runs the containers directly, so there is no VM to manage and
+// nothing to install on the user's behalf.
+type linuxHostEnvironmentPreparer struct{}
+
+func (linuxHostEnvironmentPreparer) Platform() HostPlatform { return HostPlatformLinux }
+
+func (linuxHostEnvironmentPreparer) EnsureReady(_ context.Context, _ PrepareOptions) error {
+	if _, err := exec.LookPath("podman"); err != nil {
+		return fmt.Errorf("'podman' is required to run exasol locally on this platform: %w", err)
+	}
+
+	return nil
+}
+
+func (linuxHostEnvironmentPreparer) EnsureStartable(
+	_ context.Context, _, _ io.Writer,
+) error {
+	return nil
+}
+
+func (linuxHostEnvironmentPreparer) NewExecutionEnvironment(
+	runtimeExec []string,
+) localinstall.ExecutionEnvironment {
+	return localinstall.NewDirectExecutionEnvironment(runtimeExec)
+}
+
+// HostRuntime owns direct-host prerequisites and delegates the database
+// container lifecycle to localinstall. Platform differences arrive through
+// the injected preparer rather than through branches in this type.
+type HostRuntime struct {
 	deployment  config.DeploymentDir
 	paths       runtimePaths
 	manager     *runtimeartifacts.Manager
+	preparer    hostRuntimeEnvironmentPreparer
 	endpoint    *RuntimeEndpoint
 	runtimeExec []string
 	dialContext func(context.Context, string, string) (net.Conn, error)
@@ -45,23 +91,47 @@ type LinuxHostRuntime struct {
 func NewHostLinuxRuntime(
 	deployment config.DeploymentDir,
 	manager *runtimeartifacts.Manager,
-) *LinuxHostRuntime {
-	return &LinuxHostRuntime{
+) *HostRuntime {
+	return newHostRuntime(deployment, manager, linuxHostEnvironmentPreparer{})
+}
+
+func newHostRuntime(
+	deployment config.DeploymentDir,
+	manager *runtimeartifacts.Manager,
+	preparer hostRuntimeEnvironmentPreparer,
+) *HostRuntime {
+	return &HostRuntime{
 		deployment: deployment,
 		paths:      newRuntimePaths(deployment),
 		manager:    manager,
+		preparer:   preparer,
 	}
 }
 
-func (runtime *LinuxHostRuntime) Deployment() config.DeploymentDir {
+func (runtime *HostRuntime) Deployment() config.DeploymentDir {
 	return runtime.deployment
 }
 
-// VM sizing (CPU/memory/data disk) is not a Prepare concern: it's passed
-// directly as RunCommand args for "start".
-func (runtime *LinuxHostRuntime) Prepare(_ context.Context, _ io.Reader, _, _ io.Writer) error {
-	if _, err := exec.LookPath("podman"); err != nil {
-		return fmt.Errorf("'podman' is required to run exasol locally on this platform: %w", err)
+// Platform reports which direct-host platform this runtime serves, so
+// callers can select platform-specific user guidance.
+func (runtime *HostRuntime) Platform() HostPlatform {
+	return runtime.preparer.Platform()
+}
+
+// Prepare satisfies the platform's prerequisites and creates the runtime
+// work directory. VM sizing (CPU/memory/data disk) is not a Prepare concern:
+// it is passed directly as RunCommand args for "start".
+//
+// Progress and approval come from options, not from out/outErr: preparation
+// messaging must stay visible regardless of the --verbose gate that governs
+// subprocess output.
+func (runtime *HostRuntime) Prepare(
+	ctx context.Context,
+	_, _ io.Writer,
+	options PrepareOptions,
+) error {
+	if err := runtime.preparer.EnsureReady(ctx, options); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(runtime.paths.WorkDir, dirMode); err != nil {
 		return fmt.Errorf("failed to create local runtime directory: %w", err)
@@ -70,11 +140,17 @@ func (runtime *LinuxHostRuntime) Prepare(_ context.Context, _ io.Reader, _, _ io
 	return nil
 }
 
-func (runtime *LinuxHostRuntime) Start(
+func (runtime *HostRuntime) Start(
 	ctx context.Context,
 	out, outErr io.Writer,
 	runtimeConfig VMConfig,
 ) error {
+	// Re-check prerequisites that can lapse between Prepare and Start (a
+	// stopped Podman machine, say). Without this the failure surfaces later
+	// as an opaque "podman socket unreachable".
+	if err := runtime.preparer.EnsureStartable(ctx, out, outErr); err != nil {
+		return err
+	}
 	startConfig, err := runtime.podmanStartConfig(runtimeConfig.RuntimeConfig)
 	if err != nil {
 		return err
@@ -87,11 +163,11 @@ func (runtime *LinuxHostRuntime) Start(
 	return nil
 }
 
-func (runtime *LinuxHostRuntime) Stop(ctx context.Context, out, outErr io.Writer) error {
+func (runtime *HostRuntime) Stop(ctx context.Context, out, outErr io.Writer) error {
 	return runtime.install().Stop(ctx, out, outErr)
 }
 
-func (runtime *LinuxHostRuntime) Status(ctx context.Context) (*RuntimeStatus, error) {
+func (runtime *HostRuntime) Status(ctx context.Context) (*RuntimeStatus, error) {
 	status, err := runtime.install().Status(ctx, nil, nil)
 	if err != nil {
 		return nil, err
@@ -100,7 +176,7 @@ func (runtime *LinuxHostRuntime) Status(ctx context.Context) (*RuntimeStatus, er
 	return &RuntimeStatus{Running: status.Running}, nil
 }
 
-func (runtime *LinuxHostRuntime) Destroy(ctx context.Context, out, outErr io.Writer) error {
+func (runtime *HostRuntime) Destroy(ctx context.Context, out, outErr io.Writer) error {
 	if err := runtime.install().Destroy(ctx, out, outErr); err != nil {
 		return fmt.Errorf("failed to remove deployment: %w", err)
 	}
@@ -112,11 +188,11 @@ func (runtime *LinuxHostRuntime) Destroy(ctx context.Context, out, outErr io.Wri
 	return nil
 }
 
-func (runtime *LinuxHostRuntime) WorkaroundNanoStartupDurability(
+func (runtime *HostRuntime) WorkaroundNanoStartupDurability(
 	ctx context.Context,
 	out, outErr io.Writer,
 ) error {
-	environment := localinstall.NewDirectExecutionEnvironment(runtime.runCmd())
+	environment := runtime.preparer.NewExecutionEnvironment(runtime.runCmd())
 	if err := environment.Sync(ctx, out, outErr); err != nil {
 		return fmt.Errorf("failed to apply Nano startup durability workaround: %w", err)
 	}
@@ -124,15 +200,15 @@ func (runtime *LinuxHostRuntime) WorkaroundNanoStartupDurability(
 	return nil
 }
 
-func (runtime *LinuxHostRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
+func (runtime *HostRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
 	if runtime.endpoint == nil {
 		info, err := config.ReadDeploymentInfo(runtime.Deployment())
 		if err != nil {
-			return nil, fmt.Errorf("linux host runtime endpoint is unavailable: %w", err)
+			return nil, fmt.Errorf("host runtime endpoint is unavailable: %w", err)
 		}
 		if info.Connection == nil || info.Connection.DBPort <= 0 || info.Connection.DBPort > 65535 {
 			return nil, errors.New(
-				"linux host runtime deployment information has no valid database endpoint",
+				"host runtime deployment information has no valid database endpoint",
 			)
 		}
 		runtime.endpoint = &RuntimeEndpoint{DBPort: info.Connection.DBPort}
@@ -141,7 +217,7 @@ func (runtime *LinuxHostRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
 	return &VMRuntimeEndpoint{RuntimeEndpoint: *runtime.endpoint}, nil
 }
 
-func (runtime *LinuxHostRuntime) HealthCheck(ctx context.Context) (*HealthCheckResult, error) {
+func (runtime *HostRuntime) HealthCheck(ctx context.Context) (*HealthCheckResult, error) {
 	endpoint, err := runtime.ReadEndpoints()
 	if err != nil {
 		return nil, err
@@ -162,7 +238,7 @@ func (runtime *LinuxHostRuntime) HealthCheck(ctx context.Context) (*HealthCheckR
 	}}, nil
 }
 
-func (*LinuxHostRuntime) OpenHostShell(
+func (*HostRuntime) OpenHostShell(
 	context.Context,
 	io.Reader,
 	io.Writer,
@@ -171,7 +247,7 @@ func (*LinuxHostRuntime) OpenHostShell(
 	return ErrHostShellUnsupported
 }
 
-func (*LinuxHostRuntime) OpenContainerShell(
+func (*HostRuntime) OpenContainerShell(
 	context.Context,
 	io.Reader,
 	io.Writer,
@@ -204,18 +280,30 @@ func classifyHostPortHealth(err error) PortState {
 	return PortStateBlocked
 }
 
-func (runtime *LinuxHostRuntime) install() *localinstall.PodmanInstall {
-	return localinstall.NewPodmanInstall(
-		runtime.Deployment(), runtime.manager, runtime.runCmd(),
-		SLCStagingDir(runtime.Deployment()), SLCStatusPath(runtime.Deployment()),
+func (runtime *HostRuntime) install() *localinstall.PodmanInstall {
+	resolveImage := func(ctx context.Context) (localinstall.RuntimePath, error) {
+		path, err := localinstall.ResolveNanoImage(ctx, runtime.manager)
+		if err != nil {
+			return localinstall.RuntimePath{}, err
+		}
+
+		return localinstall.IdentityRuntimePath(path), nil
+	}
+
+	return localinstall.NewPodmanInstallWithEnvironment(
+		runtime.Deployment(),
+		runtime.preparer.NewExecutionEnvironment(runtime.runCmd()),
+		resolveImage,
+		localinstall.IdentityRuntimePath(SLCStagingDir(runtime.Deployment())),
+		localinstall.IdentityRuntimePath(SLCStatusPath(runtime.Deployment())),
 	)
 }
 
-func (runtime *LinuxHostRuntime) runCmd() []string {
+func (runtime *HostRuntime) runCmd() []string {
 	return runtime.runtimeExec
 }
 
-func (runtime *LinuxHostRuntime) podmanStartConfig(
+func (runtime *HostRuntime) podmanStartConfig(
 	runtimeConfig RuntimeConfig,
 ) (localinstall.StartConfig, error) {
 	hostDBPort, err := resolveHostPodmanDBPort(runtimeConfig.Ports)

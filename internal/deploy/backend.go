@@ -34,6 +34,16 @@ type DeployOptions struct {
 	// .terraform.lock.hcl). When false, the backend must treat any such
 	// lockfile as read-only.
 	UpdateDependencyLockfile bool
+
+	// RuntimePreparation carries the approval and progress policy applied
+	// before the deployment records an operation in progress.
+	RuntimePreparation localruntime.PrepareOptions
+}
+
+// StartOptions carries options for a single start invocation.
+type StartOptions struct {
+	WaitTimeoutSeconds int
+	RuntimePreparation localruntime.PrepareOptions
 }
 
 // deploymentBackend exposes the lifecycle and configuration operations the
@@ -44,6 +54,14 @@ type DeployOptions struct {
 // when the backend was constructed (see newDeploymentBackend).
 // nolint: interfacebloat
 type deploymentBackend interface {
+	// Prepare satisfies host prerequisites. It runs before the deployment
+	// records an operation in progress, so a declined or failed
+	// prerequisite leaves the deployment retryable.
+	Prepare(
+		ctx context.Context,
+		out, outErr io.Writer,
+		options localruntime.PrepareOptions,
+	) error
 	ValidateEnvironment() error
 	SetupWorkspace(ctx context.Context) error
 	Configure(
@@ -56,8 +74,8 @@ type deploymentBackend interface {
 	ReadDeploymentConfigVariables() (map[string]ConfigVariableDefinition, error)
 	OpenHostShell(ctx context.Context, selectedNode string) error
 	OpenCOSShell(ctx context.Context) error
-	Deploy(ctx context.Context, in io.Reader, out, outErr io.Writer, options DeployOptions) error
-	Start(ctx context.Context, in io.Reader, out, outErr io.Writer, waitTimeoutSeconds int) error
+	Deploy(ctx context.Context, out, outErr io.Writer, options DeployOptions) error
+	Start(ctx context.Context, out, outErr io.Writer, waitTimeoutSeconds int) error
 	Stop(ctx context.Context, out, outErr io.Writer) error
 	Destroy(ctx context.Context, out, outErr io.Writer) error
 }

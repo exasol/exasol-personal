@@ -57,10 +57,14 @@ var startCmd = &cobra.Command{
 
 		if err := deploy.Start(
 			cmd.Context(),
-			cmd.InOrStdin(),
 			deployment,
 			commonFlags.DeployVerbose,
-			waitTimeoutSeconds,
+			deploy.StartOptions{
+				WaitTimeoutSeconds: waitTimeoutSeconds,
+				RuntimePreparation: hostRuntimePreparationOptions(
+					cmd, commonFlags.LocalRuntimeAutoApprove,
+				),
+			},
 		); err != nil {
 			if errors.Is(err, deploy.ErrLifecycleActionSkipped) {
 				return nil
@@ -120,6 +124,7 @@ func registerStartFlags() {
 		deploy.StartedDefaultTimeoutInMinutes,
 		"Maximum minutes to wait for the database to become ready",
 	)
+	registerRuntimePreparationFlag(startCmd, commonFlags)
 }
 
 // nolint: gochecknoinits

@@ -166,11 +166,13 @@ func runInstallPersistentPostRun(cmd *cobra.Command, _ []string) error {
 	deployment := commonFlags.Deployment()
 	if err := deploy.Deploy(
 		cmd.Context(),
-		cmd.InOrStdin(),
 		deployment,
 		commonFlags.DeployVerbose,
 		deploy.DeployOptions{
 			UpdateDependencyLockfile: commonFlags.DeployTofuUpdateLockfile,
+			RuntimePreparation: hostRuntimePreparationOptions(
+				cmd, commonFlags.LocalRuntimeAutoApprove,
+			),
 		},
 	); err != nil {
 		return fmt.Errorf("deployment failed: %w", err)

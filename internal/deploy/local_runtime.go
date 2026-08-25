@@ -26,21 +26,6 @@ const localSkipDatabaseWaitEnv = "EXASOL_LOCAL_SKIP_DB_WAIT"
 // mount remains available for Java UDF aliases.
 const currentJavaMountTarget = slc.SLCMountRoot + "/current-java"
 
-func startLocalRuntime(
-	ctx context.Context,
-	in io.Reader,
-	runtime localruntime.Runtime,
-	runtimeConfig localRuntimeConfig,
-	waitTimeoutSeconds int,
-	out, outErr io.Writer,
-) error {
-	if err := runtime.Prepare(ctx, in, out, outErr); err != nil {
-		return err
-	}
-
-	return startPreparedLocalRuntime(ctx, runtime, runtimeConfig, waitTimeoutSeconds, out, outErr)
-}
-
 func startPreparedLocalRuntime(
 	ctx context.Context,
 	runtime localruntime.Runtime,

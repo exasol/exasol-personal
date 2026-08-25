@@ -14,18 +14,22 @@ import (
 	"testing"
 )
 
+// windowsGOOS names the platform these guards compare against; the fake
+// shims below are POSIX shell scripts and cannot run on Windows.
+const windowsGOOS = "windows"
+
 // installFakeWinget drops a POSIX shell script named "winget" into a
 // fresh temp directory, prepends that directory to PATH, and returns the
 // path of an argv-log file the shim writes to. Mirrors the fake-podman
 // pattern used elsewhere in this repo.
-func installFakeWinget(t *testing.T, body string) (argvLogPath string) {
+func installFakeWinget(t *testing.T, body string) string {
 	t.Helper()
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("fake winget shim uses a POSIX shell script; skipping on windows")
 	}
 
 	dir := t.TempDir()
-	argvLogPath = filepath.Join(dir, "argv.log")
+	argvLogPath := filepath.Join(dir, "argv.log")
 	script := "#!/bin/sh\n" +
 		"for arg in \"$@\"; do printf '%s\\n' \"$arg\" >> \"" + argvLogPath + "\"; done\n" +
 		"printf -- '---\\n' >> \"" + argvLogPath + "\"\n" +
@@ -49,12 +53,13 @@ func readArgvCalls(t *testing.T, logPath string) [][]string {
 		}
 		t.Fatalf("read argv log: %v", err)
 	}
-	var calls [][]string
-	var current []string
-	for _, line := range strings.Split(string(data), "\n") {
+	lines := strings.Split(string(data), "\n")
+	calls := make([][]string, 0, len(lines))
+	current := make([]string, 0, len(lines))
+	for _, line := range lines {
 		if line == "---" {
 			calls = append(calls, current)
-			current = nil
+			current = make([]string, 0, len(lines))
 
 			continue
 		}
@@ -80,6 +85,7 @@ func slicesEqual(a, b []string) bool {
 	return true
 }
 
+//nolint:paralleltest // The test replaces process-wide PATH or env.
 func TestInstallPodman_Success(t *testing.T) {
 	logPath := installFakeWinget(t, `printf 'Downloading...\nInstalled.\n'; exit 0`)
 	var out, outErr bytes.Buffer
@@ -105,6 +111,7 @@ func TestInstallPodman_Success(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // The test replaces process-wide PATH or env.
 func TestPodmanInstallCommand(t *testing.T) {
 	got := PodmanInstallCommand()
 	want := "winget install --exact --id RedHat.Podman --source winget " +
@@ -115,7 +122,7 @@ func TestPodmanInstallCommand(t *testing.T) {
 }
 
 func TestInstallPodman_WingetMissingReturnsSentinel(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("cannot reliably clear winget from PATH on windows")
 	}
 	t.Setenv("PATH", t.TempDir())
@@ -129,6 +136,7 @@ func TestInstallPodman_WingetMissingReturnsSentinel(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // The test replaces process-wide PATH or env.
 func TestInstallPodman_WingetExitsNonZeroStreamsStderr(t *testing.T) {
 	installFakeWinget(t, `echo "package not found" >&2; exit 1`)
 	var out, outErr bytes.Buffer
@@ -146,7 +154,7 @@ func TestInstallPodman_WingetExitsNonZeroStreamsStderr(t *testing.T) {
 }
 
 func TestLookupWinget_MissingReturnsSentinel(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("cannot reliably clear winget from PATH on windows")
 	}
 	t.Setenv("PATH", t.TempDir())
@@ -157,6 +165,7 @@ func TestLookupWinget_MissingReturnsSentinel(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // The test replaces process-wide PATH or env.
 func TestLookupWinget_PresentReturnsNil(t *testing.T) {
 	installFakeWinget(t, `exit 0`)
 	if err := LookupWinget(); err != nil {
@@ -169,8 +178,8 @@ func TestEnsurePodmanOnPath_PrependsNewEntry(t *testing.T) {
 	t.Setenv(podmanPathAdditionsOverrideEnv, installDir)
 	t.Setenv("PATH", "/some/existing/path")
 
-	if err := EnsurePodmanOnPath(); err != nil {
-		t.Fatalf("EnsurePodmanOnPath() unexpected error: %v", err)
+	if err := EnsurePodmanOnPath(context.Background()); err != nil {
+		t.Fatalf("EnsurePodmanOnPath(context.Background()) unexpected error: %v", err)
 	}
 
 	got := os.Getenv("PATH")
@@ -191,8 +200,8 @@ func TestEnsurePodmanOnPath_DropsDuplicates(t *testing.T) {
 	t.Setenv(podmanPathAdditionsOverrideEnv,
 		installDir+sep+otherDir+sep+"/system32")
 
-	if err := EnsurePodmanOnPath(); err != nil {
-		t.Fatalf("EnsurePodmanOnPath() unexpected error: %v", err)
+	if err := EnsurePodmanOnPath(context.Background()); err != nil {
+		t.Fatalf("EnsurePodmanOnPath(context.Background()) unexpected error: %v", err)
 	}
 	got := os.Getenv("PATH")
 	if !strings.Contains(got, installDir) {
@@ -208,21 +217,24 @@ func TestEnsurePodmanOnPath_EmptyAdditionsIsNoOp(t *testing.T) {
 	t.Setenv("PATH", original)
 	t.Setenv(podmanPathAdditionsOverrideEnv, "")
 
-	if err := EnsurePodmanOnPath(); err != nil {
-		t.Fatalf("EnsurePodmanOnPath() unexpected error: %v", err)
+	if err := EnsurePodmanOnPath(context.Background()); err != nil {
+		t.Fatalf("EnsurePodmanOnPath(context.Background()) unexpected error: %v", err)
 	}
 	if got := os.Getenv("PATH"); got != original {
 		t.Errorf("PATH mutated on empty additions: want %q, got %q", original, got)
 	}
 }
 
+//nolint:paralleltest // The test replaces process-wide PATH or env.
 func TestEnsurePodmanOnPath_NonWindowsWithoutOverrideFails(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("this guard only fires on non-windows")
 	}
-	os.Unsetenv(podmanPathAdditionsOverrideEnv)
+	if err := os.Unsetenv(podmanPathAdditionsOverrideEnv); err != nil {
+		t.Fatalf("unset override env: %v", err)
+	}
 
-	err := EnsurePodmanOnPath()
+	err := EnsurePodmanOnPath(context.Background())
 	if err == nil {
 		t.Fatal("expected error on non-windows without override")
 	}

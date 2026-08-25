@@ -156,9 +156,12 @@ func TestLocalReachabilityMessageForWindowsHostDoesNotUseMacOSGuidance(t *testin
 		strings.Contains(message, "System Settings") {
 		t.Fatalf("Windows guidance must not contain macOS advice: %q", message)
 	}
-	if !strings.Contains(message, "rootful") ||
-		!strings.Contains(message, "Windows Firewall") {
-		t.Fatalf("Windows guidance must mention rootful and firewall: %q", message)
+	if !strings.Contains(message, "Windows Firewall") ||
+		!strings.Contains(message, "podman machine") {
+		t.Fatalf("Windows guidance must mention the firewall and the podman machine: %q", message)
+	}
+	if strings.Contains(message, "set --rootful") {
+		t.Fatalf("Windows guidance must not advise converting to rootful: %q", message)
 	}
 }
 

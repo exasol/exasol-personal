@@ -203,10 +203,19 @@ func (install *PodmanInstall) Start(
 		"--pids-limit=" + nanoPIDsLimit,
 		"--security-opt", nanoSecurityOpt,
 		"--restart", nanoRestartPolicy,
-		"-p", fmt.Sprintf("%d:%d", startConfig.ContainerDBPort, nanoInternalDBPort),
+		// Publish on 127.0.0.1 rather than the wildcard. On Windows the
+		// WSL2 podman machine has no IPv6 route, but pasta still creates a
+		// dual-stack published listener, and WSL's NAT localhost relay
+		// mirrors that as [::1] only. Clients then prefer the IPv6 path,
+		// connect successfully, and get reset because pasta cannot forward
+		// to the container's IPv4-only listener. Binding IPv4 explicitly
+		// keeps the relay on 127.0.0.1. See
+		// https://github.com/microsoft/WSL/issues/6387 and
+		// https://github.com/microsoft/WSL/blob/master/doc/docs/
+		// technical-documentation/localhost.md
+		"-p", fmt.Sprintf("127.0.0.1:%d:%d", startConfig.ContainerDBPort, nanoInternalDBPort),
 		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
 	}
-	args = append(args, startConfig.ExtraRunArgs...)
 	for _, slc := range availableSLCs {
 		args = append(args,
 			"--mount",

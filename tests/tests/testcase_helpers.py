@@ -41,6 +41,7 @@ __all__ = [
     "local_deploy_base_args",
     "preset_id_or_skip",
     "requires_macos_arm",
+    "requires_posix_pty",
     "run_command",
     "skip_unless_infra",
     "skip_without_cloud_deploy_optin",
@@ -57,6 +58,14 @@ IS_MACOS_ARM: bool = sys.platform == "darwin" and platform.machine().lower() in 
 requires_macos_arm = pytest.mark.skipif(
     not IS_MACOS_ARM,
     reason="local VM deployments require macOS Apple Silicon",
+)
+
+# Skip a case that drives the CLI through a real pseudo-terminal. This is a
+# property of the test, not of local deployments: it needs os.openpty and the
+# POSIX termios/fcntl ioctls, which Windows does not provide.
+requires_posix_pty = pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="test drives a pseudo-terminal, which requires POSIX openpty/termios",
 )
 
 

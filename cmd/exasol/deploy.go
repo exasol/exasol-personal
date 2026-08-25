@@ -28,11 +28,13 @@ var deployCmd = &cobra.Command{
 
 		if err := deploy.Deploy(
 			cmd.Context(),
-			cmd.InOrStdin(),
 			deployment,
 			commonFlags.DeployVerbose,
 			deploy.DeployOptions{
 				UpdateDependencyLockfile: commonFlags.DeployTofuUpdateLockfile,
+				RuntimePreparation: hostRuntimePreparationOptions(
+					cmd, commonFlags.LocalRuntimeAutoApprove,
+				),
 			},
 		); err != nil {
 			return err

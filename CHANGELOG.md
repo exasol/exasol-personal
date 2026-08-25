@@ -20,16 +20,28 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 - Added support for "local" deployments on Linux. This requires `podman` to be available.
 
+- Added support for "local" deployments on Windows amd64. The database runs through host Podman inside Podman's default machine. If `podman` is missing, the launcher offers to install it with Windows Package Manager, refreshes `PATH`, and prepares the default machine; installing Podman may request administrator approval. Podman's default machine is shared host-wide, so the launcher never changes an existing machine's configuration and leaves it running when a deployment is stopped or destroyed. `exasol shell host` and `exasol shell container` are not supported on Windows, and Windows arm64 is not supported for local deployments.
+
+  Example: `exasol install local --auto-approve`
+
+- Added `--auto-approve` to `exasol deploy`, `exasol install`, and `exasol start` to approve local runtime host preparation without prompting.
+
+  Example: `exasol start --auto-approve`
+
 ### Changed
 
 - Documented named deployments, the `exasol slc` command group, and `exasol diag local` in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers UDFs and script language containers, and the Limitations section no longer states that UDFs are unavailable on local deployments.
 - macOS local deployments now run the same Podman installation used on Linux inside a managed VM. The VM launcher is responsible only for VM lifecycle, port forwarding, shared files, and command execution; deployment state no longer exposes its SSH transport.
+- Local runtime host preparation now runs before a deployment records an operation in progress, so a declined or failed prerequisite leaves the deployment in its previous state and the command can simply be retried.
 
 ### Fixed
 
+- Local runtime host preparation no longer proceeds without approval when a command cannot prompt. Previously a non-interactive invocation was treated as consent, so a scripted run could install Podman unattended. Such runs now fail and explain how to proceed; pass `--auto-approve` for unattended setup.
+
 ### Breaking Changes
 
-- None.
+- Local runtime host preparation in a non-interactive invocation now fails instead of proceeding without approval. Scripts that relied on the previous behavior must pass `--auto-approve` to `exasol deploy`, `exasol install`, or `exasol start`.
+- Local deployments now publish the database port on `127.0.0.1` instead of on all addresses, so it is no longer reachable from other hosts. The documented connection endpoint is unchanged; use a cloud deployment if the database must be reachable over the network.
 
 ## 2.2.0 - 2026-08-06
 

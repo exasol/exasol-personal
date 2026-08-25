@@ -49,7 +49,8 @@ const (
 )
 
 var errUnsupportedLocalPlatform = errors.New(
-	"local deployments are only supported on macOS Apple Silicon, Linux amd64/arm64, and Windows amd64",
+	"local deployments are only supported on macOS Apple Silicon, " +
+		"Linux amd64/arm64, and Windows amd64",
 )
 
 func newLocalBackend(
@@ -87,6 +88,21 @@ type localBackend struct {
 
 type localPlatformCapabilities struct {
 	vmSizing bool
+}
+
+// Prepare validates the platform, then satisfies the runtime's host
+// prerequisites. Both run before the deployment records an operation in
+// progress.
+func (b *localBackend) Prepare(
+	ctx context.Context,
+	out, outErr io.Writer,
+	options localruntime.PrepareOptions,
+) error {
+	if err := b.ValidateEnvironment(); err != nil {
+		return err
+	}
+
+	return b.runtime.Prepare(ctx, out, outErr, options)
 }
 
 func (b *localBackend) ValidateEnvironment() error {
@@ -537,47 +553,40 @@ func validateLocalRuntimeConfig(
 
 func (b *localBackend) Deploy(
 	ctx context.Context,
-	in io.Reader,
 	out, outErr io.Writer,
 	_ DeployOptions,
 ) error {
 	// Deploy has no caller-supplied timeout in the backend interface, unlike
 	// Start; 0 falls back to LocalDatabaseStartedDefaultTimeoutSeconds.
-	return b.deployOrStart(ctx, in, 0, out, outErr)
+	return b.deployOrStart(ctx, 0, out, outErr)
 }
 
 func (b *localBackend) Start(
 	ctx context.Context,
-	in io.Reader,
 	out, outErr io.Writer,
 	waitTimeoutSeconds int,
 ) error {
-	return b.deployOrStart(ctx, in, waitTimeoutSeconds, out, outErr)
+	return b.deployOrStart(ctx, waitTimeoutSeconds, out, outErr)
 }
 
 func (b *localBackend) Stop(
 	ctx context.Context,
 	out, outErr io.Writer,
 ) error {
-	return stopLocalRuntime(
-		ctx, b.runtime, localBackendVisibleWriter(out), localBackendVisibleWriter(outErr),
-	)
+	return stopLocalRuntime(ctx, b.runtime, out, outErr)
 }
 
 func (b *localBackend) Destroy(
 	ctx context.Context,
 	out, outErr io.Writer,
 ) error {
-	return destroyLocalRuntime(
-		ctx, b.runtime, localBackendVisibleWriter(out), localBackendVisibleWriter(outErr),
-	)
+	return destroyLocalRuntime(ctx, b.runtime, out, outErr)
 }
 
-// deployOrStart validates the environment, resolves runtime config, and
-// starts the VM. Deploy and Start differ only in the timeout they pass through.
+// deployOrStart resolves runtime config and starts an already-prepared
+// runtime. Deploy and Start differ only in the timeout they pass through.
 func (b *localBackend) deployOrStart(
 	ctx context.Context,
-	in io.Reader,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
 ) error {
@@ -591,23 +600,7 @@ func (b *localBackend) deployOrStart(
 		return err
 	}
 
-	return startLocalRuntime(
-		ctx, in, b.runtime, runtimeConfig, waitTimeoutSeconds,
-		localBackendVisibleWriter(out), localBackendVisibleWriter(outErr),
+	return startPreparedLocalRuntime(
+		ctx, b.runtime, runtimeConfig, waitTimeoutSeconds, out, outErr,
 	)
-}
-
-// localBackendVisibleWriter replaces a nil io.Writer with os.Stderr so
-// launcher progress messages and interactive prompts issued by the local
-// runtime remain visible even when the caller passed nil (as the deploy
-// pipeline does when --verbose is not set). The --verbose gate was
-// designed for optional subprocess output from tofu-backed deployments;
-// it should not silence a Yes/No prompt or a "podman install progress"
-// stream that the user must see to make progress.
-func localBackendVisibleWriter(w io.Writer) io.Writer {
-	if w == nil {
-		return os.Stderr
-	}
-
-	return w
 }

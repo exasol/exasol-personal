@@ -133,9 +133,13 @@ The `destroy` command tears down all resources:
 
 Local deployments share one Podman installation policy that owns database images, containers, persistent data, and script language containers.
 
-On Linux, the policy executes directly against host Podman. On macOS, a runtime starts a managed VM, establishes labeled service forwarding, stages artifacts through a shared directory, and executes the same policy inside the VM. Effective host endpoints are returned to the deployment workflow after the VM starts.
+On Linux and Windows, the policy executes directly against host Podman through one shared host runtime. Each platform contributes its own prerequisites, its start-time re-checks, and the environment installation commands run through, so the container lifecycle carries no platform branching. On macOS, a runtime starts a managed VM, establishes labeled service forwarding, stages artifacts through a shared directory, and executes the same policy inside the VM. Effective host endpoints are returned to the deployment workflow after the runtime starts.
 
 The macOS VM launcher owns only the VM lifecycle, forwarding, shared directory, and guest command execution. It does not own application containers or expose its command transport through deployment state.
+
+A runtime that needs to change the host declares the change and the exact commands it intends to run; the command layer decides whether to apply them. This keeps approval policy and terminal detection out of the runtimes, and lets a runtime request a change without knowing how it will be presented. Preparation runs before the workflow records an operation in progress, so a declined or failed prerequisite leaves the deployment retryable.
+
+On Windows the containers run inside Podman's default machine, which the launcher borrows rather than owns: it creates the machine if absent and starts it if stopped, but never changes an existing machine's configuration, and leaves it running when a deployment is destroyed. The deployment's database files are not part of that machine — they live in the deployment directory on the host filesystem and are mounted in, which on Windows means they cross the machine's filesystem passthrough.
 
 ## Cloud Infrastructure Architecture
 

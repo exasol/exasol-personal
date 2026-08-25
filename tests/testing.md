@@ -287,9 +287,12 @@ Integration tests can be run using `task tests-integration` or in CI using `task
 | `test_install_help` | Tests install help documentation |
 | `test_install_executes_init_step` | Tests that install executes the init step and surfaces failures correctly |
 | `test_init_local_rejects_unsupported_platform_before_writing_files` | Tests platform validation for local deployments |
+| `test_init_local_host_help_exposes_only_host_parameters` | Tests that the Linux and Windows host runtimes expose no VM sizing flags |
+| `test_init_local_host_configuration_omits_vm_sizing` | Tests that Linux and Windows host runtime configuration contains only host-relevant options |
 | `test_init_local_accepts_explicit_minimum_memory` | Tests minimum memory configuration for local deployments |
 | `test_init_local_rejects_memory_below_minimum` | Tests that memory below the minimum is rejected before any files are written |
 | `test_deploy_local_with_fake_runner_override` | Tests local deployment end-to-end using a fake runner script |
+| `test_install_local_windows_lifecycle` | Tests Windows Podman preparation, SQL readiness, stop/start persistence, and destroy cleanup |
 
 ## Reconfiguration
 

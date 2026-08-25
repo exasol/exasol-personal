@@ -129,9 +129,7 @@ func TestNewLocalRuntimeForPlatform_SelectsRuntime(t *testing.T) {
 			goos: localLinuxOS, goarch: localLinuxAMD64,
 			assert: func(t *testing.T, selected localruntime.Runtime) {
 				t.Helper()
-				if _, ok := selected.(*localruntime.LinuxHostRuntime); !ok {
-					t.Fatalf("expected LinuxHostRuntime, got %T", selected)
-				}
+				assertHostRuntimePlatform(t, selected, localruntime.HostPlatformLinux)
 			},
 		},
 		{
@@ -139,9 +137,7 @@ func TestNewLocalRuntimeForPlatform_SelectsRuntime(t *testing.T) {
 			goos: localLinuxOS, goarch: localLinuxARM64,
 			assert: func(t *testing.T, selected localruntime.Runtime) {
 				t.Helper()
-				if _, ok := selected.(*localruntime.LinuxHostRuntime); !ok {
-					t.Fatalf("expected LinuxHostRuntime, got %T", selected)
-				}
+				assertHostRuntimePlatform(t, selected, localruntime.HostPlatformLinux)
 			},
 		},
 		{
@@ -149,9 +145,7 @@ func TestNewLocalRuntimeForPlatform_SelectsRuntime(t *testing.T) {
 			goos: localWindowsOS, goarch: localWindowsAMD64,
 			assert: func(t *testing.T, selected localruntime.Runtime) {
 				t.Helper()
-				if _, ok := selected.(*localruntime.WindowsHostRuntime); !ok {
-					t.Fatalf("expected WindowsHostRuntime, got %T", selected)
-				}
+				assertHostRuntimePlatform(t, selected, localruntime.HostPlatformWindows)
 			},
 		},
 	}
@@ -178,5 +172,23 @@ func TestNewLocalRuntimeForPlatform_RejectsUnsupportedPlatform(t *testing.T) {
 	)
 	if !errors.Is(err, errUnsupportedLocalPlatform) {
 		t.Fatalf("expected unsupported platform error, got %v", err)
+	}
+}
+
+// assertHostRuntimePlatform checks the selector produced a direct-host
+// runtime for the expected platform. Linux and Windows share one runtime
+// type, so the platform is what distinguishes them.
+func assertHostRuntimePlatform(
+	t *testing.T,
+	selected localruntime.Runtime,
+	expected localruntime.HostPlatform,
+) {
+	t.Helper()
+	hostRuntime, ok := selected.(*localruntime.HostRuntime)
+	if !ok {
+		t.Fatalf("expected HostRuntime, got %T", selected)
+	}
+	if hostRuntime.Platform() != expected {
+		t.Fatalf("expected platform %q, got %q", expected, hostRuntime.Platform())
 	}
 }
