@@ -44,6 +44,21 @@ Read-only connect / query / output workflows against the running deployment.
 
 Provisioning and lifecycle behavior.
 
+`tests/tests/deployment/test_virtual_schema.py`
+
+| Test | Targets | Description |
+|------|---------|-------------|
+| `test_postgresql_virtual_schema_create_query_and_refresh` | local | Verifies a JDBC adapter can be staged, registered, queried, and refreshed against PostgreSQL |
+
+The Virtual Schema smoke test starts an ephemeral PostgreSQL container and downloads and
+verifies the pinned adapter and JDBC driver listed in
+`tests/tests/deployment/assets/virtual_schema_artifacts.json`. Update that file when moving
+to newer versions; it also controls the PostgreSQL image version. The test requires Podman and network
+access to pull the image and artifacts. PostgreSQL runs in the Exasol container's Podman network
+namespace and is accessed through `127.0.0.1:5432`, avoiding host-gateway dependencies on both Linux
+and macOS. The Java adapter JVM is configured to use UTC so the host runner's timezone does not affect
+JDBC adapter startup.
+
 `tests/tests/deployment/test_deploy_lifecycle.py`
 
 | Test | Targets | Description |
