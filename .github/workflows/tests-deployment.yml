@@ -3,6 +3,11 @@ name: Deployment Tests
 on:
   workflow_dispatch:
     inputs:
+      runner_smoke:
+        description: Run only the selfhosted runner smoke test
+        required: false
+        default: false
+        type: boolean
       suite:
         description: Which test suite to run
         required: false
@@ -29,7 +34,32 @@ env:
   STATUS_DESC: "Deployment tests testing Exasol launcher end to end"
 
 jobs:
+  runner-smoke:
+    name: self hosted runner smoke test
+    if: ${{ inputs.runner_smoke }}
+    timeout-minutes: 10
+    runs-on:
+      - self-hosted
+      - macOS
+      - ARM64
+      - virtualization
+      - osx06
+    steps:
+      - name: Verify runner environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Runner: ${RUNNER_NAME}"
+          echo "User: $(id -un)"
+          sw_vers
+          for tool in git python3 task podman; do
+            command -v "${tool}"
+            "${tool}" --version
+          done
+          go version
+          podman info
   plan-tests-deployment:
+    if: ${{ !inputs.runner_smoke }}
     runs-on: ubuntu-latest
     outputs:
       cloud_matrix: ${{ steps.plan.outputs.cloud_matrix }}
