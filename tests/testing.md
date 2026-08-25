@@ -44,6 +44,15 @@ Read-only connect / query / output workflows against the running deployment.
 
 Provisioning and lifecycle behavior.
 
+`tests/tests/deployment/test_virtual_schema.py`
+
+| Test | Targets | Description |
+|------|---------|-------------|
+| `test_postgresql_virtual_schema_create_query_and_refresh` | local | Verifies a JDBC adapter can be staged, registered, queried, and refreshed against PostgreSQL |
+
+See the [Virtual schemas on local deployments](../doc/virtual_schemas.md) guide for the setup
+and execution details covered by this smoke test.
+
 `tests/tests/deployment/test_deploy_lifecycle.py`
 
 | Test | Targets | Description |
