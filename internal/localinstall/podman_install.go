@@ -204,7 +204,12 @@ func (install *PodmanInstall) Start(
 		"--pids-limit=" + nanoPIDsLimit,
 		"--security-opt", nanoSecurityOpt,
 		"--restart", nanoRestartPolicy,
-		"-p", fmt.Sprintf("%d:%d", startConfig.ContainerDBPort, nanoInternalDBPort),
+		// At least on windows, listening on [::1] doesn't work because the
+		// default wsl2 "podman machine" has no ipv6 connectivity.  But the
+		// wsl2 forwarding / pasta don't realize this and set up ipv6, which
+		// clients then prefer over ipv4 even though it's broken.  Use 127.0.0.1
+		// explicitly here to work around this.
+		"-p", fmt.Sprintf("127.0.0.1:%d:%d", startConfig.ContainerDBPort, nanoInternalDBPort),
 		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
 	}
 	for _, slc := range availableSLCs {
