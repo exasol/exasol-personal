@@ -54,9 +54,11 @@ def _make_table_statements(schema: str) -> list[str]:
     return [
         f"CREATE SCHEMA {schema};",
         f"OPEN SCHEMA {schema};",
-        'CREATE TABLE Users ("id" INT PRIMARY KEY, "user_id" VARCHAR(32), '
-        '"firstname" VARCHAR(100), "lastname" VARCHAR(100), '
-        '"sex" VARCHAR(10), "email" VARCHAR(255));',
+        (
+            'CREATE TABLE Users ("id" INT PRIMARY KEY, "user_id" VARCHAR(32), '
+            '"firstname" VARCHAR(100), "lastname" VARCHAR(100), '
+            '"sex" VARCHAR(10), "email" VARCHAR(255));'
+        ),
     ]
 
 
@@ -225,9 +227,11 @@ def test_import_large_csv_completes_or_fails_actionably(
     statements = [
         f"CREATE SCHEMA {schema};",
         f"OPEN SCHEMA {schema};",
-        'CREATE TABLE Users ("id" INT, "user_id" VARCHAR(32), '
-        '"firstname" VARCHAR(100), "lastname" VARCHAR(100), '
-        '"sex" VARCHAR(10), "email" VARCHAR(255));',
+        (
+            'CREATE TABLE Users ("id" INT, "user_id" VARCHAR(32), '
+            '"firstname" VARCHAR(100), "lastname" VARCHAR(100), '
+            '"sex" VARCHAR(10), "email" VARCHAR(255));'
+        ),
         f"IMPORT INTO Users FROM LOCAL CSV FILE '{csv_path}';",
         'SELECT COUNT(*) AS "n" FROM Users;',
         "exit",
