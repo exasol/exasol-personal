@@ -98,7 +98,8 @@ func TestRegexLogger(t *testing.T) {
 					wantLog:     "specific_message",
 				},
 				{
-					data:        "message\n",
+					data: "message\n",
+					// nolint:dupword
 					wantWrapped: "specific_message\nspecific_message\n",
 					wantLog:     "specific_messagespecific_message",
 				},
