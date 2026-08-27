@@ -416,10 +416,14 @@ def _stage_artifacts(deployment: Deployment, artifacts: VirtualSchemaArtifacts) 
             [
                 "set -eu",
                 f"mkdir -p {remote_bucketfs} {remote_jdbc}",
-                f"cp {shared_path}/{shlex.quote(artifacts.adapter.name)} "
-                f"{remote_bucketfs}/",
-                f"cp {shared_path}/{shlex.quote(artifacts.driver.name)} "
-                f"{remote_bucketfs}/",
+                (
+                    f"cp {shared_path}/{shlex.quote(artifacts.adapter.name)} "
+                    f"{remote_bucketfs}/"
+                ),
+                (
+                    f"cp {shared_path}/{shlex.quote(artifacts.driver.name)} "
+                    f"{remote_bucketfs}/"
+                ),
                 f"cp {shared_path}/{shlex.quote(artifacts.driver.name)} {remote_jdbc}/",
                 f"cp {shared_path}/{settings_name} {remote_jdbc}/",
             ]

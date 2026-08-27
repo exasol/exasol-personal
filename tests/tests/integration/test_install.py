@@ -658,10 +658,12 @@ def test_install_local_windows_lifecycle(exasol_path: str, tmp_path: Path) -> No
                 "--command",
                 # A fresh database has no schema open, so one must be created
                 # and opened before any table can be referenced.
-                "CREATE SCHEMA WINDOWS_LIFECYCLE; "
-                "OPEN SCHEMA WINDOWS_LIFECYCLE; "
-                "CREATE TABLE SMOKE (ID DECIMAL(18,0)); "
-                "INSERT INTO SMOKE VALUES 424242;",
+                (
+                    "CREATE SCHEMA WINDOWS_LIFECYCLE; "
+                    "OPEN SCHEMA WINDOWS_LIFECYCLE; "
+                    "CREATE TABLE SMOKE (ID DECIMAL(18,0)); "
+                    "INSERT INTO SMOKE VALUES 424242;"
+                ),
             ]
         )
 
