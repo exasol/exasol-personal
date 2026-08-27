@@ -39,11 +39,12 @@ Notable user-facing changes to Exasol Personal are documented here.
 - Documented named deployments, the `exasol slc` command group, and `exasol diag local` in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers UDFs and script language containers, and the Limitations section no longer states that UDFs are unavailable on local deployments.
 - macOS local deployments now run the same Podman installation used on Linux inside a managed VM. The VM launcher is responsible only for VM lifecycle, port forwarding, shared files, and command execution; deployment state no longer exposes its SSH transport.
 - Local runtime host preparation now runs before a deployment records an operation in progress, so a declined or failed prerequisite leaves the deployment in its previous state and the command can simply be retried.
+- Cloud deployments now provision Ubuntu 24.04 LTS instances instead of Ubuntu 22.04 LTS on all supported cloud providers (AWS, Azure, Exoscale, STACKIT). Ubuntu 22.04 only offers a Podman version that predates the Quadlet systemd generator, which Data Lakehouse Turbo requires.
 
 ### Fixed
 
 - Fixed `exasol connect` omitting its shell exit hint when standard input was piped and emitting it for interactive `--json` sessions. The hint now follows the CLI output contract: it is written to stderr for text shell sessions and suppressed under `--json`.
-- Fixed Data Lakehouse Turbo activation failing on cloud deployments. Podman was missing from the deployment hosts, so activating the feature in the AdminUI hung on a spinner and reported `Activation status for database Exasol could not be retrieved`. Podman is now installed during cloud-init on all supported cloud providers (AWS, Azure, Exoscale, STACKIT).
+- Fixed Data Lakehouse Turbo activation failing on cloud deployments. Activating the feature in the AdminUI hung on a spinner and reported `Activation status for database Exasol could not be retrieved`. Podman is now installed during cloud-init on all supported cloud providers (AWS, Azure, Exoscale, STACKIT), and the provisioned hosts now ship a Podman release that includes the Quadlet systemd generator the feature depends on. Deployments created before this change must be recreated to pick it up.
 - Local runtime host preparation no longer proceeds without approval when a command cannot prompt. Previously a non-interactive invocation was treated as consent, so a scripted run could install Podman unattended. Such runs now fail and explain how to proceed; pass `--auto-approve` for unattended setup.
 
 ### Breaking Changes

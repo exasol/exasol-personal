@@ -14,7 +14,7 @@ This document describes the Infrastructure as Code (IaC) implementation for Exas
 ### Compute
 - Exoscale compute instances named after their node IDs (e.g., `n11`, `n12`, ...).
 - Default instance type `standard.extra-large` (4 vCPU / 32 GB RAM; configurable via `var.instance_type`).
-- Ubuntu template: uses `Linux Ubuntu 22.04 LTS 64-bit` from Exoscale's public template catalog.
+- Ubuntu template: uses `Linux Ubuntu 24.04 LTS 64-bit` from Exoscale's public template catalog.
 - Cluster support: one instance per node; controlled by `var.cluster_size` (default: 1).
 - Instances get public IPv4 addresses automatically; no Elastic IP management required.
 

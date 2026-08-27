@@ -408,7 +408,7 @@ The Exasol Launcher runs on:
 
 Where the database runs depends on the deployment type:
 
-- **Cloud deployments** — the database runs on your provider's infrastructure, so any supported launcher platform above works. The launcher provisions **Ubuntu 22.04 LTS (x86-64)** compute instances on all cloud providers.
+- **Cloud deployments** — the database runs on your provider's infrastructure, so any supported launcher platform above works. The launcher provisions **Ubuntu 24.04 LTS (x86-64)** compute instances on all cloud providers.
 - **Local deployments on macOS** — the database runs with the bundled Podman installation in a managed VM and requires macOS 15 (Sequoia) or later on Apple Silicon, with at least 8 GB RAM.
 - **Local deployments on Linux** — the database runs in Podman on amd64 or arm64 and uses host resources without launcher-managed limits.
 - **Local deployments on Windows** — the database runs through host Podman on amd64, inside Podman's default machine. The launcher can install Podman and prepare that machine, asking before it changes the host.
