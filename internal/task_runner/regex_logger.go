@@ -15,7 +15,7 @@ type RegexLogger interface {
 	Write(data []byte) (int, error)
 }
 
-var _ io.Writer = (RegexLogger)(nil)
+var _ io.Writer = RegexLogger(nil)
 
 type regexLogger struct {
 	patterns   []*presets.RegexLog
