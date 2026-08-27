@@ -242,7 +242,7 @@ def test_deploy_can_be_interrupted_and_recovered(
         result = interrupt_deployment.deploy()
         logging.info("Resume deploy returncode=%s", result.returncode)
         resume_succeeded = True
-    except Exception:  # noqa: BLE001 - acceptable; we still validate state below
+    except Exception:
         logging.info("Resume deploy raised; validating state instead", exc_info=True)
         resume_succeeded = False
 
