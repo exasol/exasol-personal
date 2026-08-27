@@ -43,13 +43,14 @@ variable "image_publisher" {
 variable "image_offer" {
   description = "Azure image offer"
   type        = string
-  default     = "0001-com-ubuntu-server-jammy"
+  default     = "ubuntu-24_04-lts"
 }
 
+# The "server" SKU is Gen2; "server-gen1" selects Gen1.
 variable "image_sku" {
   description = "Azure image SKU"
   type        = string
-  default     = "22_04-lts-gen2"
+  default     = "server"
 }
 
 variable "image_version" {

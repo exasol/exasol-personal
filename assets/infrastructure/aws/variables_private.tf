@@ -47,7 +47,7 @@ variable "data_disk_device_name" {
 variable "ubuntu_version" {
   description = "Ubuntu version to use (codename)"
   type        = string
-  default     = "jammy" # Ubuntu 22.04 LTS
+  default     = "noble" # Ubuntu 24.04 LTS
 }
 
 variable "ami_id" {

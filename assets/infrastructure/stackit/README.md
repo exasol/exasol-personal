@@ -102,7 +102,7 @@ The following ports must be reachable from the operator’s network, controlled 
 ## Configuration (Key Variables)
 - `cluster_size` — Number of nodes (default: `1`).
 - `instance_type` — STACKIT machine type (memory-optimized; default: `m2i.4`).
-- `ubuntu_version` — Ubuntu version (default: `22.04`).
+- `ubuntu_version` — Ubuntu version (default: `24.04`).
 - `image_id` — Optional explicit image override (skips auto-selection).
 - `volume_performance_class` — Volume performance class for OS and data (default: `storage_premium_perf6`).
 - `os_volume_size`, `data_volume_size` — Root and data sizes in GB (defaults: `100`, `100`).

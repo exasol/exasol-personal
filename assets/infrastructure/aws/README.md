@@ -102,7 +102,7 @@ Choose the policy that matches your environment’s security posture. The minima
 ## Configuration (Key Variables)
 - `cluster_size` — number of nodes (default: `1`).
 - `instance_type` — EC2 instance type (default: `r6i.xlarge`).
-- `ubuntu_version` — Ubuntu codename; selects latest AMI (default: `jammy`).
+- `ubuntu_version` — Ubuntu codename; selects latest AMI (default: `noble`).
 - `ami_id` — optional explicit AMI override (skips auto-selection).
 - `volume_type` — EBS type for root/data (default: `gp3`).
 - `os_volume_size`, `data_volume_size` — root/data sizes in GB (defaults: `100`, `100`).

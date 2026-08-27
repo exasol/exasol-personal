@@ -29,5 +29,5 @@ variable "allowed_cidr" {
 variable "os_template" {
   description = "Exoscale OS template name to use for compute instances"
   type        = string
-  default     = "Linux Ubuntu 22.04 LTS 64-bit"
+  default     = "Linux Ubuntu 24.04 LTS 64-bit"
 }

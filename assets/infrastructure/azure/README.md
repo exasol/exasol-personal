@@ -12,7 +12,7 @@ This document describes the Infrastructure as Code (IaC) implementation for Exas
 ### Compute
 - One Azure Linux virtual machine is created per node (`n11`, `n12`, ...).
 - The default VM size is `Standard_E4s_v3`.
-- The default image is Canonical Ubuntu 22.04 LTS Gen2 (`latest`).
+- The default image is Canonical Ubuntu 24.04 LTS Gen2 (`latest`).
 - SSH access is configured with a generated RSA key pair and password authentication is disabled.
 
 ### Storage

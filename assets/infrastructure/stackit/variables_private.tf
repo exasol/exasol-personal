@@ -23,7 +23,7 @@ variable "min_ram_gb" {
 variable "ubuntu_version" {
   description = "Ubuntu version to use (numeric)"
   type        = string
-  default     = "22.04"
+  default     = "24.04"
 }
 
 variable "image_id" {
