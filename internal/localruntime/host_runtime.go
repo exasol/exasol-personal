@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	nanoDBPort      = 8563
-	nanoDataDirName = "exa"
+	nanoDBPort       = 8563
+	nanoDataDirName  = "exa"
+	hostLoopbackHost = "127.0.0.1"
 )
 
 var nanoInitParams = []string{"maxConnectionsLicenseLimit=20"}
@@ -233,7 +234,7 @@ func (runtime *HostRuntime) HealthCheck(ctx context.Context) (*HealthCheckResult
 	if err != nil {
 		return nil, err
 	}
-	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(endpoint.DBPort))
+	address := net.JoinHostPort(hostLoopbackHost, strconv.Itoa(endpoint.DBPort))
 	dialContext := runtime.dialContext
 	if dialContext == nil {
 		dialContext = (&net.Dialer{}).DialContext
@@ -324,10 +325,21 @@ func (runtime *HostRuntime) podmanStartConfig(
 
 	return localinstall.StartConfig{
 		ContainerDBPort: hostDBPort,
-		DataDir:         filepath.Join(runtime.paths.WorkDir, nanoDataDirName),
-		InitParams:      append([]string(nil), nanoInitParams...),
-		VersionCheck:    runtimeConfig.VersionCheck,
-		SLCs:            runtimeConfig.SLCs,
+		// Publish on 127.0.0.1 rather than the wildcard. On Windows the
+		// WSL2 podman machine has no IPv6 route, but pasta still creates a
+		// dual-stack published listener, and WSL's NAT localhost relay
+		// mirrors that as [::1] only. Clients then prefer the IPv6 path,
+		// connect successfully, and get reset because pasta cannot forward
+		// to the container's IPv4-only listener. Binding IPv4 explicitly
+		// keeps the relay on 127.0.0.1. See
+		// https://github.com/microsoft/WSL/issues/6387 and
+		// https://github.com/microsoft/WSL/blob/master/doc/docs/
+		// technical-documentation/localhost.md
+		ContainerDBBindHost: hostLoopbackHost,
+		DataDir:             filepath.Join(runtime.paths.WorkDir, nanoDataDirName),
+		InitParams:          append([]string(nil), nanoInitParams...),
+		VersionCheck:        runtimeConfig.VersionCheck,
+		SLCs:                runtimeConfig.SLCs,
 	}, nil
 }
 

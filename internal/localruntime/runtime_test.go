@@ -99,6 +99,9 @@ func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
 		install.startConfig.DataDir != vmNanoDataDir {
 		t.Fatalf("unexpected guest Podman config: %#v", install.startConfig)
 	}
+	if install.startConfig.ContainerDBBindHost != "" {
+		t.Fatalf("expected VM-accessible DB bind, got %#v", install.startConfig)
+	}
 	if len(install.startConfig.LegacyContainerNames) != 1 ||
 		install.startConfig.LegacyContainerNames[0] != legacyNanoContainer {
 		t.Fatalf("expected legacy container migration config, got %#v", install.startConfig)
