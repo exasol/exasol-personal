@@ -47,6 +47,7 @@ Notable user-facing changes to Exasol Personal are documented here.
 - Fixed Data Lakehouse Turbo activation failing on cloud deployments. Activating the feature in the AdminUI hung on a spinner and reported `Activation status for database Exasol could not be retrieved`. Podman is now installed during cloud-init on all supported cloud providers (AWS, Azure, Exoscale, STACKIT), and the provisioned hosts now ship a Podman release that includes the Quadlet systemd generator the feature depends on. Deployments created before this change must be recreated to pick it up.
 - Local runtime host preparation no longer proceeds without approval when a command cannot prompt. Previously a non-interactive invocation was treated as consent, so a scripted run could install Podman unattended. Such runs now fail and explain how to proceed; pass `--auto-approve` for unattended setup.
 - Cloud deployments now fail with a clear error when a node's SSH host key cannot be retrieved, instead of stalling the installation with no diagnostic.
+- Cluster synchronization during cloud deployments now gives up with a clear error when a node cannot be reached, instead of retrying indefinitely.
 
 ### Breaking Changes
 
