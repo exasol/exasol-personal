@@ -86,7 +86,7 @@ jobs:
             {
               "os": "macos-latest",
               "platform": "macos-arm64",
-              "runner": ["self-hosted", "macOS", "ARM64", "virtualization"],
+              "runner": ["self-hosted", "macOS", "ARM64", "virtualization","osx06"],
               "system_python": "true",
               "status_context": "tests-deployment-local-self-hosted"
             }
