@@ -157,9 +157,9 @@ def test_import_parquet_uses_local_filesystem(
     statements = [
         f"CREATE SCHEMA {schema};",
         f"OPEN SCHEMA {schema};",
-        'CREATE TABLE Data ("id" BIGINT, "name" VARCHAR(32));',
-        f"IMPORT INTO Data FROM LOCAL PARQUET FILE '{local_only}';",
-        'SELECT "id", "name" FROM Data ORDER BY "id";',
+        'CREATE TABLE ParquetRows ("id" BIGINT, "name" VARCHAR(32));',
+        f"IMPORT INTO ParquetRows FROM LOCAL PARQUET FILE '{local_only}';",
+        'SELECT "id", "name" FROM ParquetRows ORDER BY "id";',
     ]
 
     # ========== WHEN ==========
