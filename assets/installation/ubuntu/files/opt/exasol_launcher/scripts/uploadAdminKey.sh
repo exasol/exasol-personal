@@ -20,8 +20,28 @@ log_substep_info "Pre-seeding known_hosts for cluster nodes"
 HOSTS="$(infra_jq -er '.hostAddrs')"
 touch ~/.ssh/known_hosts
 chmod 644 ~/.ssh/known_hosts
-if [[ -n "$HOSTS" ]]; then
-  ssh-keyscan -T 5 -H $HOSTS >> ~/.ssh/known_hosts || true
-fi
+
+# A missing entry makes every later SSH to that node fail host key verification,
+# which stalls the node barrier for the whole installation. Nodes may still be
+# booting or their network may not be up yet, so retry before giving up.
+readonly KEYSCAN_ATTEMPTS=30
+# HOSTS is a space-separated list and must word-split.
+# shellcheck disable=SC2086
+for host in ${HOSTS}; do
+  keys=''
+  for _attempt in $(seq 1 "${KEYSCAN_ATTEMPTS}"); do
+    keys="$(ssh-keyscan -T 5 -H "${host}" 2>/dev/null || true)"
+    if [[ -n "${keys}" ]]; then
+      break
+    fi
+    log_substep_info "Waiting for SSH host key of ${host}"
+    sleep 5
+  done
+  if [[ -z "${keys}" ]]; then
+    log_error "No SSH host key from ${host} after ${KEYSCAN_ATTEMPTS} attempts"
+    exit 1
+  fi
+  printf '%s\n' "${keys}" >> ~/.ssh/known_hosts
+done
 
 log_step_info "SSH access configured"
