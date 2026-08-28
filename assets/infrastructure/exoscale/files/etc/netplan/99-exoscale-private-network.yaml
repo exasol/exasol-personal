@@ -1,0 +1,8 @@
+# Exoscale attaches the private network as a secondary interface that the guest
+# must configure itself. Declaring it here lets systemd-networkd bring it up on
+# every boot.
+network:
+  version: 2
+  ethernets:
+    eth1:
+      dhcp4: true

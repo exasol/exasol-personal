@@ -207,8 +207,10 @@ data "cloudinit_config" "cloud_config" {
         }
       ]
       runcmd = [
-        "systemctl enable exoscale-private-network.service",
-        "systemctl start exoscale-private-network.service"
+        # Netplan configuration must not be world-readable. Apply it on first
+        # boot because systemd-networkd has already read its configuration.
+        "chmod 600 /etc/netplan/99-exoscale-private-network.yaml",
+        "netplan apply"
       ]
     })
   }
