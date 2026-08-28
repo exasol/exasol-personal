@@ -188,16 +188,20 @@ def test_import_parquet_missing_file_reports_client_side(
     statements = [
         f"CREATE SCHEMA {schema};",
         f"OPEN SCHEMA {schema};",
-        'CREATE TABLE Data ("id" BIGINT, "name" VARCHAR(32));',
-        f"IMPORT INTO Data FROM LOCAL PARQUET FILE '{missing}';",
+        'CREATE TABLE ParquetRows ("id" BIGINT, "name" VARCHAR(32));',
+        f"IMPORT INTO ParquetRows FROM LOCAL PARQUET FILE '{missing}';",
     ]
 
     # ========== WHEN ==========
-    proc = reusable_deployment.connect(input="\n".join(statements), capture_output=True)
+    with pytest.raises(subprocess.CalledProcessError) as error_info:
+        reusable_deployment.connect(
+            "--command", "\n".join(statements), capture_output=True
+        )
 
     # ========== THEN ==========
-    combined = (proc.stdout + proc.stderr).lower()
-    assert proc.returncode != 0
+    error = error_info.value
+    combined = (_decode_stream(error.stdout) + _decode_stream(error.stderr)).lower()
+    assert error.returncode != 0
     assert any(
         token in combined
         for token in ("not found", "no such file", "does not exist", "cannot open")
