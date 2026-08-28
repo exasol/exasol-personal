@@ -35,6 +35,9 @@ func TestLinuxHostPodmanStartConfig_UsesReferenceDefaults(t *testing.T) {
 	if startConfig.ContainerDBPort != nanoDBPort {
 		t.Fatalf("unexpected default DB port: %#v", startConfig)
 	}
+	if startConfig.ContainerDBBindHost != hostLoopbackHost {
+		t.Fatalf("expected loopback DB bind, got %#v", startConfig)
+	}
 	if startConfig.DataDir != filepath.Join(localRuntime.paths.WorkDir, nanoDataDirName) {
 		t.Fatalf("unexpected Nano data directory %q", startConfig.DataDir)
 	}

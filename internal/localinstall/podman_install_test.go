@@ -57,6 +57,27 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 	}
 }
 
+func TestPodmanInstallStart_PublishesDatabaseForVMForwarding(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	startConfig.ContainerDBBindHost = ""
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected VM-facing start to succeed, got %v", err)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	runCommand := commands[len(commands)-1]
+	if !strings.Contains(runCommand, "<-p><28563:8563>") {
+		t.Fatalf("expected VM-accessible DB port mapping, got %q", runCommand)
+	}
+}
+
 func TestPodmanInstallStart_UsesLoadedNanoImageID(t *testing.T) {
 	t.Parallel()
 	skipPodmanInstallTestOnWindows(t)
@@ -651,9 +672,10 @@ func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanI
 		slcStatusPath,
 	)
 	startConfig := StartConfig{
-		ContainerDBPort: 28563,
-		DataDir:         filepath.Join(root, "runtime", "exa"),
-		InitParams:      []string{"maxConnectionsLicenseLimit=20"},
+		ContainerDBPort:     28563,
+		ContainerDBBindHost: "127.0.0.1",
+		DataDir:             filepath.Join(root, "runtime", "exa"),
+		InitParams:          []string{"maxConnectionsLicenseLimit=20"},
 	}
 	fixture := podmanInstallFixture{
 		logPath:       logPath,

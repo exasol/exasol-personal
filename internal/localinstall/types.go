@@ -10,6 +10,7 @@ import (
 
 type StartConfig struct {
 	ContainerDBPort      int
+	ContainerDBBindHost  string
 	DataDir              string
 	InitParams           []string
 	VersionCheck         VersionCheckConfig
