@@ -366,6 +366,26 @@ func TestResolveNonInteractiveSQL(t *testing.T) {
 	})
 }
 
+func TestShouldPrintShellExitHint(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name     string
+		format   OutputFormat
+		expected bool
+	}{
+		{name: "table output", format: OutputFormatTable, expected: true},
+		{name: "csv output", format: OutputFormatCSV, expected: true},
+		{name: "json output", format: OutputFormatJSON, expected: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, test.expected, shouldPrintShellExitHint(test.format))
+		})
+	}
+}
+
 type stubDatabase struct {
 	results []stubExecResult
 	queries []string

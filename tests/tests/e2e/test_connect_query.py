@@ -433,7 +433,7 @@ def test_password_marker_not_leaked_to_logs(reusable_deployment: Deployment) -> 
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 def test_connect_shows_exit_hint(reusable_deployment: Deployment) -> None:
-    """An interactive connection must print the 'how to exit' banner.
+    """A piped text connection must print the 'how to exit' banner.
 
     The launcher reads the DB password from the encrypted secrets file rather
     than prompting interactively, so the PDF's user/password-prompt expectation
@@ -445,11 +445,11 @@ def test_connect_shows_exit_hint(reusable_deployment: Deployment) -> None:
     assert reusable_deployment.db_connectable()
 
     # ========== WHEN ==========
-    # Connect is invoked with an immediate "exit" on stdin
+    # Connect is driven through piped stdin with an immediate "exit"
     proc = reusable_deployment.connect(input="exit\n", capture_output=True)
 
     # ========== THEN ==========
-    # The shell prints its exit hint to stderr and exits cleanly
+    # The text shell prints its exit hint to stderr and exits cleanly
     assert proc.returncode == 0
     assert 'Type "exit" to exit the shell' in proc.stderr
 

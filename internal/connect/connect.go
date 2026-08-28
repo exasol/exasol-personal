@@ -217,7 +217,7 @@ func Connect(
 		return runStatements(nonInteractiveSQL, processInput)
 	}
 
-	if interactiveShell {
+	if shouldPrintShellExitHint(opts.OutputFormat) {
 		if err := printExitHint(writers.stderr); err != nil {
 			return err
 		}
@@ -378,6 +378,10 @@ func printExitHint(output io.Writer) error {
 	_, err := fmt.Fprintln(output, "Type \"exit\" to exit the shell")
 
 	return err
+}
+
+func shouldPrintShellExitHint(format OutputFormat) bool {
+	return format != OutputFormatJSON
 }
 
 func normalizeJSONFormat(format JSONFormat) JSONFormat {

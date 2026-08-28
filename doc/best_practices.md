@@ -41,7 +41,7 @@ Classify every piece of terminal output as one of three kinds and route it accor
 
 - **Primary output** — the result the user asked for. Goes to stdout. Under `--json` it is the only content on stdout and must be valid JSON, so callers can parse it without filtering.
 - **Operational notice** — context a user needs to interpret the result, such as which deployment directory was used or that the license was accepted. Goes to stderr, and is shown even when stdout is piped or `--json` is selected. It never appears on stdout.
-- **Call-to-action (CTA)** — decorative next-step guidance that nudges the user toward a follow-up command (for example "run `exasol deploy` to apply", an available-update hint, or a "Next steps" block). Goes to stderr, and is shown only to interactive users.
+- **Call-to-action (CTA)** — decorative next-step guidance that nudges the user toward a follow-up command (for example "run `exasol deploy` to apply", an available-update hint, or a "Next steps" block). Goes to stderr for text output and is suppressed only under `--json`.
 
 Use the delete-test to tell a CTA from a notice: if removing the message changes neither the result nor its correctness reporting, it is a CTA.
 
