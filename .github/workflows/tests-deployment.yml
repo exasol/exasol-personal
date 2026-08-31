@@ -135,6 +135,7 @@ jobs:
   tests-deployment:
     if: ${{ needs.plan-tests-deployment.outputs.cloud_has_rows == 'true' }}
     needs: plan-tests-deployment
+    timeout-minutes: 90
     environment:
       name: deployment-tests
     strategy:

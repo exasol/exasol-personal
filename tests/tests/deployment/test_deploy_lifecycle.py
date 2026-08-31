@@ -8,12 +8,18 @@ is shared with the e2e and chaos suites. Tests here mutate lifecycle state but m
 leave the deployment database-ready on exit.
 """
 
+import logging
 import sys
+import time
+from http import HTTPStatus
 
 import pytest
 import requests
 
 from framework.deployment import Deployment, StatusDatabaseReady
+
+REMOTE_ARCHIVE_MAX_ATTEMPTS = 6
+REMOTE_ARCHIVE_RETRY_DELAY_SECONDS = 10
 
 
 @pytest.mark.infrastructure_e2e
@@ -139,15 +145,26 @@ def test_remote_archive_registered(
     # When we query the backup options for the deployment
     backups_url = f"{base_url}/deployments/{deployment_id}/backups"
 
-    backups_response = requests.options(
-        backups_url,
-        headers={
-            "Accept": "application/json",
-            "Authorization": f"Bearer {access_token}",
-        },
-        verify=verify_ssl,
-        timeout=30,
-    )
+    for attempt in range(1, REMOTE_ARCHIVE_MAX_ATTEMPTS + 1):
+        backups_response = requests.options(
+            backups_url,
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {access_token}",
+            },
+            verify=verify_ssl,
+            timeout=30,
+        )
+        if backups_response.status_code != HTTPStatus.SERVICE_UNAVAILABLE:
+            break
+        if attempt < REMOTE_ARCHIVE_MAX_ATTEMPTS:
+            logging.info(
+                "Backup API returned 503 (attempt %s/%s); retrying in %ss",
+                attempt,
+                REMOTE_ARCHIVE_MAX_ATTEMPTS,
+                REMOTE_ARCHIVE_RETRY_DELAY_SECONDS,
+            )
+            time.sleep(REMOTE_ARCHIVE_RETRY_DELAY_SECONDS)
 
     backups_response.raise_for_status()
 
