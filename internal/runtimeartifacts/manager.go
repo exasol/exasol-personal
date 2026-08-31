@@ -371,7 +371,7 @@ func (m *Manager) resolveUnderLock(
 	}
 
 	if strings.TrimSpace(artifact.Sha256) == "" {
-		slog.Info(
+		slog.Debug(
 			"re-fetching resource without checksum, result may not be stable",
 			"id",
 			resourceID,
@@ -384,7 +384,7 @@ func (m *Manager) resolveUnderLock(
 			return "", err
 		}
 		if cachedPath != "" {
-			slog.Info("found resource in cache", "id", resourceID, "path", cachedPath)
+			slog.Debug("found resource in cache", "id", resourceID, "path", cachedPath)
 
 			return cachedPath, nil
 		}
@@ -395,7 +395,7 @@ func (m *Manager) resolveUnderLock(
 		return "", err
 	}
 
-	slog.Info("fetched resource", "id", resourceID, "path", resolvedPath)
+	slog.Debug("fetched resource", "id", resourceID, "path", resolvedPath)
 
 	return resolvedPath, nil
 }
@@ -490,7 +490,7 @@ func (m *Manager) resolveEmbedded(resourceID string, entry *cacheIndexEntry) err
 		return err
 	}
 
-	slog.Info("resolved resource from embedded data", "id", resourceID)
+	slog.Debug("resolved resource from embedded data", "id", resourceID)
 
 	return nil
 }
