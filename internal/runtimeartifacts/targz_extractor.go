@@ -77,8 +77,10 @@ func extractTarEntry(
 	}
 	defer root.Close()
 
-	targetPath := filepath.FromSlash(hdr.Name)
-	if targetPath == "" || targetPath == "." {
+	// Clean strips the trailing separator tar uses to mark a directory entry;
+	// os.Root rejects such a name outright.
+	targetPath := filepath.Clean(filepath.FromSlash(hdr.Name))
+	if targetPath == "." || targetPath == string(filepath.Separator) {
 		return false, fmt.Errorf("invalid archive entry %q", hdr.Name)
 	}
 
