@@ -7,7 +7,7 @@ import secrets
 import tempfile
 import time
 from pathlib import Path
-from subprocess import CalledProcessError, CompletedProcess, Popen
+from subprocess import CalledProcessError, CompletedProcess, Popen, TimeoutExpired
 from typing import Final, Unpack
 
 import websocket
@@ -32,6 +32,8 @@ class Deployment:
     DESTROY_RETRY_INITIAL_DELAY_SECONDS: Final = 15.0
     DESTROY_RETRY_MAX_DELAY_SECONDS: Final = 200.0
     DESTROY_RETRY_JITTER_FACTOR: Final = 0.20
+    DESTROY_TIMEOUT_SECONDS: Final = 20 * 60
+    DEPLOY_TIMEOUT_SECONDS: Final = 20 * 60
     UNATTENDED_FLAG: Final = "--auto-approve"
 
     def __init__(
@@ -108,7 +110,11 @@ class Deployment:
         for attempt in range(1, self.DESTROY_RETRY_MAX_ATTEMPTS + 1):
             attempt_error: str | None = None
             try:
-                self.launcher.destroy(self.deployment_dir.name, "--auto-approve")
+                self.launcher.destroy(
+                    self.deployment_dir.name,
+                    "--auto-approve",
+                    timeout=self.DESTROY_TIMEOUT_SECONDS,
+                )
 
                 if not self.launcher.has_status(
                     self.deployment_dir.name,
@@ -125,7 +131,7 @@ class Deployment:
                         "no file should exist and 'initialized but not yet completed' "
                         "msg after `init`"
                     )
-            except (CalledProcessError, RuntimeError) as exc:
+            except (CalledProcessError, RuntimeError, TimeoutExpired) as exc:
                 attempt_error = str(exc)
 
             if attempt_error is None:
@@ -175,7 +181,18 @@ class Deployment:
         return [*args, self.UNATTENDED_FLAG]
 
     def deploy(self, *args: str) -> CompletedProcess[str]:
-        return self.launcher.deploy(self.deployment_dir.name, *self._unattended(args))
+        try:
+            return self.launcher.deploy(
+                self.deployment_dir.name,
+                *self._unattended(args),
+                timeout=self.DEPLOY_TIMEOUT_SECONDS,
+            )
+        except TimeoutExpired as exc:
+            msg = (
+                f"Deploy command timed out after {self.DEPLOY_TIMEOUT_SECONDS}s\n"
+                f"deployment.log tail:\n{self.deployment_log_tail()}"
+            )
+            raise TimeoutError(msg) from exc
 
     def deploy_no_block(self, *args: str) -> Popen[str]:
         return self.launcher.deploy_no_block(

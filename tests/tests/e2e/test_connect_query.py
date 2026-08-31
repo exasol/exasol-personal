@@ -225,6 +225,7 @@ def test_connect_table_width(reusable_deployment: Deployment) -> None:
     output = "\n".join(output_lines).strip("\n")
 
     expected = textwrap.dedent("""
+    Type "exit" to exit the shell
     ┌────┬─────────────────────────────────────────────────────┐
     │ id │                        name                         │
     ├────┼─────────────────────────────────────────────────────┤
