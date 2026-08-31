@@ -452,3 +452,35 @@ func addTagToTestRepo(t *testing.T, repoPath, tagName string) string {
 
 	return head.Hash().String()
 }
+
+func TestGitSource_Probe_CommitSHANeedsNoRemote(t *testing.T) {
+	t.Parallel()
+
+	src := &GitSource{}
+	const sha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+
+	probe, err := src.Probe(
+		context.Background(),
+		Locator{URL: "https://unreachable.invalid/org/repo.git", Ref: sha},
+	)
+	if err != nil {
+		t.Fatalf("expected no remote access, got %v", err)
+	}
+	if probe.Identity != gitIdentity(sha) {
+		t.Fatalf("identity = %q, want %q", probe.Identity, gitIdentity(sha))
+	}
+}
+
+func TestGitSource_Probe_UnreachableRemoteIsReported(t *testing.T) {
+	t.Parallel()
+
+	src := &GitSource{}
+
+	_, err := src.Probe(
+		context.Background(),
+		Locator{URL: "https://unreachable.invalid/org/repo.git", Ref: "main"},
+	)
+	if err == nil {
+		t.Fatal("expected an error for an unreachable remote")
+	}
+}
