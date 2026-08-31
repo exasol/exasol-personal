@@ -1,7 +1,7 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package runtimeartifacts
+package resource
 
 import "context"
 
@@ -19,7 +19,7 @@ func NewContext(ctx context.Context, manager *Manager) context.Context {
 func FromContext(ctx context.Context) *Manager {
 	manager, ok := ctx.Value(managerContextKey{}).(*Manager)
 	if !ok {
-		panic("runtimeartifacts: no Manager attached to context")
+		panic("resource: no Manager attached to context")
 	}
 
 	return manager

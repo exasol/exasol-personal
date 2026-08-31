@@ -1,7 +1,7 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package runtimeartifacts
+package resource
 
 import (
 	"context"
@@ -19,11 +19,11 @@ import (
 )
 
 const (
-	runtimeArtifactsDirName  = "runtime-artifacts"
+	resourcesDirName         = "resources"
 	artifactsDirName         = "artifacts"
 	downloadsDirName         = "downloads"
 	cacheIndexFileName       = "index.json"
-	cacheConfigFileName      = "runtime-artifacts.yaml"
+	cacheConfigFileName      = "resources.yaml"
 	cacheIndexVersion        = 1
 	defaultRetentionDays     = 30
 	automaticCleanupInterval = 24 * time.Hour
@@ -34,8 +34,8 @@ const (
 )
 
 var (
-	ErrInvalidCacheConfig = errors.New("invalid runtime artifact cache configuration")
-	ErrCacheLocked        = errors.New("runtime artifact cache is locked")
+	ErrInvalidCacheConfig = errors.New("invalid resource cache configuration")
+	ErrCacheLocked        = errors.New("resource cache is locked")
 )
 
 type clocker interface {
@@ -133,7 +133,7 @@ func DefaultCacheRoot() (string, error) {
 		return "", fmt.Errorf("resolve user cache directory: %w", err)
 	}
 
-	return filepath.Join(launcherpaths.DirPath(cacheDir), runtimeArtifactsDirName), nil
+	return filepath.Join(launcherpaths.DirPath(cacheDir), resourcesDirName), nil
 }
 
 func DefaultConfigPath() (string, error) {

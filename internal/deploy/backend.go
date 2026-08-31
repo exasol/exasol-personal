@@ -13,7 +13,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
@@ -120,7 +120,7 @@ func newDeploymentBackend(
 		return nil, err
 	}
 
-	manager := runtimeartifacts.FromContext(ctx)
+	manager := resource.FromContext(ctx)
 
 	switch kind {
 	case backendTypeTofu:
@@ -168,14 +168,14 @@ func readInfrastructurePresetConfigVariables(
 
 func newLocalRuntime(
 	deployment config.DeploymentDir,
-	manager *runtimeartifacts.Manager,
+	manager *resource.Manager,
 ) (localruntime.Runtime, error) {
 	return newLocalRuntimeForPlatform(deployment, manager, runtime.GOOS, runtime.GOARCH)
 }
 
 func newLocalRuntimeForPlatform(
 	deployment config.DeploymentDir,
-	manager *runtimeartifacts.Manager,
+	manager *resource.Manager,
 	goos, goarch string,
 ) (localruntime.Runtime, error) {
 	switch {

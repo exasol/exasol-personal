@@ -11,15 +11,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/spf13/cobra"
 )
 
-const cacheCmdShortDesc = "Manage the runtime artifact cache"
+const cacheCmdShortDesc = "Manage the resource cache"
 
 const cacheCmdLongDesc = cacheCmdShortDesc + `
 
-Runtime artifacts are launcher-managed tools and files that are downloaded on demand
+Resources are launcher-managed tools and files that are downloaded on demand
 and reused across deployments.
 `
 
@@ -42,11 +42,11 @@ var cacheCmd = &cobra.Command{
 
 var cacheListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List cached runtime artifacts",
+	Short: "List cached resources",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		artifactCache, err := runtimeartifacts.NewDefaultCache()
+		artifactCache, err := resource.NewDefaultCache()
 		if err != nil {
 			return err
 		}
@@ -66,12 +66,12 @@ var cacheListCmd = &cobra.Command{
 
 var cacheCleanCmd = &cobra.Command{
 	Use:   "clean",
-	Short: "Clean cached runtime artifacts",
-	Long: `Clean cached runtime artifacts.
+	Short: "Clean cached resources",
+	Long: `Clean cached resources.
 
 With no selector, this removes artifacts older than the configured retention period.
 Use --invalid to remove artifacts that fail integrity checks.
-Use --all to remove every cached runtime artifact.
+Use --all to remove every cached resource.
 Use --partial-downloads to remove staged partial downloads.
 Use --dry-run to preview a cleanup without removing files.
 `,
@@ -81,11 +81,11 @@ Use --dry-run to preview a cleanup without removing files.
 		if selectedCacheCleanupSelectorCount() > 1 {
 			return errors.New("--invalid, --all, and --partial-downloads are mutually exclusive")
 		}
-		artifactCache, err := runtimeartifacts.NewDefaultCache()
+		artifactCache, err := resource.NewDefaultCache()
 		if err != nil {
 			return err
 		}
-		summary, err := artifactCache.Clean(cmd.Context(), runtimeartifacts.CleanOptions{
+		summary, err := artifactCache.Clean(cmd.Context(), resource.CleanOptions{
 			Mode:   selectedCacheCleanupMode(),
 			DryRun: cacheCleanOpts.DryRun,
 		})
@@ -101,23 +101,23 @@ Use --dry-run to preview a cleanup without removing files.
 
 var cacheUnlockCmd = &cobra.Command{
 	Use:   "unlock",
-	Short: "Clear a stale runtime artifact cache lock",
-	Long: `Clear a stale runtime artifact cache lock.
+	Short: "Clear a stale resource cache lock",
+	Long: `Clear a stale resource cache lock.
 
 Only use this command when you are certain that no launcher process is currently
-using the runtime artifact cache.
+using the resource cache.
 `,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		artifactCache, err := runtimeartifacts.NewDefaultCache()
+		artifactCache, err := resource.NewDefaultCache()
 		if err != nil {
 			return err
 		}
 		if err := artifactCache.Unlock(); err != nil {
 			return err
 		}
-		addTerminalNotice("Runtime artifact cache lock cleared.")
+		addTerminalNotice("Resource cache lock cleared.")
 
 		return nil
 	},
@@ -125,7 +125,7 @@ using the runtime artifact cache.
 
 func renderCacheListJSON(
 	writer io.Writer,
-	entries []runtimeartifacts.CacheEntryInfo,
+	entries []resource.CacheEntryInfo,
 ) error {
 	encoder := json.NewEncoder(writer)
 	encoder.SetIndent("", "  ")
@@ -136,13 +136,13 @@ func renderCacheListJSON(
 func renderCacheListText(
 	writer io.Writer,
 	cacheRoot string,
-	entries []runtimeartifacts.CacheEntryInfo,
+	entries []resource.CacheEntryInfo,
 ) error {
-	if _, err := fmt.Fprintf(writer, "Runtime artifact cache: %s\n", cacheRoot); err != nil {
+	if _, err := fmt.Fprintf(writer, "Resource cache: %s\n", cacheRoot); err != nil {
 		return err
 	}
 	if len(entries) == 0 {
-		_, err := fmt.Fprintln(writer, "No cached runtime artifacts.")
+		_, err := fmt.Fprintln(writer, "No cached resources.")
 		return err
 	}
 	for _, entry := range entries {
@@ -162,18 +162,18 @@ func renderCacheListText(
 	return nil
 }
 
-func selectedCacheCleanupMode() runtimeartifacts.CleanupMode {
+func selectedCacheCleanupMode() resource.CleanupMode {
 	if cacheCleanOpts.Invalid {
-		return runtimeartifacts.CleanupModeInvalid
+		return resource.CleanupModeInvalid
 	}
 	if cacheCleanOpts.All {
-		return runtimeartifacts.CleanupModeAll
+		return resource.CleanupModeAll
 	}
 	if cacheCleanOpts.PartialDownloads {
-		return runtimeartifacts.CleanupModePartialDownloads
+		return resource.CleanupModePartialDownloads
 	}
 
-	return runtimeartifacts.CleanupModeStale
+	return resource.CleanupModeStale
 }
 
 func selectedCacheCleanupSelectorCount() int {
@@ -193,14 +193,14 @@ func selectedCacheCleanupSelectorCount() int {
 
 func renderCacheCleanText(
 	writer io.Writer,
-	summary runtimeartifacts.CleanSummary,
+	summary resource.CleanSummary,
 ) error {
 	action := "Removed"
 	if summary.DryRun {
 		action = "Would remove"
 	}
-	subject := "runtime artifact(s)"
-	if summary.Mode == runtimeartifacts.CleanupModePartialDownloads {
+	subject := "resource(s)"
+	if summary.Mode == resource.CleanupModePartialDownloads {
 		subject = "partial download(s)"
 	}
 	if _, err := fmt.Fprintf(
@@ -277,7 +277,7 @@ func registerCacheCommands() {
 		&cacheCleanOpts.All,
 		"all",
 		false,
-		"Remove all cached runtime artifacts",
+		"Remove all cached resources",
 	)
 	cacheCleanCmd.Flags().BoolVar(
 		&cacheCleanOpts.PartialDownloads,

@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts/runtimeartifactstest"
+	"github.com/exasol/exasol-personal/internal/resource/resourcetest"
 )
 
 // testManagerContext returns a context carrying a Manager backed by the real
@@ -16,5 +16,5 @@ import (
 func testManagerContext(t *testing.T) context.Context {
 	t.Helper()
 
-	return runtimeartifactstest.NewContext(t)
+	return resourcetest.NewContext(t)
 }

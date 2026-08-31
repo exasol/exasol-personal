@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
@@ -109,7 +109,7 @@ func TestPodmanInstallStart_LoadsNanoFromRuntimePath(t *testing.T) {
 	skipPodmanInstallTestOnWindows(t)
 
 	// Given
-	const runtimeImagePath = "/mnt/host/runtime-artifacts/nano.tar"
+	const runtimeImagePath = "/mnt/host/resources/nano.tar"
 	install, startConfig, fixture := newPodmanInstallFixture(t)
 	install.resolveImage = func(context.Context) (RuntimePath, error) {
 		return RuntimePath{
@@ -649,10 +649,10 @@ func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanI
 	logPath := filepath.Join(root, "podman.log")
 	imagePath := filepath.Join(root, "nano-image.tar")
 	writeTestFile(t, imagePath, "image")
-	manager := runtimeartifacts.NewResourceManagerForPlatform(
-		runtimeartifacts.ResourceSpec{
+	manager := resource.NewResourceManagerForPlatform(
+		resource.ResourceSpec{
 			exasolNanoImageResourceID: {
-				Artifact: map[string]runtimeartifacts.ArtifactSpec{
+				Artifact: map[string]resource.ArtifactSpec{
 					"any": {URL: imagePath},
 				},
 			},

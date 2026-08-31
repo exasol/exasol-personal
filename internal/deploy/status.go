@@ -11,7 +11,7 @@ import (
 	"os"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
@@ -233,7 +233,7 @@ func localVMStoppedStatus(ctx context.Context, deployment config.DeploymentDir) 
 		return nil
 	}
 
-	manager := runtimeartifacts.FromContext(ctx)
+	manager := resource.FromContext(ctx)
 
 	selectedRuntime, err := newLocalRuntime(deployment, manager)
 	if err != nil {

@@ -1,7 +1,7 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package runtimeartifacts
+package resource
 
 import (
 	"bytes"
@@ -260,7 +260,7 @@ func TestDockerSource_Fetch_LocalOCIImages(t *testing.T) {
 				"image",
 				"inspect",
 				"--format",
-				"{{ index .Config.Labels \"runtimeartifacts.test\" }}",
+				"{{ index .Config.Labels \"resource.test\" }}",
 				parsedReference.destinationImage,
 			)
 			if output != "local-oci-image\n" {
@@ -313,12 +313,12 @@ func createTestContainerImage(t *testing.T) string {
 
 	contextDir := t.TempDir()
 	containerfile := filepath.Join(contextDir, "Containerfile")
-	containerfileContents := []byte("FROM scratch\nLABEL runtimeartifacts.test=local-oci-image\n")
+	containerfileContents := []byte("FROM scratch\nLABEL resource.test=local-oci-image\n")
 	if err := os.WriteFile(containerfile, containerfileContents, filePerm); err != nil {
 		t.Fatalf("write Containerfile: %v", err)
 	}
 
-	image := fmt.Sprintf("runtimeartifacts-test-%d", time.Now().UnixNano())
+	image := fmt.Sprintf("resource-test-%d", time.Now().UnixNano())
 	runPodman(t, "build", "--tag", image, contextDir)
 	t.Cleanup(func() {
 		removePodmanImage(t, image)

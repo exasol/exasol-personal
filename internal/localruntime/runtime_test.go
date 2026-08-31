@@ -19,7 +19,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
@@ -27,7 +27,7 @@ const (
 	runnerZipEntryName = "launcher"
 )
 
-func newTestManagerForRunner(t *testing.T, scriptContent []byte) *runtimeartifacts.Manager {
+func newTestManagerForRunner(t *testing.T, scriptContent []byte) *resource.Manager {
 	t.Helper()
 
 	zipPath := filepath.Join(t.TempDir(), "runner.zip")
@@ -52,16 +52,16 @@ func newTestManagerForRunner(t *testing.T, scriptContent []byte) *runtimeartifac
 		t.Fatalf("failed to close runner fixture: %v", err)
 	}
 
-	spec := runtimeartifacts.ResourceSpec{
+	spec := resource.ResourceSpec{
 		exasolLocalRunnerResourceID: {
 			Extract: true,
-			Artifact: map[string]runtimeartifacts.ArtifactSpec{
+			Artifact: map[string]resource.ArtifactSpec{
 				"any": {URL: zipPath, ResourcePath: runnerZipEntryName},
 			},
 		},
 	}
 
-	return runtimeartifacts.NewResourceManagerForPlatform(
+	return resource.NewResourceManagerForPlatform(
 		spec, t.TempDir(), runtime.GOOS, runtime.GOARCH,
 	)
 }

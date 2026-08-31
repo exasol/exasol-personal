@@ -1,7 +1,7 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package runtimeartifacts
+package resource
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func (c *testClock) Now() time.Time {
 	return c.now
 }
 
-func TestDefaultCacheRootUsesLauncherRuntimeArtifactsNamespace(t *testing.T) {
+func TestDefaultCacheRootUsesLauncherResourcesNamespace(t *testing.T) {
 	t.Parallel()
 
 	cacheDir, err := os.UserCacheDir()
@@ -41,7 +41,7 @@ func TestDefaultCacheRootUsesLauncherRuntimeArtifactsNamespace(t *testing.T) {
 		t.Fatalf("expected cache root, got error: %v", err)
 	}
 
-	expected := filepath.Join(launcherpaths.DirPath(cacheDir), runtimeArtifactsDirName)
+	expected := filepath.Join(launcherpaths.DirPath(cacheDir), resourcesDirName)
 	if root != expected {
 		t.Fatalf("expected %q, got %q", expected, root)
 	}
@@ -50,7 +50,7 @@ func TestDefaultCacheRootUsesLauncherRuntimeArtifactsNamespace(t *testing.T) {
 //nolint:paralleltest // home-directory environment is process-global.
 func TestDefaultConfigPathUsesLauncherRootDirectory(t *testing.T) {
 	home := t.TempDir()
-	setRuntimeArtifactsTestHome(t, home)
+	setResourcesTestHome(t, home)
 
 	path, err := DefaultConfigPath()
 	if err != nil {
@@ -536,7 +536,7 @@ func TestCacheLockContentionReturnsUserFacingError(t *testing.T) {
 	}
 }
 
-func setRuntimeArtifactsTestHome(t *testing.T, home string) {
+func setResourcesTestHome(t *testing.T, home string) {
 	t.Helper()
 
 	t.Setenv("HOME", home)

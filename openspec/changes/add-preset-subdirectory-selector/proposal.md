@@ -3,7 +3,7 @@
 External preset sources (git repositories and archives) currently must expose the preset
 directory at the resolved root: `verifyPresetManifest` checks the resolved path for
 `infrastructure.yaml` / `installation.yaml`, and the CLI builds a `ResourceDefinition` with
-`URL` only, so the runtime-artifact `ResourcePath` selector is never populated. That forces
+`URL` only, so the resource `ResourcePath` selector is never populated. That forces
 every git-hosted preset into its own repository and every archive to root-level presets — a
 poor fit for monorepos of related infrastructure/installation presets.
 
@@ -17,7 +17,7 @@ fragment idiom and composes cleanly with the existing `@ref` grammar
 - CLI preset arguments accept an optional `#<subpath>` fragment after the URL (and after any
   `@<ref>` suffix for git URLs). The resolved preset directory is the given subdirectory of
   the cloned repository or extracted archive.
-- The runtime-artifact layer allows `ResourcePath` on git sources (currently rejected because
+- The resource layer allows `ResourcePath` on git sources (currently rejected because
   git sources use `Extract: false`) and applies it when resolving the entry.
 - `deploy.ResolvePreset` parses the fragment off the URI before building the
   `ResourceDefinition` and populates `ArtifactSpec.ResourcePath`.
@@ -26,10 +26,10 @@ fragment idiom and composes cleanly with the existing `@ref` grammar
 
 ## Impact
 
-- `internal/runtimeartifacts/spec.go`: loosen `ResourcePath` validation for git sources.
-- `internal/runtimeartifacts/manager.go`: apply `ResourcePath` in the non-extract branch when
+- `internal/resource/spec.go`: loosen `ResourcePath` validation for git sources.
+- `internal/resource/manager.go`: apply `ResourcePath` in the non-extract branch when
   the URL is a git source.
-- `internal/runtimeartifacts/preset_uri.go` (new): `ParsePresetURI` helper that splits the
+- `internal/resource/preset_uri.go` (new): `ParsePresetURI` helper that splits the
   fragment off a preset URI.
 - `internal/deploy/preset_external.go`: wire the parsed subpath into `ResourceDefinition`.
 - Cache identity: unchanged — `ResourcePath` is already part of `artifactIdentity`, so

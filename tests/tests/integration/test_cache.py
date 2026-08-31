@@ -1,7 +1,7 @@
 # Copyright 2026 Exasol AG
 # SPDX-License-Identifier: MIT
 
-"""Runtime-artifact cache CLI: list, clean, unlock, diag, locking, output (offline)."""
+"""Resource cache CLI: list, clean, unlock, diag, locking, output (offline)."""
 
 import json
 from pathlib import Path
@@ -18,7 +18,7 @@ def test_cache_list_text_output(exasol_path: str) -> None:
     output = run_command([exasol_path, "cache", "list"]).stdout
 
     # Then it reports the cache root
-    assert "Runtime artifact cache:" in output
+    assert "Resource cache:" in output
 
 
 @pytest.mark.launcher_tests
@@ -69,7 +69,7 @@ def test_cache_unlock_reports_cleared(exasol_path: str) -> None:
 
     # Then it confirms the lock was cleared. The confirmation is terminal-notice
     # output on stderr, so stdout stays free for primary output.
-    assert "Runtime artifact cache lock cleared." in result.stderr
+    assert "Resource cache lock cleared." in result.stderr
 
 
 @pytest.mark.launcher_tests

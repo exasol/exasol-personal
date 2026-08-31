@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 
 	"github.com/exasol/exasol-personal/assets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
@@ -41,17 +41,17 @@ var (
 
 // WriteDir materializes preset into outDir.
 func WriteDir(ctx context.Context, kind PresetKind, preset PresetRef, outDir string) error {
-	manager := runtimeartifacts.FromContext(ctx)
+	manager := resource.FromContext(ctx)
 	if preset.IsPath() {
-		def := runtimeartifacts.ResourceDefinition{
-			Artifact: map[string]runtimeartifacts.ArtifactSpec{"any": {URL: preset.Path}},
+		def := resource.ResourceDefinition{
+			Artifact: map[string]resource.ArtifactSpec{"any": {URL: preset.Path}},
 		}
 
 		return manager.GetCopy(ctx, def, kind.resourceGroup, outDir)
 	}
 
 	if err := manager.RequestMemberCopy(ctx, kind.resourceGroup, preset.Name, outDir); err != nil {
-		if errors.Is(err, runtimeartifacts.ErrUnknownMember) {
+		if errors.Is(err, resource.ErrUnknownMember) {
 			return fmt.Errorf("%w: %s", kind.unknownErr, preset.Name)
 		}
 
@@ -67,7 +67,7 @@ func WriteSharedDir(outDir string) error {
 
 // ListEmbeddedPresets lists every built-in preset name of kind.
 func ListEmbeddedPresets(ctx context.Context, kind PresetKind) []string {
-	return runtimeartifacts.FromContext(ctx).GroupMembers(kind.resourceGroup)
+	return resource.FromContext(ctx).GroupMembers(kind.resourceGroup)
 }
 
 // ReadInfrastructureFile reads a file from the named embedded infrastructure
@@ -98,9 +98,9 @@ func ReadInfrastructureFile(
 }
 
 func presetDir(ctx context.Context, kind PresetKind, name string) (string, error) {
-	dir, err := runtimeartifacts.FromContext(ctx).RequestMember(ctx, kind.resourceGroup, name)
+	dir, err := resource.FromContext(ctx).RequestMember(ctx, kind.resourceGroup, name)
 	if err != nil {
-		if errors.Is(err, runtimeartifacts.ErrUnknownMember) {
+		if errors.Is(err, resource.ErrUnknownMember) {
 			return "", fmt.Errorf("%w: %s", kind.unknownErr, name)
 		}
 

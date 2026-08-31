@@ -1,7 +1,7 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package runtimeartifacts
+package resource
 
 import (
 	"context"
@@ -169,7 +169,7 @@ func mapCacheLockError(err error) error {
 	}
 	if errors.Is(err, directorymutex.ErrAcquireTimeout) {
 		return &cacheLockedError{
-			message: "Runtime artifact cache is locked by another operation. " +
+			message: "Resource cache is locked by another operation. " +
 				"Please wait. Run `exasol cache unlock` only if no launcher " +
 				"process is using the cache.",
 		}
@@ -215,7 +215,7 @@ func (c *Cache) readIndexRaw() (cacheIndex, bool, error) {
 	}
 	if index.Version != cacheIndexVersion {
 		return index, true, fmt.Errorf(
-			"unsupported runtime artifact cache index version %d",
+			"unsupported resource cache index version %d",
 			index.Version,
 		)
 	}

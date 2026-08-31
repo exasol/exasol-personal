@@ -10,7 +10,7 @@ package {{.Package}}
 import (
 	_ "embed"
 
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 {{range .Resources}}
@@ -19,9 +19,9 @@ var {{.VarName}} []byte
 {{end}}
 func init() {
 {{- range .Resources}}
-	runtimeartifacts.Register({{printf "%q" .ResourceID}}, {{.VarName}}, {{printf "%q" .Hash}})
+	resource.Register({{printf "%q" .ResourceID}}, {{.VarName}}, {{printf "%q" .Hash}})
 {{- if .Members}}
-	runtimeartifacts.RegisterGroupMembers({{printf "%q" .ResourceID}}, []string{ {{- range .Members}}{{printf "%q" .}}, {{end -}} })
+	resource.RegisterGroupMembers({{printf "%q" .ResourceID}}, []string{ {{- range .Members}}{{printf "%q" .}}, {{end -}} })
 {{- end}}
 {{- end}}
 }

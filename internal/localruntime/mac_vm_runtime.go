@@ -22,7 +22,7 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
@@ -38,7 +38,7 @@ const (
 	minimumRunnerMajor = 2
 
 	vmNanoDataDir          = "/var/lib/exa"
-	nanoArtifactDirName    = "runtime-artifacts"
+	nanoArtifactDirName    = "resources"
 	nanoArtifactFileName   = "nano.tar"
 	legacyNanoContainer    = "exasol-local-db"
 	forwardDatabaseService = "db"
@@ -86,7 +86,7 @@ type runnerState struct {
 type MacVMRuntime struct {
 	deployment     config.DeploymentDir
 	paths          vmRuntimePaths
-	manager        *runtimeartifacts.Manager
+	manager        *resource.Manager
 	endpoint       *RuntimeEndpoint
 	installFactory func(string) (localinstall.LocalInstall, error)
 }
@@ -94,7 +94,7 @@ type MacVMRuntime struct {
 // NewMacVMRuntime creates a VM runtime. manager may be nil when no runner invocation is needed.
 func NewMacVMRuntime(
 	deployment config.DeploymentDir,
-	manager *runtimeartifacts.Manager,
+	manager *resource.Manager,
 ) *MacVMRuntime {
 	return &MacVMRuntime{
 		deployment: deployment,
@@ -455,7 +455,7 @@ func (runtime *MacVMRuntime) install(
 }
 
 func materializeFileAtomically(sourcePath, targetPath string) error {
-	source, err := os.Open(sourcePath) //nolint:gosec // runtime-artifact path
+	source, err := os.Open(sourcePath) //nolint:gosec // resource path
 	if err != nil {
 		return fmt.Errorf("failed to open source artifact %s: %w", sourcePath, err)
 	}
@@ -478,7 +478,7 @@ func materializeFileAtomically(sourcePath, targetPath string) error {
 
 	directory := filepath.Dir(targetPath)
 	if err := os.MkdirAll(directory, dirMode); err != nil {
-		return fmt.Errorf("failed to create runtime artifact directory %s: %w", directory, err)
+		return fmt.Errorf("failed to create resource directory %s: %w", directory, err)
 	}
 	temporary, err := os.CreateTemp(directory, ".nano-*.tmp")
 	if err != nil {

@@ -15,7 +15,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 // testRunnerExecutableMode is a named constant rather than an inline literal
@@ -310,7 +310,7 @@ func ensureLocalRuntimeWorkDir(t *testing.T, deployment config.DeploymentDir) {
 func writeFakeCombinedRunner(
 	t *testing.T,
 	statusJSON, healthCheckJSON string,
-) *runtimeartifacts.Manager {
+) *resource.Manager {
 	t.Helper()
 
 	script := "#!/bin/sh\n" +
@@ -330,20 +330,20 @@ func writeFakeCombinedRunner(
 // resource resolves through the same extract: true / resource_path shape the
 // real resources.yaml entry uses: scriptContent is packed into a minimal,
 // single-entry zip (mirroring the real release archive).
-func newTestManagerForRunner(t *testing.T, scriptContent []byte) *runtimeartifacts.Manager {
+func newTestManagerForRunner(t *testing.T, scriptContent []byte) *resource.Manager {
 	t.Helper()
 
 	zipPath := writeRunnerZip(t, scriptContent)
-	spec := runtimeartifacts.ResourceSpec{
+	spec := resource.ResourceSpec{
 		exasolLocalRunnerResourceID: {
 			Extract: true,
-			Artifact: map[string]runtimeartifacts.ArtifactSpec{
+			Artifact: map[string]resource.ArtifactSpec{
 				"any": {URL: zipPath, ResourcePath: runnerZipEntryName},
 			},
 		},
 	}
 
-	return runtimeartifacts.NewResourceManagerForPlatform(
+	return resource.NewResourceManagerForPlatform(
 		spec, t.TempDir(), runtime.GOOS, runtime.GOARCH,
 	)
 }

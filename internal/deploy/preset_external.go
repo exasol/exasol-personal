@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 // IsExternalPresetURI reports whether arg looks like an external preset URI
@@ -29,14 +29,14 @@ func IsExternalPresetURI(arg string) bool {
 // verifies the expected manifest file is present for the given preset type.
 func ResolvePreset(
 	ctx context.Context,
-	manager *runtimeartifacts.Manager,
+	manager *resource.Manager,
 	uri string,
 	presetType string,
 ) (string, error) {
 	cleanURI, subpath := parsePresetURI(uri)
 
-	repoURL, ref := runtimeartifacts.ParseGitURL(cleanURI)
-	if ref != "" && !runtimeartifacts.IsGitSourceURL(repoURL) {
+	repoURL, ref := resource.ParseGitURL(cleanURI)
+	if ref != "" && !resource.IsGitSourceURL(repoURL) {
 		return "", fmt.Errorf(
 			"@ref syntax (%q) is only valid on git source URLs;"+
 				" %q does not appear to be a git repository",
@@ -45,9 +45,9 @@ func ResolvePreset(
 		)
 	}
 
-	def := runtimeartifacts.ResourceDefinition{
+	def := resource.ResourceDefinition{
 		Extract: needsExtraction(cleanURI),
-		Artifact: map[string]runtimeartifacts.ArtifactSpec{
+		Artifact: map[string]resource.ArtifactSpec{
 			"any": {URL: cleanURI, ResourcePath: subpath},
 		},
 	}

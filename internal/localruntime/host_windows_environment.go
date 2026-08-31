@@ -14,7 +14,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/podmanmachine"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/exasol/exasol-personal/internal/winget"
 )
 
@@ -32,7 +32,7 @@ type windowsHostEnvironmentPreparer struct{}
 // deployment that was never prepared.
 func NewHostWindowsRuntime(
 	deployment config.DeploymentDir,
-	manager *runtimeartifacts.Manager,
+	manager *resource.Manager,
 ) *HostRuntime {
 	return newHostRuntime(deployment, manager, windowsHostEnvironmentPreparer{})
 }

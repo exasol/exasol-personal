@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 func TestResolvePreset_NonGitURLWithRefReturnsError(t *testing.T) {
@@ -40,8 +40,8 @@ func TestResolvePreset_FileDirectory(t *testing.T) {
 		t.Fatalf("failed to write manifest: %v", err)
 	}
 
-	manager := runtimeartifacts.NewResourceManagerForPlatform(
-		runtimeartifacts.ResourceSpec{},
+	manager := resource.NewResourceManagerForPlatform(
+		resource.ResourceSpec{},
 		t.TempDir(),
 		runtime.GOOS,
 		runtime.GOARCH,
@@ -65,8 +65,8 @@ func TestResolvePreset_FileDirectoryMissingManifestReturnsError(t *testing.T) {
 
 	presetDir := t.TempDir()
 
-	manager := runtimeartifacts.NewResourceManagerForPlatform(
-		runtimeartifacts.ResourceSpec{},
+	manager := resource.NewResourceManagerForPlatform(
+		resource.ResourceSpec{},
 		t.TempDir(),
 		runtime.GOOS,
 		runtime.GOARCH,
@@ -96,8 +96,8 @@ func TestResolvePreset_FileDirectoryWithFragmentResolvesSubdirectory(t *testing.
 		t.Fatalf("failed to write manifest: %v", err)
 	}
 
-	manager := runtimeartifacts.NewResourceManagerForPlatform(
-		runtimeartifacts.ResourceSpec{},
+	manager := resource.NewResourceManagerForPlatform(
+		resource.ResourceSpec{},
 		t.TempDir(),
 		runtime.GOOS,
 		runtime.GOARCH,
@@ -129,8 +129,8 @@ func TestResolvePreset_FileArchiveWithFragmentResolvesSubdirectory(t *testing.T)
 		"installation/ubuntu/" + presets.InstallationManifestFilename: "name: ubuntu",
 	})
 
-	manager := runtimeartifacts.NewResourceManagerForPlatform(
-		runtimeartifacts.ResourceSpec{},
+	manager := resource.NewResourceManagerForPlatform(
+		resource.ResourceSpec{},
 		t.TempDir(),
 		runtime.GOOS,
 		runtime.GOARCH,
@@ -164,8 +164,8 @@ func TestResolvePreset_FileArchiveFragmentPointingAtNonPresetSubdirReturnsError(
 		"infra/aws/README.md": "no manifest here",
 	})
 
-	manager := runtimeartifacts.NewResourceManagerForPlatform(
-		runtimeartifacts.ResourceSpec{},
+	manager := resource.NewResourceManagerForPlatform(
+		resource.ResourceSpec{},
 		t.TempDir(),
 		runtime.GOOS,
 		runtime.GOARCH,

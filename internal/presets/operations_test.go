@@ -10,21 +10,21 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts/runtimeartifactstest"
+	"github.com/exasol/exasol-personal/internal/resource"
+	"github.com/exasol/exasol-personal/internal/resource/resourcetest"
 )
 
-func testManagerContext(t *testing.T, spec runtimeartifacts.ResourceSpec) context.Context {
+func testManagerContext(t *testing.T, spec resource.ResourceSpec) context.Context {
 	t.Helper()
 
-	return runtimeartifactstest.NewManagerContext(t, spec)
+	return resourcetest.NewManagerContext(t, spec)
 }
 
 func TestPresetDir_UnknownInfrastructureNameReturnsErrUnknownInfrastructure(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	ctx := testManagerContext(t, runtimeartifacts.ResourceSpec{})
+	ctx := testManagerContext(t, resource.ResourceSpec{})
 
 	// When
 	_, err := presetDir(ctx, Infrastructure, "this-preset-does-not-exist")
@@ -38,7 +38,7 @@ func TestPresetDir_UnknownInstallationNameReturnsErrUnknownInstallation(t *testi
 	t.Parallel()
 
 	// Given
-	ctx := testManagerContext(t, runtimeartifacts.ResourceSpec{})
+	ctx := testManagerContext(t, resource.ResourceSpec{})
 
 	// When
 	_, err := presetDir(ctx, Installation, "this-preset-does-not-exist")
@@ -51,9 +51,9 @@ func TestPresetDir_UnknownInstallationNameReturnsErrUnknownInstallation(t *testi
 //nolint:paralleltest // registers under the shared build-time group registry.
 func TestListEmbeddedPresets_ReturnsNamesDeclaredUnderKind(t *testing.T) {
 	// Given
-	t.Cleanup(func() { runtimeartifacts.RegisterGroupMembers(infrastructurePresetsResource, nil) })
-	runtimeartifacts.RegisterGroupMembers(infrastructurePresetsResource, []string{"aws", "azure"})
-	ctx := testManagerContext(t, runtimeartifacts.ResourceSpec{})
+	t.Cleanup(func() { resource.RegisterGroupMembers(infrastructurePresetsResource, nil) })
+	resource.RegisterGroupMembers(infrastructurePresetsResource, []string{"aws", "azure"})
+	ctx := testManagerContext(t, resource.ResourceSpec{})
 
 	// When
 	names := ListEmbeddedPresets(ctx, Infrastructure)
@@ -67,7 +67,7 @@ func TestListEmbeddedPresets_EmptyForKindWithNoMembers(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	ctx := testManagerContext(t, runtimeartifacts.ResourceSpec{})
+	ctx := testManagerContext(t, resource.ResourceSpec{})
 
 	// When
 	names := ListEmbeddedPresets(ctx, Infrastructure)
@@ -92,10 +92,10 @@ func TestWriteDir_NamedPresetCopiesResolvedDirectory(t *testing.T) {
 	); err != nil {
 		t.Fatalf("failed to write fixture: %v", err)
 	}
-	ctx := testManagerContext(t, runtimeartifacts.ResourceSpec{
+	ctx := testManagerContext(t, resource.ResourceSpec{
 		infrastructurePresetsResource: {
 			Glob: true,
-			Artifact: map[string]runtimeartifacts.ArtifactSpec{
+			Artifact: map[string]resource.ArtifactSpec{
 				"any": {URL: srcDir, ResourcePath: "*"},
 			},
 		},
@@ -117,7 +117,7 @@ func TestWriteDir_UnknownNamedPresetReturnsErrUnknownInfrastructure(t *testing.T
 	t.Parallel()
 
 	// Given
-	ctx := testManagerContext(t, runtimeartifacts.ResourceSpec{})
+	ctx := testManagerContext(t, resource.ResourceSpec{})
 
 	// When
 	err := WriteDir(ctx, Infrastructure, PresetRef{Name: "does-not-exist"}, t.TempDir())
@@ -139,7 +139,7 @@ func TestWriteDir_PathPresetCopiesDirectoryDirectly(t *testing.T) {
 	); err != nil {
 		t.Fatalf("failed to write fixture: %v", err)
 	}
-	ctx := testManagerContext(t, runtimeartifacts.ResourceSpec{})
+	ctx := testManagerContext(t, resource.ResourceSpec{})
 	outDir := filepath.Join(t.TempDir(), "out")
 
 	// When
@@ -158,10 +158,10 @@ func TestWriteDir_ResolutionFailurePropagatesInsteadOfReportingUnknownPreset(t *
 
 	// Given: a group whose own source can never resolve — not a member that
 	// fails to match a pattern within an otherwise-resolvable group.
-	ctx := testManagerContext(t, runtimeartifacts.ResourceSpec{
+	ctx := testManagerContext(t, resource.ResourceSpec{
 		infrastructurePresetsResource: {
 			Glob: true,
-			Artifact: map[string]runtimeartifacts.ArtifactSpec{
+			Artifact: map[string]resource.ArtifactSpec{
 				"any": {URL: filepath.Join(t.TempDir(), "does-not-exist"), ResourcePath: "*"},
 			},
 		},
@@ -194,10 +194,10 @@ func TestReadInfrastructureFile_RejectsPathEscapingThePresetDirectory(t *testing
 	); err != nil {
 		t.Fatalf("failed to write fixture file: %v", err)
 	}
-	ctx := testManagerContext(t, runtimeartifacts.ResourceSpec{
+	ctx := testManagerContext(t, resource.ResourceSpec{
 		infrastructurePresetsResource: {
 			Glob: true,
-			Artifact: map[string]runtimeartifacts.ArtifactSpec{
+			Artifact: map[string]resource.ArtifactSpec{
 				"any": {URL: presetsRoot, ResourcePath: "*"},
 			},
 		},

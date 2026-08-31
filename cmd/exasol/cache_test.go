@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/spf13/cobra"
 )
 
@@ -70,7 +70,7 @@ func TestCacheListCommandInitializesConfig(t *testing.T) {
 		t.Fatalf("expected no stderr output, got %q", stderr.String())
 	}
 
-	expectedConfig := filepath.Join(config.LauncherDirPath(home), "runtime-artifacts.yaml")
+	expectedConfig := filepath.Join(config.LauncherDirPath(home), "resources.yaml")
 	if _, err := os.Stat(expectedConfig); err != nil {
 		t.Fatalf("expected cache config to be created, got %v", err)
 	}
@@ -80,12 +80,12 @@ func TestCacheListCommandInitializesConfig(t *testing.T) {
 	}
 	expectedCacheRoot := filepath.Join(
 		config.LauncherDirPath(userCacheDir),
-		"runtime-artifacts",
+		"resources",
 	)
-	if !strings.Contains(buf.String(), "Runtime artifact cache: "+expectedCacheRoot) {
+	if !strings.Contains(buf.String(), "Resource cache: "+expectedCacheRoot) {
 		t.Fatalf("expected cache root in output, got %q", buf.String())
 	}
-	if !strings.Contains(buf.String(), "No cached runtime artifacts.") {
+	if !strings.Contains(buf.String(), "No cached resources.") {
 		t.Fatalf("expected empty-cache message, got %q", buf.String())
 	}
 }
@@ -108,10 +108,10 @@ func TestCacheUnlockCommandReportsConfirmationOnStderr(t *testing.T) {
 
 	// The unlock confirmation is an operational notice: it belongs on stderr and
 	// must not pollute stdout, which stays reserved for primary/JSON output.
-	if strings.Contains(stdout.String(), "Runtime artifact cache lock cleared.") {
+	if strings.Contains(stdout.String(), "Resource cache lock cleared.") {
 		t.Fatalf("confirmation must not appear on stdout, got %q", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "Runtime artifact cache lock cleared.") {
+	if !strings.Contains(stderr.String(), "Resource cache lock cleared.") {
 		t.Fatalf("expected confirmation on stderr, got %q", stderr.String())
 	}
 }
@@ -185,14 +185,14 @@ func TestDiagCacheHelpDescribesReadOnlyBehavior(t *testing.T) {
 func TestRenderCacheListJSON(t *testing.T) {
 	t.Parallel()
 
-	entries := []runtimeartifacts.CacheEntryInfo{cacheEntryInfoFixture()}
+	entries := []resource.CacheEntryInfo{cacheEntryInfoFixture()}
 	var buf bytes.Buffer
 
 	if err := renderCacheListJSON(&buf, entries); err != nil {
 		t.Fatalf("expected json render to succeed, got %v", err)
 	}
 
-	var decoded []runtimeartifacts.CacheEntryInfo
+	var decoded []resource.CacheEntryInfo
 	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
 		t.Fatalf("expected valid json, got %v: %s", err, buf.String())
 	}
@@ -209,7 +209,7 @@ func TestRenderCacheListTextIncludesLastUsedTimestamp(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	if err := renderCacheListText(&buf, "/cache", []runtimeartifacts.CacheEntryInfo{
+	if err := renderCacheListText(&buf, "/cache", []resource.CacheEntryInfo{
 		cacheEntryInfoFixture(),
 	}); err != nil {
 		t.Fatalf("expected text render to succeed, got %v", err)
@@ -217,7 +217,7 @@ func TestRenderCacheListTextIncludesLastUsedTimestamp(t *testing.T) {
 
 	output := buf.String()
 	for _, expected := range []string{
-		"Runtime artifact cache: /cache",
+		"Resource cache: /cache",
 		"tofu linux/amd64",
 		"last_used=2026-06-08T12:00:00Z",
 		"size=1.5 KB",
@@ -234,7 +234,7 @@ func TestRenderCacheCleanTextUsesDryRunAndInvalidWording(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	err := renderCacheCleanText(&buf, runtimeartifacts.CleanSummary{
+	err := renderCacheCleanText(&buf, resource.CleanSummary{
 		Mode:           "invalid",
 		DryRun:         true,
 		RemovedEntries: 2,
@@ -247,7 +247,7 @@ func TestRenderCacheCleanTextUsesDryRunAndInvalidWording(t *testing.T) {
 
 	output := buf.String()
 	for _, expected := range []string{
-		"Would remove 2 runtime artifact(s), 2 MB (mode: invalid).",
+		"Would remove 2 resource(s), 2 MB (mode: invalid).",
 		"Invalid artifacts: 2",
 	} {
 		if !strings.Contains(output, expected) {
@@ -260,21 +260,21 @@ func TestRenderCacheDiagnosticsTextIncludesCacheState(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	report := runtimeartifacts.DiagnosticReport{
+	report := resource.DiagnosticReport{
 		CacheRoot:        "/cache",
-		ConfigPath:       "/config/runtime-artifacts.yaml",
+		ConfigPath:       "/config/resources.yaml",
 		ConfigExists:     true,
 		RetentionDays:    30,
 		IndexPath:        "/cache/index.json",
 		IndexExists:      true,
-		Lock:             runtimeartifacts.CacheLockStatus{Locked: true, Mode: "exclusive"},
+		Lock:             resource.CacheLockStatus{Locked: true, Mode: "exclusive"},
 		ArtifactCount:    1,
 		TotalBytes:       3 * 1024 * 1024 * 1024,
 		StaleCandidates:  1,
 		InvalidArtifacts: 1,
 		MissingFiles:     []string{"/cache/missing"},
 		UnexpectedPaths:  []string{"/cache/unexpected"},
-		Entries: []runtimeartifacts.DiagnosticEntry{
+		Entries: []resource.DiagnosticEntry{
 			{
 				CacheEntryInfo:  cacheEntryInfoFixture(),
 				Stale:           true,
@@ -290,7 +290,7 @@ func TestRenderCacheDiagnosticsTextIncludesCacheState(t *testing.T) {
 	output := buf.String()
 	for _, expected := range []string{
 		"Cache root: /cache",
-		"Config file: /config/runtime-artifacts.yaml",
+		"Config file: /config/resources.yaml",
 		"Index file: index.json",
 		"Config status: ok (retention_days=30)",
 		"Index status: ok",
@@ -325,8 +325,8 @@ func TestFormatCachePathReturnsRelativePathsInsideCacheRoot(t *testing.T) {
 		{
 			name:      "outside root",
 			cacheRoot: "/cache",
-			pathValue: "/config/runtime-artifacts.yaml",
-			expected:  "/config/runtime-artifacts.yaml",
+			pathValue: "/config/resources.yaml",
+			expected:  "/config/resources.yaml",
 		},
 		{
 			name:      "already relative",
@@ -363,8 +363,8 @@ func TestFormatByteSizeUsesHumanFriendlyUnits(t *testing.T) {
 	}
 }
 
-func cacheEntryInfoFixture() runtimeartifacts.CacheEntryInfo {
-	return runtimeartifacts.CacheEntryInfo{
+func cacheEntryInfoFixture() resource.CacheEntryInfo {
+	return resource.CacheEntryInfo{
 		ID:           "identity",
 		ResourceID:   "tofu",
 		Platform:     "linux/amd64",

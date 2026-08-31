@@ -11,7 +11,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 // LocalDiagnostics is a read-only snapshot of the local deployment preset's
@@ -35,7 +35,7 @@ func DiagnoseLocal(
 ) (*LocalDiagnostics, error) {
 	var diagnostics *LocalDiagnostics
 	err := withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
-		manager := runtimeartifacts.FromContext(ctx)
+		manager := resource.FromContext(ctx)
 
 		selectedRuntime, err := newLocalRuntime(deployment, manager)
 		if err != nil {

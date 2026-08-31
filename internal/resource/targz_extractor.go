@@ -1,7 +1,7 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package runtimeartifacts
+package resource
 
 import (
 	"archive/tar"
@@ -156,7 +156,7 @@ func writeTarRegularFile(
 		return err
 	}
 
-	// #nosec G110 -- archive contents are trusted runtime artifacts.
+	// #nosec G110 -- archive contents are trusted resources.
 	if _, err := io.Copy(out, tarReader); err != nil {
 		_ = out.Close()
 		return err

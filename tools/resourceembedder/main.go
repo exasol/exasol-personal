@@ -37,7 +37,7 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/assets/resources"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
@@ -55,7 +55,7 @@ var resourceFileTemplate = template.Must(template.New("resourceFile").Parse(reso
 // repoRoot resolves the repository root from this source file's own location
 // rather than the process's working directory: go generate invokes this tool
 // with the working directory set to wherever the //go:generate directive
-// lives (internal/runtimeartifacts/), not the repo root, so a bare relative
+// lives (internal/resource/), not the repo root, so a bare relative
 // path would resolve to the wrong place depending on how the tool was
 // invoked (go generate vs. a Task step run from the repo root).
 func repoRoot() (string, error) {
@@ -73,11 +73,11 @@ func repoRoot() (string, error) {
 // differ.
 func resolveRelativeLocalArtifacts(
 	root string,
-	spec runtimeartifacts.ResourceSpec,
-) runtimeartifacts.ResourceSpec {
-	resolved := make(runtimeartifacts.ResourceSpec, len(spec))
+	spec resource.ResourceSpec,
+) resource.ResourceSpec {
+	resolved := make(resource.ResourceSpec, len(spec))
 	for resourceID, def := range spec {
-		resolvedArtifacts := make(map[string]runtimeartifacts.ArtifactSpec, len(def.Artifact))
+		resolvedArtifacts := make(map[string]resource.ArtifactSpec, len(def.Artifact))
 		for key, artifact := range def.Artifact {
 			resolvedArtifacts[key] = resolveLocalArtifactURL(root, artifact)
 		}
@@ -90,18 +90,18 @@ func resolveRelativeLocalArtifacts(
 
 func resolveLocalArtifactURL(
 	root string,
-	artifact runtimeartifacts.ArtifactSpec,
-) runtimeartifacts.ArtifactSpec {
-	if !(runtimeartifacts.FileSource{}).CanFetch(artifact.URL) {
+	artifact resource.ArtifactSpec,
+) resource.ArtifactSpec {
+	if !(resource.FileSource{}).CanFetch(artifact.URL) {
 		return artifact
 	}
 
-	rawPath := strings.TrimPrefix(artifact.URL, runtimeartifacts.FileURLScheme)
+	rawPath := strings.TrimPrefix(artifact.URL, resource.FileURLScheme)
 	if filepath.IsAbs(rawPath) {
 		return artifact
 	}
 
-	artifact.URL = runtimeartifacts.FileURLScheme + filepath.Join(root, rawPath)
+	artifact.URL = resource.FileURLScheme + filepath.Join(root, rawPath)
 
 	return artifact
 }
@@ -131,20 +131,20 @@ func run(ctx context.Context, args []string) error {
 	}
 	outputDir := filepath.Join(root, generatedDirRelPath)
 
-	spec, err := runtimeartifacts.ParseSpec(resources.ResourcesYAML)
+	spec, err := resource.ParseSpec(resources.ResourcesYAML)
 	if err != nil {
 		return err
 	}
 
 	spec = resolveRelativeLocalArtifacts(root, spec)
 
-	cache, err := runtimeartifacts.NewDefaultCache()
+	cache, err := resource.NewDefaultCache()
 	if err != nil {
 		return err
 	}
 
 	g := &generator{
-		manager: runtimeartifacts.NewResourceManagerWithCacheForPlatform(
+		manager: resource.NewResourceManagerWithCacheForPlatform(
 			spec, cache, cfg.goos, cfg.goarch,
 		),
 		outputDir: outputDir,
@@ -161,10 +161,10 @@ func run(ctx context.Context, args []string) error {
 // that, and fail. resource_path is cleared too, since Get would otherwise
 // treat it as a literal subdirectory name rather than the pattern it
 // actually is.
-func rawDefFor(def runtimeartifacts.ResourceDefinition) runtimeartifacts.ResourceDefinition {
+func rawDefFor(def resource.ResourceDefinition) resource.ResourceDefinition {
 	rawDef := def
-	rawDef.Embed = runtimeartifacts.EmbedNever
-	rawDef.Artifact = make(map[string]runtimeartifacts.ArtifactSpec, len(def.Artifact))
+	rawDef.Embed = resource.EmbedNever
+	rawDef.Artifact = make(map[string]resource.ArtifactSpec, len(def.Artifact))
 	for platform, artifact := range def.Artifact {
 		artifact.ResourcePath = ""
 		rawDef.Artifact[platform] = artifact
@@ -228,7 +228,7 @@ type platformFileData struct {
 }
 
 type generator struct {
-	manager   *runtimeartifacts.Manager
+	manager   *resource.Manager
 	outputDir string
 	goos      string
 	goarch    string
@@ -237,10 +237,10 @@ type generator struct {
 
 // generatePlatform combines every embed: true resource in spec that declares
 // data for g.goos/g.goarch into a single generated file for that platform.
-func (g *generator) generatePlatform(ctx context.Context, spec runtimeartifacts.ResourceSpec) error {
+func (g *generator) generatePlatform(ctx context.Context, spec resource.ResourceSpec) error {
 	resourceIDs := make([]string, 0, len(spec))
 	for resourceID, def := range spec {
-		if def.Embed != runtimeartifacts.EmbedNever {
+		if def.Embed != resource.EmbedNever {
 			resourceIDs = append(resourceIDs, resourceID)
 		}
 	}
@@ -270,14 +270,14 @@ func (g *generator) generatePlatform(ctx context.Context, spec runtimeartifacts.
 func (g *generator) resolveResourceEmbed(
 	ctx context.Context,
 	resourceID string,
-	def runtimeartifacts.ResourceDefinition,
+	def resource.ResourceDefinition,
 ) (*resourceEmbed, error) {
 	artifact, err := def.Resolve(g.goos, g.goarch)
 	if err != nil {
 		return nil, nil
 	}
 
-	if g.skipEmbed && def.Embed != runtimeartifacts.EmbedAlways {
+	if g.skipEmbed && def.Embed != resource.EmbedAlways {
 		// embed: always is the one exemption: it must still resolve to real
 		// data regardless of build speed concerns.
 		return nil, nil
@@ -294,7 +294,7 @@ func (g *generator) resolveResourceEmbed(
 // declares: a running binary extracts the embedded bytes itself later if
 // the real entry declares extract: true.
 func (g *generator) resolveRawEmbed(
-	ctx context.Context, resourceID string, def runtimeartifacts.ResourceDefinition,
+	ctx context.Context, resourceID string, def resource.ResourceDefinition,
 ) (*resourceEmbed, error) {
 	rawDef := rawDefFor(def)
 	rawDef.Extract = false
@@ -317,15 +317,15 @@ func (g *generator) resolveRawEmbed(
 func (g *generator) resolveGlobEmbed(
 	ctx context.Context,
 	resourceID string,
-	def runtimeartifacts.ResourceDefinition,
-	artifact runtimeartifacts.ArtifactSpec,
+	def resource.ResourceDefinition,
+	artifact resource.ArtifactSpec,
 ) (*resourceEmbed, error) {
 	root, err := g.manager.Get(ctx, rawDefFor(def), resourceID)
 	if err != nil {
 		return nil, err
 	}
 
-	matches, err := runtimeartifacts.GlobMatches(root, artifact.ResourcePath)
+	matches, err := resource.GlobMatches(root, artifact.ResourcePath)
 	if err != nil {
 		return nil, err
 	}

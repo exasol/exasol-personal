@@ -1,7 +1,7 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-package runtimeartifacts
+package resource
 
 import (
 	"archive/zip"
@@ -47,8 +47,6 @@ func (*ZipExtractor) Extract(srcPath, dstPath string) error {
 	return nil
 }
 
-// extractZipEntry extracts a single zip entry under dstPath and reports
-// whether it produced an extractable file or directory.
 func extractZipEntry(zipEntry *zip.File, dstPath string) (bool, error) {
 	targetPath, err := sanitizeZipEntryPath(dstPath, zipEntry.Name)
 	if err != nil {
@@ -105,7 +103,7 @@ func writeZipRegularFile(zipEntry *zip.File, targetPath string, mode os.FileMode
 		_ = entryReader.Close()
 		return err
 	}
-	// #nosec G110 -- archive contents are trusted runtime artifacts.
+	// #nosec G110 -- archive contents are trusted resources.
 	if _, err := io.Copy(out, entryReader); err != nil {
 		_ = entryReader.Close()
 		_ = out.Close()

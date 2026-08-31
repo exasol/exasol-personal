@@ -19,7 +19,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
@@ -80,7 +80,7 @@ func (linuxHostEnvironmentPreparer) NewExecutionEnvironment(
 type HostRuntime struct {
 	deployment  config.DeploymentDir
 	paths       runtimePaths
-	manager     *runtimeartifacts.Manager
+	manager     *resource.Manager
 	preparer    hostRuntimeEnvironmentPreparer
 	endpoint    *RuntimeEndpoint
 	runtimeExec []string
@@ -91,14 +91,14 @@ type HostRuntime struct {
 // that never invoke the runner, such as destroying an unprepared deployment.
 func NewHostLinuxRuntime(
 	deployment config.DeploymentDir,
-	manager *runtimeartifacts.Manager,
+	manager *resource.Manager,
 ) *HostRuntime {
 	return newHostRuntime(deployment, manager, linuxHostEnvironmentPreparer{})
 }
 
 func newHostRuntime(
 	deployment config.DeploymentDir,
-	manager *runtimeartifacts.Manager,
+	manager *resource.Manager,
 	preparer hostRuntimeEnvironmentPreparer,
 ) *HostRuntime {
 	return &HostRuntime{

@@ -11,7 +11,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts/runtimeartifactstest"
+	"github.com/exasol/exasol-personal/internal/resource/resourcetest"
 )
 
 // testManagerContext returns a context carrying a Manager backed by the real
@@ -20,7 +20,7 @@ import (
 func testManagerContext(t *testing.T) context.Context {
 	t.Helper()
 
-	return runtimeartifactstest.NewContext(t)
+	return resourcetest.NewContext(t)
 }
 
 func TestResolveBackendKind_UsesExplicitBackend(t *testing.T) {

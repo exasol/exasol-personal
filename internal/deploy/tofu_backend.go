@@ -17,7 +17,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/exasol/exasol-personal/internal/task_runner"
 	"github.com/exasol/exasol-personal/internal/tofu"
 	"github.com/exasol/exasol-personal/internal/util"
@@ -60,7 +60,7 @@ type tofuBackend struct {
 func newTofuBackend(
 	deployment config.DeploymentDir,
 	manifest *presets.InfrastructureManifest,
-	manager *runtimeartifacts.Manager,
+	manager *resource.Manager,
 ) *tofuBackend {
 	b := &tofuBackend{deployment: deployment}
 	if manifest != nil && manifest.Tofu != nil {

@@ -15,7 +15,7 @@ import (
 
 	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/exasol/exasol-personal/internal/slc"
 )
 
@@ -573,7 +573,7 @@ func applySLCChange(
 }
 
 func isLocalDeploymentRunning(ctx context.Context, deployment config.DeploymentDir) bool {
-	manager := runtimeartifacts.FromContext(ctx)
+	manager := resource.FromContext(ctx)
 
 	selectedRuntime, err := newLocalRuntime(deployment, manager)
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 // Default tofu configuration values.
@@ -31,14 +31,14 @@ type Config struct {
 	varsOutputFile string
 	planeFile      string
 	stateFile      string
-	manager        *runtimeartifacts.Manager
+	manager        *resource.Manager
 }
 
 // NewTofuConfigFromDeployment constructs a Tofu config from a deployment and preset.
 func NewTofuConfigFromDeployment(
 	deploymentDir string,
 	presetTofuConfig presets.InfrastructureTofu,
-	manager *runtimeartifacts.Manager,
+	manager *resource.Manager,
 ) *Config {
 	infraDir := path.Join(deploymentDir, config.InfrastructureFilesDirectory)
 
@@ -70,7 +70,7 @@ func newTofuConfig(
 	workDir string,
 	variablesRelFilepath string,
 	varsOutputRelFilepath string,
-	manager *runtimeartifacts.Manager,
+	manager *resource.Manager,
 ) *Config {
 	planFile := path.Join(workDir, DefaultPlanFile)
 	stateFile := path.Join(workDir, DefaultStateFile)

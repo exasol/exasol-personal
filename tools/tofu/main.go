@@ -11,13 +11,13 @@ import (
 	"os/exec"
 
 	"github.com/exasol/exasol-personal/assets/resources"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 func main() {
 	flag.Parse()
 
-	manager, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
+	manager, err := resource.NewResourceManagerWithSpec(resources.ResourcesYAML)
 	if err != nil {
 		log.Fatal(err)
 	}

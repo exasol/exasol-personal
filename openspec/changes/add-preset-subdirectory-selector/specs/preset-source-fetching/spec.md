@@ -3,7 +3,7 @@
 ### Requirement: Preset resource paths select a subdirectory of the resolved source
 
 When a preset source is fetched from a git repository or extracted from an archive, the
-runtime-artifact layer SHALL support a `ResourcePath` that selects a subdirectory of the
+resource layer SHALL support a `ResourcePath` that selects a subdirectory of the
 resolved source as the returned path. `ResourcePath` SHALL be honoured for git sources even
 when `Extract` is false, since a git clone already produces a browsable directory tree.
 

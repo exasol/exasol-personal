@@ -13,7 +13,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 // UserConfirmationValidator is a function that takes an user input as a String,
@@ -71,7 +71,7 @@ func looksLikePathPresetArg(arg string) bool {
 
 // resolvePresetRef resolves a preset argument to a PresetRef.
 // Plain names (no path separators or URI scheme) are returned as embedded preset
-// names. Everything else is resolved as a runtime artifact.
+// names. Everything else is resolved as a resource.
 func resolvePresetRef(
 	ctx context.Context,
 	arg string,
@@ -82,7 +82,7 @@ func resolvePresetRef(
 		return deploy.PresetRef{Name: arg}, nil
 	}
 
-	manager := runtimeartifacts.FromContext(ctx)
+	manager := resource.FromContext(ctx)
 	resolvedPath, err := deploy.ResolvePreset(ctx, manager, arg, presetType)
 	if err != nil {
 		return deploy.PresetRef{}, err

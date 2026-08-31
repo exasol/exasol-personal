@@ -14,7 +14,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/exasol/exasol-personal/internal/tofu"
 )
 
@@ -56,7 +56,7 @@ func TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles(t *te
 
 	// Given
 	ctx := testManagerContext(t)
-	mgr := runtimeartifacts.FromContext(ctx)
+	mgr := resource.FromContext(ctx)
 
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := InitDeployment(
