@@ -237,6 +237,23 @@ The runtime artifact cache SHALL extract `.zip` archives in addition to `.tar.gz
 - **WHEN** an artifact source resolves to a file with an unrecognised archive format
 - **THEN** the cache SHALL return an error identifying the unsupported format
 
+### Requirement: Runtime artifact cache SHALL extract directory entries within a tar.gz archive
+The runtime artifact cache SHALL extract an explicit directory entry within a
+tar.gz archive as a directory, in addition to the regular file and symlink
+entries it already extracts.
+
+#### Scenario: Directory entry is created
+- **WHEN** a tar.gz archive being extracted contains an explicit directory
+  entry
+- **THEN** the cache SHALL create that directory in the extraction target
+- **AND** extraction of the remaining entries in the archive SHALL continue
+
+#### Scenario: Entries nested under an extracted directory entry are extracted
+- **WHEN** a tar.gz archive contains a directory entry followed by regular
+  file or symlink entries nested under that directory
+- **THEN** the cache SHALL extract all of those nested entries into the
+  created directory
+
 ### Requirement: Runtime artifact cache SHALL support platform-independent artifact definitions
 The runtime artifact cache SHALL accept artifact definitions that use an `"any"` platform key, resolving that definition for any platform when no platform-specific variant is present.
 
