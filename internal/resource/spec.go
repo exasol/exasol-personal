@@ -245,7 +245,7 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 	locator := a.Locator()
 
 	switch {
-	case (&GitSource{}).CanFetch(locator.String()):
+	case (&GitSource{}).Handles(locator):
 		if strings.TrimSpace(a.Sha256) != "" {
 			return fmt.Errorf(
 				"resource %q artifact %q must not define sha256 for a git source"+
@@ -254,7 +254,7 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 				ctx.variant,
 			)
 		}
-	case (FileSource{}).CanFetch(locator.String()):
+	case (FileSource{}).Handles(locator):
 		// Local (file://, or bare local path) sources are first-party content whose
 		// integrity comes from being part of the same versioned repository commit,
 		// not from a hand-authored checksum, so a checksum is optional for them.
@@ -301,7 +301,7 @@ func validateGlobSubpath(artifact ArtifactSpec, ctx artifactValidationContext) e
 
 		return nil
 	}
-	if (FileSource{}).CanFetch(artifact.URL) {
+	if (FileSource{}).Handles(artifact.Locator()) {
 		return nil
 	}
 	if !ctx.extract {

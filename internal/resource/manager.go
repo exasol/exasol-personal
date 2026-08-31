@@ -47,20 +47,25 @@ type Manager struct {
 	platform Platform
 }
 
-type Source interface {
-	CanFetch(url string) bool
-	// Fetch downloads or copies the resource at url to dstPath. It returns a
-	// non-empty redirectPath when the resource already resides locally and
-	// dstPath should be ignored; the caller uses redirectPath directly. For all
-	// other sources redirectPath is empty.
-	Fetch(ctx context.Context, url, dstPath string) (redirectPath string, err error)
+// Probe is what a source can determine about a locator without transferring
+// its content.
+type Probe struct {
+	// Identity changes exactly when the content changes. It is opaque to the
+	// manager, which only keys the cache on it; each source formats its own.
+	// Empty means the source cannot tell, and the resource is refreshed on
+	// every request.
+	Identity string
+	// Local names a path that already holds the artifact. When set, Fetch is
+	// never called and the cache stores no copy of the artifact itself, though
+	// an extraction of it is still cached.
+	Local string
 }
 
-// Identifier is an optional interface for Source types that can resolve their
-// content identity before fetching. The returned string is used as a synthetic
-// Sha256 so the standard cache machinery handles deduplication.
-type Identifier interface {
-	Identify(ctx context.Context, url string) (string, error)
+type Source interface {
+	Handles(loc Locator) bool
+	Probe(ctx context.Context, loc Locator) (Probe, error)
+	// Fetch places the content at loc into dstPath.
+	Fetch(ctx context.Context, loc Locator, dstPath string) error
 }
 
 type Extractor interface {
@@ -179,24 +184,23 @@ func (m *Manager) Get(
 	artifact.URL = artifact.Locator().String()
 	artifact.Ref = ""
 
-	// If the source can identify its content before fetching, use that identity
-	// as a synthetic Sha256 so the standard cache machinery handles the rest.
-	// An embed: true resource uses its own build-time content hash instead,
-	// even when the source artifact also declares a checksum: the checksum
-	// describes what was fetched from the source, not necessarily what a
-	// particular build ends up embedding, so only the build's own hash can
-	// tell two builds' embedded content apart. A source's own Identify exists
-	// to identify network content before fetching it, not to stand in for the
-	// identity of whatever was actually embedded (e.g. FileSource.Identify
-	// hashes a path, not file content).
-	switch {
-	case def.Embed != EmbedNever:
+	// An embedded resource takes its identity from the build's own content hash
+	// even when the artifact also declares a checksum: the checksum describes
+	// what was fetched upstream, not what a particular build ended up
+	// embedding, so only the build's hash tells two builds' content apart.
+	var probe Probe
+	if def.Embed != EmbedNever {
 		if hash, ok := lookupEmbeddedHash(resourceID); ok {
 			artifact.Sha256 = hash
 		}
-	case strings.TrimSpace(artifact.Sha256) == "":
-		artifact.Sha256 = m.identify(ctx, artifact)
-	default:
+	} else {
+		probe, err = probeSource(ctx, artifact.Locator())
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(artifact.Sha256) == "" {
+			artifact.Sha256 = probe.Identity
+		}
 	}
 
 	entry, err := m.resolveEntry(resourceID, def, artifact)
@@ -207,7 +211,7 @@ func (m *Manager) Get(
 	var resolvedPath string
 	err = m.cache.withExclusiveLock(ctx, func() error {
 		var lockErr error
-		resolvedPath, lockErr = m.resolveUnderLock(ctx, resourceID, artifact, &entry)
+		resolvedPath, lockErr = m.resolveUnderLock(ctx, resourceID, artifact, probe, &entry)
 
 		return lockErr
 	})
@@ -368,6 +372,7 @@ func (m *Manager) resolveUnderLock(
 	ctx context.Context,
 	resourceID string,
 	artifact ArtifactSpec,
+	probe Probe,
 	entry *cacheIndexEntry,
 ) (string, error) {
 	index, _, err := m.cache.readIndex()
@@ -395,7 +400,7 @@ func (m *Manager) resolveUnderLock(
 		}
 	}
 
-	resolvedPath, err := m.refresh(ctx, resourceID, artifact, entry, &index)
+	resolvedPath, err := m.refresh(ctx, resourceID, artifact, probe, entry, &index)
 	if err != nil {
 		return "", err
 	}
@@ -405,52 +410,36 @@ func (m *Manager) resolveUnderLock(
 	return resolvedPath, nil
 }
 
-func (*Manager) identify(ctx context.Context, artifact ArtifactSpec) string {
-	for _, src := range sources {
-		if !src.CanFetch(artifact.URL) {
-			continue
+func sourceFor(loc Locator) (Source, error) {
+	for _, source := range sources {
+		if source.Handles(loc) {
+			return source, nil
 		}
-		if id, ok := src.(Identifier); ok {
-			if hash, err := id.Identify(ctx, artifact.URL); err == nil {
-				return hash
-			}
-		}
-
-		break
 	}
 
-	return ""
+	return nil, fmt.Errorf("unsupported resource scheme in %q", loc.URL)
+}
+
+func probeSource(ctx context.Context, loc Locator) (Probe, error) {
+	source, err := sourceFor(loc)
+	if err != nil {
+		return Probe{}, err
+	}
+
+	return source.Probe(ctx, loc)
 }
 
 func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, entry *cacheIndexEntry) error {
-	for _, source := range sources {
-		if !source.CanFetch(artifact.URL) {
-			continue
-		}
-
-		return m.fetchFromSource(ctx, source, artifact, entry)
-	}
-
-	return fmt.Errorf("unsupported resource scheme in %q", artifact.URL)
-}
-
-func (m *Manager) fetchFromSource(
-	ctx context.Context,
-	source Source,
-	artifact ArtifactSpec,
-	entry *cacheIndexEntry,
-) error {
-	fetchPath := m.cache.absolutePath(entry.ArtifactPath)
-
-	_ = os.MkdirAll(filepath.Dir(fetchPath), dirPerm)
-	redirectPath, err := source.Fetch(ctx, artifact.URL, fetchPath)
+	loc := artifact.Locator()
+	source, err := sourceFor(loc)
 	if err != nil {
 		return err
 	}
-	if redirectPath != "" {
-		entry.RedirectPath = redirectPath
 
-		return nil
+	fetchPath := m.cache.absolutePath(entry.ArtifactPath)
+	_ = os.MkdirAll(filepath.Dir(fetchPath), dirPerm)
+	if err := source.Fetch(ctx, loc, fetchPath); err != nil {
+		return err
 	}
 
 	return verifyFetchedChecksum(fetchPath, artifact.Sha256)
@@ -577,15 +566,21 @@ func (m *Manager) refresh(
 	ctx context.Context,
 	resourceID string,
 	artifact ArtifactSpec,
+	probe Probe,
 	entry *cacheIndexEntry,
 	index *cacheIndex,
 ) (string, error) {
-	if entry.Embed {
+	switch {
+	case entry.Embed:
 		if err := m.resolveEmbedded(resourceID, entry); err != nil {
 			return "", err
 		}
-	} else if err := m.fetch(ctx, artifact, entry); err != nil {
-		return "", errors.Join(fmt.Errorf("failed to fetch resource %q", resourceID), err)
+	case probe.Local != "":
+		entry.RedirectPath = probe.Local
+	default:
+		if err := m.fetch(ctx, artifact, entry); err != nil {
+			return "", errors.Join(fmt.Errorf("failed to fetch resource %q", resourceID), err)
+		}
 	}
 
 	if entry.Extract {

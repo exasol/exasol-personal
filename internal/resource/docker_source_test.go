@@ -163,7 +163,7 @@ func TestDockerSource_CanFetch(t *testing.T) {
 		"oci-archive:" + ociPath + ":latest",
 	}
 	for _, url := range trueURLs {
-		if !src.CanFetch(url) {
+		if !src.Handles(Locator{URL: url}) {
 			t.Errorf("CanFetch(%q) = false, want true", url)
 		}
 	}
@@ -175,7 +175,7 @@ func TestDockerSource_CanFetch(t *testing.T) {
 		"",
 	}
 	for _, url := range falseURLs {
-		if src.CanFetch(url) {
+		if src.Handles(Locator{URL: url}) {
 			t.Errorf("CanFetch(%q) = true, want false", url)
 		}
 	}
@@ -234,11 +234,12 @@ func TestDockerSource_Fetch_LocalOCIImages(t *testing.T) {
 			dstPath := filepath.Join(t.TempDir(), "download.tar")
 
 			// When
-			if _, err := src.Fetch(context.Background(), url, dstPath); err != nil {
+			if err := src.Fetch(context.Background(), Locator{URL: url}, dstPath); err != nil {
 				t.Fatalf("fetch %s: %v", testCase.name, err)
 			}
 			secondDstPath := filepath.Join(t.TempDir(), "download.tar")
-			if _, err := src.Fetch(context.Background(), url, secondDstPath); err != nil {
+			err = src.Fetch(context.Background(), Locator{URL: url}, secondDstPath)
+			if err != nil {
 				t.Fatalf("fetch %s a second time: %v", testCase.name, err)
 			}
 			runPodman(t, "load", "--input", dstPath)

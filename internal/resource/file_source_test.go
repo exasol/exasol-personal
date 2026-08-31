@@ -21,7 +21,7 @@ func TestFileSource_CanFetch_FileURLs(t *testing.T) {
 		"file:///tmp/preset.tar.gz",
 	}
 	for _, url := range trueURLs {
-		if !src.CanFetch(url) {
+		if !src.Handles(Locator{URL: url}) {
 			t.Errorf("CanFetch(%q) = false, want true", url)
 		}
 	}
@@ -37,7 +37,7 @@ func TestFileSource_CanFetch_LocalPaths(t *testing.T) {
 		"./some/file",
 	}
 	for _, url := range trueURLs {
-		if !src.CanFetch(url) {
+		if !src.Handles(Locator{URL: url}) {
 			t.Errorf("CanFetch(%q) = false, want true", url)
 		}
 	}
@@ -54,61 +54,56 @@ func TestFileSource_CanFetch_Exclusions(t *testing.T) {
 		"git://github.com/org/repo.git",
 	}
 	for _, url := range falseURLs {
-		if src.CanFetch(url) {
+		if src.Handles(Locator{URL: url}) {
 			t.Errorf("CanFetch(%q) = true, want false", url)
 		}
 	}
 }
 
-func TestFileSource_Fetch_DirectoryReturnsRedirectPath(t *testing.T) {
+func TestFileSource_Probe_DirectoryReportsItInPlace(t *testing.T) {
 	t.Parallel()
 
 	srcDir := t.TempDir()
 	dstDir := filepath.Join(t.TempDir(), "link")
 	src := FileSource{}
 
-	redirectPath, err := src.Fetch(context.Background(), "file://"+srcDir, dstDir)
+	probe, err := src.Probe(context.Background(), Locator{URL: "file://" + srcDir})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if !filepath.IsAbs(redirectPath) {
-		t.Fatalf("expected absolute redirect path, got %q", redirectPath)
+	if !filepath.IsAbs(probe.Local) {
+		t.Fatalf("expected absolute local path, got %q", probe.Local)
 	}
-	if redirectPath != srcDir {
-		t.Fatalf("expected redirect to %q, got %q", srcDir, redirectPath)
+	if probe.Local != srcDir {
+		t.Fatalf("expected local path %q, got %q", srcDir, probe.Local)
 	}
-	// Nothing written to dstDir.
 	if _, err := os.Lstat(dstDir); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected nothing at dstDir, got %v", err)
+		t.Fatalf("expected nothing written elsewhere, got %v", err)
 	}
 }
 
-func TestFileSource_Fetch_ArchiveReturnsRedirectPath(t *testing.T) {
+func TestFileSource_Probe_ArchiveReportsItInPlace(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cases := []string{"preset.tar.gz", "tool.zip"}
-	for _, name := range cases {
+	for _, name := range []string{"preset.tar.gz", "tool.zip"} {
 		filePath := filepath.Join(dir, name)
 		if err := os.WriteFile(filePath, []byte("content"), filePerm); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
 		src := FileSource{}
 
-		redirectPath, err := src.Fetch(context.Background(), "file://"+filePath, "ignored")
+		probe, err := src.Probe(context.Background(), Locator{URL: "file://" + filePath})
 		if err != nil {
-			t.Fatalf("Fetch(%s) unexpected error: %v", name, err)
+			t.Fatalf("Probe(%s) unexpected error: %v", name, err)
 		}
-		if redirectPath == "" {
-			t.Fatalf("Fetch(%s) expected non-empty redirect path", name)
-		}
-		if redirectPath != filePath {
-			t.Fatalf("Fetch(%s) redirect %q does not match source %q", name, redirectPath, filePath)
+		if probe.Local != filePath {
+			t.Fatalf("Probe(%s) local %q does not match source %q", name, probe.Local, filePath)
 		}
 	}
 }
 
-func TestFileSource_Fetch_BareFileReturnsRedirectPath(t *testing.T) {
+func TestFileSource_Probe_BareFileReportsItInPlace(t *testing.T) {
 	t.Parallel()
 
 	filePath := filepath.Join(t.TempDir(), "launcher")
@@ -117,22 +112,21 @@ func TestFileSource_Fetch_BareFileReturnsRedirectPath(t *testing.T) {
 	}
 	src := FileSource{}
 
-	redirectPath, err := src.Fetch(context.Background(), "file://"+filePath, "ignored")
+	probe, err := src.Probe(context.Background(), Locator{URL: "file://" + filePath})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if redirectPath != filePath {
-		t.Fatalf("expected redirect to %q, got %q", filePath, redirectPath)
+	if probe.Local != filePath {
+		t.Fatalf("expected local path %q, got %q", filePath, probe.Local)
 	}
 }
 
-func TestFileSource_Fetch_MissingPathReturnsError(t *testing.T) {
+func TestFileSource_Probe_MissingPathReturnsError(t *testing.T) {
 	t.Parallel()
 
-	dstPath := filepath.Join(t.TempDir(), "dst")
 	src := FileSource{}
 
-	_, err := src.Fetch(context.Background(), "file:///nonexistent/path", dstPath)
+	_, err := src.Probe(context.Background(), Locator{URL: "file:///nonexistent/path"})
 	if err == nil {
 		t.Fatal("expected error for missing path")
 	}
@@ -141,55 +135,42 @@ func TestFileSource_Fetch_MissingPathReturnsError(t *testing.T) {
 	}
 }
 
-func TestFileSource_Identify_DirectoryReturnsHash(t *testing.T) {
+func TestFileSource_Probe_DirectoryIdentityIsStable(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	src := FileSource{}
 
-	hash, err := src.Identify(context.Background(), "file://"+dir)
+	first, err := src.Probe(context.Background(), Locator{URL: "file://" + dir})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if hash == "" {
-		t.Fatal("expected non-empty hash for directory")
+	if first.Identity == "" {
+		t.Fatal("expected non-empty identity for directory")
 	}
-	// Same path always produces the same hash.
-	hash2, err := src.Identify(context.Background(), "file://"+dir)
+	second, err := src.Probe(context.Background(), Locator{URL: "file://" + dir})
 	if err != nil {
-		t.Fatalf("second Identify: %v", err)
+		t.Fatalf("second probe: %v", err)
 	}
-	if hash != hash2 {
-		t.Fatalf("expected stable hash, got %q then %q", hash, hash2)
+	if first.Identity != second.Identity {
+		t.Fatalf("expected stable identity, got %q then %q", first.Identity, second.Identity)
 	}
 }
 
-func TestFileSource_Identify_FileReturnsPathHash(t *testing.T) {
+func TestFileSource_Probe_FileReportsIdentity(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	filePath := filepath.Join(dir, "archive.tar.gz")
+	filePath := filepath.Join(t.TempDir(), "archive.tar.gz")
 	if err := os.WriteFile(filePath, []byte("data"), filePerm); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	src := FileSource{}
 
-	hash, err := src.Identify(context.Background(), "file://"+filePath)
+	probe, err := src.Probe(context.Background(), Locator{URL: "file://" + filePath})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if hash == "" {
-		t.Fatal("expected non-empty hash for file")
-	}
-}
-
-func TestFileSource_Identify_MissingPathReturnsError(t *testing.T) {
-	t.Parallel()
-
-	src := FileSource{}
-
-	_, err := src.Identify(context.Background(), "file:///nonexistent/identify/path")
-	if err == nil || !strings.Contains(err.Error(), "does not exist") {
-		t.Fatalf("expected does-not-exist error, got %v", err)
+	if probe.Identity == "" {
+		t.Fatal("expected non-empty identity for file")
 	}
 }

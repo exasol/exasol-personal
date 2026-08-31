@@ -92,7 +92,7 @@ func resolveLocalArtifactURL(
 	root string,
 	artifact resource.ArtifactSpec,
 ) resource.ArtifactSpec {
-	if !(resource.FileSource{}).CanFetch(artifact.URL) {
+	if !(resource.FileSource{}).Handles(artifact.Locator()) {
 		return artifact
 	}
 

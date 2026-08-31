@@ -25,30 +25,36 @@ import (
 
 type DockerSource struct{}
 
-func (*DockerSource) CanFetch(url string) bool {
-	return strings.HasPrefix(url, "docker://") || strings.HasPrefix(url, "oci:") ||
-		strings.HasPrefix(url, "oci-archive:")
+func (*DockerSource) Handles(loc Locator) bool {
+	return strings.HasPrefix(loc.URL, "docker://") || strings.HasPrefix(loc.URL, "oci:") ||
+		strings.HasPrefix(loc.URL, "oci-archive:")
 }
 
-func (*DockerSource) Fetch(ctx context.Context, url, dstPath string) (string, error) {
-	parsedRef, err := parseImageReference(url)
+// Probe states no identity: an image archive is identified by its declared
+// checksum until the registry digest supplies one.
+func (*DockerSource) Probe(_ context.Context, _ Locator) (Probe, error) {
+	return Probe{}, nil
+}
+
+func (*DockerSource) Fetch(ctx context.Context, loc Locator, dstPath string) error {
+	parsedRef, err := parseImageReference(loc.URL)
 	if err != nil {
-		return "", err
+		return err
 	}
 	tmpDir, err := os.MkdirTemp(filepath.Dir(dstPath), "oci-archive-*")
 	if err != nil {
-		return "", fmt.Errorf("create temporary OCI archive directory: %w", err)
+		return fmt.Errorf("create temporary OCI archive directory: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
 	rawArchivePath := filepath.Join(tmpDir, "image.tar")
 	destRef, err := ociarchive.NewReference(rawArchivePath, parsedRef.destinationImage)
 	if err != nil {
-		return "", fmt.Errorf("create OCI archive destination: %w", err)
+		return fmt.Errorf("create OCI archive destination: %w", err)
 	}
 	policyContext, err := newInsecurePolicyContext()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	timestamp := time.Unix(0, 0).UTC()
@@ -60,15 +66,15 @@ func (*DockerSource) Fetch(ctx context.Context, url, dstPath string) (string, er
 	if err := errors.Join(copyErr, destroyErr); err != nil {
 		_ = os.Remove(dstPath)
 
-		return "", fmt.Errorf("copy image to OCI archive: %w", err)
+		return fmt.Errorf("copy image to OCI archive: %w", err)
 	}
 	if err := repackTarDeterministically(rawArchivePath, dstPath); err != nil {
 		_ = os.Remove(dstPath)
 
-		return "", fmt.Errorf("repack OCI archive deterministically: %w", err)
+		return fmt.Errorf("repack OCI archive deterministically: %w", err)
 	}
 
-	return "", nil
+	return nil
 }
 
 func newInsecurePolicyContext() (*signature.PolicyContext, error) {

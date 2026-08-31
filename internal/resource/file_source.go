@@ -19,26 +19,33 @@ const FileURLScheme = "file://"
 
 type FileSource struct{}
 
-func (FileSource) CanFetch(url string) bool {
-	if strings.HasPrefix(url, FileURLScheme) {
+func (FileSource) Handles(loc Locator) bool {
+	if strings.HasPrefix(loc.URL, FileURLScheme) {
 		return true
 	}
 	// Local filesystem path: no URL scheme and not a git@ remote
-	return !strings.Contains(url, "://") && !strings.HasPrefix(url, "git@")
+	return !strings.Contains(loc.URL, "://") && !strings.HasPrefix(loc.URL, "git@")
 }
 
-func (FileSource) Identify(_ context.Context, url string) (string, error) {
-	absPath, err := resolveLocalPath(url)
+// Probe reports the content's existing location, so the cache stores no copy
+// of it. Extracting it, when asked for, still lands in the cache.
+func (FileSource) Probe(_ context.Context, loc Locator) (Probe, error) {
+	absPath, err := resolveLocalPath(loc.URL)
 	if err != nil {
-		return "", err
+		return Probe{}, err
 	}
 	sum := sha256.Sum256([]byte(absPath))
 
-	return hex.EncodeToString(sum[:]), nil
+	return Probe{
+		Identity: "local-path:" + hex.EncodeToString(sum[:]),
+		Local:    absPath,
+	}, nil
 }
 
-func (FileSource) Fetch(_ context.Context, url string, _ string) (string, error) {
-	return resolveLocalPath(url)
+// Fetch is unreachable: Probe always reports a local path, and the manager
+// never fetches content it has been told is already in place.
+func (FileSource) Fetch(_ context.Context, loc Locator, _ string) error {
+	return fmt.Errorf("local resource %q is used in place, not fetched", loc.URL)
 }
 
 func resolveLocalPath(url string) (string, error) {

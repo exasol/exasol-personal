@@ -18,7 +18,7 @@ func TestHttpSource_CanFetch_HTTPURLs(t *testing.T) {
 		"https://releases.example.com/v1.0/tool",
 	}
 	for _, url := range trueURLs {
-		if !src.CanFetch(url) {
+		if !src.Handles(Locator{URL: url}) {
 			t.Errorf("CanFetch(%q) = false, want true", url)
 		}
 	}
@@ -38,7 +38,7 @@ func TestHttpSource_CanFetch_GitURLsExcluded(t *testing.T) {
 		"",
 	}
 	for _, url := range falseURLs {
-		if src.CanFetch(url) {
+		if src.Handles(Locator{URL: url}) {
 			t.Errorf("CanFetch(%q) = true, want false", url)
 		}
 	}

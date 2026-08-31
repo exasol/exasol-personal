@@ -55,8 +55,8 @@ func TestGitSource_CanFetch_RemoteURLs(t *testing.T) {
 		"git@github.com:org/repo.git@v1.0.0",
 	}
 	for _, url := range trueURLs {
-		if !src.CanFetch(url) {
-			t.Errorf("CanFetch(%q) = false, want true", url)
+		if !src.Handles(ParseURI(url).Locator) {
+			t.Errorf("Handles(%q) = false, want true", url)
 		}
 	}
 
@@ -67,8 +67,8 @@ func TestGitSource_CanFetch_RemoteURLs(t *testing.T) {
 		"",
 	}
 	for _, url := range falseURLs {
-		if src.CanFetch(url) {
-			t.Errorf("CanFetch(%q) = true, want false", url)
+		if src.Handles(ParseURI(url).Locator) {
+			t.Errorf("Handles(%q) = true, want false", url)
 		}
 	}
 }
@@ -102,7 +102,7 @@ func TestGitSource_Fetch_ClonesLocalRepo(t *testing.T) {
 	cloneDir := filepath.Join(dstDir, "clone")
 	src := &GitSource{}
 
-	if _, err := src.Fetch(context.Background(), repoDir, cloneDir); err != nil {
+	if err := src.Fetch(context.Background(), ParseURI(repoDir).Locator, cloneDir); err != nil {
 		t.Fatalf("expected clone to succeed, got %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(cloneDir, "README.md")); err != nil {
@@ -130,13 +130,13 @@ func TestGitSource_Fetch_UpdatesWorkingTree(t *testing.T) {
 	cloneDir := filepath.Join(dstDir, "clone")
 	src := &GitSource{}
 
-	if _, err := src.Fetch(context.Background(), repoDir, cloneDir); err != nil {
+	if err := src.Fetch(context.Background(), ParseURI(repoDir).Locator, cloneDir); err != nil {
 		t.Fatalf("first fetch failed: %v", err)
 	}
 
 	addCommitToTestRepo(t, repoDir, "file.txt", "v2")
 
-	if _, err := src.Fetch(context.Background(), repoDir, cloneDir); err != nil {
+	if err := src.Fetch(context.Background(), ParseURI(repoDir).Locator, cloneDir); err != nil {
 		t.Fatalf("second fetch failed: %v", err)
 	}
 
@@ -158,7 +158,8 @@ func TestGitSource_Fetch_BranchRef(t *testing.T) {
 	cloneDir := filepath.Join(dstDir, "clone")
 	src := &GitSource{}
 
-	if _, err := src.Fetch(context.Background(), repoDir+"@feature", cloneDir); err != nil {
+	err := src.Fetch(context.Background(), ParseURI(repoDir+"@feature").Locator, cloneDir)
+	if err != nil {
 		t.Fatalf("expected branch clone to succeed, got %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(cloneDir, "feature.txt")); err != nil {
@@ -176,7 +177,8 @@ func TestGitSource_Fetch_TagRef(t *testing.T) {
 	cloneDir := filepath.Join(dstDir, "clone")
 	src := &GitSource{}
 
-	if _, err := src.Fetch(context.Background(), repoDir+"@v1.0.0", cloneDir); err != nil {
+	err := src.Fetch(context.Background(), ParseURI(repoDir+"@v1.0.0").Locator, cloneDir)
+	if err != nil {
 		t.Fatalf("expected tag clone to succeed, got %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(cloneDir, "release.txt")); err != nil {
@@ -207,7 +209,7 @@ func TestGitSource_Fetch_IdempotentOnSameCommit(t *testing.T) {
 	cloneDir := filepath.Join(dstDir, "clone")
 	src := &GitSource{}
 
-	if _, err := src.Fetch(context.Background(), repoDir, cloneDir); err != nil {
+	if err := src.Fetch(context.Background(), ParseURI(repoDir).Locator, cloneDir); err != nil {
 		t.Fatalf("first fetch failed: %v", err)
 	}
 	// Corrupt a file; second fetch (no new commit) should not change it.
@@ -215,7 +217,7 @@ func TestGitSource_Fetch_IdempotentOnSameCommit(t *testing.T) {
 	if err := os.WriteFile(corruptedPath, []byte("corrupted"), filePerm); err != nil {
 		t.Fatalf("corrupt failed: %v", err)
 	}
-	if _, err := src.Fetch(context.Background(), repoDir, cloneDir); err != nil {
+	if err := src.Fetch(context.Background(), ParseURI(repoDir).Locator, cloneDir); err != nil {
 		t.Fatalf("second fetch failed: %v", err)
 	}
 	content, err := os.ReadFile(filepath.Join(cloneDir, "file.txt"))
@@ -229,22 +231,23 @@ func TestGitSource_Fetch_IdempotentOnSameCommit(t *testing.T) {
 	}
 }
 
-func TestGitSource_Identify_NoRef(t *testing.T) {
+func TestGitSource_Probe_NoRef(t *testing.T) {
 	t.Parallel()
 
 	repoDir, headHash := createTestGitRepo(t, map[string]string{"file.txt": "content"})
 	src := &GitSource{}
 
-	hash, err := src.Identify(context.Background(), repoDir)
+	probe, err := src.Probe(context.Background(), ParseURI(repoDir).Locator)
+	hash := probe.Identity
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if hash != headHash {
+	if hash != gitIdentity(headHash) {
 		t.Fatalf("expected %s, got %s", headHash, hash)
 	}
 }
 
-func TestGitSource_Identify_BranchRef(t *testing.T) {
+func TestGitSource_Probe_BranchRef(t *testing.T) {
 	t.Parallel()
 
 	repoDir, _ := createTestGitRepo(t, map[string]string{"main.txt": "main"})
@@ -261,27 +264,29 @@ func TestGitSource_Identify_BranchRef(t *testing.T) {
 	wantHash := featureRef.Hash().String()
 
 	src := &GitSource{}
-	hash, err := src.Identify(context.Background(), repoDir+"@feature")
+	probe, err := src.Probe(context.Background(), ParseURI(repoDir+"@feature").Locator)
+	hash := probe.Identity
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if hash != wantHash {
+	if hash != gitIdentity(wantHash) {
 		t.Fatalf("expected %s, got %s", wantHash, hash)
 	}
 }
 
-func TestGitSource_Identify_CommitSHA(t *testing.T) {
+func TestGitSource_Probe_CommitSHA(t *testing.T) {
 	t.Parallel()
 
 	repoDir, headHash := createTestGitRepo(t, map[string]string{"file.txt": "content"})
 	src := &GitSource{}
 
 	// Full SHA embedded in URL — must return immediately without any network/local call.
-	hash, err := src.Identify(context.Background(), repoDir+"@"+headHash)
+	probe, err := src.Probe(context.Background(), ParseURI(repoDir+"@"+headHash).Locator)
+	hash := probe.Identity
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if hash != headHash {
+	if hash != gitIdentity(headHash) {
 		t.Fatalf("expected %s, got %s", headHash, hash)
 	}
 }
@@ -298,7 +303,8 @@ func TestGitSource_Fetch_CommitSHA(t *testing.T) {
 	cloneDir := filepath.Join(dstDir, "clone")
 	src := &GitSource{}
 
-	if _, err := src.Fetch(context.Background(), repoDir+"@"+headHash, cloneDir); err != nil {
+	err := src.Fetch(context.Background(), ParseURI(repoDir+"@"+headHash).Locator, cloneDir)
+	if err != nil {
 		t.Fatalf("expected SHA clone to succeed, got %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(cloneDir, "pinned.txt")); err != nil {

@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	git "github.com/go-git/go-git/v5"
@@ -21,30 +23,28 @@ const gitSHALength = 40
 
 type GitSource struct{}
 
-func (*GitSource) CanFetch(url string) bool {
-	repoURL, ref := splitGitRef(url)
-
-	return IsGitSourceURL(repoURL) || (ref != "" && isLocalGitWorktree(repoURL))
+func (*GitSource) Handles(loc Locator) bool {
+	return IsGitSourceURL(loc.URL) || (loc.Ref != "" && isLocalGitWorktree(loc.URL))
 }
 
-func (*GitSource) Fetch(ctx context.Context, url, dstPath string) (string, error) {
-	repoURL, ref := splitGitRef(url)
+func (*GitSource) Fetch(ctx context.Context, loc Locator, dstPath string) error {
+	repoURL, ref := loc.URL, loc.Ref
 
-	auth, err := gitAuth(url)
+	auth, err := gitAuth(loc.URL)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	refName, commitHash, err := getRefName(ctx, repoURL, ref, auth)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// refName is empty when ref is a commit SHA not pointed to by any named
 	// ref; a full-depth clone is required to make the commit reachable.
 	repo, err := git.PlainOpen(dstPath)
 	if err != nil {
-		return "", cloneRepo(ctx, repoURL, dstPath, refName, commitHash, auth)
+		return cloneRepo(ctx, repoURL, dstPath, refName, commitHash, auth)
 	}
 
 	fetchOpts := &git.FetchOptions{
@@ -58,26 +58,26 @@ func (*GitSource) Fetch(ctx context.Context, url, dstPath string) (string, error
 
 	if err := repo.FetchContext(ctx, fetchOpts); err != nil &&
 		!errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return "", err
+		return err
 	}
 
 	if refName == "" {
 		worktree, err := repo.Worktree()
 		if err != nil {
-			return "", err
+			return err
 		}
 
-		return "", worktree.Reset(&git.ResetOptions{Commit: commitHash, Mode: git.HardReset})
+		return worktree.Reset(&git.ResetOptions{Commit: commitHash, Mode: git.HardReset})
 	}
 
 	head, err := repo.Head()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if !head.Name().IsBranch() {
 		// Detached HEAD (tag checkout) — tags are immutable, nothing to update.
-		return "", nil
+		return nil
 	}
 
 	remoteRef, err := repo.Reference(
@@ -86,18 +86,18 @@ func (*GitSource) Fetch(ctx context.Context, url, dstPath string) (string, error
 	)
 	if err != nil {
 		if errors.Is(err, plumbing.ErrReferenceNotFound) {
-			return "", nil
+			return nil
 		}
 
-		return "", err
+		return err
 	}
 
 	worktree, err := repo.Worktree()
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	return "", worktree.Reset(&git.ResetOptions{
+	return worktree.Reset(&git.ResetOptions{
 		Commit: remoteRef.Hash(),
 		Mode:   git.HardReset,
 	})
@@ -142,6 +142,16 @@ func IsGitSourceURL(url string) bool {
 		strings.HasPrefix(url, "git://") ||
 		((strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://")) &&
 			strings.HasSuffix(url, ".git"))
+}
+
+func isLocalGitWorktree(url string) bool {
+	if strings.Contains(url, "://") || strings.HasPrefix(url, "file:") {
+		return false
+	}
+
+	_, err := os.Stat(filepath.Join(url, ".git"))
+
+	return err == nil
 }
 
 // getRefName resolves ref against the remote and returns the canonical
@@ -232,23 +242,25 @@ func resolveNamedRef(
 	return "", plumbing.ZeroHash, fmt.Errorf("ref %q not found in %s", ref, repoURL)
 }
 
-// Identify returns the resolved commit hash for url without cloning.
-// For URLs with a full 40-character commit SHA embedded, no network call is made.
-func (*GitSource) Identify(ctx context.Context, url string) (string, error) {
-	repoURL, ref := splitRef(url)
-	if isFullCommitSHA(ref) {
-		return ref, nil
+// Probe: named refs require a remote lookup because they can move; full SHAs do not.
+func (*GitSource) Probe(ctx context.Context, loc Locator) (Probe, error) {
+	if isFullCommitSHA(loc.Ref) {
+		return Probe{Identity: gitIdentity(loc.Ref)}, nil
 	}
-	auth, err := gitAuth(url)
+	auth, err := gitAuth(loc.URL)
 	if err != nil {
-		return "", err
+		return Probe{}, err
 	}
-	_, hash, err := getRefName(ctx, repoURL, ref, auth)
+	_, hash, err := getRefName(ctx, loc.URL, loc.Ref, auth)
 	if err != nil {
-		return "", err
+		return Probe{}, err
 	}
 
-	return hash.String(), nil
+	return Probe{Identity: gitIdentity(hash.String())}, nil
+}
+
+func gitIdentity(commit string) string {
+	return "git-commit:" + commit
 }
 
 func isFullCommitSHA(s string) bool {

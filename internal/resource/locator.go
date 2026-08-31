@@ -5,8 +5,6 @@ package resource
 
 import (
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -71,16 +69,6 @@ func splitGitRef(rawURL string) (location, ref string) { //nolint:nonamedreturns
 	}
 
 	return location, ref
-}
-
-func isLocalGitWorktree(location string) bool {
-	if strings.Contains(location, "://") || strings.HasPrefix(location, "file:") {
-		return false
-	}
-
-	_, err := os.Stat(filepath.Join(location, ".git"))
-
-	return err == nil
 }
 
 // splitSubpath removes a "#subpath" suffix, percent-decoding it so encoded

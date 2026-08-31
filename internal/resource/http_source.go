@@ -15,33 +15,39 @@ import (
 
 type HttpSource struct{}
 
-func (*HttpSource) CanFetch(url string) bool {
-	return (strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")) &&
-		!IsGitSourceURL(url)
+func (*HttpSource) Handles(loc Locator) bool {
+	return (strings.HasPrefix(loc.URL, "http://") || strings.HasPrefix(loc.URL, "https://")) &&
+		!IsGitSourceURL(loc.URL)
 }
 
-func (*HttpSource) Fetch(ctx context.Context, url, dstPath string) (string, error) {
+// Probe states no identity: a download is identified by its declared checksum,
+// and without one it is re-fetched on every request.
+func (*HttpSource) Probe(_ context.Context, _ Locator) (Probe, error) {
+	return Probe{}, nil
+}
+
+func (*HttpSource) Fetch(ctx context.Context, loc Locator, dstPath string) error {
 	tmpDownload, err := os.CreateTemp(filepath.Dir(dstPath), "download-*")
 	if err != nil {
-		return "", err
+		return err
 	}
 	tmpDownloadPath := tmpDownload.Name()
 	if err := tmpDownload.Close(); err != nil {
 		_ = os.Remove(tmpDownloadPath)
-		return "", err
+		return err
 	}
 
-	if err := downloadFile(ctx, url, tmpDownloadPath); err != nil {
+	if err := downloadFile(ctx, loc.URL, tmpDownloadPath); err != nil {
 		_ = os.Remove(tmpDownloadPath)
-		return "", err
+		return err
 	}
 
 	if err := os.Rename(tmpDownloadPath, dstPath); err != nil {
 		_ = os.Remove(tmpDownloadPath)
-		return "", err
+		return err
 	}
 
-	return "", nil
+	return nil
 }
 
 func downloadFile(ctx context.Context, url, dstPath string) error {
