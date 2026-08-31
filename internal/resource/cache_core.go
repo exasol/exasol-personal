@@ -51,6 +51,7 @@ type cacheIndexEntry struct {
 	ResourceID   string    `json:"resourceId"`
 	Platform     string    `json:"platform"`
 	URL          string    `json:"url"`
+	Identity     string    `json:"identity"`
 	Sha256       string    `json:"sha256"`
 	Extract      bool      `json:"extract"`
 	Embed        bool      `json:"embed"`
@@ -296,6 +297,29 @@ func (c *Cache) writeIndex(index cacheIndex) error {
 	return nil
 }
 
+// verifyStored checks freshly stored content against the checksum the resource
+// declared. A directory, or a resource that declared none, has nothing to
+// check against.
+func verifyStored(path, declaredSha256 string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() || strings.TrimSpace(declaredSha256) == "" {
+		return nil
+	}
+
+	actual, err := sha256OfFile(path)
+	if err != nil {
+		return err
+	}
+	if actual != declaredSha256 {
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", declaredSha256, actual)
+	}
+
+	return nil
+}
+
 func (c *Cache) checkIntegrity(entry cacheIndexEntry) integrityCheck {
 	artifactPath, err := c.pathFromRelative(entry.ArtifactPath, "artifactPath")
 	if err != nil {
@@ -310,7 +334,7 @@ func (c *Cache) checkIntegrity(entry cacheIndexEntry) integrityCheck {
 		return integrityCheck{Status: integrityStatusReadError, Error: err.Error()}
 	}
 
-	if info.IsDir() {
+	if info.IsDir() || strings.TrimSpace(entry.Sha256) == "" {
 		return integrityCheck{Status: integrityStatusOK, Actual: entry.Sha256}
 	}
 

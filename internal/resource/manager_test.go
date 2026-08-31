@@ -145,7 +145,7 @@ func TestManager_ResolveEntry_HonoursResourcePathWithoutExtraction(t *testing.T)
 	}
 
 	// When
-	entry, err := manager.resolveEntry("preset", def, def.Artifact[anyPlatformKey])
+	entry, err := manager.resolveEntry("preset", def, def.Artifact[anyPlatformKey], "sha256:test")
 	// Then
 	if err != nil {
 		t.Fatalf("expected resolveEntry to succeed, got %v", err)
@@ -175,7 +175,7 @@ func TestManager_ResolveEntry_RejectsTraversalResourcePathWithoutExtraction(t *t
 	}
 
 	// When
-	_, err := manager.resolveEntry("preset", def, def.Artifact[anyPlatformKey])
+	_, err := manager.resolveEntry("preset", def, def.Artifact[anyPlatformKey], "sha256:test")
 	// Then
 	if err == nil || !strings.Contains(err.Error(), "subpath") {
 		t.Fatalf("expected subpath traversal error, got %v", err)
@@ -200,8 +200,9 @@ func TestManager_ResolveEntry_DifferentSubpathsProduceDistinctEntries(t *testing
 	// When
 	defA := makeDef("infra/aws")
 	defB := makeDef("infra/azure")
-	entryA, errA := manager.resolveEntry("preset", defA, defA.Artifact[anyPlatformKey])
-	entryB, errB := manager.resolveEntry("preset", defB, defB.Artifact[anyPlatformKey])
+	artifactA, artifactB := defA.Artifact[anyPlatformKey], defB.Artifact[anyPlatformKey]
+	entryA, errA := manager.resolveEntry("preset", defA, artifactA, "sha256:test")
+	entryB, errB := manager.resolveEntry("preset", defB, artifactB, "sha256:test")
 	// Then
 	if errA != nil || errB != nil {
 		t.Fatalf("expected both resolveEntry calls to succeed, got %v / %v", errA, errB)

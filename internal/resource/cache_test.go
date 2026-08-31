@@ -148,31 +148,27 @@ func TestCacheIndexReadWriteRoundTripAndRejectsEscapingPaths(t *testing.T) {
 	}
 }
 
-func TestArtifactIdentityChangesWhenArtifactMetadataChanges(t *testing.T) {
+func TestArtifactCacheKeyChangesWhenArtifactMetadataChanges(t *testing.T) {
 	t.Parallel()
 
-	base, err := artifactIdentity(
+	base, err := artifactCacheKey(
 		"tofu",
 		"linux/amd64",
 		false,
-		ArtifactSpec{
-			URL:    "https://example.com/tofu.tgz",
-			Sha256: strings.Repeat("A", 64),
-		},
+		"https://example.com/tofu.tgz",
+		"sha256:"+strings.Repeat("a", 64),
 		"tofu.tgz",
 		"",
 	)
 	if err != nil {
 		t.Fatalf("expected identity, got error: %v", err)
 	}
-	changed, err := artifactIdentity(
+	changed, err := artifactCacheKey(
 		"tofu",
 		"linux/amd64",
 		false,
-		ArtifactSpec{
-			URL:    "https://example.com/tofu-v2.tgz",
-			Sha256: strings.Repeat("A", 64),
-		},
+		"https://example.com/tofu-v2.tgz",
+		"sha256:"+strings.Repeat("a", 64),
 		"tofu.tgz",
 		"",
 	)

@@ -89,7 +89,7 @@ type artifactIdentityPayload struct {
 	ResourceID   string `json:"resourceId"`
 	Platform     string `json:"platform"`
 	URL          string `json:"url"`
-	Sha256       string `json:"sha256"`
+	Identity     string `json:"identity"`
 	CommitHash   string `json:"commitHash,omitempty"`
 	Extract      bool   `json:"extract"`
 	DownloadPath string `json:"downloadPath"`
@@ -198,12 +198,11 @@ func (m *Manager) Get(
 		if err != nil {
 			return "", err
 		}
-		if strings.TrimSpace(artifact.Sha256) == "" {
-			artifact.Sha256 = probe.Identity
-		}
 	}
 
-	entry, err := m.resolveEntry(resourceID, def, artifact)
+	identity := contentIdentity(artifact.Sha256, probe.Identity)
+
+	entry, err := m.resolveEntry(resourceID, def, artifact, identity)
 	if err != nil {
 		return "", err
 	}
@@ -211,7 +210,9 @@ func (m *Manager) Get(
 	var resolvedPath string
 	err = m.cache.withExclusiveLock(ctx, func() error {
 		var lockErr error
-		resolvedPath, lockErr = m.resolveUnderLock(ctx, resourceID, artifact, probe, &entry)
+		resolvedPath, lockErr = m.resolveUnderLock(
+			ctx, resourceID, artifact, probe, identity, &entry,
+		)
 
 		return lockErr
 	})
@@ -373,6 +374,7 @@ func (m *Manager) resolveUnderLock(
 	resourceID string,
 	artifact ArtifactSpec,
 	probe Probe,
+	identity string,
 	entry *cacheIndexEntry,
 ) (string, error) {
 	index, _, err := m.cache.readIndex()
@@ -380,7 +382,7 @@ func (m *Manager) resolveUnderLock(
 		return "", err
 	}
 
-	if strings.TrimSpace(artifact.Sha256) == "" {
+	if strings.TrimSpace(identity) == "" {
 		slog.Debug(
 			"re-fetching resource without checksum, result may not be stable",
 			"id",
@@ -389,7 +391,7 @@ func (m *Manager) resolveUnderLock(
 			artifact.URL,
 		)
 	} else {
-		cachedPath, err := m.getCacheEntry(&index, artifact, *entry)
+		cachedPath, err := m.getCacheEntry(&index, artifact, identity, *entry)
 		if err != nil {
 			return "", err
 		}
@@ -400,7 +402,7 @@ func (m *Manager) resolveUnderLock(
 		}
 	}
 
-	resolvedPath, err := m.refresh(ctx, resourceID, artifact, probe, entry, &index)
+	resolvedPath, err := m.refresh(ctx, resourceID, artifact, probe, identity, entry, &index)
 	if err != nil {
 		return "", err
 	}
@@ -408,6 +410,18 @@ func (m *Manager) resolveUnderLock(
 	slog.Debug("fetched resource", "id", resourceID, "path", resolvedPath)
 
 	return resolvedPath, nil
+}
+
+// contentIdentity is what the cache keys on. A declared checksum is a content
+// hash, so it doubles as an identity; anything else comes from the source, and
+// an empty result means nothing can identify this content and it is refreshed
+// on every request.
+func contentIdentity(declaredSha256, probed string) string {
+	if normalized := normalizeSha256(declaredSha256); normalized != "" {
+		return "sha256:" + normalized
+	}
+
+	return probed
 }
 
 func sourceFor(loc Locator) (Source, error) {
@@ -442,29 +456,7 @@ func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, entry *cache
 		return err
 	}
 
-	return verifyFetchedChecksum(fetchPath, artifact.Sha256)
-}
-
-func verifyFetchedChecksum(fetchPath, expectedSha256 string) error {
-	info, err := os.Stat(fetchPath)
-	if err != nil {
-		return err
-	}
-
-	// Only check the checksum for files with a specified sha256.
-	if info.IsDir() || strings.TrimSpace(expectedSha256) == "" {
-		return nil
-	}
-
-	actual, err := sha256OfFile(fetchPath)
-	if err != nil {
-		return err
-	}
-	if actual != expectedSha256 {
-		return checksumMismatchError(expectedSha256, actual)
-	}
-
-	return nil
+	return verifyStored(fetchPath, normalizeSha256(artifact.Sha256))
 }
 
 // resolveEmbedded materializes an embed:true resource from data compiled into
@@ -511,6 +503,7 @@ func (m *Manager) extract(entry cacheIndexEntry) error {
 func (m *Manager) getCacheEntry(
 	index *cacheIndex,
 	artifact ArtifactSpec,
+	identity string,
 	target cacheIndexEntry,
 ) (string, error) {
 	entry, ok := index.Entries[target.Key]
@@ -521,7 +514,7 @@ func (m *Manager) getCacheEntry(
 	if entry.URL != artifact.URL {
 		return "", nil
 	}
-	if entry.Sha256 != normalizeSha256(artifact.Sha256) {
+	if entry.Identity != identity {
 		return "", nil
 	}
 	if entry.EntryPath != target.EntryPath ||
@@ -567,6 +560,7 @@ func (m *Manager) refresh(
 	resourceID string,
 	artifact ArtifactSpec,
 	probe Probe,
+	identity string,
 	entry *cacheIndexEntry,
 	index *cacheIndex,
 ) (string, error) {
@@ -597,6 +591,7 @@ func (m *Manager) refresh(
 	now := m.cache.clock.Now().UTC()
 	entry.ResourceID = resourceID
 	entry.URL = artifact.URL
+	entry.Identity = identity
 	entry.Sha256 = normalizeSha256(artifact.Sha256)
 	entry.CreatedAt = now
 	entry.LastUsedAt = now
@@ -618,6 +613,7 @@ func (m *Manager) resolveEntry(
 	resourceID string,
 	def ResourceDefinition,
 	artifact ArtifactSpec,
+	identity string,
 ) (cacheIndexEntry, error) {
 	downloadPath, err := cleanRelativePath(artifact.DownloadPath, "download_path")
 	if err != nil {
@@ -647,11 +643,12 @@ func (m *Manager) resolveEntry(
 	}
 
 	platform := platformKey(m.platform.GOOS, m.platform.GOARCH)
-	cacheKey, err := artifactIdentity(
+	cacheKey, err := artifactCacheKey(
 		resourceID,
 		platform,
 		extract,
-		artifact,
+		artifact.URL,
+		identity,
 		downloadPath,
 		resourcePath,
 	)
@@ -696,17 +693,17 @@ func (m *Manager) resolveEntry(
 	}, nil
 }
 
-func artifactIdentity(
+func artifactCacheKey(
 	resourceID, platform string,
 	extract bool,
-	artifact ArtifactSpec,
+	url, identity string,
 	downloadPath, resourcePath string,
 ) (string, error) {
 	payload := artifactIdentityPayload{
 		ResourceID:   resourceID,
 		Platform:     platform,
-		URL:          artifact.URL,
-		Sha256:       normalizeSha256(artifact.Sha256),
+		URL:          url,
+		Identity:     identity,
 		Extract:      extract,
 		DownloadPath: downloadPath,
 		Subpath:      resourcePath,
@@ -766,14 +763,6 @@ func (m *Manager) resolveResolvedPath(
 
 func normalizeSha256(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
-}
-
-func checksumMismatchError(expected, actual string) error {
-	return fmt.Errorf(
-		"checksum mismatch: expected %s, got %s",
-		expected,
-		actual,
-	)
 }
 
 func urlBasename(rawURL string) string {
