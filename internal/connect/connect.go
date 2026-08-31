@@ -81,6 +81,8 @@ type Opts struct {
 	// Stderr receives interactive notices and truncation messages. The command
 	// layer owns the concrete terminal stream.
 	Stderr io.Writer
+	// ShowExitHint controls whether the SQL shell prints its exit guidance.
+	ShowExitHint bool
 }
 
 // MaxRowsUnset is the sentinel for a MaxRows that was not set on the command
@@ -217,7 +219,7 @@ func Connect(
 		return runStatements(nonInteractiveSQL, processInput)
 	}
 
-	if shouldPrintShellExitHint(opts.OutputFormat) {
+	if opts.ShowExitHint {
 		if err := printExitHint(writers.stderr); err != nil {
 			return err
 		}
@@ -378,10 +380,6 @@ func printExitHint(output io.Writer) error {
 	_, err := fmt.Fprintln(output, "Type \"exit\" to exit the shell")
 
 	return err
-}
-
-func shouldPrintShellExitHint(format OutputFormat) bool {
-	return format != OutputFormatJSON
 }
 
 func normalizeJSONFormat(format JSONFormat) JSONFormat {
