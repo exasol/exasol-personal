@@ -118,21 +118,23 @@ func TestTerminalMessagesPrintCallsToActionLastInCombinedTerminalOutput(t *testi
 	}
 }
 
-// TestCallToActionsVisibleFollowsJSONFlag must not run in parallel: it mutates
-// the shared commonFlags global.
-//
-//nolint:paralleltest // mutates shared package globals; must run serially
-func TestCallToActionsVisibleFollowsJSONFlag(t *testing.T) {
-	old := commonFlags.OutputJson
-	defer func() { commonFlags.OutputJson = old }()
+func TestCallsToActionVisible(t *testing.T) {
+	t.Parallel()
 
-	// Text output (interactive or not) shows guidance; only --json suppresses it.
-	commonFlags.OutputJson = false
-	if !callsToActionVisible() {
-		t.Fatal("expected calls to action to be visible for text output")
-	}
-	commonFlags.OutputJson = true
-	if callsToActionVisible() {
-		t.Fatal("expected calls to action to be suppressed under --json")
+	for _, test := range []struct {
+		name       string
+		jsonOutput bool
+		expected   bool
+	}{
+		{name: "text output", jsonOutput: false, expected: true},
+		{name: "JSON output", jsonOutput: true, expected: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if callsToActionVisible(test.jsonOutput) != test.expected {
+				t.Fatalf("unexpected visibility for JSON output %t", test.jsonOutput)
+			}
+		})
 	}
 }

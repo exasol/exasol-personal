@@ -51,16 +51,14 @@ func printTerminalMessages() {
 	writeTerminalMessages(terminalConfig{
 		stdout:            os.Stdout,
 		stderr:            os.Stderr,
-		showCallsToAction: callsToActionVisible(),
+		showCallsToAction: callsToActionVisible(commonFlags.OutputJson),
 	})
 }
 
-// callsToActionVisible reports whether call-to-action guidance should be shown.
-// Calls to action help any reader, including a non-interactive agent driving the
-// CLI, so they are not TTY-gated; they are suppressed only under --json, where
-// consumers branch on structured fields instead of prose.
-func callsToActionVisible() bool {
-	return !commonFlags.OutputJson
+// Calls to action help any reader, including a non-interactive agent driving
+// the CLI, so they are suppressed only for JSON output.
+func callsToActionVisible(jsonOutput bool) bool {
+	return !jsonOutput
 }
 
 type terminalConfig struct {
