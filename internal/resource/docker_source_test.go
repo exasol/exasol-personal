@@ -348,3 +348,55 @@ func runPodman(t *testing.T, args ...string) string {
 
 	return string(output)
 }
+
+func TestDockerSource_Probe_DigestPinnedReference(t *testing.T) {
+	t.Parallel()
+
+	const digest = "sha256:93512673ca38053cb45fa33eaa9ac999fc93c2c8f70c873d054432433c5e81bf"
+	src := &DockerSource{}
+
+	probe, err := src.Probe(
+		context.Background(),
+		Locator{URL: "docker://docker.io/exasol/nano:2026.2.0-nano.2@" + digest},
+	)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if want := "oci:" + digest; probe.Identity != want {
+		t.Fatalf("identity = %q, want %q", probe.Identity, want)
+	}
+}
+
+func TestDockerSource_Probe_SameDigestYieldsSameIdentity(t *testing.T) {
+	t.Parallel()
+
+	const url = "docker://docker.io/exasol/nano:2026.2.0-nano.2" +
+		"@sha256:93512673ca38053cb45fa33eaa9ac999fc93c2c8f70c873d054432433c5e81bf"
+	src := &DockerSource{}
+
+	first, err := src.Probe(context.Background(), Locator{URL: url})
+	if err != nil {
+		t.Fatalf("first probe: %v", err)
+	}
+	second, err := src.Probe(context.Background(), Locator{URL: url})
+	if err != nil {
+		t.Fatalf("second probe: %v", err)
+	}
+	if first.Identity != second.Identity {
+		t.Fatalf("identity %q then %q", first.Identity, second.Identity)
+	}
+}
+
+func TestDockerSource_Probe_TagOnlyReferenceStatesNoIdentity(t *testing.T) {
+	t.Parallel()
+
+	src := &DockerSource{}
+
+	probe, err := src.Probe(context.Background(), Locator{URL: "docker://example.org/foo:1.5"})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if probe.Identity != "" {
+		t.Fatalf("identity = %q, want empty", probe.Identity)
+	}
+}

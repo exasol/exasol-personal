@@ -4,6 +4,7 @@
 package resource
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -149,6 +150,17 @@ func (a ArtifactSpec) Locator() Locator {
 	return Locator{URL: rawURL, Ref: ref}
 }
 
+// isDigestPinnedImage reports whether loc is a container image reference that
+// names its content by digest.
+func isDigestPinnedImage(loc Locator) bool {
+	if !(&DockerSource{}).Handles(loc) {
+		return false
+	}
+	probe, err := (&DockerSource{}).Probe(context.Background(), loc)
+
+	return err == nil && probe.Identity != ""
+}
+
 const anyPlatformKey = "any"
 
 // Resolve returns the artifact for the requested platform.
@@ -258,6 +270,8 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 		// Local (file://, or bare local path) sources are first-party content whose
 		// integrity comes from being part of the same versioned repository commit,
 		// not from a hand-authored checksum, so a checksum is optional for them.
+	case isDigestPinnedImage(locator):
+		// A digest names the image content itself, so it is already the checksum.
 	default:
 		if strings.TrimSpace(a.Sha256) == "" {
 			return fmt.Errorf(

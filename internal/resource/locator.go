@@ -100,6 +100,11 @@ func splitRef(rawURL string) (location, ref string) { //nolint:nonamedreturns
 	if strings.HasPrefix(rawURL, "git@") && !strings.Contains(rawURL[:atIdx], ":") {
 		return rawURL, ""
 	}
+	// A container image reference names its content with a digest after an @,
+	// which belongs to the reference rather than being a ref suffix.
+	if strings.HasPrefix(rawURL[atIdx+1:], "sha256:") {
+		return rawURL, ""
+	}
 
 	return rawURL[:atIdx], rawURL[atIdx+1:]
 }

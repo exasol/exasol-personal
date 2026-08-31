@@ -3,7 +3,10 @@
 
 package resource
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseURI(t *testing.T) {
 	t.Parallel()
@@ -73,6 +76,11 @@ func TestParseURI(t *testing.T) {
 			uri:     "https://github.com/org/repo.git@a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
 			wantURL: "https://github.com/org/repo.git",
 			wantRef: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+		},
+		{
+			name:    "image digest is part of the reference, not a ref",
+			uri:     "docker://docker.io/exasol/nano:1@sha256:" + strings.Repeat("a", 64),
+			wantURL: "docker://docker.io/exasol/nano:1@sha256:" + strings.Repeat("a", 64),
 		},
 		{
 			name:        "file archive URI with subpath",
