@@ -55,7 +55,7 @@ type cacheIndexEntry struct {
 	Extract      bool      `json:"extract"`
 	Embed        bool      `json:"embed"`
 	DownloadPath string    `json:"downloadPath,omitempty"`
-	ResourcePath string    `json:"resourcePath,omitempty"`
+	Subpath      string    `json:"resourcePath,omitempty"`
 	EntryPath    string    `json:"entryPath"`
 	ArtifactPath string    `json:"artifactPath"`
 	ResolvedPath string    `json:"resolvedPath"`

@@ -366,7 +366,7 @@ func TestGeneratePlatform_CombinesMultipleResourcesIntoOneFile(t *testing.T) {
 
 // zipContaining builds an in-memory zip archive holding a single named entry,
 // matching the shape of the real embedded resources: an archive that declares
-// extract: true plus a resource_path pointing at a file inside it.
+// extract: true plus a subpath pointing at a file inside it.
 func zipContaining(t *testing.T, name string, content []byte) []byte {
 	t.Helper()
 
@@ -387,7 +387,7 @@ func zipContaining(t *testing.T, name string, content []byte) []byte {
 }
 
 // Embedding stages the raw archive, so the generator neutralizes extract and
-// the resource_path that goes with it. Leaving resource_path in place resolves
+// the subpath that goes with it. Leaving subpath in place resolves
 // it against the downloaded file instead of an extracted directory, yielding a
 // path such as artifact.zip/launcher that cannot exist.
 func TestGeneratePlatform_EmbedsRawArchiveWhenResourcePathIsDeclared(t *testing.T) {
@@ -402,9 +402,9 @@ func TestGeneratePlatform_EmbedsRawArchiveWhenResourcePathIsDeclared(t *testing.
 		Embed:   resource.EmbedDefault,
 		Artifact: map[string]resource.ArtifactSpec{
 			"darwin/arm64": {
-				URL:          server.URL + "/artifact.zip",
-				Sha256:       sha256Hex(archive),
-				ResourcePath: "launcher",
+				URL:     server.URL + "/artifact.zip",
+				Sha256:  sha256Hex(archive),
+				Subpath: "launcher",
 			},
 		},
 	}
@@ -432,11 +432,12 @@ func TestGeneratePlatform_EmbedsRawArchiveWhenResourcePathIsDeclared(t *testing.
 	}
 
 	// The caller's definition must survive untouched: the generator clears
-	// resource_path on its own copy, not on the shared spec.
-	if got := spec["embed-extract-test"].Artifact["darwin/arm64"].ResourcePath; got != "launcher" {
-		t.Errorf("expected the spec's resource_path to be left alone, got %q", got)
+	// subpath on its own copy, not on the shared spec.
+	if got := spec["embed-extract-test"].Artifact["darwin/arm64"].Subpath; got != "launcher" {
+		t.Errorf("expected the spec's subpath to be left alone, got %q", got)
 	}
 }
+
 //nolint:paralleltest // changes the process's working directory.
 func TestResolveRelativeLocalArtifacts_GenerationIsIdenticalFromAnyWorkingDirectory(t *testing.T) {
 	// Given: a resource whose artifact is a relative bare local path.
@@ -579,7 +580,7 @@ func TestResolveResourceEmbed_GlobEmbedsMatchesNestedBelowRoot(t *testing.T) {
 		Artifact: map[string]resource.ArtifactSpec{
 			"any": {
 				URL:          "file://" + fixtureDir,
-				ResourcePath: "modules/*",
+				Subpath:      "modules/*",
 				DownloadPath: "nested-glob-test.tar.gz",
 			},
 		},
@@ -641,7 +642,7 @@ func TestResolveResourceEmbed_GlobArchivesSymlinksInsteadOfFailing(t *testing.T)
 		Artifact: map[string]resource.ArtifactSpec{
 			"any": {
 				URL:          "file://" + fixtureDir,
-				ResourcePath: "*",
+				Subpath:      "*",
 				DownloadPath: "symlink-glob-test.tar.gz",
 			},
 		},

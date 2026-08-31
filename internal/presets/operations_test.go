@@ -96,7 +96,7 @@ func TestWriteDir_NamedPresetCopiesResolvedDirectory(t *testing.T) {
 		infrastructurePresetsResource: {
 			Glob: true,
 			Artifact: map[string]resource.ArtifactSpec{
-				"any": {URL: srcDir, ResourcePath: "*"},
+				"any": {URL: srcDir, Subpath: "*"},
 			},
 		},
 	})
@@ -162,7 +162,7 @@ func TestWriteDir_ResolutionFailurePropagatesInsteadOfReportingUnknownPreset(t *
 		infrastructurePresetsResource: {
 			Glob: true,
 			Artifact: map[string]resource.ArtifactSpec{
-				"any": {URL: filepath.Join(t.TempDir(), "does-not-exist"), ResourcePath: "*"},
+				"any": {URL: filepath.Join(t.TempDir(), "does-not-exist"), Subpath: "*"},
 			},
 		},
 	})
@@ -198,7 +198,7 @@ func TestReadInfrastructureFile_RejectsPathEscapingThePresetDirectory(t *testing
 		infrastructurePresetsResource: {
 			Glob: true,
 			Artifact: map[string]resource.ArtifactSpec{
-				"any": {URL: presetsRoot, ResourcePath: "*"},
+				"any": {URL: presetsRoot, Subpath: "*"},
 			},
 		},
 	})

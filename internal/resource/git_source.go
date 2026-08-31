@@ -22,13 +22,13 @@ const gitSHALength = 40
 type GitSource struct{}
 
 func (*GitSource) CanFetch(url string) bool {
-	repoURL, _ := ParseGitURL(url)
+	repoURL, ref := splitGitRef(url)
 
-	return IsGitSourceURL(repoURL)
+	return IsGitSourceURL(repoURL) || (ref != "" && isLocalGitWorktree(repoURL))
 }
 
 func (*GitSource) Fetch(ctx context.Context, url, dstPath string) (string, error) {
-	repoURL, ref := ParseGitURL(url)
+	repoURL, ref := splitGitRef(url)
 
 	auth, err := gitAuth(url)
 	if err != nil {
@@ -144,20 +144,6 @@ func IsGitSourceURL(url string) bool {
 			strings.HasSuffix(url, ".git"))
 }
 
-func ParseGitURL(url string) (repoURL, ref string) { //nolint:nonamedreturns
-	atIdx := strings.LastIndex(url, "@")
-	if atIdx < 0 {
-		return url, ""
-	}
-	// For git@ SCP URLs (git@host:path) the first @ is part of the scheme.
-	// A ref separator only exists when a colon appears before the last @.
-	if strings.HasPrefix(url, "git@") && !strings.Contains(url[:atIdx], ":") {
-		return url, ""
-	}
-
-	return url[:atIdx], url[atIdx+1:]
-}
-
 // getRefName resolves ref against the remote and returns the canonical
 // reference name and the target commit hash. When refName is empty, no named
 // ref points to the commit and a full-depth clone is required.
@@ -249,7 +235,7 @@ func resolveNamedRef(
 // Identify returns the resolved commit hash for url without cloning.
 // For URLs with a full 40-character commit SHA embedded, no network call is made.
 func (*GitSource) Identify(ctx context.Context, url string) (string, error) {
-	repoURL, ref := ParseGitURL(url)
+	repoURL, ref := splitRef(url)
 	if isFullCommitSHA(ref) {
 		return ref, nil
 	}

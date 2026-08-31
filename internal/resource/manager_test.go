@@ -53,14 +53,14 @@ embedded:
     linux/amd64:
       url: https://example.com/embedded-linux.tar.gz
       sha256: deadbeef
-      resource_path: tool
+      subpath: tool
 not-embedded:
   extract: true
   artifact:
     linux/amd64:
       url: https://example.com/not-embedded-linux.tar.gz
       sha256: deadbeef
-      resource_path: tool
+      subpath: tool
 `)
 
 	// When
@@ -80,7 +80,7 @@ not-embedded:
 func TestParseSpec_AllowsResourcePathWithoutExtraction(t *testing.T) {
 	t.Parallel()
 
-	// Given — resource_path selects a subpath inside whatever the source
+	// Given — subpath selects a subpath inside whatever the source
 	// produces, and is valid regardless of source kind or extract flag.
 	raw := []byte(`
 artifact:
@@ -89,17 +89,17 @@ artifact:
     linux/amd64:
       url: https://example.com/artifact-linux.tar.gz
       sha256: deadbeef
-      resource_path: tofu
+      subpath: tofu
 `)
 
 	// When
 	spec, err := ParseSpec(raw)
 	// Then
 	if err != nil {
-		t.Fatalf("expected resource_path without extraction to be valid, got %v", err)
+		t.Fatalf("expected subpath without extraction to be valid, got %v", err)
 	}
-	if got := spec["artifact"].Artifact["linux/amd64"].ResourcePath; got != "tofu" {
-		t.Fatalf("expected resource_path %q, got %q", "tofu", got)
+	if got := spec["artifact"].Artifact["linux/amd64"].Subpath; got != "tofu" {
+		t.Fatalf("expected subpath %q, got %q", "tofu", got)
 	}
 }
 
@@ -133,14 +133,14 @@ preset:
 func TestManager_ResolveEntry_HonoursResourcePathWithoutExtraction(t *testing.T) {
 	t.Parallel()
 
-	// Given — a non-extract resource with a resource_path. The manager must
+	// Given — a non-extract resource with a subpath. The manager must
 	// apply the subpath to the artifact path regardless of source kind.
 	cacheDir := t.TempDir()
 	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
 	def := ResourceDefinition{
 		Extract: false,
 		Artifact: map[string]ArtifactSpec{
-			anyPlatformKey: {URL: "https://example.com/repo.git", ResourcePath: "infra/aws"},
+			anyPlatformKey: {URL: "https://example.com/repo.git", Subpath: "infra/aws"},
 		},
 	}
 
@@ -156,8 +156,8 @@ func TestManager_ResolveEntry_HonoursResourcePathWithoutExtraction(t *testing.T)
 	if !strings.HasSuffix(entry.ResolvedPath, wantSuffix) {
 		t.Fatalf("expected ResolvedPath to end with %q, got %q", wantSuffix, entry.ResolvedPath)
 	}
-	if entry.ResourcePath != "infra/aws" {
-		t.Fatalf("expected ResourcePath %q, got %q", "infra/aws", entry.ResourcePath)
+	if entry.Subpath != "infra/aws" {
+		t.Fatalf("expected Subpath %q, got %q", "infra/aws", entry.Subpath)
 	}
 }
 
@@ -170,15 +170,15 @@ func TestManager_ResolveEntry_RejectsTraversalResourcePathWithoutExtraction(t *t
 	def := ResourceDefinition{
 		Extract: false,
 		Artifact: map[string]ArtifactSpec{
-			anyPlatformKey: {URL: "https://example.com/repo.git", ResourcePath: "../escape"},
+			anyPlatformKey: {URL: "https://example.com/repo.git", Subpath: "../escape"},
 		},
 	}
 
 	// When
 	_, err := manager.resolveEntry("preset", def, def.Artifact[anyPlatformKey])
 	// Then
-	if err == nil || !strings.Contains(err.Error(), "resource_path") {
-		t.Fatalf("expected resource_path traversal error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "subpath") {
+		t.Fatalf("expected subpath traversal error, got %v", err)
 	}
 }
 
@@ -192,7 +192,7 @@ func TestManager_ResolveEntry_DifferentSubpathsProduceDistinctEntries(t *testing
 		return ResourceDefinition{
 			Extract: false,
 			Artifact: map[string]ArtifactSpec{
-				anyPlatformKey: {URL: "https://example.com/repo.git", ResourcePath: subpath},
+				anyPlatformKey: {URL: "https://example.com/repo.git", Subpath: subpath},
 			},
 		}
 	}
@@ -327,9 +327,9 @@ func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 			Extract: true,
 			Artifact: map[string]ArtifactSpec{
 				"linux/amd64": {
-					URL:          server.URL + "/artifact.tgz",
-					Sha256:       sum,
-					ResourcePath: "tool",
+					URL:     server.URL + "/artifact.tgz",
+					Sha256:  sum,
+					Subpath: "tool",
 				},
 			},
 		},
@@ -427,7 +427,7 @@ func TestManager_RequestExtractsZipResource(t *testing.T) {
 					URL:          server.URL + "/artifact.zip",
 					Sha256:       sum,
 					DownloadPath: "artifact.zip",
-					ResourcePath: "launcher",
+					Subpath:      "launcher",
 				},
 			},
 		},
@@ -483,9 +483,9 @@ func TestManager_RequestResolvesEmbeddedResourceWithoutNetwork(t *testing.T) {
 			Embed:   EmbedDefault,
 			Artifact: map[string]ArtifactSpec{
 				"darwin/arm64": {
-					URL:          server.URL + "/artifact.zip",
-					Sha256:       sha256OfTestFile(t, archivePath),
-					ResourcePath: "launcher",
+					URL:     server.URL + "/artifact.zip",
+					Sha256:  sha256OfTestFile(t, archivePath),
+					Subpath: "launcher",
 				},
 			},
 		},
@@ -533,9 +533,9 @@ func TestManager_RequestFailsWhenEmbeddedResourceNotRegistered(t *testing.T) {
 			Embed:   EmbedDefault,
 			Artifact: map[string]ArtifactSpec{
 				"darwin/arm64": {
-					URL:          server.URL + "/artifact.zip",
-					Sha256:       "deadbeef",
-					ResourcePath: "launcher",
+					URL:     server.URL + "/artifact.zip",
+					Sha256:  "deadbeef",
+					Subpath: "launcher",
 				},
 			},
 		},
@@ -853,9 +853,9 @@ func TestManager_RequestReportsChecksumMismatch(t *testing.T) {
 			Extract: true,
 			Artifact: map[string]ArtifactSpec{
 				"linux/amd64": {
-					URL:          server.URL + "/artifact.tgz",
-					Sha256:       strings.Repeat("0", 64),
-					ResourcePath: "tool",
+					URL:     server.URL + "/artifact.tgz",
+					Sha256:  strings.Repeat("0", 64),
+					Subpath: "tool",
 				},
 			},
 		},
@@ -1434,7 +1434,7 @@ func TestManager_GetFileDirectoryWithResourcePathReturnsSubdirectory(t *testing.
 	t.Parallel()
 
 	// Given — a preset root with a nested subdirectory. The manager must apply
-	// resource_path to the redirect target, not silently return the root.
+	// subpath to the redirect target, not silently return the root.
 	presetDir := t.TempDir()
 	subDir := filepath.Join(presetDir, "infra", "aws")
 	if err := os.MkdirAll(subDir, 0o750); err != nil {
@@ -1443,7 +1443,7 @@ func TestManager_GetFileDirectoryWithResourcePathReturnsSubdirectory(t *testing.
 	def := ResourceDefinition{
 		Extract: false,
 		Artifact: map[string]ArtifactSpec{
-			anyPlatformKey: {URL: "file://" + presetDir, ResourcePath: "infra/aws"},
+			anyPlatformKey: {URL: "file://" + presetDir, Subpath: "infra/aws"},
 		},
 	}
 	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
@@ -1462,12 +1462,12 @@ func TestManager_GetFileDirectoryWithResourcePathReturnsSubdirectory(t *testing.
 func TestManager_GetFileDirectoryRejectsTraversalResourcePath(t *testing.T) {
 	t.Parallel()
 
-	// Given — a resource_path that tries to escape the redirect root.
+	// Given — a subpath that tries to escape the redirect root.
 	presetDir := t.TempDir()
 	def := ResourceDefinition{
 		Extract: false,
 		Artifact: map[string]ArtifactSpec{
-			anyPlatformKey: {URL: "file://" + presetDir, ResourcePath: "../escape"},
+			anyPlatformKey: {URL: "file://" + presetDir, Subpath: "../escape"},
 		},
 	}
 	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
@@ -1475,8 +1475,8 @@ func TestManager_GetFileDirectoryRejectsTraversalResourcePath(t *testing.T) {
 	// When
 	_, err := manager.Get(context.Background(), def, "preset-dir")
 	// Then
-	if err == nil || !strings.Contains(err.Error(), "resource_path") {
-		t.Fatalf("expected resource_path traversal error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "subpath") {
+		t.Fatalf("expected subpath traversal error, got %v", err)
 	}
 }
 
@@ -1538,7 +1538,7 @@ func TestManager_GetFileArchiveExtractedIntoCache(t *testing.T) {
 	def := ResourceDefinition{
 		Extract: true,
 		Artifact: map[string]ArtifactSpec{
-			anyPlatformKey: {URL: "file://" + archivePath, ResourcePath: "tool"},
+			anyPlatformKey: {URL: "file://" + archivePath, Subpath: "tool"},
 		},
 	}
 	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
@@ -1646,8 +1646,8 @@ func TestManager_GetZipExtraction(t *testing.T) {
 		Extract: true,
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {
-				URL:          "file://" + archivePath,
-				ResourcePath: "tool",
+				URL:     "file://" + archivePath,
+				Subpath: "tool",
 			},
 		},
 	}
@@ -1796,7 +1796,7 @@ func TestManager_RequestMember_ResolvesAMatchWithinALocalDirectory(t *testing.T)
 	spec := ResourceSpec{
 		"shared-modules": {
 			Glob:     true,
-			Artifact: map[string]ArtifactSpec{anyPlatformKey: {URL: srcDir, ResourcePath: "*"}},
+			Artifact: map[string]ArtifactSpec{anyPlatformKey: {URL: srcDir, Subpath: "*"}},
 		},
 	}
 	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
@@ -1827,7 +1827,7 @@ func TestManager_RequestMember_ResolvesAMatchWithinAnExtractedArchive(t *testing
 			Extract: true,
 			Glob:    true,
 			Artifact: map[string]ArtifactSpec{
-				anyPlatformKey: {URL: "file://" + archivePath, ResourcePath: "*"},
+				anyPlatformKey: {URL: "file://" + archivePath, Subpath: "*"},
 			},
 		},
 	}
@@ -1855,7 +1855,7 @@ func TestManager_RequestMember_ReturnsErrorForUnknownMember(t *testing.T) {
 	spec := ResourceSpec{
 		"shared-modules": {
 			Glob:     true,
-			Artifact: map[string]ArtifactSpec{anyPlatformKey: {URL: srcDir, ResourcePath: "*"}},
+			Artifact: map[string]ArtifactSpec{anyPlatformKey: {URL: srcDir, Subpath: "*"}},
 		},
 	}
 	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
@@ -1927,7 +1927,7 @@ func TestManager_RequestMember_EmbeddedGlobResourceIsExtractedForMatching(t *tes
 			Artifact: map[string]ArtifactSpec{
 				anyPlatformKey: {
 					URL:          "https://example.com/" + resourceID + ".tar.gz",
-					ResourcePath: "*",
+					Subpath:      "*",
 					DownloadPath: resourceID + ".tar.gz",
 				},
 			},

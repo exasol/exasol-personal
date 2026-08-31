@@ -67,7 +67,7 @@ infra-presets:
   artifact:
     any:
       url: assets/infrastructure
-      resource_path: "*"
+      subpath: "*"
 `)
 
 	if _, err := ParseSpec(raw); err != nil {
@@ -85,7 +85,7 @@ shared-modules:
   artifact:
     any:
       url: https://github.com/org/shared-modules.git
-      resource_path: "modules/*"
+      subpath: "modules/*"
 `)
 
 	if _, err := ParseSpec(raw); err != nil {
@@ -106,7 +106,7 @@ shared-modules:
 `)
 
 	_, err := ParseSpec(raw)
-	if err == nil || !strings.Contains(err.Error(), "resource_path with a glob pattern") {
+	if err == nil || !strings.Contains(err.Error(), "subpath with a glob pattern") {
 		t.Fatalf("expected a missing pattern error, got %v", err)
 	}
 }
@@ -121,7 +121,7 @@ shared-modules:
   artifact:
     any:
       url: https://github.com/org/shared-modules.git
-      resource_path: "modules/*"
+      subpath: "modules/*"
       sha256: deadbeef
 `)
 
@@ -142,7 +142,7 @@ shared-modules:
   artifact:
     any:
       url: https://github.com/org/shared-modules.git
-      resource_path: "modules/*"
+      subpath: "modules/*"
 `)
 
 	_, err := ParseSpec(raw)
@@ -162,7 +162,7 @@ shared-archives:
   artifact:
     any:
       url: https://example.com/presets.tar.gz
-      resource_path: "infra/*"
+      subpath: "infra/*"
       sha256: deadbeef
 `)
 
@@ -189,7 +189,7 @@ shared-archives:
 `)
 
 	_, err := ParseSpec(raw)
-	if err == nil || !strings.Contains(err.Error(), "resource_path with a glob pattern") {
+	if err == nil || !strings.Contains(err.Error(), "subpath with a glob pattern") {
 		t.Fatalf("expected a missing pattern error, got %v", err)
 	}
 }
@@ -205,7 +205,7 @@ shared-archives:
   artifact:
     any:
       url: https://example.com/presets.tar.gz
-      resource_path: "infra/*"
+      subpath: "infra/*"
       sha256: deadbeef
 `)
 

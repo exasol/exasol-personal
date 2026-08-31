@@ -22,8 +22,8 @@ type ResourceDefinition struct {
 	Extract  bool                    `json:"extract"  yaml:"extract"`
 	Embed    EmbedMode               `json:"embed"    yaml:"embed"`
 	Artifact map[string]ArtifactSpec `json:"artifact" yaml:"artifact"`
-	// Glob marks resource_path as a pattern to match within the artifact's
-	// resolved content, instead of a literal subpath.
+	// Glob marks subpath as a pattern to match within the artifact's
+	// resolved content, instead of a literal path.
 	Glob bool `json:"glob,omitempty" yaml:"glob,omitempty"`
 }
 
@@ -126,14 +126,27 @@ func (m EmbedMode) embedValue() (any, error) {
 
 // ArtifactSpec describes one downloadable artifact for a specific platform.
 type ArtifactSpec struct {
-	URL    string `yaml:"url"`
+	URL string `yaml:"url"`
+	// Ref selects a revision within the source, such as a branch, tag, or
+	// commit for a git repository.
+	Ref    string `yaml:"ref,omitempty"`
 	Sha256 string `yaml:"sha256"`
 	// DownloadPath's suffix picks the extractor (see extractors), so it must
 	// look like an archive even when the source itself is a bare directory.
 	//nolint:tagliatelle // YAML schema uses snake_case field names.
 	DownloadPath string `yaml:"download_path,omitempty"`
-	//nolint:tagliatelle // YAML schema uses snake_case field names.
-	ResourcePath string `yaml:"resource_path,omitempty"`
+	Subpath      string `yaml:"subpath,omitempty"`
+}
+
+// Locator resolves the artifact's location, taking a Git revision from Ref
+// when declared and from the URL's own "@ref" suffix otherwise.
+func (a ArtifactSpec) Locator() Locator {
+	if strings.TrimSpace(a.Ref) != "" {
+		return Locator{URL: a.URL, Ref: a.Ref}
+	}
+	rawURL, ref := splitGitRef(a.URL)
+
+	return Locator{URL: rawURL, Ref: ref}
 }
 
 const anyPlatformKey = "any"
@@ -229,11 +242,10 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 	if strings.TrimSpace(a.URL) == "" {
 		return fmt.Errorf("resource %q artifact %q must define url", ctx.resourceID, ctx.variant)
 	}
-	// ArtifactSpec.URL may carry an @ref suffix; strip it before classification.
-	gitRepoURL, _ := ParseGitURL(a.URL)
+	locator := a.Locator()
 
 	switch {
-	case IsGitSourceURL(gitRepoURL):
+	case (&GitSource{}).CanFetch(locator.String()):
 		if strings.TrimSpace(a.Sha256) != "" {
 			return fmt.Errorf(
 				"resource %q artifact %q must not define sha256 for a git source"+
@@ -242,7 +254,7 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 				ctx.variant,
 			)
 		}
-	case (FileSource{}).CanFetch(a.URL):
+	case (FileSource{}).CanFetch(locator.String()):
 		// Local (file://, or bare local path) sources are first-party content whose
 		// integrity comes from being part of the same versioned repository commit,
 		// not from a hand-authored checksum, so a checksum is optional for them.
@@ -257,7 +269,7 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 	}
 
 	if ctx.glob {
-		return validateGlobResourcePath(a, ctx)
+		return validateGlobSubpath(a, ctx)
 	}
 
 	return nil
@@ -267,16 +279,16 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 // source must not declare extract: true. Any other non-local source must,
 // since a git checkout or an extracted archive is the only way to have a
 // directory tree to glob within.
-func validateGlobResourcePath(artifact ArtifactSpec, ctx artifactValidationContext) error {
-	if strings.TrimSpace(artifact.ResourcePath) == "" {
+func validateGlobSubpath(artifact ArtifactSpec, ctx artifactValidationContext) error {
+	if strings.TrimSpace(artifact.Subpath) == "" {
 		return fmt.Errorf(
-			"resource %q artifact %q must define resource_path with a glob pattern",
+			"resource %q artifact %q must define subpath with a glob pattern",
 			ctx.resourceID,
 			ctx.variant,
 		)
 	}
 	// ArtifactSpec.URL may carry an @ref suffix; strip it before classification.
-	gitRepoURL, _ := ParseGitURL(artifact.URL)
+	gitRepoURL, _ := splitRef(artifact.URL)
 	if IsGitSourceURL(gitRepoURL) {
 		if ctx.extract {
 			return fmt.Errorf(
@@ -294,7 +306,7 @@ func validateGlobResourcePath(artifact ArtifactSpec, ctx artifactValidationConte
 	}
 	if !ctx.extract {
 		return fmt.Errorf(
-			"resource %q artifact %q must declare extract: true to use a glob resource_path",
+			"resource %q artifact %q must declare extract: true to use a glob subpath",
 			ctx.resourceID,
 			ctx.variant,
 		)

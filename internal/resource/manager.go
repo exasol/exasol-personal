@@ -88,7 +88,7 @@ type artifactIdentityPayload struct {
 	CommitHash   string `json:"commitHash,omitempty"`
 	Extract      bool   `json:"extract"`
 	DownloadPath string `json:"downloadPath"`
-	ResourcePath string `json:"resourcePath"`
+	Subpath      string `json:"resourcePath"`
 }
 
 // NewManager creates a Manager backed by the default cache.
@@ -174,6 +174,11 @@ func (m *Manager) Get(
 		return "", err
 	}
 
+	// Sources take one URL string, so a ref declared as its own field is folded
+	// back into it here.
+	artifact.URL = artifact.Locator().String()
+	artifact.Ref = ""
+
 	// If the source can identify its content before fetching, use that identity
 	// as a synthetic Sha256 so the standard cache machinery handles the rest.
 	// An embed: true resource uses its own build-time content hash instead,
@@ -219,7 +224,7 @@ func (m *Manager) Request(ctx context.Context, resourceID string) (string, error
 }
 
 // RequestMember treats an empty member as plain Request. Otherwise it
-// matches member against the resolved group's own resource_path pattern:
+// matches member against the resolved group's own subpath pattern:
 // never an independent fetch, cache entry, or embed, only a subpath of the
 // already-resolved group.
 func (m *Manager) RequestMember(ctx context.Context, resourceID, member string) (string, error) {
@@ -239,7 +244,7 @@ func (m *Manager) RequestMember(ctx context.Context, resourceID, member string) 
 	if err != nil {
 		return "", err
 	}
-	matches, err := GlobMatches(root, artifact.ResourcePath)
+	matches, err := GlobMatches(root, artifact.Subpath)
 	if err != nil {
 		return "", err
 	}
@@ -330,7 +335,7 @@ func (*Manager) GroupMembers(group string) []string {
 func GlobMatches(root, pattern string) (map[string]string, error) {
 	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
-		return nil, errors.New("must define resource_path with a glob pattern")
+		return nil, errors.New("must define subpath with a glob pattern")
 	}
 
 	globMatches, err := filepath.Glob(filepath.Join(root, pattern))
@@ -627,12 +632,12 @@ func (m *Manager) resolveEntry(
 		downloadPath = urlBasename(artifact.URL)
 	}
 
-	resourcePath, err := cleanRelativePath(artifact.ResourcePath, "resource_path")
+	resourcePath, err := cleanRelativePath(artifact.Subpath, "subpath")
 	if err != nil {
 		return cacheIndexEntry{}, err
 	}
 	if def.Glob {
-		// resource_path is a match pattern applied after Get returns here,
+		// subpath is a match pattern applied after Get returns here,
 		// not a literal subdirectory to select.
 		resourcePath = ""
 	}
@@ -690,7 +695,7 @@ func (m *Manager) resolveEntry(
 		ArtifactPath: artifactRelPath,
 		ResolvedPath: resolvedRelPath,
 		DownloadPath: downloadPath,
-		ResourcePath: resourcePath,
+		Subpath:      resourcePath,
 		Extract:      extract,
 		Embed:        def.Embed != EmbedNever,
 	}, nil
@@ -709,7 +714,7 @@ func artifactIdentity(
 		Sha256:       normalizeSha256(artifact.Sha256),
 		Extract:      extract,
 		DownloadPath: downloadPath,
-		ResourcePath: resourcePath,
+		Subpath:      resourcePath,
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -722,16 +727,16 @@ func artifactIdentity(
 
 // returnPath computes the effective path returned to callers of Get. For
 // redirect sources (file:// directories or bare files) the returned path is
-// the redirect itself; when resource_path is set, it selects a subdirectory of
+// the redirect itself; when subpath is set, it selects a subdirectory of
 // the redirect target. For cached artifacts, ResolvedPath already encodes the
-// resource_path suffix (see resolveResolvedPath).
+// subpath suffix (see resolveResolvedPath).
 func (m *Manager) returnPath(entry cacheIndexEntry) (string, error) {
 	if entry.RedirectPath != "" && !entry.Extract {
-		if strings.TrimSpace(entry.ResourcePath) == "" {
+		if strings.TrimSpace(entry.Subpath) == "" {
 			return entry.RedirectPath, nil
 		}
 
-		return pathWithinRoot(entry.RedirectPath, entry.ResourcePath, "resource_path")
+		return pathWithinRoot(entry.RedirectPath, entry.Subpath, "subpath")
 	}
 
 	return m.cache.absolutePath(entry.ResolvedPath), nil
@@ -739,7 +744,7 @@ func (m *Manager) returnPath(entry cacheIndexEntry) (string, error) {
 
 // resolveResolvedPath computes the resolved path returned to callers of Get.
 // The root is the extracted directory for archives that are extracted, and the
-// artifact path itself otherwise. A non-empty resource_path selects a
+// artifact path itself otherwise. A non-empty subpath selects a
 // subdirectory within that root, applying uniformly regardless of source kind.
 func (m *Manager) resolveResolvedPath(
 	extract bool,
@@ -756,7 +761,7 @@ func (m *Manager) resolveResolvedPath(
 
 		return artifactRelPath, nil
 	}
-	resolvedAbsPath, err := pathWithinRoot(root, resourcePath, "resource_path")
+	resolvedAbsPath, err := pathWithinRoot(root, resourcePath, "subpath")
 	if err != nil {
 		return "", err
 	}

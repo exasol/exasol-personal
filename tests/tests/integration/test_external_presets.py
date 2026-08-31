@@ -248,25 +248,30 @@ def test_file_uri_plain_file_without_manifest_returns_error(
     assert "infrastructure manifest" in exc.value.stderr
 
 
-def test_at_ref_on_non_git_url_returns_error(exasol_path: str, tmp_path: Path) -> None:
-    # Given a deployment directory
+def test_at_sign_remains_in_file_preset_path(exasol_path: str, tmp_path: Path) -> None:
+    # Given
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+    preset_dir = tmp_path / "preset@v1"
+    preset_dir.mkdir()
+    export_preset(exasol_path, infra_id, "infrastructure", str(preset_dir))
+
     deployment_dir = tmp_path / "deployment"
     deployment_dir.mkdir()
 
-    # When init is invoked with an @ref suffix on a non-git HTTPS URL
-    args = [
-        exasol_path,
-        "init",
-        "https://example.com/preset.tar.gz@v1.0.0",
-        "--deployment-dir",
-        str(deployment_dir),
-    ]
-    with pytest.raises(CalledProcessError) as exc:
-        run_command(args)
+    # When
+    result = run_command(
+        [
+            exasol_path,
+            "init",
+            f"file://{preset_dir}",
+            "--deployment-dir",
+            str(deployment_dir),
+        ]
+    )
 
-    # Then it fails with an error about the @ref syntax restriction
-    assert exc.value.returncode != 0
-    assert "@ref" in exc.value.stderr
+    # Then
+    assert result.returncode == 0
+    assert (deployment_dir / ".exasolLauncherState.json").exists()
 
 
 def test_init_accepts_http_tar_gz_infra_preset(

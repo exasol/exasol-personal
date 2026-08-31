@@ -23,7 +23,7 @@ import (
 // don't flag these test fixtures for needing an executable fake runner.
 const testRunnerExecutableMode = 0o700
 
-// runnerZipEntryName matches resources.yaml's resource_path for
+// runnerZipEntryName matches resources.yaml's subpath for
 // exasol-local-runner.
 const runnerZipEntryName = "launcher"
 
@@ -327,7 +327,7 @@ func writeFakeCombinedRunner(
 }
 
 // newTestManagerForRunner builds a Manager whose "exasol-local-runner"
-// resource resolves through the same extract: true / resource_path shape the
+// resource resolves through the same extract: true / subpath shape the
 // real resources.yaml entry uses: scriptContent is packed into a minimal,
 // single-entry zip (mirroring the real release archive).
 func newTestManagerForRunner(t *testing.T, scriptContent []byte) *resource.Manager {
@@ -338,7 +338,7 @@ func newTestManagerForRunner(t *testing.T, scriptContent []byte) *resource.Manag
 		exasolLocalRunnerResourceID: {
 			Extract: true,
 			Artifact: map[string]resource.ArtifactSpec{
-				"any": {URL: zipPath, ResourcePath: runnerZipEntryName},
+				"any": {URL: zipPath, Subpath: runnerZipEntryName},
 			},
 		},
 	}

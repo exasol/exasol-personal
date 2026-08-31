@@ -41,38 +41,6 @@ func TestIsGitSourceURL(t *testing.T) {
 	}
 }
 
-func TestParseGitURL(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		url     string
-		wantURL string
-		wantRef string
-	}{
-		{"https://github.com/org/repo.git", "https://github.com/org/repo.git", ""},
-		{"https://github.com/org/repo.git@main", "https://github.com/org/repo.git", "main"},
-		{
-			"https://github.com/org/repo.git@a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-			"https://github.com/org/repo.git",
-			"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-		},
-		{"http://github.com/org/repo.git", "http://github.com/org/repo.git", ""},
-		{"git://github.com/org/repo.git", "git://github.com/org/repo.git", ""},
-		{"git@github.com:org/repo.git", "git@github.com:org/repo.git", ""},
-		{"git@github.com:org/repo.git@main", "git@github.com:org/repo.git", "main"},
-		{"https://example.com/preset.tar.gz", "https://example.com/preset.tar.gz", ""},
-		{"file:///some/path/to/preset", "file:///some/path/to/preset", ""},
-	}
-
-	for _, tc := range cases {
-		gotURL, gotRef := ParseGitURL(tc.url)
-		if gotURL != tc.wantURL || gotRef != tc.wantRef {
-			t.Errorf("ParseGitURL(%q) = (%q, %q), want (%q, %q)",
-				tc.url, gotURL, gotRef, tc.wantURL, tc.wantRef)
-		}
-	}
-}
-
 func TestGitSource_CanFetch_RemoteURLs(t *testing.T) {
 	t.Parallel()
 

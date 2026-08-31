@@ -8,21 +8,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/resource"
 )
 
+var externalPresetSchemes = []string{"file", "http", "https", "git"}
+
 // IsExternalPresetURI reports whether arg looks like an external preset URI
 // that should be resolved via ResolvePreset rather than treated as an embedded
 // preset name or local filesystem path.
 func IsExternalPresetURI(arg string) bool {
-	return strings.HasPrefix(arg, "file://") ||
-		strings.HasPrefix(arg, "http://") ||
-		strings.HasPrefix(arg, "https://") ||
-		strings.HasPrefix(arg, "git://") ||
-		strings.HasPrefix(arg, "git@")
+	if strings.HasPrefix(arg, "git@") {
+		return true
+	}
+
+	return slices.Contains(externalPresetSchemes, resource.ParseURI(arg).Locator.Scheme())
 }
 
 // ResolvePreset resolves an external preset URI to a local directory path and
@@ -33,22 +36,16 @@ func ResolvePreset(
 	uri string,
 	presetType string,
 ) (string, error) {
-	cleanURI, subpath := parsePresetURI(uri)
-
-	repoURL, ref := resource.ParseGitURL(cleanURI)
-	if ref != "" && !resource.IsGitSourceURL(repoURL) {
-		return "", fmt.Errorf(
-			"@ref syntax (%q) is only valid on git source URLs;"+
-				" %q does not appear to be a git repository",
-			ref,
-			repoURL,
-		)
-	}
+	descriptor := resource.ParseURI(uri)
 
 	def := resource.ResourceDefinition{
-		Extract: needsExtraction(cleanURI),
+		Extract: needsExtraction(descriptor.Locator.URL),
 		Artifact: map[string]resource.ArtifactSpec{
-			"any": {URL: cleanURI, ResourcePath: subpath},
+			"any": {
+				URL:     descriptor.Locator.URL,
+				Ref:     descriptor.Locator.Ref,
+				Subpath: descriptor.Subpath,
+			},
 		},
 	}
 

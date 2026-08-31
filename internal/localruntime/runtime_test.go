@@ -56,7 +56,7 @@ func newTestManagerForRunner(t *testing.T, scriptContent []byte) *resource.Manag
 		exasolLocalRunnerResourceID: {
 			Extract: true,
 			Artifact: map[string]resource.ArtifactSpec{
-				"any": {URL: zipPath, ResourcePath: runnerZipEntryName},
+				"any": {URL: zipPath, Subpath: runnerZipEntryName},
 			},
 		},
 	}

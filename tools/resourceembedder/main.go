@@ -158,7 +158,7 @@ func run(ctx context.Context, args []string) error {
 
 // This tool never imports assets/resourcedata/generated, so it has no embedded
 // data to fall back to; a declared Embed would make Get look for exactly
-// that, and fail. resource_path is cleared too, since Get would otherwise
+// that, and fail. subpath is cleared too, since Get would otherwise
 // treat it as a literal subdirectory name rather than the pattern it
 // actually is.
 func rawDefFor(def resource.ResourceDefinition) resource.ResourceDefinition {
@@ -166,7 +166,7 @@ func rawDefFor(def resource.ResourceDefinition) resource.ResourceDefinition {
 	rawDef.Embed = resource.EmbedNever
 	rawDef.Artifact = make(map[string]resource.ArtifactSpec, len(def.Artifact))
 	for platform, artifact := range def.Artifact {
-		artifact.ResourcePath = ""
+		artifact.Subpath = ""
 		rawDef.Artifact[platform] = artifact
 	}
 
@@ -325,7 +325,7 @@ func (g *generator) resolveGlobEmbed(
 		return nil, err
 	}
 
-	matches, err := resource.GlobMatches(root, artifact.ResourcePath)
+	matches, err := resource.GlobMatches(root, artifact.Subpath)
 	if err != nil {
 		return nil, err
 	}
