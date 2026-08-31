@@ -19,7 +19,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/exasol/exasol-personal/assets/resources"
+	"github.com/exasol/exasol-personal/assets/resourcedata"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/connect"
 	connecttypes "github.com/exasol/exasol-personal/internal/connect/types"
@@ -1181,7 +1181,7 @@ func officialAliasNamespace(entries []customslc.AliasEntry) map[string]bool {
 		names[alias] = true
 	}
 
-	catalog, err := slc.Load(resources.SLCCatalogYAML)
+	catalog, err := slc.Load(resourcedata.SLCCatalogYAML)
 	if err != nil {
 		return names
 	}

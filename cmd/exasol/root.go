@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/exasol/exasol-personal/assets/resources"
+	"github.com/exasol/exasol-personal/assets/resourcedata"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/exasol/exasol-personal/internal/resource"
@@ -168,7 +168,7 @@ func Execute() error {
 	// One resource manager for the whole process, attached to the root
 	// context so every command reaches it via cmd.Context() instead of each
 	// building (and caching against) its own.
-	manager, err := resource.NewResourceManagerWithSpec(resources.ResourcesYAML)
+	manager, err := resource.NewResourceManagerWithSpec(resourcedata.ResourcesYAML)
 	if err != nil {
 		return err
 	}

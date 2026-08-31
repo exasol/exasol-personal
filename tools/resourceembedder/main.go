@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 // Command resourceembedder generates the //go:embed wrapper file under
-// assets/resources/generated/ for every resource marked embed: true in
+// assets/resourcedata/generated/ for every resource marked embed: true in
 // resources.yaml, for one target platform per invocation (default: the host
 // platform, overridable via -goos/-goarch or the TARGET_GOOS/TARGET_GOARCH
 // environment variables). All resources declared for a given platform are
 // combined into a single generated file for that platform. It never imports
-// assets/resources/generated itself, which is what guarantees it always
+// assets/resourcedata/generated itself, which is what guarantees it always
 // performs a real, checksum-verified fetch rather than reusing whatever a
 // previous run happened to embed — unless -skip-embed/SKIP_EMBED is set, in
 // which case it always writes an empty placeholder instead, for callers that
@@ -36,14 +36,14 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/exasol/exasol-personal/assets/resources"
+	"github.com/exasol/exasol-personal/assets/resourcedata"
 	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
 	dirPerm             = 0o700
 	filePerm            = 0o600
-	generatedDirRelPath = "assets/resources/generated"
+	generatedDirRelPath = "assets/resourcedata/generated"
 	generatedPkg        = "generated"
 )
 
@@ -131,7 +131,7 @@ func run(ctx context.Context, args []string) error {
 	}
 	outputDir := filepath.Join(root, generatedDirRelPath)
 
-	spec, err := resource.ParseSpec(resources.ResourcesYAML)
+	spec, err := resource.ParseSpec(resourcedata.ResourcesYAML)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func run(ctx context.Context, args []string) error {
 	return g.generatePlatform(ctx, spec)
 }
 
-// This tool never imports assets/resources/generated, so it has no embedded
+// This tool never imports assets/resourcedata/generated, so it has no embedded
 // data to fall back to; a declared Embed would make Get look for exactly
 // that, and fail. resource_path is cleared too, since Get would otherwise
 // treat it as a literal subdirectory name rather than the pattern it

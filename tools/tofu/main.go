@@ -10,14 +10,14 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/exasol/exasol-personal/assets/resources"
+	"github.com/exasol/exasol-personal/assets/resourcedata"
 	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 func main() {
 	flag.Parse()
 
-	manager, err := resource.NewResourceManagerWithSpec(resources.ResourcesYAML)
+	manager, err := resource.NewResourceManagerWithSpec(resourcedata.ResourcesYAML)
 	if err != nil {
 		log.Fatal(err)
 	}

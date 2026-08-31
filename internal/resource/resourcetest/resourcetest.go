@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/exasol/exasol-personal/assets/resources"
+	"github.com/exasol/exasol-personal/assets/resourcedata"
 	"github.com/exasol/exasol-personal/internal/resource"
 )
 
@@ -34,7 +34,7 @@ func NewContext(t *testing.T) context.Context {
 	t.Helper()
 
 	manager, err := resource.NewResourceManagerWithSpecForPlatform(
-		resources.ResourcesYAML, t.TempDir(), runtime.GOOS, runtime.GOARCH,
+		resourcedata.ResourcesYAML, t.TempDir(), runtime.GOOS, runtime.GOARCH,
 	)
 	if err != nil {
 		t.Fatalf("failed to parse resources.yaml: %v", err)

@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/exasol/exasol-personal/assets/resources"
+	"github.com/exasol/exasol-personal/assets/resourcedata"
 	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/exasol/exasol-personal/internal/util"
 	"gopkg.in/yaml.v3"
@@ -146,7 +146,7 @@ func updateLockfileForPreset(ctx context.Context, presetDir string, platforms []
 		return fmt.Errorf("copy preset dir to temp: %w", err)
 	}
 
-	manager, err := resource.NewResourceManagerWithSpec(resources.ResourcesYAML)
+	manager, err := resource.NewResourceManagerWithSpec(resourcedata.ResourcesYAML)
 	if err != nil {
 		return fmt.Errorf("create artifact manager: %w", err)
 	}

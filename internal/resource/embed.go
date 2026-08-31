@@ -6,7 +6,7 @@ package resource
 //go:generate go run ../../tools/resourceembedder
 
 // embeddedResources holds resource data compiled directly into the binary,
-// populated via Register by generated files under assets/resources/generated.
+// populated via Register by generated files under assets/resourcedata/generated.
 // It stays empty in any process that never imports that package, which is
 // what keeps the build-time generator's fetches always real.
 var embeddedResources = map[string][]byte{}

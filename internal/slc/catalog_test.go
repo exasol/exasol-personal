@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/exasol/exasol-personal/assets/resources"
+	"github.com/exasol/exasol-personal/assets/resourcedata"
 	"github.com/exasol/exasol-personal/internal/slc"
 )
 
@@ -156,7 +156,7 @@ func TestListReturnsAllFlavorsSorted(t *testing.T) {
 func TestEmbeddedCatalogResolvesPython3(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := slc.Load(resources.SLCCatalogYAML)
+	catalog, err := slc.Load(resourcedata.SLCCatalogYAML)
 	if err != nil {
 		t.Fatalf("failed to load embedded SLC catalog: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestEmbeddedCatalogResolvesPython3(t *testing.T) {
 func TestEmbeddedCatalogMapsAMD64ToX64ImageTags(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := slc.Load(resources.SLCCatalogYAML)
+	catalog, err := slc.Load(resourcedata.SLCCatalogYAML)
 	if err != nil {
 		t.Fatalf("failed to load embedded SLC catalog: %v", err)
 	}

@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/exasol/exasol-personal/assets/resources"
+	"github.com/exasol/exasol-personal/assets/resourcedata"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/exasol/exasol-personal/internal/slc"
@@ -476,7 +476,7 @@ func UpdateSLC(
 // SLCStatuses returns every SLC in the catalog (for the current architecture) with its
 // installation status in this deployment.
 func SLCStatuses(deployment config.DeploymentDir) ([]SLCStatus, error) {
-	catalog, err := slc.Load(resources.SLCCatalogYAML)
+	catalog, err := slc.Load(resourcedata.SLCCatalogYAML)
 	if err != nil {
 		return nil, err
 	}
@@ -598,7 +598,7 @@ func resolveOfficialSLCForChange(
 		return slc.Entry{}, nil, err
 	}
 
-	catalog, err := slc.Load(resources.SLCCatalogYAML)
+	catalog, err := slc.Load(resourcedata.SLCCatalogYAML)
 	if err != nil {
 		return slc.Entry{}, nil, err
 	}

@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exasol/exasol-personal/assets/resources"
+	"github.com/exasol/exasol-personal/assets/resourcedata"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/customslc"
 	"github.com/exasol/exasol-personal/internal/directorymutex"
@@ -183,7 +183,7 @@ func TestCustomSLCTargetNeverCollidesWithOfficialFlavors(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	catalog, err := slc.Load(resources.SLCCatalogYAML)
+	catalog, err := slc.Load(resourcedata.SLCCatalogYAML)
 	if err != nil {
 		t.Fatal(err)
 	}
