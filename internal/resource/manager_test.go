@@ -1122,7 +1122,10 @@ func newCountingArtifactServer(
 
 	requests := &atomic.Int64{}
 	handler := func(writer http.ResponseWriter, request *http.Request) {
-		requests.Add(1)
+		// Only transfers count: a validator request moves no artifact bytes.
+		if request.Method != http.MethodHead {
+			requests.Add(1)
+		}
 		expectedPath := "/"
 		if artifactName != "" {
 			expectedPath = "/" + artifactName
@@ -1258,7 +1261,7 @@ func TestManager_GetNoChecksumAlwaysRefetches(t *testing.T) {
 	}
 	// Then
 	if requests.Load() != 2 {
-		t.Fatalf("expected 2 requests for no-checksum archive, got %d", requests.Load())
+		t.Fatalf("expected 2 downloads for no-checksum archive, got %d", requests.Load())
 	}
 }
 

@@ -188,13 +188,17 @@ func (m *Manager) Get(
 	// even when the artifact also declares a checksum: the checksum describes
 	// what was fetched upstream, not what a particular build ended up
 	// embedding, so only the build's hash tells two builds' content apart.
+	// A declared checksum already identifies the content, so a source is asked
+	// to identify it only when none was declared. A local source is asked
+	// regardless, since only it can report content that is already in place.
 	var probe Probe
+	locator := artifact.Locator()
 	if def.Embed != EmbedNever {
 		if hash, ok := lookupEmbeddedHash(resourceID); ok {
 			artifact.Sha256 = hash
 		}
-	} else {
-		probe, err = probeSource(ctx, artifact.Locator())
+	} else if strings.TrimSpace(artifact.Sha256) == "" || (FileSource{}).Handles(locator) {
+		probe, err = probeSource(ctx, locator)
 		if err != nil {
 			return "", err
 		}

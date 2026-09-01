@@ -4,10 +4,18 @@
 package resource
 
 import (
+	"bytes"
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 )
 
-func TestHttpSource_CanFetch_HTTPURLs(t *testing.T) {
+func TestHttpSource_Handles_HTTPURLs(t *testing.T) {
 	t.Parallel()
 
 	src := &HttpSource{}
@@ -19,12 +27,12 @@ func TestHttpSource_CanFetch_HTTPURLs(t *testing.T) {
 	}
 	for _, url := range trueURLs {
 		if !src.Handles(Locator{URL: url}) {
-			t.Errorf("CanFetch(%q) = false, want true", url)
+			t.Errorf("Handles(%q) = false, want true", url)
 		}
 	}
 }
 
-func TestHttpSource_CanFetch_GitURLsExcluded(t *testing.T) {
+func TestHttpSource_Handles_GitURLsExcluded(t *testing.T) {
 	t.Parallel()
 
 	src := &HttpSource{}
@@ -39,7 +47,212 @@ func TestHttpSource_CanFetch_GitURLsExcluded(t *testing.T) {
 	}
 	for _, url := range falseURLs {
 		if src.Handles(Locator{URL: url}) {
-			t.Errorf("CanFetch(%q) = true, want false", url)
+			t.Errorf("Handles(%q) = true, want false", url)
 		}
+	}
+}
+
+// A strong entity tag identifies an otherwise unidentifiable download, so the
+// cached copy is reused while the tag is unchanged.
+func TestHttpSource_Probe_StrongETagIdentifiesContent(t *testing.T) {
+	t.Parallel()
+
+	handler := func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("ETag", `"abc123"`)
+	}
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+
+	probe, err := (&HttpSource{}).Probe(context.Background(), Locator{URL: server.URL + "/a.tgz"})
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if !strings.HasSuffix(probe.Identity, `:"abc123"`) {
+		t.Fatalf("identity = %q, want the strong tag", probe.Identity)
+	}
+}
+
+func TestHttpSource_Probe_ScopesETagToLocation(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	handler := func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("ETag", `"shared"`)
+	}
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+	source := &HttpSource{}
+
+	// When
+	first, err := source.Probe(context.Background(), Locator{URL: server.URL + "/first.zip"})
+	if err != nil {
+		t.Fatalf("probe first location: %v", err)
+	}
+	second, err := source.Probe(context.Background(), Locator{URL: server.URL + "/second.zip"})
+	if err != nil {
+		t.Fatalf("probe second location: %v", err)
+	}
+
+	// Then
+	if first.Identity == second.Identity {
+		t.Fatalf("expected location-scoped identities, both were %q", first.Identity)
+	}
+}
+
+// A weak tag promises only semantic equivalence, so it cannot identify bytes.
+func TestHttpSource_Probe_WeakETagIsIgnored(t *testing.T) {
+	t.Parallel()
+
+	handler := func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("ETag", `W/"abc123"`)
+	}
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+
+	probe, err := (&HttpSource{}).Probe(context.Background(), Locator{URL: server.URL + "/a.tgz"})
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if probe.Identity != "" {
+		t.Fatalf("identity = %q, want empty", probe.Identity)
+	}
+}
+
+// A server offering no validator leaves the download unidentified.
+func TestHttpSource_Probe_NoETagStatesNoIdentity(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+
+	probe, err := (&HttpSource{}).Probe(context.Background(), Locator{URL: server.URL + "/a.tgz"})
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if probe.Identity != "" {
+		t.Fatalf("identity = %q, want empty", probe.Identity)
+	}
+}
+
+// A strong tag lets a checksumless archive be served from the cache instead of
+// being downloaded again.
+func TestManager_StrongETagAvoidsRedownload(t *testing.T) {
+	t.Parallel()
+
+	var downloads int
+	handler := func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("ETag", `"v1"`)
+		if request.Method == http.MethodHead {
+			return
+		}
+		downloads++
+		_, _ = writer.Write([]byte("payload"))
+	}
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	def := ResourceDefinition{
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: server.URL + "/payload.bin"},
+		},
+	}
+
+	if _, err := manager.Get(context.Background(), def, "payload"); err != nil {
+		t.Fatalf("first resolve: %v", err)
+	}
+	if _, err := manager.Get(context.Background(), def, "payload"); err != nil {
+		t.Fatalf("second resolve: %v", err)
+	}
+	if downloads != 1 {
+		t.Fatalf("expected one download, got %d", downloads)
+	}
+}
+
+// Without any validator the download cannot be identified, so it is fetched
+// again on every request.
+//
+//nolint:paralleltest // The process-wide logger must capture both resolutions.
+func TestManager_UnidentifiableArchiveRefetches(t *testing.T) {
+	// Given
+	var logs bytes.Buffer
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})))
+	defer slog.SetDefault(originalLogger)
+	var downloads int
+	handler := func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodHead {
+			return
+		}
+		downloads++
+		_, _ = fmt.Fprintf(writer, "payload-%d", downloads)
+	}
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	def := ResourceDefinition{
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {URL: server.URL + "/payload.bin"},
+		},
+	}
+
+	// When
+	if _, err := manager.Get(context.Background(), def, "payload"); err != nil {
+		t.Fatalf("first resolve: %v", err)
+	}
+	path, err := manager.Get(context.Background(), def, "payload")
+	if err != nil {
+		t.Fatalf("second resolve: %v", err)
+	}
+	// Then
+	if downloads != 2 {
+		t.Fatalf("expected a re-fetch, got %d downloads", downloads)
+	}
+	if !strings.Contains(logs.String(), "re-fetching resource") ||
+		!strings.Contains(logs.String(), "result may not be stable") {
+		t.Fatalf("expected re-fetch reason in log, got %q", logs.String())
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read refreshed resource: %v", err)
+	}
+	if string(content) != "payload-2" {
+		t.Fatalf("refreshed resource contains %q", content)
+	}
+}
+
+// A checksummed download is already identified, so resolution must not depend
+// on the server answering a validator request.
+func TestManager_ChecksummedDownloadNeedsNoValidatorRequest(t *testing.T) {
+	t.Parallel()
+
+	var heads int
+	handler := func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodHead {
+			heads++
+		}
+		_, _ = writer.Write([]byte("payload"))
+	}
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	def := ResourceDefinition{
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {
+				URL:    server.URL + "/payload.bin",
+				Sha256: sha256OfBytes([]byte("payload")),
+			},
+		},
+	}
+
+	if _, err := manager.Get(context.Background(), def, "payload"); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if heads != 0 {
+		t.Fatalf("expected no validator request, got %d", heads)
 	}
 }
