@@ -39,12 +39,13 @@ func (*Manager) newResolution(
 	probe Probe,
 	identity string,
 ) (resolution, error) {
+	locator := artifact.Locator()
 	downloadPath, err := cleanRelativePath(artifact.DownloadPath, "download_path")
 	if err != nil {
 		return resolution{}, err
 	}
 	if downloadPath == "" {
-		downloadPath = urlBasename(artifact.URL)
+		downloadPath = urlBasename(locator.URL)
 	}
 
 	subpath, err := cleanRelativePath(artifact.Subpath, "subpath")
@@ -53,7 +54,7 @@ func (*Manager) newResolution(
 	}
 
 	return resolution{
-		key:          cacheKeyFor(identity, artifact.URL, downloadPath),
+		key:          cacheKeyFor(identity, locator, downloadPath),
 		identity:     identity,
 		local:        probe.Local,
 		downloadPath: downloadPath,
@@ -66,10 +67,13 @@ func (*Manager) newResolution(
 // reached by two resources is stored once. Content that cannot be identified
 // falls back to its location, which keeps unidentifiable resources from
 // colliding with each other.
-func cacheKeyFor(identity, url, downloadPath string) string {
+func cacheKeyFor(identity string, loc Locator, downloadPath string) string {
 	seed := identity
 	if strings.TrimSpace(seed) == "" {
-		seed = "url:" + url + "|" + downloadPath
+		// Nothing identifies the content, so its location stands in. The
+		// revision is part of that location: two refs of one repository are
+		// two different things.
+		seed = "url:" + loc.String() + "|" + downloadPath
 	}
 	sum := sha256.Sum256([]byte(seed))
 
@@ -117,11 +121,6 @@ func (m *Manager) Get(
 	if err != nil {
 		return "", err
 	}
-
-	// Sources take one URL string, so a ref declared as its own field is folded
-	// back into it here.
-	artifact.URL = artifact.Locator().String()
-	artifact.Ref = ""
 
 	// A declared checksum already identifies the content, so a source is asked
 	// to identify it only when none was declared. An embedded resource always
@@ -178,7 +177,7 @@ func (m *Manager) resolveUnderLock(
 	if res.identity == "" {
 		slog.Info(
 			"re-fetching resource that cannot be identified, result may not be stable",
-			"id", resourceID, "url", artifact.URL,
+			"id", resourceID, "url", artifact.Locator().String(),
 		)
 	} else if path, ok := m.reuse(&index, resourceID, res); ok {
 		slog.Debug("found resource in cache", "id", resourceID, "path", path)
@@ -282,7 +281,7 @@ func (m *Manager) materialize(
 	now := m.cache.clock().UTC()
 	entry := index.Entries[res.key]
 	entry.ResourceIDs = withResourceID(entry.ResourceIDs, resourceID)
-	entry.URL = artifact.URL
+	entry.URL = artifact.Locator().String()
 	entry.Identity = res.identity
 	entry.Sha256 = normalizeSha256(artifact.Sha256)
 	entry.DownloadPath = res.downloadPath

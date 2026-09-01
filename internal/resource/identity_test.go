@@ -194,7 +194,7 @@ func TestManager_StartsFreshOnPriorCacheSchemaVersion(t *testing.T) {
 	content := []byte("current")
 	server, downloads := newCountingArtifactServer(t, "tool.bin", content)
 	identity := "sha256:" + sha256OfBytes(content)
-	key := cacheKeyFor(identity, server.URL+"/tool.bin", "tool.bin")
+	key := cacheKeyFor(identity, Locator{URL: server.URL + "/tool.bin"}, "tool.bin")
 	entryDir := cache.entryDir(key)
 	if err := os.MkdirAll(entryDir, dirPerm); err != nil {
 		t.Fatalf("create old cache entry: %v", err)

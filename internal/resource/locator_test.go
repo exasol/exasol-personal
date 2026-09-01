@@ -123,8 +123,6 @@ func TestParseURI(t *testing.T) {
 	}
 }
 
-// A specification declaring url, ref, and subpath as separate fields must
-// describe the same source as the equivalent command-line shorthand.
 func TestArtifactSpecLocatorMatchesParsedURI(t *testing.T) {
 	t.Parallel()
 
@@ -142,5 +140,29 @@ func TestArtifactSpecLocatorMatchesParsedURI(t *testing.T) {
 	}
 	if fromFields.Subpath != fromURI.Subpath {
 		t.Errorf("subpath from fields = %q, want %q", fromFields.Subpath, fromURI.Subpath)
+	}
+}
+
+func TestCacheKey_RefsOfOneRepositoryStayDistinct(t *testing.T) {
+	t.Parallel()
+
+	repo := "https://example.com/repo.git"
+	first := cacheKeyFor("", Locator{URL: repo, Ref: "v1"}, "repo.git")
+	second := cacheKeyFor("", Locator{URL: repo, Ref: "v2"}, "repo.git")
+
+	if first == second {
+		t.Fatalf("expected distinct keys for distinct refs, both were %q", first)
+	}
+}
+
+func TestCacheKey_RefFieldAndURLSuffixAgree(t *testing.T) {
+	t.Parallel()
+
+	field := ArtifactSpec{URL: "https://example.com/repo.git", Ref: "v1"}
+	suffixed := ArtifactSpec{URL: "https://example.com/repo.git@v1"}
+
+	if got, want := cacheKeyFor("", suffixed.Locator(), "repo.git"),
+		cacheKeyFor("", field.Locator(), "repo.git"); got != want {
+		t.Fatalf("key %q, want %q", got, want)
 	}
 }
