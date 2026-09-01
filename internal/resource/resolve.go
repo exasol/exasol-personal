@@ -16,17 +16,10 @@ import (
 	"strings"
 )
 
-// resolution is where one descriptor's content lives. It is computed from the
-// descriptor on every request rather than recorded, which is what lets two
-// descriptors differing only in presentation share one cache entry.
+// Presentation is not part of cache identity.
 type resolution struct {
-	// key names both the index record and the entry directory.
-	key string
-	// identity is empty when nothing can identify the content, which forces a
-	// refresh on every request.
-	identity string
-	// local is set when the source reported content already in place, in which
-	// case the cache stores no copy of the artifact itself.
+	key          string
+	identity     string
 	local        string
 	downloadPath string
 	extract      bool
@@ -34,45 +27,37 @@ type resolution struct {
 }
 
 func (*Resolver) newResolution(
-	def ResourceDefinition,
-	artifact ArtifactSpec,
+	descriptor Descriptor,
 	probe Probe,
 	identity string,
 ) (resolution, error) {
-	locator := artifact.Locator()
-	downloadPath, err := cleanRelativePath(artifact.DownloadPath, "download_path")
+	downloadPath, err := cleanRelativePath(descriptor.DownloadPath, "download_path")
 	if err != nil {
 		return resolution{}, err
 	}
 	if downloadPath == "" {
-		downloadPath = urlBasename(locator.URL)
+		downloadPath = urlBasename(descriptor.Locator.URL)
 	}
 
-	subpath, err := cleanRelativePath(artifact.Subpath, "subpath")
+	subpath, err := cleanRelativePath(descriptor.Subpath, "subpath")
 	if err != nil {
 		return resolution{}, err
 	}
 
 	return resolution{
-		key:          cacheKeyFor(identity, locator, downloadPath),
+		key:          cacheKeyFor(identity, descriptor.Locator, downloadPath),
 		identity:     identity,
 		local:        probe.Local,
 		downloadPath: downloadPath,
-		extract:      def.Extract,
+		extract:      descriptor.Extract,
 		subpath:      subpath,
 	}, nil
 }
 
-// cacheKeyFor keys an entry on content identity alone, so the same content
-// reached by two resources is stored once. Content that cannot be identified
-// falls back to its location, which keeps unidentifiable resources from
-// colliding with each other.
+// Unidentified resources use their location to avoid collisions.
 func cacheKeyFor(identity string, loc Locator, downloadPath string) string {
 	seed := identity
 	if strings.TrimSpace(seed) == "" {
-		// Nothing identifies the content, so its location stands in. The
-		// revision is part of that location: two refs of one repository are
-		// two different things.
 		seed = "url:" + loc.String() + "|" + downloadPath
 	}
 	sum := sha256.Sum256([]byte(seed))
@@ -80,8 +65,6 @@ func cacheKeyFor(identity string, loc Locator, downloadPath string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// artifactPath is where the fetched artifact is stored, empty when the content
-// stays where the source reported it.
 func (r *Resolver) artifactPath(res resolution) string {
 	if res.local != "" {
 		return ""
@@ -90,7 +73,6 @@ func (r *Resolver) artifactPath(res resolution) string {
 	return filepath.Join(r.cache.entryDir(res.key), res.downloadPath)
 }
 
-// contentRoot is the directory or file a subpath is selected from.
 func (r *Resolver) contentRoot(res resolution) string {
 	if res.extract {
 		return filepath.Join(r.cache.entryDir(res.key), extractRelPath)
@@ -111,39 +93,30 @@ func (r *Resolver) resolvedPath(res resolution) (string, error) {
 	return pathWithinRoot(root, res.subpath, "subpath")
 }
 
-func (r *Resolver) resolveDefinition(
+func (r *Resolver) resolveArtifact(
 	ctx context.Context,
-	def ResourceDefinition,
+	descriptor Descriptor,
 	resourceID string,
 ) (string, error) {
-	artifact, err := def.Resolve(r.platform.GOOS, r.platform.GOARCH)
-	if err != nil {
-		return "", err
-	}
-
-	// A declared checksum already identifies the content, so a source is asked
-	// to identify it only when none was declared. An embedded resource always
-	// declares one, recorded by the generation that produced its blob, so two
-	// builds embedding different content never share a cache entry. A local
-	// source is asked regardless, since only it can report content already in
-	// place.
-	var probe Probe
-	locator := artifact.Locator()
-	if strings.TrimSpace(artifact.Sha256) == "" || (FileSource{}).Handles(locator) {
-		probe, err = r.probeSource(ctx, locator)
+	// Only a local probe can tell the resolver to bypass artifact storage.
+	var (
+		probe Probe
+		err   error
+	)
+	if strings.TrimSpace(descriptor.Sha256) == "" ||
+		(FileSource{}).Handles(descriptor.Locator) {
+		probe, err = r.probeSource(ctx, descriptor.Locator)
 		if err != nil {
 			return "", err
 		}
 	}
 
-	identity := contentIdentity(artifact.Sha256, probe.Identity)
-	res, err := r.newResolution(def, artifact, probe, identity)
+	identity := contentIdentity(descriptor.Sha256, probe.Identity)
+	res, err := r.newResolution(descriptor, probe, identity)
 	if err != nil {
 		return "", err
 	}
 
-	// Content already in place that needs no unpacking is used where it is, so
-	// the cache neither stores nor tracks it.
 	if res.local != "" && !res.extract {
 		return r.resolvedPath(res)
 	}
@@ -151,7 +124,7 @@ func (r *Resolver) resolveDefinition(
 	var resolvedPath string
 	err = r.cache.withExclusiveLock(ctx, func() error {
 		var lockErr error
-		resolvedPath, lockErr = r.resolveUnderLock(ctx, resourceID, artifact, res)
+		resolvedPath, lockErr = r.resolveUnderLock(ctx, resourceID, descriptor, res)
 
 		return lockErr
 	})
@@ -165,7 +138,7 @@ func (r *Resolver) resolveDefinition(
 func (r *Resolver) resolveUnderLock(
 	ctx context.Context,
 	resourceID string,
-	artifact ArtifactSpec,
+	descriptor Descriptor,
 	res resolution,
 ) (string, error) {
 	index, err := r.cache.readIndex()
@@ -176,7 +149,7 @@ func (r *Resolver) resolveUnderLock(
 	if res.identity == "" {
 		slog.Info(
 			"re-fetching resource that cannot be identified, result may not be stable",
-			"id", resourceID, "url", artifact.Locator().String(),
+			"id", resourceID, "url", descriptor.Locator.String(),
 		)
 	} else if path, ok := r.reuse(&index, resourceID, res); ok {
 		slog.Debug("found resource in cache", "id", resourceID, "path", path)
@@ -184,7 +157,7 @@ func (r *Resolver) resolveUnderLock(
 		return path, nil
 	}
 
-	resolvedPath, err := r.materialize(ctx, resourceID, artifact, res, &index)
+	resolvedPath, err := r.materialize(ctx, resourceID, descriptor, res, &index)
 	if err != nil {
 		return "", err
 	}
@@ -194,9 +167,7 @@ func (r *Resolver) resolveUnderLock(
 	return resolvedPath, nil
 }
 
-// reuse reports a cached path only when the index knows the identity and the
-// bytes this descriptor needs are actually present, so a user who deleted part
-// of the cache gets a refetch rather than a dangling path.
+// Missing cache files force a refetch.
 func (r *Resolver) reuse(index *cacheIndex, resourceID string, res resolution) (string, bool) {
 	entry, ok := index.Entries[res.key]
 	if !ok {
@@ -232,7 +203,7 @@ func (r *Resolver) reuse(index *cacheIndex, resourceID string, res resolution) (
 func (r *Resolver) materialize(
 	ctx context.Context,
 	resourceID string,
-	artifact ArtifactSpec,
+	descriptor Descriptor,
 	res resolution,
 	index *cacheIndex,
 ) (string, error) {
@@ -242,8 +213,6 @@ func (r *Resolver) materialize(
 	}
 	defer func() { _ = os.RemoveAll(stagingDir) }()
 
-	// content is what an extraction reads from: the staged artifact, or the
-	// source's own copy when it reported the content already in place.
 	content := res.local
 	needsFetch := res.local == ""
 	if needsFetch && res.extract {
@@ -257,7 +226,7 @@ func (r *Resolver) materialize(
 	}
 	if needsFetch {
 		content = filepath.Join(stagingDir, res.downloadPath)
-		if err := r.fetch(ctx, artifact, content); err != nil {
+		if err := r.fetch(ctx, descriptor, content); err != nil {
 			return "", errors.Join(fmt.Errorf("failed to fetch resource %q", resourceID), err)
 		}
 	}
@@ -280,9 +249,9 @@ func (r *Resolver) materialize(
 	now := r.cache.clock().UTC()
 	entry := index.Entries[res.key]
 	entry.ResourceIDs = withResourceID(entry.ResourceIDs, resourceID)
-	entry.URL = artifact.Locator().String()
+	entry.URL = descriptor.Locator.String()
 	entry.Identity = res.identity
-	entry.Sha256 = normalizeSha256(artifact.Sha256)
+	entry.Sha256 = normalizeSha256(descriptor.Sha256)
 	entry.DownloadPath = res.downloadPath
 	if entry.CreatedAt.IsZero() {
 		entry.CreatedAt = now
@@ -316,9 +285,8 @@ func (r *Resolver) writeIndexAfterCleanup(index *cacheIndex) error {
 	return r.cache.writeIndex(*index)
 }
 
-func (r *Resolver) fetch(ctx context.Context, artifact ArtifactSpec, fetchPath string) error {
-	loc := artifact.Locator()
-	source, err := r.sourceFor(loc)
+func (r *Resolver) fetch(ctx context.Context, descriptor Descriptor, fetchPath string) error {
+	source, err := r.sourceFor(descriptor.Locator)
 	if err != nil {
 		return err
 	}
@@ -326,11 +294,11 @@ func (r *Resolver) fetch(ctx context.Context, artifact ArtifactSpec, fetchPath s
 	if err := os.MkdirAll(filepath.Dir(fetchPath), dirPerm); err != nil {
 		return err
 	}
-	if err := source.Fetch(ctx, loc, fetchPath); err != nil {
+	if err := source.Fetch(ctx, descriptor.Locator, fetchPath); err != nil {
 		return err
 	}
 
-	return verifyStored(fetchPath, normalizeSha256(artifact.Sha256))
+	return verifyStored(fetchPath, normalizeSha256(descriptor.Sha256))
 }
 
 func (r *Resolver) extractInto(filename, extractPath string) error {
