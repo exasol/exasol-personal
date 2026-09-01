@@ -173,6 +173,7 @@ func Execute() error {
 		return err
 	}
 	ctx := resource.NewContext(context.Background(), manager)
+	supersededCacheVersion := manager.Cache().SupersededIndexVersion()
 
 	// Register infrastructure variable flags only for commands that need them.
 	// This must happen before Cobra parses arguments.
@@ -205,11 +206,25 @@ func Execute() error {
 
 	err = rootCmd.ExecuteContext(ctx)
 	runDeploymentLogCleanup()
+	addSupersededCacheCallToAction(supersededCacheVersion)
 	if err == nil {
 		printTerminalMessages()
 	}
 
 	return err
+}
+
+// A cache from an earlier launcher is never read again, so its contents sit
+// unreferenced until the user reclaims the space.
+func addSupersededCacheCallToAction(supersededVersion int) {
+	if supersededVersion == 0 {
+		return
+	}
+
+	addTerminalCallToAction(
+		"Cached resources from an earlier version of Exasol Personal are no " +
+			"longer used. Run `exasol cache clean --all` to reclaim their space.",
+	)
 }
 
 func maybeAddVersionUpdateHint(cmd *cobra.Command, deployment config.DeploymentDir) {

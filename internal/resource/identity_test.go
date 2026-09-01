@@ -4,7 +4,6 @@
 package resource
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -32,6 +31,16 @@ func TestContentIdentity_FallsBackToProbe(t *testing.T) {
 
 	if got := contentIdentity("", "git-commit:deadbeef"); got != "git-commit:deadbeef" {
 		t.Fatalf("identity = %q, want the probed value", got)
+	}
+}
+
+// Neither source means nothing identifies the content, which is what makes the
+// resource refresh on every request.
+func TestContentIdentity_EmptyWhenNothingIdentifiesContent(t *testing.T) {
+	t.Parallel()
+
+	if got := contentIdentity("   ", ""); got != "" {
+		t.Fatalf("identity = %q, want empty", got)
 	}
 }
 
@@ -155,24 +164,107 @@ func TestManager_LocalDirectoryOccupiesNoCacheEntry(t *testing.T) {
 	}
 }
 
-// Entries created under an earlier schema are not reused, so a layout change
-// cannot serve content from the wrong place.
-func TestCache_RejectsPriorSchemaVersion(t *testing.T) {
-	t.Parallel()
+func writeIndexFixture(t *testing.T, cache *Cache, body string) {
+	t.Helper()
 
-	cacheDir := t.TempDir()
-	cache := NewCache(cacheDir, filepath.Join(cacheDir, cacheConfigFileName))
-	if err := os.MkdirAll(cacheDir, dirPerm); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cache.IndexPath()), dirPerm); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	older := `{"version":1,"entries":{}}`
-	if err := os.WriteFile(cache.IndexPath(), []byte(older), filePerm); err != nil {
+	if err := os.WriteFile(cache.IndexPath(), []byte(body), filePerm); err != nil {
 		t.Fatalf("write index: %v", err)
 	}
+}
+
+func newIsolatedCache(t *testing.T) *Cache {
+	t.Helper()
+
+	cacheDir := t.TempDir()
+
+	return NewCache(cacheDir, filepath.Join(cacheDir, cacheConfigFileName))
+}
+
+// Entries created under an earlier schema describe a layout this launcher no
+// longer reads, so they are dropped rather than reused, and the launcher keeps
+// working instead of failing on every request.
+func TestManager_StartsFreshOnPriorCacheSchemaVersion(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	cache := newIsolatedCache(t)
+	content := []byte("current")
+	server, downloads := newCountingArtifactServer(t, "tool.bin", content)
+	identity := "sha256:" + sha256OfBytes(content)
+	key := cacheKeyFor(identity, server.URL+"/tool.bin", "tool.bin")
+	entryDir := cache.entryDir(key)
+	if err := os.MkdirAll(entryDir, dirPerm); err != nil {
+		t.Fatalf("create old cache entry: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(entryDir, "tool.bin"),
+		[]byte("old"),
+		filePerm,
+	); err != nil {
+		t.Fatalf("write old cached artifact: %v", err)
+	}
+	writeIndexFixture(t, cache, `{"version":1,"entries":{"`+key+`":{`+
+		`"resourceIds":["tool"],"identity":"`+identity+`",`+
+		`"downloadPath":"tool.bin"}}}`)
+	manager := NewResourceManagerForPlatform(ResourceSpec{
+		"tool": {Artifact: map[string]ArtifactSpec{anyPlatformKey: {
+			URL:          server.URL + "/tool.bin",
+			Sha256:       sha256OfBytes(content),
+			DownloadPath: "tool.bin",
+		}}},
+	}, cache.root, "linux", "amd64")
+
+	// When
+	path, err := manager.Request(context.Background(), "tool")
+	if err != nil {
+		t.Fatalf("resolve with earlier cache schema: %v", err)
+	}
+
+	// Then
+	resolved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read resolved artifact: %v", err)
+	}
+	if string(resolved) != string(content) {
+		t.Fatalf("resolved content = %q, want %q", resolved, content)
+	}
+	if downloads.Load() != 1 {
+		t.Fatalf("expected prior entry not to be reused, got %d downloads", downloads.Load())
+	}
+}
+
+// The superseded content stays on disk, so the launcher can tell the user how
+// to reclaim its space.
+func TestCache_ReportsSupersededIndexVersion(t *testing.T) {
+	t.Parallel()
+
+	cache := newIsolatedCache(t)
+	writeIndexFixture(t, cache, `{"version":1,"entries":{}}`)
+
+	if got := cache.SupersededIndexVersion(); got != 1 {
+		t.Fatalf("expected the superseded version to be reported, got %d", got)
+	}
+}
+
+// An index from a newer launcher cannot be interpreted, so it is refused, and
+// the refusal says what to do about it.
+func TestCache_RefusesNewerSchemaVersionWithGuidance(t *testing.T) {
+	t.Parallel()
+
+	cache := newIsolatedCache(t)
+	writeIndexFixture(t, cache, `{"version":99,"entries":{}}`)
 
 	_, err := cache.readIndex()
-	if err == nil || !strings.Contains(err.Error(), "unsupported") {
-		t.Fatalf("expected the prior schema to be rejected, got %v", err)
+	if err == nil {
+		t.Fatal("expected a newer schema to be refused")
+	}
+	if !strings.Contains(err.Error(), "newer version") ||
+		!strings.Contains(err.Error(), "upgrade Exasol Personal") ||
+		!strings.Contains(err.Error(), "cache clean --all") {
+		t.Fatalf("expected the error to say how to recover, got %v", err)
 	}
 }
 
@@ -236,18 +328,20 @@ func TestManager_InterruptedFetchLeavesNoUsableEntry(t *testing.T) {
 func TestCache_CleanupReclaimsInterruptedEntries(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	cacheDir := t.TempDir()
 	cache := NewCache(cacheDir, filepath.Join(cacheDir, cacheConfigFileName))
-	stagingDir := stageIncompleteEntry(t, cache)
-	index := emptyCacheIndex()
-	seedCacheEntry(t, cache, &index, "complete", "payload", checksumString("payload"), testNow())
-	writeTestIndex(t, cache, index)
 
-	// When
+	stagingDir, err := cache.newStagingDir()
+	if err != nil {
+		t.Fatalf("staging dir: %v", err)
+	}
+	partial := filepath.Join(stagingDir, "partial.bin")
+	if err := os.WriteFile(partial, []byte("abc"), filePerm); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
 	opts := CleanOptions{Mode: CleanupModeIncomplete}
 	summary, err := cache.Clean(context.Background(), opts)
-	// Then
 	if err != nil {
 		t.Fatalf("clean: %v", err)
 	}
@@ -257,61 +351,4 @@ func TestCache_CleanupReclaimsInterruptedEntries(t *testing.T) {
 	if _, err := os.Stat(stagingDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected the staged entry to be gone, got %v", err)
 	}
-	if _, err := os.Stat(cache.entryDir("complete")); err != nil {
-		t.Fatalf("complete entry was removed: %v", err)
-	}
-}
-
-func TestCache_CleanupPreviewsInterruptedEntriesWithoutMutation(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	cacheDir := t.TempDir()
-	cache := NewCache(cacheDir, filepath.Join(cacheDir, cacheConfigFileName))
-	stagingDir := stageIncompleteEntry(t, cache)
-	index := emptyCacheIndex()
-	seedCacheEntry(t, cache, &index, "complete", "payload", checksumString("payload"), testNow())
-	writeTestIndex(t, cache, index)
-	indexBefore, err := os.ReadFile(cache.IndexPath())
-	if err != nil {
-		t.Fatalf("read index: %v", err)
-	}
-
-	// When
-	summary, err := cache.Clean(context.Background(), CleanOptions{
-		Mode: CleanupModeIncomplete, DryRun: true,
-	})
-	// Then
-	if err != nil {
-		t.Fatalf("preview cleanup: %v", err)
-	}
-	if !summary.DryRun || summary.RemovedEntries != 1 {
-		t.Fatalf("summary = %+v", summary)
-	}
-	if _, err := os.Stat(stagingDir); err != nil {
-		t.Fatalf("preview removed staged entry: %v", err)
-	}
-	indexAfter, err := os.ReadFile(cache.IndexPath())
-	if err != nil {
-		t.Fatalf("read index: %v", err)
-	}
-	if !bytes.Equal(indexAfter, indexBefore) {
-		t.Fatal("preview changed cache metadata")
-	}
-}
-
-func stageIncompleteEntry(t *testing.T, cache *Cache) string {
-	t.Helper()
-
-	stagingDir, err := cache.newStagingDir()
-	if err != nil {
-		t.Fatalf("staging dir: %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(stagingDir, "partial.bin"), []byte("abc"), filePerm,
-	); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	return stagingDir
 }

@@ -87,6 +87,39 @@ func TestCacheListCommandShowsEmptyCache(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // The terminal message queue is process-wide.
+func TestTextCommandReportsHowToReclaimSupersededCacheAfterIndexReplacement(t *testing.T) {
+	// Given
+	manager := resource.NewResourceManagerForPlatform(
+		resource.ResourceSpec{}, t.TempDir(), "linux", "amd64",
+	)
+	if err := os.WriteFile(
+		manager.Cache().IndexPath(), []byte(`{"version":1,"entries":{}}`), 0o600,
+	); err != nil {
+		t.Fatalf("write superseded index: %v", err)
+	}
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+	supersededVersion := manager.Cache().SupersededIndexVersion()
+	if err := os.WriteFile(
+		manager.Cache().IndexPath(), []byte(`{"version":2,"entries":{}}`), 0o600,
+	); err != nil {
+		t.Fatalf("replace superseded index: %v", err)
+	}
+
+	// When
+	addSupersededCacheCallToAction(supersededVersion)
+	var stderr bytes.Buffer
+	writeTerminalMessages(terminalConfig{stderr: &stderr, showCallsToAction: true})
+
+	// Then
+	output := stderr.String()
+	if !strings.Contains(output, "earlier version") ||
+		!strings.Contains(output, "cache clean --all") {
+		t.Fatalf("call to action = %q", output)
+	}
+}
+
 //nolint:paralleltest // mutates shared terminal message queues and global env
 func TestCacheUnlockCommandReportsConfirmationOnStderr(t *testing.T) {
 	home := t.TempDir()

@@ -153,6 +153,11 @@ func NewResourceManagerForPlatform(spec ResourceSpec, cacheRoot, goos, goarch st
 	)
 }
 
+// Cache returns the cache this manager stores resources in.
+func (m *Manager) Cache() *Cache {
+	return m.cache
+}
+
 // Request looks up a definition from the static spec by ID and resolves it.
 func (m *Manager) Request(ctx context.Context, resourceID string) (string, error) {
 	return m.RequestMember(ctx, resourceID, "")

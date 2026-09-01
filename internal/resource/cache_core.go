@@ -19,8 +19,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/directorymutex"
 )
 
-// This timeout should be long enough for another launcher to download and
-// extract whatever resource it is going to use.
+// Large downloads and extractions can hold the lock for several minutes.
 const acquireTimeout = 5 * time.Minute
 
 type cacheIndex struct {
@@ -29,19 +28,12 @@ type cacheIndex struct {
 	Entries     map[string]cacheIndexEntry `json:"entries"`
 }
 
-// cacheIndexEntry records stored bytes, nothing else. How a resource presents
-// those bytes (extraction, subpath selection) is recomputed from its
-// descriptor on every request, so it is deliberately absent here: two
-// descriptors that differ only in presentation share one entry.
+// Presentation is excluded because one content identity may have several views.
 type cacheIndexEntry struct {
-	// ResourceIDs lists every resource that resolved to this entry. Entries are
-	// keyed by content identity, so distinct resources with identical content
-	// share one, and normally there is exactly one name here.
-	ResourceIDs []string `json:"resourceIds"`
-	URL         string   `json:"url"`
-	Identity    string   `json:"identity"`
-	// Sha256 is the checksum the resource declared, kept so a later integrity
-	// check has something to compare against. Empty when none was declared.
+	// Content-addressed entries may be shared by several resource IDs.
+	ResourceIDs  []string  `json:"resourceIds"`
+	URL          string    `json:"url"`
+	Identity     string    `json:"identity"`
 	Sha256       string    `json:"sha256,omitempty"`
 	DownloadPath string    `json:"downloadPath,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
@@ -75,8 +67,7 @@ func (c *Cache) stagingRoot() string {
 	return filepath.Join(c.root, stagingDirName)
 }
 
-// newStagingDir returns a directory to assemble an entry in, so a partially
-// built entry never sits where a complete one is looked for.
+// Partial entries must stay outside committed cache paths.
 func (c *Cache) newStagingDir() (string, error) {
 	if err := os.MkdirAll(c.stagingRoot(), dirPerm); err != nil {
 		return "", err
@@ -85,9 +76,7 @@ func (c *Cache) newStagingDir() (string, error) {
 	return os.MkdirTemp(c.stagingRoot(), "entry-")
 }
 
-// commitStaged moves an assembled entry into place. A new entry arrives in one
-// rename; an entry gaining an extraction it did not have before takes one
-// rename per staged item, so each item still appears complete or not at all.
+// Renames keep each staged item atomic.
 func (*Cache) commitStaged(stagingDir, entryDir string) error {
 	if err := os.MkdirAll(filepath.Dir(entryDir), dirPerm); err != nil {
 		return err
@@ -217,9 +206,15 @@ func (c *Cache) readIndexRaw() (cacheIndex, bool, error) {
 	if index.Version == 0 {
 		index.Version = cacheIndexVersion
 	}
-	if index.Version != cacheIndexVersion {
+	// Older indexes describe incompatible paths, but their data remains recoverable.
+	if index.Version < cacheIndexVersion {
+		return emptyCacheIndex(), true, nil
+	}
+	if index.Version > cacheIndexVersion {
 		return index, true, fmt.Errorf(
-			"unsupported resource cache index version %d",
+			"resource cache was created by a newer version of Exasol Personal"+
+				" (index version %d): upgrade Exasol Personal,"+
+				" or run `exasol cache clean --all` to discard the cache",
 			index.Version,
 		)
 	}
@@ -230,10 +225,26 @@ func (c *Cache) readIndexRaw() (cacheIndex, bool, error) {
 	return index, true, nil
 }
 
+func (c *Cache) SupersededIndexVersion() int {
+	data, err := os.ReadFile(c.IndexPath())
+	if err != nil {
+		return 0
+	}
+	var header struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(data, &header); err != nil {
+		return 0
+	}
+	if header.Version == 0 || header.Version >= cacheIndexVersion {
+		return 0
+	}
+
+	return header.Version
+}
+
 func (*Cache) validateIndex(index cacheIndex) error {
 	for entryID, entry := range index.Entries {
-		// An entry may carry no identity: content nothing can identify is still
-		// stored, and is simply refreshed on every request.
 		if _, err := cleanRelativePath(entry.DownloadPath, "downloadPath"); err != nil {
 			return fmt.Errorf("cache entry %q: %w", entryID, err)
 		}
@@ -293,9 +304,6 @@ func (c *Cache) writeIndex(index cacheIndex) error {
 	return nil
 }
 
-// verifyStored checks freshly stored content against the checksum the resource
-// declared. A directory, or a resource that declared none, has nothing to
-// check against.
 func verifyStored(path, declaredSha256 string) error {
 	info, err := os.Stat(path)
 	if err != nil {

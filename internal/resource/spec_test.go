@@ -214,3 +214,36 @@ shared-archives:
 		t.Fatalf("expected an extract:true requirement error, got %v", err)
 	}
 }
+
+// A digest names the image content, so it already is the checksum.
+func TestParseSpec_DigestPinnedImageMayOmitChecksum(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`
+nano:
+  artifact:
+    any:
+      url: docker://docker.io/exasol/nano:1@sha256:` + strings.Repeat("a", 64) + `
+      download_path: nano.tar
+`)
+	if _, err := ParseSpec(raw); err != nil {
+		t.Fatalf("expected a digest-pinned image to be accepted, got %v", err)
+	}
+}
+
+// A tag can move, so it identifies nothing and a checksum is still required.
+func TestParseSpec_TagOnlyImageRequiresChecksum(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`
+nano:
+  artifact:
+    any:
+      url: docker://docker.io/exasol/nano:1
+      download_path: nano.tar
+`)
+	_, err := ParseSpec(raw)
+	if err == nil || !strings.Contains(err.Error(), "sha256") {
+		t.Fatalf("expected a tag-only image to require a checksum, got %v", err)
+	}
+}
