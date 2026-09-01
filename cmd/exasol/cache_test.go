@@ -90,9 +90,10 @@ func TestCacheListCommandShowsEmptyCache(t *testing.T) {
 //nolint:paralleltest // The terminal message queue is process-wide.
 func TestTextCommandReportsHowToReclaimSupersededCacheAfterIndexReplacement(t *testing.T) {
 	// Given
-	manager := resource.NewResourceManagerForPlatform(
-		resource.ResourceSpec{}, t.TempDir(), "linux", "amd64",
-	)
+	manager, err := resource.New(resource.Options{CacheRoot: t.TempDir()})
+	if err != nil {
+		t.Fatalf("create resource manager: %v", err)
+	}
 	if err := os.WriteFile(
 		manager.Cache().IndexPath(), []byte(`{"version":1,"entries":{}}`), 0o600,
 	); err != nil {

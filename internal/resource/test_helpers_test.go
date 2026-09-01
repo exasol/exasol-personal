@@ -9,7 +9,28 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
+
+func newGroupTestManager(t *testing.T, spec ResourceSpec, cacheRoot string) *Manager {
+	t.Helper()
+
+	raw, err := yaml.Marshal(spec)
+	if err != nil {
+		t.Fatalf("marshal resource specification: %v", err)
+	}
+	manager, err := New(Options{
+		Spec:      raw,
+		CacheRoot: cacheRoot,
+		Platform:  Platform{GOOS: "linux", GOARCH: "amd64"},
+	})
+	if err != nil {
+		t.Fatalf("create resource manager: %v", err)
+	}
+
+	return manager
+}
 
 func writeZipFixtureEntries(
 	t *testing.T,

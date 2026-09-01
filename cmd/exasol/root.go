@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/exasol/exasol-personal/assets/resourcedata"
+	"github.com/exasol/exasol-personal/assets/resourcedata/embedded"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/exasol/exasol-personal/internal/resource"
@@ -169,7 +169,10 @@ func Execute() error {
 	// One resource manager for the whole process, attached to the root
 	// context so every command reaches it via cmd.Context() instead of each
 	// building (and caching against) its own.
-	manager, err := resource.NewResourceManagerWithSpec(resourcedata.ResourcesYAML)
+	manager, err := resource.New(resource.Options{
+		Spec:  embedded.ResolvedSpec,
+		Blobs: embedded.Blobs,
+	})
 	if err != nil {
 		return err
 	}
