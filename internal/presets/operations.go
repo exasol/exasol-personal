@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,8 +47,43 @@ func ResourceContext(
 			"invalid resource specification for preset %q: %w", presetLabel(preset), err,
 		)
 	}
+	spec = normalizePresetResourceSpec(spec, dir, presetLabel(preset))
 
 	return resource.NewContext(ctx, resource.FromContext(ctx).Layer(spec)), dir, nil
+}
+
+func normalizePresetResourceSpec(
+	spec resource.ResourceSpec,
+	dir, preset string,
+) resource.ResourceSpec {
+	for resourceID, definition := range spec {
+		if definition.Embed != resource.EmbedNever {
+			slog.Warn("ignoring preset resource directive", "directive", "embed", "preset", preset)
+			definition.Embed = resource.EmbedNever
+		}
+		if definition.Glob != "" {
+			slog.Warn("ignoring preset resource directive", "directive", "glob", "preset", preset)
+			definition.Glob = ""
+		}
+		for platform, artifact := range definition.Artifact {
+			if (resource.FileSource{}).Handles(artifact.Locator()) {
+				artifact.URL = resolvePresetLocation(dir, artifact.URL)
+				definition.Artifact[platform] = artifact
+			}
+		}
+		spec[resourceID] = definition
+	}
+
+	return spec
+}
+
+func resolvePresetLocation(dir, location string) string {
+	path := strings.TrimPrefix(location, resource.FileURLScheme)
+	if filepath.IsAbs(path) {
+		return location
+	}
+
+	return resource.FileURLScheme + filepath.Join(dir, path)
 }
 
 var (
@@ -87,7 +123,6 @@ func WriteDir(ctx context.Context, kind PresetKind, preset PresetRef, outDir str
 	return resource.Copy(path, outDir)
 }
 
-// WriteSharedDir materializes the deployment assets shared by every preset.
 func WriteSharedDir(ctx context.Context, outDir string) error {
 	path, err := resource.FromContext(ctx).Resolve(ctx, sharedAssetsResource)
 	if err != nil {

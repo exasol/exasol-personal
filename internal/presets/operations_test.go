@@ -4,10 +4,12 @@
 package presets
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -75,6 +77,52 @@ func TestResourceContextReportsInvalidSpecificationWithPresetName(t *testing.T) 
 	if err == nil || !strings.Contains(err.Error(), "invalid resource specification") ||
 		!strings.Contains(err.Error(), presetDir) {
 		t.Fatalf("error = %v, want invalid specification and preset name", err)
+	}
+}
+
+//nolint:paralleltest // The process-wide logger must capture each directive warning.
+func TestResourceContextIgnoresBuildDirectivesWithWarnings(t *testing.T) {
+	for _, directive := range []struct {
+		name  string
+		value string
+	}{
+		{name: "embed", value: "true"},
+		{name: "glob", value: `"*"`},
+	} {
+		t.Run(directive.name, func(t *testing.T) {
+			// Given
+			presetDir := t.TempDir()
+			resourceDir := t.TempDir()
+			spec := fmt.Sprintf(
+				"tool:\n  %s: %s\n  artifact:\n    any:\n      url: file://%s\n",
+				directive.name, directive.value, resourceDir,
+			)
+			if err := os.WriteFile(
+				filepath.Join(presetDir, resourceSpecFilename), []byte(spec), 0o600,
+			); err != nil {
+				t.Fatalf("write resource specification: %v", err)
+			}
+			var logs bytes.Buffer
+			originalLogger := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+			defer slog.SetDefault(originalLogger)
+			ctx := testResolverContext(t, resource.ResourceSpec{})
+
+			// When
+			layered, _, err := ResourceContext(ctx, Infrastructure, PresetRef{Path: presetDir})
+			if err == nil {
+				_, err = resource.FromContext(layered).Resolve(layered, "tool")
+			}
+
+			// Then
+			if err != nil {
+				t.Fatalf("resolve resource: %v", err)
+			}
+			if logText := logs.String(); !strings.Contains(logText, "directive="+directive.name) ||
+				!strings.Contains(logText, presetDir) {
+				t.Fatalf("warning = %q, want directive and preset", logText)
+			}
+		})
 	}
 }
 
@@ -295,6 +343,40 @@ func TestResourceContextKeepsPresetLayersIsolated(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Working directory changes process-wide state.
+func TestResourceContextResolvesRelativeLocationsFromPresetDirectory(t *testing.T) {
+	// Given
+	presetDir := t.TempDir()
+	resourceDir := filepath.Join(presetDir, "resource")
+	if err := os.Mkdir(resourceDir, 0o700); err != nil {
+		t.Fatalf("create resource directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(presetDir, resourceSpecFilename), []byte(
+		"tool:\n  artifact:\n    any:\n      url: resource\n",
+	), 0o600); err != nil {
+		t.Fatalf("write resource specification: %v", err)
+	}
+	ctx := testResolverContext(t, resource.ResourceSpec{})
+
+	for range 2 {
+		t.Chdir(t.TempDir())
+
+		// When
+		layered, _, err := ResourceContext(ctx, Infrastructure, PresetRef{Path: presetDir})
+		if err != nil {
+			t.Fatalf("build preset resource context: %v", err)
+		}
+		path, err := resource.FromContext(layered).Resolve(layered, "tool")
+		// Then
+		if err != nil {
+			t.Fatalf("resolve preset resource: %v", err)
+		}
+		if path != resourceDir {
+			t.Errorf("resolved path = %q, want %q", path, resourceDir)
+		}
+	}
+}
+
 func TestPresetDir_UnknownInstallationNameReturnsErrUnknownInstallation(t *testing.T) {
 	t.Parallel()
 
@@ -388,7 +470,7 @@ func TestWriteDir_UnknownNamedPresetReturnsErrUnknownInfrastructure(t *testing.T
 func TestWriteDir_PathPresetCopiesDirectoryDirectly(t *testing.T) {
 	t.Parallel()
 
-	// Given: a filesystem-path preset, never declared in the catalog.
+	// Given
 	srcDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(srcDir, "installation.yaml"),
@@ -414,8 +496,7 @@ func TestWriteDir_PathPresetCopiesDirectoryDirectly(t *testing.T) {
 func TestWriteDir_ResolutionFailurePropagatesInsteadOfReportingUnknownPreset(t *testing.T) {
 	t.Parallel()
 
-	// Given: a declared member whose source can never resolve — not a name the
-	// specification does not declare at all.
+	// Given
 	ctx := testResolverContext(t, resource.ResourceSpec{
 		infrastructurePresetsResource + "/aws": memberDef(
 			filepath.Join(t.TempDir(), "does-not-exist"),
@@ -424,8 +505,7 @@ func TestWriteDir_ResolutionFailurePropagatesInsteadOfReportingUnknownPreset(t *
 
 	// When
 	err := WriteDir(ctx, Infrastructure, PresetRef{Name: "aws"}, t.TempDir())
-	// Then: the real resolution failure surfaces, not the unknown-preset
-	// sentinel, which would misreport a resolvable preset as nonexistent.
+	// Then
 	if err == nil {
 		t.Fatal("expected an error, got none")
 	}
@@ -438,8 +518,7 @@ func TestWriteDir_ResolutionFailurePropagatesInsteadOfReportingUnknownPreset(t *
 func TestReadInfrastructureFile_RejectsPathEscapingThePresetDirectory(t *testing.T) {
 	t.Parallel()
 
-	// Given: a preset directory alongside a file outside it that a
-	// traversing relPath could otherwise reach.
+	// Given
 	presetsRoot := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(presetsRoot, "aws"), 0o700); err != nil {
 		t.Fatalf("failed to create fixture subdirectory: %v", err)
@@ -461,8 +540,6 @@ func TestReadInfrastructureFile_RejectsPathEscapingThePresetDirectory(t *testing
 	}
 }
 
-// The assets every deployment shares are distributed like any other resource,
-// and must still arrive in the deployment directory.
 func TestWriteSharedDir_WritesSharedAssets(t *testing.T) {
 	t.Parallel()
 
@@ -480,7 +557,6 @@ func TestWriteSharedDir_WritesSharedAssets(t *testing.T) {
 	}
 }
 
-// A group member is a resource in its own right, named "<group>/<member>".
 func memberDef(dir string) resource.ResourceDefinition {
 	return resource.ResourceDefinition{
 		Artifact: map[string]resource.ArtifactSpec{"any": {URL: dir}},

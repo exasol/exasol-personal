@@ -6,6 +6,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Presets can include a `resources.yaml` file. Its resources are available only
+  while that preset is evaluated, override launcher resources with the same
+  name, and resolve relative local paths from the preset directory.
+
 - Added an **Install with AI Agent** section to the README, showing the single `claude`/`codex` command that has an AI coding agent install the [Exasol agent skills](https://github.com/exasol-labs/exasol-agent-skills) and set up Exasol Personal.
 
 - Enabled Virtual Schema support in local deployments when the required adapter runtime and dependencies are installed.
