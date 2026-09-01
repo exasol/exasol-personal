@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/directorymutex"
@@ -53,8 +52,7 @@ type Cache struct {
 }
 
 type CacheEntryInfo struct {
-	ID string `json:"id"`
-	// ResourceIDs lists every resource sharing this entry, normally just one.
+	ID          string    `json:"id"`
 	ResourceIDs []string  `json:"resourceIds"`
 	URL         string    `json:"url"`
 	Identity    string    `json:"identity"`
@@ -68,10 +66,10 @@ type CacheEntryInfo struct {
 type CleanupMode string
 
 const (
-	CleanupModeStale            CleanupMode = "stale"
-	CleanupModeInvalid          CleanupMode = "invalid"
-	CleanupModeAll              CleanupMode = "all"
-	CleanupModePartialDownloads CleanupMode = "partial-downloads"
+	CleanupModeStale      CleanupMode = "stale"
+	CleanupModeInvalid    CleanupMode = "invalid"
+	CleanupModeAll        CleanupMode = "all"
+	CleanupModeIncomplete CleanupMode = "incomplete"
 )
 
 type CleanOptions struct {
@@ -95,15 +93,6 @@ type CacheLockStatus struct {
 	SharedCount int    `json:"sharedCount,omitempty"`
 	MarkerPath  string `json:"markerPath,omitempty"`
 	Error       string `json:"error,omitempty"`
-}
-
-type partialDownloadPlan struct {
-	removedBytes int64
-	candidates   []partialDownloadCandidate
-}
-
-type partialDownloadCandidate struct {
-	path string
 }
 
 func DefaultCacheRoot() (string, error) {
@@ -230,8 +219,8 @@ func (c *Cache) Clean(ctx context.Context, opts CleanOptions) (CleanSummary, err
 		if err != nil {
 			return err
 		}
-		if opts.Mode == CleanupModePartialDownloads {
-			summary, err = c.cleanPartialDownloads(opts.DryRun)
+		if opts.Mode == CleanupModeIncomplete {
+			summary, err = c.cleanIncompleteEntries(opts.DryRun)
 
 			return err
 		}
@@ -249,21 +238,41 @@ func (c *Cache) Unlock() error {
 }
 
 //nolint:revive // dryRun mirrors the command-level --dry-run flag.
-func (c *Cache) cleanPartialDownloads(dryRun bool) (CleanSummary, error) {
-	plan, err := c.planPartialDownloadCleanup()
-	summary := plan.summary(dryRun)
-	if err != nil || dryRun {
+func (c *Cache) cleanIncompleteEntries(dryRun bool) (CleanSummary, error) {
+	summary := CleanSummary{Mode: CleanupModeIncomplete, DryRun: dryRun}
+	root := c.stagingRoot()
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return summary, nil
+	}
+	if err != nil {
 		return summary, err
 	}
+	for _, entry := range entries {
+		path := filepath.Join(root, entry.Name())
+		size, err := directorySize(path)
+		if err != nil {
+			return summary, err
+		}
+		summary.RemovedBytes += size
+	}
+	summary.RemovedEntries = len(entries)
+	if dryRun {
+		return summary, nil
+	}
+	for _, entry := range entries {
+		if err := os.RemoveAll(filepath.Join(root, entry.Name())); err != nil {
+			return summary, err
+		}
+	}
 
-	return summary, removePartialDownloads(plan)
+	return summary, nil
 }
 
 func (c *Cache) cleanIndexedEntries(cfg CacheConfig, opts CleanOptions) (CleanSummary, error) {
 	index, err := c.readIndex()
 	if err != nil {
-		// If we can't read the cache index, we treat it as empty so we can
-		// still wipe the cache.
+		// Cleanup must still be able to wipe a cache with an unreadable index.
 		index = emptyCacheIndex()
 	}
 	summary := c.planCleanup(index, cfg, opts)
@@ -325,7 +334,7 @@ func (c *Cache) planCleanup(
 			check := c.checkIntegrity(entryID, entry)
 			invalid = check.Status != integrityStatusOK
 			remove = invalid
-		case CleanupModePartialDownloads:
+		case CleanupModeIncomplete:
 			remove = false
 		default:
 			remove = isEntryStale(entry, cfg, now)
@@ -354,7 +363,7 @@ func normalizeCleanupMode(mode CleanupMode) (CleanupMode, error) {
 		return CleanupModeStale, nil
 	}
 	switch mode {
-	case CleanupModeStale, CleanupModeInvalid, CleanupModeAll, CleanupModePartialDownloads:
+	case CleanupModeStale, CleanupModeInvalid, CleanupModeAll, CleanupModeIncomplete:
 		return mode, nil
 	default:
 		return "", fmt.Errorf("unsupported cache cleanup mode %q", mode)
@@ -399,57 +408,7 @@ func (c *Cache) removeEntries(index *cacheIndex, summary CleanSummary) error {
 	return nil
 }
 
-func (p partialDownloadPlan) summary(dryRun bool) CleanSummary {
-	return CleanSummary{
-		Mode:           CleanupModePartialDownloads,
-		DryRun:         dryRun,
-		RemovedEntries: len(p.candidates),
-		RemovedBytes:   p.removedBytes,
-	}
-}
-
-func removePartialDownloads(plan partialDownloadPlan) error {
-	for _, candidate := range plan.candidates {
-		if err := os.RemoveAll(candidate.path); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (c *Cache) planPartialDownloadCleanup() (partialDownloadPlan, error) {
-	plan := partialDownloadPlan{}
-	root := c.stagingRoot()
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return plan, nil
-		}
-
-		return plan, err
-	}
-	slices.SortFunc(entries, func(left, right os.DirEntry) int {
-		return strings.Compare(left.Name(), right.Name())
-	})
-
-	plan.candidates = make([]partialDownloadCandidate, 0, len(entries))
-	for _, entry := range entries {
-		path := filepath.Join(root, entry.Name())
-		size, err := directorySize(path)
-		if err != nil {
-			return partialDownloadPlan{}, err
-		}
-		plan.removedBytes += size
-		plan.candidates = append(plan.candidates, partialDownloadCandidate{path: path})
-	}
-
-	return plan, nil
-}
-
-// wipeCacheContents removes cache contents, including unindexed files, while
-// preserving lock state for the running operation and resetting artifact
-// metadata.
+// Lock markers must survive because cleanup already holds the lock.
 func (c *Cache) wipeCacheContents(index *cacheIndex) error {
 	entries, err := os.ReadDir(c.root)
 	if err != nil {

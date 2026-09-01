@@ -25,7 +25,7 @@ def test_cache_list_text_output(exasol_path: str) -> None:
 def test_cache_list_json_reports_entry_metadata(
     exasol_path: str, tmp_path: Path
 ) -> None:
-    # Given a materialized resource
+    # Given
     preset = first_infrastructure_preset_id_or_skip(exasol_path)
     target = tmp_path / "preset"
     target.mkdir()
@@ -45,7 +45,7 @@ def test_cache_list_json_reports_entry_metadata(
     # When the cache is listed as JSON
     output = run_command([exasol_path, "cache", "list", "--json"]).stdout
 
-    # Then each entry includes the metadata users need to identify it
+    # Then
     data = json.loads(output)
     assert isinstance(data, list)
     assert data
@@ -73,7 +73,7 @@ def test_cache_clean_selectors_are_mutually_exclusive(exasol_path: str) -> None:
 
 
 @pytest.mark.launcher_tests
-@pytest.mark.parametrize("mode", ["--partial-downloads", "--all"])
+@pytest.mark.parametrize("mode", ["--incomplete", "--all"])
 def test_cache_clean_reports_mode_summary(exasol_path: str, mode: str) -> None:
     # When a real cleanup mode runs
     output = run_command([exasol_path, "cache", "clean", mode]).stdout

@@ -23,10 +23,10 @@ and reused across deployments.
 `
 
 var cacheCleanOpts = struct {
-	Invalid          bool
-	All              bool
-	PartialDownloads bool
-	DryRun           bool
+	Invalid    bool
+	All        bool
+	Incomplete bool
+	DryRun     bool
 }{}
 
 var cacheCmd = &cobra.Command{
@@ -71,14 +71,14 @@ var cacheCleanCmd = &cobra.Command{
 With no selector, this removes artifacts older than the configured retention period.
 Use --invalid to remove artifacts that fail integrity checks.
 Use --all to remove every cached resource.
-Use --partial-downloads to remove staged partial downloads.
+Use --incomplete to remove entries left behind by an interrupted operation.
 Use --dry-run to preview a cleanup without removing files.
 `,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 		if selectedCacheCleanupSelectorCount() > 1 {
-			return errors.New("--invalid, --all, and --partial-downloads are mutually exclusive")
+			return errors.New("--invalid, --all, and --incomplete are mutually exclusive")
 		}
 		artifactCache, err := resource.NewDefaultCache()
 		if err != nil {
@@ -157,8 +157,8 @@ func selectedCacheCleanupMode() resource.CleanupMode {
 	if cacheCleanOpts.All {
 		return resource.CleanupModeAll
 	}
-	if cacheCleanOpts.PartialDownloads {
-		return resource.CleanupModePartialDownloads
+	if cacheCleanOpts.Incomplete {
+		return resource.CleanupModeIncomplete
 	}
 
 	return resource.CleanupModeStale
@@ -172,7 +172,7 @@ func selectedCacheCleanupSelectorCount() int {
 	if cacheCleanOpts.All {
 		count++
 	}
-	if cacheCleanOpts.PartialDownloads {
+	if cacheCleanOpts.Incomplete {
 		count++
 	}
 
@@ -188,8 +188,8 @@ func renderCacheCleanText(
 		action = "Would remove"
 	}
 	subject := "resource(s)"
-	if summary.Mode == resource.CleanupModePartialDownloads {
-		subject = "partial download(s)"
+	if summary.Mode == resource.CleanupModeIncomplete {
+		subject = "incomplete entry/entries"
 	}
 	if _, err := fmt.Fprintf(
 		writer,
@@ -268,10 +268,10 @@ func registerCacheCommands() {
 		"Remove all cached resources",
 	)
 	cacheCleanCmd.Flags().BoolVar(
-		&cacheCleanOpts.PartialDownloads,
-		"partial-downloads",
+		&cacheCleanOpts.Incomplete,
+		"incomplete",
 		false,
-		"Remove staged partial downloads",
+		"Remove entries left behind by an interrupted operation",
 	)
 	cacheCleanCmd.Flags().BoolVar(
 		&cacheCleanOpts.DryRun,
@@ -279,7 +279,7 @@ func registerCacheCommands() {
 		false,
 		"Preview cleanup without removing files",
 	)
-	cacheCleanCmd.MarkFlagsMutuallyExclusive("invalid", "all", "partial-downloads")
+	cacheCleanCmd.MarkFlagsMutuallyExclusive("invalid", "all", "incomplete")
 
 	cacheCmd.AddCommand(cacheListCmd)
 	cacheCmd.AddCommand(cacheCleanCmd)

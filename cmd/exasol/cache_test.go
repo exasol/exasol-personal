@@ -124,15 +124,15 @@ func TestCacheListCommandRegistersJSONFlag(t *testing.T) {
 func TestCacheCleanCommandRegistersCleanupFlags(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"invalid", "all", "partial-downloads", "dry-run"} {
+	for _, name := range []string{"invalid", "all", "incomplete", "dry-run"} {
 		if cacheCleanCmd.Flags().Lookup(name) == nil {
 			t.Fatalf("expected cache clean to register --%s", name)
 		}
 	}
-	for _, name := range []string{"invalid", "all", "partial-downloads"} {
+	for _, name := range []string{"invalid", "all", "incomplete"} {
 		flag := cacheCleanCmd.Flags().Lookup(name)
 		annotations := flag.Annotations["cobra_annotation_mutually_exclusive"]
-		if len(annotations) != 1 || annotations[0] != "invalid all partial-downloads" {
+		if len(annotations) != 1 || annotations[0] != "invalid all incomplete" {
 			t.Fatalf(
 				"expected --%s mutually exclusive with cleanup selectors, got %+v",
 				name,
@@ -147,7 +147,7 @@ func TestCacheCleanRejectsMultipleCleanupSelectors(t *testing.T) {
 	oldOpts := cacheCleanOpts
 	cacheCleanOpts.Invalid = true
 	cacheCleanOpts.All = false
-	cacheCleanOpts.PartialDownloads = true
+	cacheCleanOpts.Incomplete = true
 	cacheCleanOpts.DryRun = true
 	t.Cleanup(func() {
 		cacheCleanOpts = oldOpts

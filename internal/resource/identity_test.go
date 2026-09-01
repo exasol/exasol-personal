@@ -4,6 +4,7 @@
 package resource
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -235,20 +236,18 @@ func TestManager_InterruptedFetchLeavesNoUsableEntry(t *testing.T) {
 func TestCache_CleanupReclaimsInterruptedEntries(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	cacheDir := t.TempDir()
 	cache := NewCache(cacheDir, filepath.Join(cacheDir, cacheConfigFileName))
+	stagingDir := stageIncompleteEntry(t, cache)
+	index := emptyCacheIndex()
+	seedCacheEntry(t, cache, &index, "complete", "payload", checksumString("payload"), testNow())
+	writeTestIndex(t, cache, index)
 
-	stagingDir, err := cache.newStagingDir()
-	if err != nil {
-		t.Fatalf("staging dir: %v", err)
-	}
-	partial := filepath.Join(stagingDir, "partial.bin")
-	if err := os.WriteFile(partial, []byte("abc"), filePerm); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	opts := CleanOptions{Mode: CleanupModePartialDownloads}
+	// When
+	opts := CleanOptions{Mode: CleanupModeIncomplete}
 	summary, err := cache.Clean(context.Background(), opts)
+	// Then
 	if err != nil {
 		t.Fatalf("clean: %v", err)
 	}
@@ -258,4 +257,61 @@ func TestCache_CleanupReclaimsInterruptedEntries(t *testing.T) {
 	if _, err := os.Stat(stagingDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected the staged entry to be gone, got %v", err)
 	}
+	if _, err := os.Stat(cache.entryDir("complete")); err != nil {
+		t.Fatalf("complete entry was removed: %v", err)
+	}
+}
+
+func TestCache_CleanupPreviewsInterruptedEntriesWithoutMutation(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	cacheDir := t.TempDir()
+	cache := NewCache(cacheDir, filepath.Join(cacheDir, cacheConfigFileName))
+	stagingDir := stageIncompleteEntry(t, cache)
+	index := emptyCacheIndex()
+	seedCacheEntry(t, cache, &index, "complete", "payload", checksumString("payload"), testNow())
+	writeTestIndex(t, cache, index)
+	indexBefore, err := os.ReadFile(cache.IndexPath())
+	if err != nil {
+		t.Fatalf("read index: %v", err)
+	}
+
+	// When
+	summary, err := cache.Clean(context.Background(), CleanOptions{
+		Mode: CleanupModeIncomplete, DryRun: true,
+	})
+	// Then
+	if err != nil {
+		t.Fatalf("preview cleanup: %v", err)
+	}
+	if !summary.DryRun || summary.RemovedEntries != 1 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	if _, err := os.Stat(stagingDir); err != nil {
+		t.Fatalf("preview removed staged entry: %v", err)
+	}
+	indexAfter, err := os.ReadFile(cache.IndexPath())
+	if err != nil {
+		t.Fatalf("read index: %v", err)
+	}
+	if !bytes.Equal(indexAfter, indexBefore) {
+		t.Fatal("preview changed cache metadata")
+	}
+}
+
+func stageIncompleteEntry(t *testing.T, cache *Cache) string {
+	t.Helper()
+
+	stagingDir, err := cache.newStagingDir()
+	if err != nil {
+		t.Fatalf("staging dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(stagingDir, "partial.bin"), []byte("abc"), filePerm,
+	); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	return stagingDir
 }
