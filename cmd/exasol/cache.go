@@ -4,7 +4,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -123,16 +122,6 @@ using the resource cache.
 	},
 }
 
-func renderCacheListJSON(
-	writer io.Writer,
-	entries []resource.CacheEntryInfo,
-) error {
-	encoder := json.NewEncoder(writer)
-	encoder.SetIndent("", "  ")
-
-	return encoder.Encode(entries)
-}
-
 func renderCacheListText(
 	writer io.Writer,
 	cacheRoot string,
@@ -148,12 +137,11 @@ func renderCacheListText(
 	for _, entry := range entries {
 		if _, err := fmt.Fprintf(
 			writer,
-			"%s %s last_used=%s size=%s path=%s\n",
-			entry.ResourceID,
-			entry.Platform,
+			"%s last_used=%s size=%s path=%s\n",
+			strings.Join(entry.ResourceIDs, ","),
 			entry.LastUsedAt.Format("2006-01-02T15:04:05Z07:00"),
 			formatByteSize(entry.SizeBytes),
-			entry.ResolvedPath,
+			entry.Path,
 		); err != nil {
 			return err
 		}

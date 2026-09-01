@@ -19,23 +19,6 @@ import (
 	"github.com/exasol/exasol-personal/internal/directorymutex"
 )
 
-// Primitive groups and semantics:
-// - lock primitives (`withExclusiveLock`, `lockStatus`, `clearLock`) create the
-//   cache root before constructing directorymutex, serialize cache reads and
-//   mutations with exclusive locks, map contention to cache-specific errors,
-//   report lock state without acquiring the lock, and release locks with a
-//   cancellation-independent context.
-// - index primitives (`readIndex`, `readIndexRaw`, `writeIndex`) treat a
-//   missing index as an empty cache, reject unsupported schema versions,
-//   validate relative cache paths for normal operations, and write metadata
-//   atomically through a temporary file.
-// - path primitives (`pathWithinRoot`, `pathFromRelative`, `relativePath`,
-//   `absolutePath`) normalize cache-relative paths and convert them to absolute
-//   filesystem paths while rejecting values that escape their root.
-// - integrity primitives (`checkIntegrity`) validate the cached downloaded
-//   artifact against the expected checksum and do not inspect extracted
-//   contents.
-
 // This timeout should be long enough for another launcher to download and
 // extract whatever resource it is going to use.
 const acquireTimeout = 5 * time.Minute
@@ -46,42 +29,42 @@ type cacheIndex struct {
 	Entries     map[string]cacheIndexEntry `json:"entries"`
 }
 
+// cacheIndexEntry records stored bytes, nothing else. How a resource presents
+// those bytes (extraction, subpath selection) is recomputed from its
+// descriptor on every request, so it is deliberately absent here: two
+// descriptors that differ only in presentation share one entry.
 type cacheIndexEntry struct {
-	Key          string    `json:"-"`
-	ResourceID   string    `json:"resourceId"`
-	Platform     string    `json:"platform"`
-	URL          string    `json:"url"`
-	Identity     string    `json:"identity"`
-	Sha256       string    `json:"sha256"`
-	Extract      bool      `json:"extract"`
-	Embed        bool      `json:"embed"`
+	// ResourceIDs lists every resource that resolved to this entry. Entries are
+	// keyed by content identity, so distinct resources with identical content
+	// share one, and normally there is exactly one name here.
+	ResourceIDs []string `json:"resourceIds"`
+	URL         string   `json:"url"`
+	Identity    string   `json:"identity"`
+	// Sha256 is the checksum the resource declared, kept so a later integrity
+	// check has something to compare against. Empty when none was declared.
+	Sha256       string    `json:"sha256,omitempty"`
 	DownloadPath string    `json:"downloadPath,omitempty"`
-	Subpath      string    `json:"resourcePath,omitempty"`
-	EntryPath    string    `json:"entryPath"`
-	ArtifactPath string    `json:"artifactPath"`
-	ResolvedPath string    `json:"resolvedPath"`
-	RedirectPath string    `json:"redirectPath,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 	LastUsedAt   time.Time `json:"lastUsedAt"`
 	SizeBytes    int64     `json:"sizeBytes"`
+}
+
+func (c *Cache) entryDir(key string) string {
+	return filepath.Join(c.artifactsRoot(), key)
+}
+
+func (c *Cache) artifactFile(entryID string, entry cacheIndexEntry) string {
+	if strings.TrimSpace(entry.DownloadPath) == "" {
+		return ""
+	}
+
+	return filepath.Join(c.entryDir(entryID), entry.DownloadPath)
 }
 
 type integrityCheck struct {
 	Status string
 	Actual string
 	Error  string
-}
-
-type cacheLockedError struct {
-	message string
-}
-
-func (e *cacheLockedError) Error() string {
-	return e.message
-}
-
-func (*cacheLockedError) Is(target error) bool {
-	return target == ErrCacheLocked
 }
 
 func (c *Cache) artifactsRoot() string {
@@ -142,9 +125,6 @@ func (c *Cache) lockStatus() CacheLockStatus {
 
 //nolint:contextcheck // Lock release must outlive caller cancellation.
 func (c *Cache) withExclusiveLock(ctx context.Context, function func() error) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if err := os.MkdirAll(c.root, dirPerm); err != nil {
 		return err
 	}
@@ -157,23 +137,8 @@ func (c *Cache) withExclusiveLock(ctx context.Context, function func() error) er
 	defer cancel()
 
 	err = mutex.WithExclusive(waitCtx, nil, func(any) error { return function() })
-	if err != nil {
-		return mapCacheLockError(err)
-	}
-
-	return nil
-}
-
-func mapCacheLockError(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return err
-	}
 	if errors.Is(err, directorymutex.ErrAcquireTimeout) {
-		return &cacheLockedError{
-			message: "Resource cache is locked by another operation. " +
-				"Please wait. Run `exasol cache unlock` only if no launcher " +
-				"process is using the cache.",
-		}
+		return ErrCacheLocked
 	}
 
 	return err
@@ -186,16 +151,16 @@ func emptyCacheIndex() cacheIndex {
 	}
 }
 
-func (c *Cache) readIndex() (cacheIndex, bool, error) {
+func (c *Cache) readIndex() (cacheIndex, error) {
 	index, exists, err := c.readIndexRaw()
 	if err != nil || !exists {
-		return index, exists, err
+		return index, err
 	}
 	if err := c.validateIndex(index); err != nil {
-		return index, true, err
+		return index, err
 	}
 
-	return index, true, nil
+	return index, nil
 }
 
 func (c *Cache) readIndexRaw() (cacheIndex, bool, error) {
@@ -227,19 +192,12 @@ func (c *Cache) readIndexRaw() (cacheIndex, bool, error) {
 	return index, true, nil
 }
 
-func (c *Cache) validateIndex(index cacheIndex) error {
+func (*Cache) validateIndex(index cacheIndex) error {
 	for entryID, entry := range index.Entries {
-		for field, value := range map[string]string{
-			"entryPath":    entry.EntryPath,
-			"artifactPath": entry.ArtifactPath,
-			"resolvedPath": entry.ResolvedPath,
-		} {
-			if strings.TrimSpace(value) == "" {
-				return fmt.Errorf("cache entry %q has empty %s", entryID, field)
-			}
-			if _, err := c.pathFromRelative(value, field); err != nil {
-				return fmt.Errorf("cache entry %q: %w", entryID, err)
-			}
+		// An entry may carry no identity: content nothing can identify is still
+		// stored, and is simply refreshed on every request.
+		if _, err := cleanRelativePath(entry.DownloadPath, "downloadPath"); err != nil {
+			return fmt.Errorf("cache entry %q: %w", entryID, err)
 		}
 	}
 
@@ -320,10 +278,10 @@ func verifyStored(path, declaredSha256 string) error {
 	return nil
 }
 
-func (c *Cache) checkIntegrity(entry cacheIndexEntry) integrityCheck {
-	artifactPath, err := c.pathFromRelative(entry.ArtifactPath, "artifactPath")
-	if err != nil {
-		return integrityCheck{Status: integrityStatusReadError, Error: err.Error()}
+func (c *Cache) checkIntegrity(entryID string, entry cacheIndexEntry) integrityCheck {
+	artifactPath := c.artifactFile(entryID, entry)
+	if artifactPath == "" {
+		return integrityCheck{Status: integrityStatusOK}
 	}
 	info, err := os.Stat(artifactPath)
 	if err != nil {
@@ -349,10 +307,6 @@ func (c *Cache) checkIntegrity(entry cacheIndexEntry) integrityCheck {
 	return integrityCheck{Status: integrityStatusOK, Actual: actual}
 }
 
-func (c *Cache) pathFromRelative(value, field string) (string, error) {
-	return pathWithinRoot(c.root, value, field)
-}
-
 func (c *Cache) relativePath(pathValue string) (string, error) {
 	rel, err := filepath.Rel(c.root, pathValue)
 	if err != nil {
@@ -365,26 +319,13 @@ func (c *Cache) relativePath(pathValue string) (string, error) {
 	return filepath.ToSlash(rel), nil
 }
 
-func (c *Cache) absolutePath(rel string) string {
-	return filepath.Join(c.root, filepath.FromSlash(rel))
-}
-
 func pathWithinRoot(root, value, field string) (string, error) {
 	cleanValue, err := cleanRelativePath(value, field)
 	if err != nil {
 		return "", err
 	}
 
-	candidate := filepath.Join(root, filepath.FromSlash(cleanValue))
-	rel, err := filepath.Rel(root, candidate)
-	if err != nil {
-		return "", err
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%s %q must stay within %s", field, value, root)
-	}
-
-	return candidate, nil
+	return filepath.Join(root, filepath.FromSlash(cleanValue)), nil
 }
 
 func cleanRelativePath(value, field string) (string, error) {

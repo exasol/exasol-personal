@@ -39,6 +39,7 @@ Notable user-facing changes to Exasol Personal are documented here.
 - Custom SLC language identifiers are no longer limited to Python, Java, and R. The launcher now
   accepts any valid client-defined identifier, such as `rust`, for a custom SLC.
 
+- Resources are now cached by content, so one copy serves every resource that resolves to it. `exasol cache list` and `exasol diag cache` therefore report the resources sharing an entry instead of a single resource and platform, and show one entry path. With `--json`, the `resourceId`, `platform`, `artifactPath`, and `resolvedPath` fields are replaced by `resourceIds`, `identity`, and `path`.
 - Documented named deployments, the `exasol slc` command group, and `exasol diag local` in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers UDFs and script language containers, and the Limitations section no longer states that UDFs are unavailable on local deployments.
 - macOS local deployments now run the same Podman installation used on Linux inside a managed VM. The VM launcher is responsible only for VM lifecycle, port forwarding, shared files, and command execution; deployment state no longer exposes its SSH transport.
 - Local runtime host preparation now runs before a deployment records an operation in progress, so a declined or failed prerequisite leaves the deployment in its previous state and the command can simply be retried.

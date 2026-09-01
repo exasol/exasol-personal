@@ -114,69 +114,71 @@ func TestCacheIndexReadWriteRoundTripAndRejectsEscapingPaths(t *testing.T) {
 		t.Fatalf("expected temporary index file to be absent, got %v", err)
 	}
 
-	read, exists, err := cache.readIndex()
+	read, err := cache.readIndex()
 	if err != nil {
 		t.Fatalf("expected index read, got error: %v", err)
 	}
-	if !exists {
-		t.Fatal("expected index to exist")
-	}
-	if read.Entries["artifact"].ArtifactPath != entry.ArtifactPath {
+	if read.Entries["artifact"].DownloadPath != entry.DownloadPath {
 		t.Fatalf(
-			"expected artifact path %q, got %q",
-			entry.ArtifactPath,
-			read.Entries["artifact"].ArtifactPath,
+			"expected download path %q, got %q",
+			entry.DownloadPath,
+			read.Entries["artifact"].DownloadPath,
 		)
 	}
 
 	malicious := `{
-		"version":1,
+		"version":2,
 		"entries":{
 			"bad":{
-				"entryPath":"../bad",
-				"artifactPath":"artifacts/bad/file",
-				"resolvedPath":"artifacts/bad/file"
+				"identity":"sha256:abc",
+				"downloadPath":"../escape"
 			}
 		}
 	}`
 	if err := os.WriteFile(cache.IndexPath(), []byte(malicious), filePerm); err != nil {
 		t.Fatalf("failed to write malicious index: %v", err)
 	}
-	_, _, err = cache.readIndex()
+	_, err = cache.readIndex()
 	if err == nil || !strings.Contains(err.Error(), "must stay within") {
 		t.Fatalf("expected containment error, got %v", err)
 	}
 }
 
-func TestArtifactCacheKeyChangesWhenArtifactMetadataChanges(t *testing.T) {
+// Content identity alone keys an entry, so the same bytes reached two ways are
+// stored once.
+func TestCacheKey_SameIdentityDeduplicates(t *testing.T) {
 	t.Parallel()
 
-	base, err := artifactCacheKey(
-		"tofu",
-		"linux/amd64",
-		false,
-		"https://example.com/tofu.tgz",
-		"sha256:"+strings.Repeat("a", 64),
-		"tofu.tgz",
-		"",
-	)
-	if err != nil {
-		t.Fatalf("expected identity, got error: %v", err)
+	identity := "sha256:" + strings.Repeat("a", 64)
+	first := cacheKeyFor(identity, "https://example.com/tofu.tgz", "tofu.tgz")
+	second := cacheKeyFor(identity, "https://mirror.example.com/tofu.tgz", "tofu.tgz")
+
+	if first != second {
+		t.Fatalf("expected one entry for one identity, got %q and %q", first, second)
 	}
-	changed, err := artifactCacheKey(
-		"tofu",
-		"linux/amd64",
-		false,
-		"https://example.com/tofu-v2.tgz",
-		"sha256:"+strings.Repeat("a", 64),
-		"tofu.tgz",
-		"",
-	)
-	if err != nil {
-		t.Fatalf("expected changed identity, got error: %v", err)
+}
+
+func TestCacheKey_DifferentIdentitiesDoNotCollide(t *testing.T) {
+	t.Parallel()
+
+	first := cacheKeyFor("sha256:"+strings.Repeat("a", 64), "https://example.com/a", "a")
+	second := cacheKeyFor("sha256:"+strings.Repeat("b", 64), "https://example.com/a", "a")
+
+	if first == second {
+		t.Fatalf("expected distinct keys, both were %q", first)
 	}
-	if base == changed {
-		t.Fatal("expected URL change to produce a distinct artifact identity")
+}
+
+// Content that nothing can identify still needs entries that do not collide,
+// so the location stands in for an identity.
+func TestCacheKey_UnidentifiedContentKeysOnLocation(t *testing.T) {
+	t.Parallel()
+
+	first := cacheKeyFor("", "https://example.com/a.tgz", "a.tgz")
+	second := cacheKeyFor("", "https://example.com/b.tgz", "b.tgz")
+
+	if first == second {
+		t.Fatalf("expected distinct keys, both were %q", first)
 	}
 }
 
@@ -187,7 +189,7 @@ func TestCacheCleanRemovesStaleEntriesAndKeepsRecentEntries(t *testing.T) {
 	cache := newTestCache(t, now)
 	writeTestCacheConfig(t, cache, 10)
 	index := emptyCacheIndex()
-	stale := seedCacheEntry(
+	seedCacheEntry(
 		t,
 		cache,
 		&index,
@@ -196,7 +198,7 @@ func TestCacheCleanRemovesStaleEntriesAndKeepsRecentEntries(t *testing.T) {
 		checksumString("old"),
 		now.AddDate(0, 0, -30),
 	)
-	recent := seedCacheEntry(
+	seedCacheEntry(
 		t,
 		cache,
 		&index,
@@ -215,13 +217,13 @@ func TestCacheCleanRemovesStaleEntriesAndKeepsRecentEntries(t *testing.T) {
 	if summary.Mode != CleanupModeStale || summary.RemovedEntries != 1 {
 		t.Fatalf("unexpected cleanup summary: %+v", summary)
 	}
-	if _, err := os.Stat(cache.absolutePath(stale.EntryPath)); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(cache.entryDir("stale")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected stale entry to be removed, got %v", err)
 	}
-	if _, err := os.Stat(cache.absolutePath(recent.EntryPath)); err != nil {
+	if _, err := os.Stat(cache.entryDir("recent")); err != nil {
 		t.Fatalf("expected recent entry to remain, got %v", err)
 	}
-	read, _, err := cache.readIndex()
+	read, err := cache.readIndex()
 	if err != nil {
 		t.Fatalf("failed to read index: %v", err)
 	}
@@ -240,7 +242,7 @@ func TestCacheCleanDryRunDoesNotMutateFilesOrMetadata(t *testing.T) {
 	cache := newTestCache(t, now)
 	writeTestCacheConfig(t, cache, 1)
 	index := emptyCacheIndex()
-	entry := seedCacheEntry(
+	seedCacheEntry(
 		t,
 		cache,
 		&index,
@@ -259,10 +261,10 @@ func TestCacheCleanDryRunDoesNotMutateFilesOrMetadata(t *testing.T) {
 	if !summary.DryRun || summary.RemovedEntries != 1 {
 		t.Fatalf("unexpected dry-run summary: %+v", summary)
 	}
-	if _, err := os.Stat(cache.absolutePath(entry.EntryPath)); err != nil {
+	if _, err := os.Stat(cache.entryDir("stale")); err != nil {
 		t.Fatalf("expected dry-run to keep files, got %v", err)
 	}
-	read, _, err := cache.readIndex()
+	read, err := cache.readIndex()
 	if err != nil {
 		t.Fatalf("failed to read index: %v", err)
 	}
@@ -279,8 +281,8 @@ func TestCacheCleanInvalidRemovesChecksumMismatches(t *testing.T) {
 
 	cache := newTestCache(t, testNow())
 	index := emptyCacheIndex()
-	good := seedCacheEntry(t, cache, &index, "good", "good", checksumString("good"), testNow())
-	bad := seedCacheEntry(t, cache, &index, "bad", "bad", checksumString("expected"), testNow())
+	seedCacheEntry(t, cache, &index, "good", "good", checksumString("good"), testNow())
+	seedCacheEntry(t, cache, &index, "bad", "bad", checksumString("expected"), testNow())
 	writeTestIndex(t, cache, index)
 
 	summary, err := cache.Clean(context.Background(), CleanOptions{Mode: CleanupModeInvalid})
@@ -293,10 +295,10 @@ func TestCacheCleanInvalidRemovesChecksumMismatches(t *testing.T) {
 		summary.InvalidEntries != 1 {
 		t.Fatalf("unexpected invalid cleanup summary: %+v", summary)
 	}
-	if _, err := os.Stat(cache.absolutePath(bad.EntryPath)); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(cache.entryDir("bad")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected invalid entry to be removed, got %v", err)
 	}
-	if _, err := os.Stat(cache.absolutePath(good.EntryPath)); err != nil {
+	if _, err := os.Stat(cache.entryDir("good")); err != nil {
 		t.Fatalf("expected valid entry to remain, got %v", err)
 	}
 }
@@ -319,8 +321,6 @@ func TestCacheCleanAllWipesCacheContentsAndResetsMetadata(t *testing.T) {
 	unexpected := filepath.Join(
 		cache.artifactsRoot(),
 		"unexpected",
-		"linux_amd64",
-		"orphan",
 		"file",
 	)
 	if err := os.MkdirAll(filepath.Dir(unexpected), dirPerm); err != nil {
@@ -358,7 +358,7 @@ func TestCacheCleanAllWipesCacheContentsAndResetsMetadata(t *testing.T) {
 	if _, err := os.Stat(rootUnexpected); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected root-level unexpected content to be removed, got %v", err)
 	}
-	read, _, err := cache.readIndex()
+	read, err := cache.readIndex()
 	if err != nil {
 		t.Fatalf("failed to read index: %v", err)
 	}
@@ -427,8 +427,6 @@ func TestCacheDiagnoseReportsChecksumMismatchAndUnexpectedPaths(t *testing.T) {
 	expectedUnexpected := filepath.ToSlash(filepath.Join(
 		artifactsDirName,
 		"unexpected",
-		"linux_amd64",
-		"orphan",
 	))
 	if len(report.UnexpectedPaths) != 1 || report.UnexpectedPaths[0] != expectedUnexpected {
 		t.Fatalf("expected unexpected entry root, got %+v", report.UnexpectedPaths)
@@ -443,12 +441,10 @@ func TestCacheDiagnoseContinuesWhenOneEntryHasInvalidPath(t *testing.T) {
 	index := emptyCacheIndex()
 	seedCacheEntry(t, cache, &index, "valid", "valid", checksumString("valid"), now)
 	index.Entries["bad"] = cacheIndexEntry{
-		ResourceID:   "bad-resource",
-		Platform:     "linux/amd64",
+		ResourceIDs:  []string{"bad-resource"},
+		Identity:     "sha256:" + checksumString("bad"),
 		Sha256:       checksumString("bad"),
-		EntryPath:    "../bad",
-		ArtifactPath: "artifacts/bad/file",
-		ResolvedPath: "artifacts/bad/file",
+		DownloadPath: "../escape",
 		LastUsedAt:   now,
 	}
 	writeTestIndex(t, cache, index)
@@ -551,7 +547,7 @@ func newTestCache(t *testing.T, now time.Time) *Cache {
 	root := filepath.Join(t.TempDir(), "cache")
 	configPath := filepath.Join(t.TempDir(), "config", cacheConfigFileName)
 
-	return newCacheWithClock(root, configPath, clk)
+	return newCacheWithClock(root, configPath, clk.Now)
 }
 
 func writeTestCacheConfig(t *testing.T, cache *Cache, retentionDays int) {
@@ -583,31 +579,20 @@ func seedCacheEntry(
 ) cacheIndexEntry {
 	t.Helper()
 
-	entryPath := filepath.Join(cache.artifactsRoot(), "resource", "linux_amd64", artifactID)
-	artifactPath := filepath.Join(entryPath, "artifact.bin")
+	artifactPath := filepath.Join(cache.entryDir(artifactID), "artifact.bin")
 	if err := os.MkdirAll(filepath.Dir(artifactPath), dirPerm); err != nil {
 		t.Fatalf("failed to create artifact directory: %v", err)
 	}
 	if err := os.WriteFile(artifactPath, []byte(content), filePerm); err != nil {
 		t.Fatalf("failed to write artifact: %v", err)
 	}
-	entryRelPath, err := cache.relativePath(entryPath)
-	if err != nil {
-		t.Fatalf("failed to resolve entry rel path: %v", err)
-	}
-	artifactRelPath, err := cache.relativePath(artifactPath)
-	if err != nil {
-		t.Fatalf("failed to resolve artifact rel path: %v", err)
-	}
 
 	entry := cacheIndexEntry{
-		ResourceID:   "resource",
-		Platform:     "linux/amd64",
+		ResourceIDs:  []string{"resource"},
 		URL:          "https://example.com/" + artifactID,
+		Identity:     "sha256:" + expectedSha,
 		Sha256:       expectedSha,
-		EntryPath:    entryRelPath,
-		ArtifactPath: artifactRelPath,
-		ResolvedPath: artifactRelPath,
+		DownloadPath: "artifact.bin",
 		CreatedAt:    lastUsedAt.Add(-time.Hour),
 		LastUsedAt:   lastUsedAt,
 		SizeBytes:    int64(len(content)),

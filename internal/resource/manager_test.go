@@ -130,85 +130,179 @@ preset:
 	}
 }
 
-func TestManager_ResolveEntry_HonoursResourcePathWithoutExtraction(t *testing.T) {
+func newTestResolution(t *testing.T, manager *Manager, def ResourceDefinition) (resolution, error) {
+	t.Helper()
+
+	return manager.newResolution(def, def.Artifact[anyPlatformKey], Probe{}, "sha256:test")
+}
+
+// A subpath selects within resolved content whatever the source kind, so it
+// applies to a plain download just as it does to an extracted archive.
+func TestManager_Resolution_AppliesSubpathWithoutExtraction(t *testing.T) {
 	t.Parallel()
 
-	// Given — a non-extract resource with a subpath. The manager must
-	// apply the subpath to the artifact path regardless of source kind.
-	cacheDir := t.TempDir()
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
 	def := ResourceDefinition{
-		Extract: false,
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {URL: "https://example.com/repo.git", Subpath: "infra/aws"},
 		},
 	}
 
-	// When
-	entry, err := manager.resolveEntry("preset", def, def.Artifact[anyPlatformKey], "sha256:test")
-	// Then
+	res, err := newTestResolution(t, manager, def)
 	if err != nil {
-		t.Fatalf("expected resolveEntry to succeed, got %v", err)
+		t.Fatalf("expected a resolution, got %v", err)
 	}
-	// The download path is the URL basename; the resolved path must point at
-	// the subdirectory joined onto it.
+	resolved, err := manager.resolvedPath(res)
+	if err != nil {
+		t.Fatalf("expected a resolved path, got %v", err)
+	}
+
 	wantSuffix := filepath.Join("repo.git", "infra", "aws")
-	if !strings.HasSuffix(entry.ResolvedPath, wantSuffix) {
-		t.Fatalf("expected ResolvedPath to end with %q, got %q", wantSuffix, entry.ResolvedPath)
-	}
-	if entry.Subpath != "infra/aws" {
-		t.Fatalf("expected Subpath %q, got %q", "infra/aws", entry.Subpath)
+	if !strings.HasSuffix(resolved, wantSuffix) {
+		t.Fatalf("expected resolved path to end with %q, got %q", wantSuffix, resolved)
 	}
 }
 
-func TestManager_ResolveEntry_RejectsTraversalResourcePathWithoutExtraction(t *testing.T) {
+func TestManager_Resolution_RejectsTraversalSubpath(t *testing.T) {
 	t.Parallel()
 
-	// Given
-	cacheDir := t.TempDir()
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
 	def := ResourceDefinition{
-		Extract: false,
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {URL: "https://example.com/repo.git", Subpath: "../escape"},
 		},
 	}
 
-	// When
-	_, err := manager.resolveEntry("preset", def, def.Artifact[anyPlatformKey], "sha256:test")
-	// Then
+	_, err := newTestResolution(t, manager, def)
 	if err == nil || !strings.Contains(err.Error(), "subpath") {
 		t.Fatalf("expected subpath traversal error, got %v", err)
 	}
 }
 
-func TestManager_ResolveEntry_DifferentSubpathsProduceDistinctEntries(t *testing.T) {
+// A subpath is presentation, not identity, so selecting two subpaths of one
+// source stores the source once instead of fetching it twice.
+func TestManager_Resolution_SubpathsShareOneCacheEntry(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	cacheDir := t.TempDir()
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
-	makeDef := func(subpath string) ResourceDefinition {
+	fixtureDir := t.TempDir()
+	archivePath := writeTarGzMultiFixture(
+		t,
+		fixtureDir,
+		"presets.tar.gz",
+		map[string]tarFixtureEntry{
+			"infra/aws/manifest.yaml":   {Content: "aws", Mode: 0o600},
+			"infra/azure/manifest.yaml": {Content: "azure", Mode: 0o600},
+		},
+	)
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	server, downloads := newCountingArtifactServer(t, "presets.tar.gz", archiveData)
+	definition := func(subpath string) ResourceDefinition {
 		return ResourceDefinition{
-			Extract: false,
-			Artifact: map[string]ArtifactSpec{
-				anyPlatformKey: {URL: "https://example.com/repo.git", Subpath: subpath},
-			},
+			Extract: true,
+			Artifact: map[string]ArtifactSpec{anyPlatformKey: {
+				URL:          server.URL + "/presets.tar.gz",
+				Sha256:       sha256OfBytes(archiveData),
+				DownloadPath: "presets.tar.gz",
+				Subpath:      subpath,
+			}},
 		}
 	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{
+		"aws":   definition("infra/aws/manifest.yaml"),
+		"azure": definition("infra/azure/manifest.yaml"),
+	}, t.TempDir(), "linux", "amd64")
 
 	// When
-	defA := makeDef("infra/aws")
-	defB := makeDef("infra/azure")
-	artifactA, artifactB := defA.Artifact[anyPlatformKey], defB.Artifact[anyPlatformKey]
-	entryA, errA := manager.resolveEntry("preset", defA, artifactA, "sha256:test")
-	entryB, errB := manager.resolveEntry("preset", defB, artifactB, "sha256:test")
-	// Then
-	if errA != nil || errB != nil {
-		t.Fatalf("expected both resolveEntry calls to succeed, got %v / %v", errA, errB)
+	awsPath, err := manager.Request(context.Background(), "aws")
+	if err != nil {
+		t.Fatalf("resolve aws: %v", err)
 	}
-	if entryA.Key == entryB.Key {
-		t.Fatalf("expected distinct cache keys for different subpaths, both were %q", entryA.Key)
+	azurePath, err := manager.Request(context.Background(), "azure")
+	if err != nil {
+		t.Fatalf("resolve azure: %v", err)
+	}
+
+	// Then
+	awsContent, err := os.ReadFile(awsPath)
+	if err != nil {
+		t.Fatalf("read aws preset: %v", err)
+	}
+	azureContent, err := os.ReadFile(azurePath)
+	if err != nil {
+		t.Fatalf("read azure preset: %v", err)
+	}
+	if string(awsContent) != "aws" || string(azureContent) != "azure" {
+		t.Fatalf("resolved content: aws=%q azure=%q", awsContent, azureContent)
+	}
+	if downloads.Load() != 1 {
+		t.Fatalf("expected one download, got %d", downloads.Load())
+	}
+}
+
+// Extraction is presentation too, so an extracted and an unextracted view of
+// one source share the download.
+func TestManager_Resolution_ExtractedAndPlainShareOneCacheEntry(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	fixtureDir := t.TempDir()
+	archivePath := writeTarGzMultiFixture(
+		t,
+		fixtureDir,
+		"tool.tar.gz",
+		map[string]tarFixtureEntry{"tool": {Content: "payload", Mode: 0o600}},
+	)
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	server, downloads := newCountingArtifactServer(t, "tool.tar.gz", archiveData)
+	definition := func(extract bool) ResourceDefinition {
+		return ResourceDefinition{
+			Extract: extract,
+			Artifact: map[string]ArtifactSpec{anyPlatformKey: {
+				URL:          server.URL + "/tool.tar.gz",
+				Sha256:       sha256OfBytes(archiveData),
+				DownloadPath: "tool.tar.gz",
+			}},
+		}
+	}
+	manager := NewResourceManagerForPlatform(ResourceSpec{
+		"plain":     definition(false),
+		"extracted": definition(true),
+	}, t.TempDir(), "linux", "amd64")
+
+	// When
+	plainPath, err := manager.Request(context.Background(), "plain")
+	if err != nil {
+		t.Fatalf("resolve plain archive: %v", err)
+	}
+	extractedPath, err := manager.Request(context.Background(), "extracted")
+	if err != nil {
+		t.Fatalf("resolve extracted archive: %v", err)
+	}
+
+	// Then
+	plainContent, err := os.ReadFile(plainPath)
+	if err != nil {
+		t.Fatalf("read plain archive: %v", err)
+	}
+	if !slices.Equal(plainContent, archiveData) {
+		t.Fatal("plain view differs from the downloaded archive")
+	}
+	extractedContent, err := os.ReadFile(filepath.Join(extractedPath, "tool"))
+	if err != nil {
+		t.Fatalf("read extracted tool: %v", err)
+	}
+	if string(extractedContent) != "payload" {
+		t.Fatalf("extracted content = %q, want payload", extractedContent)
+	}
+	if downloads.Load() != 1 {
+		t.Fatalf("expected one download, got %d", downloads.Load())
 	}
 }
 
@@ -243,14 +337,7 @@ func TestManager_RequestUsesDownloadPathFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	assertPathInCache(
-		t,
-		deploymentDir,
-		path,
-		"artifact",
-		filepath.Join("linux", "amd64"),
-		"artifact.tar.gz",
-	)
+	assertPathInCache(t, deploymentDir, path, "artifact.tar.gz")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected artifact path to exist, got %v", err)
 	}
@@ -346,14 +433,7 @@ func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 	if path1 == "" {
 		t.Fatal("expected resolved path")
 	}
-	assertPathInCache(
-		t,
-		deploymentDir,
-		path1,
-		"artifact",
-		filepath.Join("linux", "amd64"),
-		filepath.Join("unpack", "tool"),
-	)
+	assertPathInCache(t, deploymentDir, path1, filepath.Join("unpack", "tool"))
 	if _, err := os.Stat(path1); err != nil {
 		t.Fatalf("expected resolved path to exist, got %v", err)
 	}
@@ -372,12 +452,12 @@ func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 	if toolInfo.Mode().Perm() != 0o640 {
 		t.Fatalf("expected extracted tool mode 0640, got %v", toolInfo.Mode().Perm())
 	}
-	index, _, err := manager.cache.readIndex()
+	index, err := manager.cache.readIndex()
 	if err != nil {
 		t.Fatalf("failed to read cache index: %v", err)
 	}
-	entry := onlyCacheEntry(t, index)
-	expectedSize, err := directorySize(manager.cache.absolutePath(entry.EntryPath))
+	entryID, entry := onlyCacheEntry(t, index)
+	expectedSize, err := directorySize(manager.cache.entryDir(entryID))
 	if err != nil {
 		t.Fatalf("failed to calculate cache entry size: %v", err)
 	}
@@ -441,14 +521,7 @@ func TestManager_RequestExtractsZipResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	assertPathInCache(
-		t,
-		deploymentDir,
-		path,
-		"artifact",
-		filepath.Join("darwin", "arm64"),
-		filepath.Join("unpack", "launcher"),
-	)
+	assertPathInCache(t, deploymentDir, path, filepath.Join("unpack", "launcher"))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("expected resolved path to be readable, got %v", err)
@@ -505,14 +578,7 @@ func TestManager_RequestResolvesEmbeddedResourceWithoutNetwork(t *testing.T) {
 	}
 	// Same cache layout (unpack/launcher) a network-fetched zip of this shape
 	// would produce — proves extraction reused the identical code path.
-	assertPathInCache(
-		t,
-		deploymentDir,
-		path,
-		resourceID,
-		filepath.Join("darwin", "arm64"),
-		filepath.Join("unpack", "launcher"),
-	)
+	assertPathInCache(t, deploymentDir, path, filepath.Join("unpack", "launcher"))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("expected resolved path to be readable, got %v", err)
@@ -663,7 +729,7 @@ func TestManager_RequestUpdatesLastUsedAtOnCacheHit(t *testing.T) {
 	cache := newCacheWithClock(
 		filepath.Join(t.TempDir(), "cache"),
 		filepath.Join(t.TempDir(), cacheConfigFileName),
-		clock,
+		clock.Now,
 	)
 	data := []byte("artifact")
 	server, requests := newCountingArtifactServer(t, "artifact.bin", data)
@@ -687,11 +753,11 @@ func TestManager_RequestUpdatesLastUsedAtOnCacheHit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected first request to succeed, got %v", err)
 	}
-	index, _, err := cache.readIndex()
+	index, err := cache.readIndex()
 	if err != nil {
 		t.Fatalf("failed to read cache index: %v", err)
 	}
-	entry := onlyCacheEntry(t, index)
+	_, entry := onlyCacheEntry(t, index)
 	if !entry.CreatedAt.Equal(clock.now) || !entry.LastUsedAt.Equal(clock.now) {
 		t.Fatalf("unexpected initial timestamps: %+v", entry)
 	}
@@ -709,11 +775,11 @@ func TestManager_RequestUpdatesLastUsedAtOnCacheHit(t *testing.T) {
 	if requests.Load() != 1 {
 		t.Fatalf("expected cache hit to avoid a second download, got %d requests", requests.Load())
 	}
-	index, _, err = cache.readIndex()
+	index, err = cache.readIndex()
 	if err != nil {
 		t.Fatalf("failed to read cache index: %v", err)
 	}
-	entry = onlyCacheEntry(t, index)
+	_, entry = onlyCacheEntry(t, index)
 	if !entry.CreatedAt.Equal(testNow()) {
 		t.Fatalf("expected created timestamp to remain unchanged, got %s", entry.CreatedAt)
 	}
@@ -730,7 +796,7 @@ func TestManager_RequestRefreshesMissingCachedFile(t *testing.T) {
 	cache := newCacheWithClock(
 		filepath.Join(t.TempDir(), "cache"),
 		filepath.Join(t.TempDir(), cacheConfigFileName),
-		clock,
+		clock.Now,
 	)
 	data := []byte("artifact")
 	server, requests := newCountingArtifactServer(t, "artifact.bin", data)
@@ -784,11 +850,11 @@ func TestManager_RequestRunsAutomaticStaleCleanupWhenDue(t *testing.T) {
 	cache := newCacheWithClock(
 		filepath.Join(t.TempDir(), "cache"),
 		filepath.Join(t.TempDir(), cacheConfigFileName),
-		clock,
+		clock.Now,
 	)
 	writeTestCacheConfig(t, cache, 1)
 	index := emptyCacheIndex()
-	stale := seedCacheEntry(
+	seedCacheEntry(
 		t,
 		cache,
 		&index,
@@ -820,10 +886,10 @@ func TestManager_RequestRunsAutomaticStaleCleanupWhenDue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected request to succeed, got %v", err)
 	}
-	if _, err := os.Stat(cache.absolutePath(stale.EntryPath)); !os.IsNotExist(err) {
+	if _, err := os.Stat(cache.entryDir("stale")); !os.IsNotExist(err) {
 		t.Fatalf("expected stale entry to be removed, got %v", err)
 	}
-	read, _, err := cache.readIndex()
+	read, err := cache.readIndex()
 	if err != nil {
 		t.Fatalf("failed to read index: %v", err)
 	}
@@ -948,13 +1014,13 @@ func TestManager_RequestRefreshesWhenChecksumChanges(t *testing.T) {
 	}
 }
 
-func assertPathInCache(
-	t *testing.T,
-	cacheRoot, actualPath, resourceID, platformDir, suffix string,
-) {
+// Entries live in one flat directory named by the cache key, so a cached path
+// is identified by its root and its tail, not by a resource or platform
+// segment in the middle.
+func assertPathInCache(t *testing.T, cacheRoot, actualPath, suffix string) {
 	t.Helper()
 
-	prefix := filepath.Join(cacheRoot, artifactsDirName, resourceID, platformDir)
+	prefix := filepath.Join(cacheRoot, artifactsDirName)
 	if !strings.HasPrefix(actualPath, prefix+string(filepath.Separator)) {
 		t.Fatalf("expected path under %q, got %q", prefix, actualPath)
 	}
@@ -1168,19 +1234,19 @@ func newMutableArtifactServer(t *testing.T, artifactName string, data *[]byte) *
 	return server
 }
 
-func onlyCacheEntry(t *testing.T, index cacheIndex) cacheIndexEntry {
+func onlyCacheEntry(t *testing.T, index cacheIndex) (string, cacheIndexEntry) {
 	t.Helper()
 
 	if len(index.Entries) != 1 {
 		t.Fatalf("expected one cache entry, got %+v", index.Entries)
 	}
-	for _, entry := range index.Entries {
-		return entry
+	for key, entry := range index.Entries {
+		return key, entry
 	}
 
 	t.Fatal("expected one cache entry")
 
-	return cacheIndexEntry{}
+	return "", cacheIndexEntry{}
 }
 
 func TestManager_GetWithRuntimeDefinition(t *testing.T) {

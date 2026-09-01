@@ -24,7 +24,7 @@ const (
 	downloadsDirName         = "downloads"
 	cacheIndexFileName       = "index.json"
 	cacheConfigFileName      = "resources.yaml"
-	cacheIndexVersion        = 1
+	cacheIndexVersion        = 2
 	defaultRetentionDays     = 30
 	automaticCleanupInterval = 24 * time.Hour
 	integrityStatusOK        = "ok"
@@ -35,18 +35,11 @@ const (
 
 var (
 	ErrInvalidCacheConfig = errors.New("invalid resource cache configuration")
-	ErrCacheLocked        = errors.New("resource cache is locked")
+	ErrCacheLocked        = errors.New(
+		"resource cache is locked by another operation; please wait; " +
+			"run `exasol cache unlock` only if no launcher process is using the cache",
+	)
 )
-
-type clocker interface {
-	Now() time.Time
-}
-
-type systemClock struct{}
-
-func (systemClock) Now() time.Time {
-	return time.Now().UTC()
-}
 
 type CacheConfig struct {
 	//nolint:tagliatelle // YAML config uses snake_case field names.
@@ -56,20 +49,20 @@ type CacheConfig struct {
 type Cache struct {
 	root       string
 	configPath string
-	clock      clocker
+	clock      func() time.Time
 }
 
 type CacheEntryInfo struct {
-	ID           string    `json:"id"`
-	ResourceID   string    `json:"resourceId"`
-	Platform     string    `json:"platform"`
-	URL          string    `json:"url"`
-	Sha256       string    `json:"sha256"`
-	ArtifactPath string    `json:"artifactPath"`
-	ResolvedPath string    `json:"resolvedPath"`
-	CreatedAt    time.Time `json:"createdAt"`
-	LastUsedAt   time.Time `json:"lastUsedAt"`
-	SizeBytes    int64     `json:"sizeBytes"`
+	ID string `json:"id"`
+	// ResourceIDs lists every resource sharing this entry, normally just one.
+	ResourceIDs []string  `json:"resourceIds"`
+	URL         string    `json:"url"`
+	Identity    string    `json:"identity"`
+	Sha256      string    `json:"sha256,omitempty"`
+	Path        string    `json:"path"`
+	CreatedAt   time.Time `json:"createdAt"`
+	LastUsedAt  time.Time `json:"lastUsedAt"`
+	SizeBytes   int64     `json:"sizeBytes"`
 }
 
 type CleanupMode string
@@ -102,20 +95,6 @@ type CacheLockStatus struct {
 	SharedCount int    `json:"sharedCount,omitempty"`
 	MarkerPath  string `json:"markerPath,omitempty"`
 	Error       string `json:"error,omitempty"`
-}
-
-type cleanupPlan struct {
-	mode           CleanupMode
-	dryRun         bool
-	removedBytes   int64
-	invalidEntries int
-	candidates     []cleanupCandidate
-}
-
-type cleanupCandidate struct {
-	id    string
-	entry cacheIndexEntry
-	info  CacheEntryInfo
 }
 
 type partialDownloadPlan struct {
@@ -159,19 +138,15 @@ func NewDefaultCache() (*Cache, error) {
 }
 
 func NewCache(root, configPath string) *Cache {
-	return newCacheWithClock(root, configPath, systemClock{})
+	return newCacheWithClock(root, configPath, time.Now)
 }
 
-func newCacheWithClock(root, configPath string, clk clocker) *Cache {
-	return &Cache{root: filepath.Clean(root), configPath: filepath.Clean(configPath), clock: clk}
+func newCacheWithClock(root, configPath string, clock func() time.Time) *Cache {
+	return &Cache{root: filepath.Clean(root), configPath: filepath.Clean(configPath), clock: clock}
 }
 
 func (c *Cache) Root() string {
 	return c.root
-}
-
-func (c *Cache) ConfigPath() string {
-	return c.configPath
 }
 
 func (c *Cache) IndexPath() string {
@@ -230,10 +205,7 @@ func validateCacheConfig(cfg CacheConfig) error {
 func (c *Cache) List(ctx context.Context) ([]CacheEntryInfo, error) {
 	var entries []CacheEntryInfo
 	err := c.withExclusiveLock(ctx, func() error {
-		if _, err := EnsureCacheConfig(c.configPath); err != nil {
-			return err
-		}
-		index, _, err := c.readIndex()
+		index, err := c.readIndex()
 		if err != nil {
 			return err
 		}
@@ -288,25 +260,24 @@ func (c *Cache) cleanPartialDownloads(dryRun bool) (CleanSummary, error) {
 }
 
 func (c *Cache) cleanIndexedEntries(cfg CacheConfig, opts CleanOptions) (CleanSummary, error) {
-	index, _, err := c.readIndex()
+	index, err := c.readIndex()
 	if err != nil {
 		// If we can't read the cache index, we treat it as empty so we can
 		// still wipe the cache.
 		index = emptyCacheIndex()
 	}
-	plan, err := c.planCleanup(index, cfg, opts)
-	summary := plan.summary()
-	if err == nil && !opts.DryRun {
+	summary := c.planCleanup(index, cfg, opts)
+	if !opts.DryRun {
 		if opts.Mode == CleanupModeAll {
 			err = c.wipeCacheContents(&index)
 		} else {
-			err = c.removeEntries(&index, plan)
+			err = c.removeEntries(&index, summary)
 		}
 	}
 	if err != nil || opts.DryRun {
 		return summary, err
 	}
-	index.LastCleanup = c.clock.Now().UTC()
+	index.LastCleanup = c.clock().UTC()
 
 	return summary, c.writeIndex(index)
 }
@@ -314,47 +285,33 @@ func (c *Cache) cleanIndexedEntries(cfg CacheConfig, opts CleanOptions) (CleanSu
 func (c *Cache) listEntries(index cacheIndex) []CacheEntryInfo {
 	entries := make([]CacheEntryInfo, 0, len(index.Entries))
 	for _, entryID := range sortedEntryIDs(index) {
-		info, err := c.entryInfo(entryID, index.Entries[entryID])
-		if err == nil {
-			entries = append(entries, info)
-		}
+		entries = append(entries, c.entryInfo(entryID, index.Entries[entryID]))
 	}
 
 	return entries
 }
 
-func (c *Cache) entryInfo(entryID string, entry cacheIndexEntry) (CacheEntryInfo, error) {
-	if _, err := c.pathFromRelative(entry.EntryPath, "entryPath"); err != nil {
-		return CacheEntryInfo{}, err
-	}
-	if _, err := c.pathFromRelative(entry.ArtifactPath, "artifactPath"); err != nil {
-		return CacheEntryInfo{}, err
-	}
-	if _, err := c.pathFromRelative(entry.ResolvedPath, "resolvedPath"); err != nil {
-		return CacheEntryInfo{}, err
-	}
-
+func (c *Cache) entryInfo(entryID string, entry cacheIndexEntry) CacheEntryInfo {
 	return CacheEntryInfo{
-		ID:           entryID,
-		ResourceID:   entry.ResourceID,
-		Platform:     entry.Platform,
-		URL:          entry.URL,
-		Sha256:       entry.Sha256,
-		ArtifactPath: entry.ArtifactPath,
-		ResolvedPath: entry.ResolvedPath,
-		CreatedAt:    entry.CreatedAt,
-		LastUsedAt:   entry.LastUsedAt,
-		SizeBytes:    entry.SizeBytes,
-	}, nil
+		ID:          entryID,
+		ResourceIDs: slices.Clone(entry.ResourceIDs),
+		URL:         entry.URL,
+		Identity:    entry.Identity,
+		Sha256:      entry.Sha256,
+		Path:        c.entryDir(entryID),
+		CreatedAt:   entry.CreatedAt,
+		LastUsedAt:  entry.LastUsedAt,
+		SizeBytes:   entry.SizeBytes,
+	}
 }
 
 func (c *Cache) planCleanup(
 	index cacheIndex,
 	cfg CacheConfig,
 	opts CleanOptions,
-) (cleanupPlan, error) {
-	plan := cleanupPlan{mode: opts.Mode, dryRun: opts.DryRun}
-	now := c.clock.Now()
+) CleanSummary {
+	summary := CleanSummary{Mode: opts.Mode, DryRun: opts.DryRun}
+	now := c.clock()
 	for _, entryID := range sortedEntryIDs(index) {
 		entry := index.Entries[entryID]
 		invalid := false
@@ -365,7 +322,7 @@ func (c *Cache) planCleanup(
 		case CleanupModeStale:
 			remove = isEntryStale(entry, cfg, now)
 		case CleanupModeInvalid:
-			check := c.checkIntegrity(entry)
+			check := c.checkIntegrity(entryID, entry)
 			invalid = check.Status != integrityStatusOK
 			remove = invalid
 		case CleanupModePartialDownloads:
@@ -376,42 +333,20 @@ func (c *Cache) planCleanup(
 		if !remove {
 			continue
 		}
-		info, err := c.entryInfo(entryID, entry)
-		if err != nil {
-			return plan, err
-		}
-		size, err := directorySize(c.absolutePath(entry.EntryPath))
+		info := c.entryInfo(entryID, entry)
+		size, err := directorySize(c.entryDir(entryID))
 		if err == nil {
 			info.SizeBytes = size
 		}
-		plan.removedBytes += info.SizeBytes
+		summary.RemovedBytes += info.SizeBytes
 		if invalid {
-			plan.invalidEntries++
+			summary.InvalidEntries++
 		}
-		plan.candidates = append(plan.candidates, cleanupCandidate{
-			id:    entryID,
-			entry: entry,
-			info:  info,
-		})
+		summary.Entries = append(summary.Entries, info)
 	}
+	summary.RemovedEntries = len(summary.Entries)
 
-	return plan, nil
-}
-
-func (p cleanupPlan) summary() CleanSummary {
-	entries := make([]CacheEntryInfo, 0, len(p.candidates))
-	for _, candidate := range p.candidates {
-		entries = append(entries, candidate.info)
-	}
-
-	return CleanSummary{
-		Mode:           p.mode,
-		DryRun:         p.dryRun,
-		RemovedEntries: len(p.candidates),
-		RemovedBytes:   p.removedBytes,
-		InvalidEntries: p.invalidEntries,
-		Entries:        entries,
-	}
+	return summary
 }
 
 func normalizeCleanupMode(mode CleanupMode) (CleanupMode, error) {
@@ -437,31 +372,28 @@ func isEntryStale(entry cacheIndexEntry, cfg CacheConfig, now time.Time) bool {
 
 func (c *Cache) cleanupStaleIfDue(index *cacheIndex) error {
 	if !index.LastCleanup.IsZero() &&
-		c.clock.Now().Sub(index.LastCleanup) < automaticCleanupInterval {
+		c.clock().Sub(index.LastCleanup) < automaticCleanupInterval {
 		return nil
 	}
 	cfg, _, err := LoadCacheConfig(c.configPath)
 	if err != nil {
 		return err
 	}
-	plan, err := c.planCleanup(*index, cfg, CleanOptions{Mode: CleanupModeStale})
-	if err != nil {
+	summary := c.planCleanup(*index, cfg, CleanOptions{Mode: CleanupModeStale})
+	if err := c.removeEntries(index, summary); err != nil {
 		return err
 	}
-	if err := c.removeEntries(index, plan); err != nil {
-		return err
-	}
-	index.LastCleanup = c.clock.Now().UTC()
+	index.LastCleanup = c.clock().UTC()
 
 	return nil
 }
 
-func (c *Cache) removeEntries(index *cacheIndex, plan cleanupPlan) error {
-	for _, candidate := range plan.candidates {
-		if err := os.RemoveAll(c.absolutePath(candidate.entry.EntryPath)); err != nil {
+func (c *Cache) removeEntries(index *cacheIndex, summary CleanSummary) error {
+	for _, entry := range summary.Entries {
+		if err := os.RemoveAll(c.entryDir(entry.ID)); err != nil {
 			return err
 		}
-		delete(index.Entries, candidate.id)
+		delete(index.Entries, entry.ID)
 	}
 
 	return nil
