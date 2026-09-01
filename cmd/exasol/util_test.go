@@ -4,9 +4,13 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/exasol/exasol-personal/internal/presets"
 )
 
 func TestLooksLikePathPresetArg(t *testing.T) {
@@ -29,6 +33,43 @@ func TestLooksLikePathPresetArg(t *testing.T) {
 		if got != tc.wantPath {
 			t.Errorf("looksLikePathPresetArg(%q) = %v, want %v", tc.arg, got, tc.wantPath)
 		}
+	}
+}
+
+//nolint:paralleltest // t.Chdir changes process state.
+func TestResolvePresetRefMatchesKnownNamesBeforeLocations(t *testing.T) {
+	// Given
+	cwd := t.TempDir()
+	if err := os.Mkdir(filepath.Join(cwd, "aws"), 0o700); err != nil {
+		t.Fatalf("create same-named local directory: %v", err)
+	}
+	t.Chdir(cwd)
+	ctx := testResolverContext(t)
+
+	// When
+	ref, err := resolvePresetRef(ctx, "aws", presets.PresetTypeInfrastructure)
+	// Then
+	if err != nil {
+		t.Fatalf("resolve known preset: %v", err)
+	}
+	if ref.Name != "aws" || ref.Path != "" {
+		t.Fatalf("expected embedded aws preset, got %#v", ref)
+	}
+}
+
+func TestResolvePresetRefListsKnownNamesForUnknownPlainName(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	ctx := testResolverContext(t)
+
+	// When
+	_, err := resolvePresetRef(ctx, "unknown", presets.PresetTypeInfrastructure)
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "unknown") ||
+		!strings.Contains(err.Error(), "aws") {
+		t.Fatalf("expected descriptive unknown-preset error, got %v", err)
 	}
 }
 
