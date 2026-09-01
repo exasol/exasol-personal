@@ -5,7 +5,11 @@ package presets
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,6 +125,173 @@ func TestResourceContextScopesPresetResources(t *testing.T) {
 	_, err = resource.FromContext(ctx).Resolve(ctx, "tool")
 	if !errors.Is(err, resource.ErrUnknownMember) {
 		t.Fatalf("expected preset resource to stay scoped, got %v", err)
+	}
+}
+
+func TestResourceContextOverridesLauncherResourcesTemporarily(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	const baseContent = "launcher"
+	const overrideContent = "preset"
+	server := httptest.NewServer(http.HandlerFunc(func(
+		writer http.ResponseWriter, request *http.Request,
+	) {
+		if request.URL.Path == "/base" {
+			_, _ = writer.Write([]byte(baseContent))
+		} else {
+			_, _ = writer.Write([]byte(overrideContent))
+		}
+	}))
+	defer server.Close()
+	presetDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(presetDir, resourceSpecFilename), []byte(
+		fmt.Sprintf(
+			"tool:\n  artifact:\n    any:\n      url: %s/override\n      sha256: %x\n",
+			server.URL, sha256.Sum256([]byte(overrideContent)),
+		),
+	), 0o600); err != nil {
+		t.Fatalf("write resource specification: %v", err)
+	}
+	ctx := testResolverContext(t, resource.ResourceSpec{
+		"tool": {Artifact: map[string]resource.ArtifactSpec{
+			"any": {
+				URL:    server.URL + "/base",
+				Sha256: fmt.Sprintf("%x", sha256.Sum256([]byte(baseContent))),
+			},
+		}},
+	})
+
+	// When
+	layered, _, err := ResourceContext(ctx, Infrastructure, PresetRef{Path: presetDir})
+	if err != nil {
+		t.Fatalf("build preset resource context: %v", err)
+	}
+	overridden, err := resource.FromContext(layered).Resolve(layered, "tool")
+	if err != nil {
+		t.Fatalf("resolve overridden resource: %v", err)
+	}
+	base, err := resource.FromContext(ctx).Resolve(ctx, "tool")
+	if err != nil {
+		t.Fatalf("resolve base resource: %v", err)
+	}
+
+	// Then
+	if overridden == base {
+		t.Fatalf("override and launcher resource shared %q", overridden)
+	}
+	for path, want := range map[string]string{overridden: overrideContent, base: baseContent} {
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read resource: %v", readErr)
+		}
+		if string(content) != want {
+			t.Fatalf("resource %q contains %q, want %q", path, content, want)
+		}
+	}
+}
+
+func TestResourceContextKeepsPresetLayersIsolated(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	infrastructureDir := t.TempDir()
+	installationDir := t.TempDir()
+	wrongInfrastructureDir := t.TempDir()
+	wrongInstallationDir := t.TempDir()
+	launcherTool := t.TempDir()
+	infrastructureTool := t.TempDir()
+	installationTool := t.TempDir()
+	infrastructureOnly := t.TempDir()
+	if err := os.WriteFile(filepath.Join(infrastructureDir, resourceSpecFilename), []byte(
+		"installation-presets/custom:\n"+
+			"  artifact:\n    any:\n      url: file://"+wrongInstallationDir+"\n"+
+			"tool:\n  artifact:\n    any:\n      url: file://"+infrastructureTool+"\n"+
+			"infrastructure-only:\n  artifact:\n    any:\n"+
+			"      url: file://"+infrastructureOnly+"\n",
+	), 0o600); err != nil {
+		t.Fatalf("write infrastructure resources: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(installationDir, resourceSpecFilename), []byte(
+		"infrastructure-presets/custom:\n"+
+			"  artifact:\n    any:\n      url: file://"+wrongInfrastructureDir+"\n"+
+			"tool:\n  artifact:\n    any:\n      url: file://"+installationTool+"\n",
+	), 0o600); err != nil {
+		t.Fatalf("write installation resources: %v", err)
+	}
+	base := testResolverContext(t, resource.ResourceSpec{
+		"infrastructure-presets/custom": memberDef(infrastructureDir),
+		"installation-presets/custom":   memberDef(installationDir),
+		"tool":                          memberDef(launcherTool),
+	})
+
+	// When
+	infrastructureContext, resolvedInfrastructureDir, err := ResourceContext(
+		base, Infrastructure, PresetRef{Name: "custom"},
+	)
+	if err != nil {
+		t.Fatalf("add infrastructure resources: %v", err)
+	}
+	installationContext, resolvedInstallationDir, err := ResourceContext(
+		base, Installation, PresetRef{Name: "custom"},
+	)
+	if err != nil {
+		t.Fatalf("add installation resources: %v", err)
+	}
+	infrastructureResolvedTool, err := resource.FromContext(infrastructureContext).Resolve(
+		infrastructureContext, "tool",
+	)
+	if err != nil {
+		t.Fatalf("resolve infrastructure resource: %v", err)
+	}
+	installationResolvedTool, err := resource.FromContext(installationContext).Resolve(
+		installationContext, "tool",
+	)
+	if err != nil {
+		t.Fatalf("resolve installation resource: %v", err)
+	}
+
+	// Then
+	if resolvedInfrastructureDir != infrastructureDir {
+		t.Fatalf(
+			"infrastructure directory = %q, want %q",
+			resolvedInfrastructureDir,
+			infrastructureDir,
+		)
+	}
+	if resolvedInstallationDir != installationDir {
+		t.Fatalf(
+			"installation directory = %q, want %q",
+			resolvedInstallationDir,
+			installationDir,
+		)
+	}
+	if infrastructureResolvedTool != infrastructureTool {
+		t.Fatalf(
+			"infrastructure tool = %q, want %q",
+			infrastructureResolvedTool,
+			infrastructureTool,
+		)
+	}
+	if installationResolvedTool != installationTool {
+		t.Fatalf(
+			"installation tool = %q, want %q",
+			installationResolvedTool,
+			installationTool,
+		)
+	}
+	_, err = resource.FromContext(installationContext).Resolve(
+		installationContext, "infrastructure-only",
+	)
+	if !errors.Is(err, resource.ErrUnknownMember) {
+		t.Fatalf("expected infrastructure resource to stay scoped, got %v", err)
+	}
+	launcherResolvedTool, err := resource.FromContext(base).Resolve(base, "tool")
+	if err != nil {
+		t.Fatalf("resolve launcher resource: %v", err)
+	}
+	if launcherResolvedTool != launcherTool {
+		t.Fatalf("launcher tool = %q, want %q", launcherResolvedTool, launcherTool)
 	}
 }
 
