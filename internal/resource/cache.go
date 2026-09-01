@@ -21,7 +21,7 @@ import (
 const (
 	resourcesDirName         = "resources"
 	artifactsDirName         = "artifacts"
-	downloadsDirName         = "downloads"
+	stagingDirName           = "staging"
 	cacheIndexFileName       = "index.json"
 	cacheConfigFileName      = "resources.yaml"
 	cacheIndexVersion        = 2
@@ -420,7 +420,7 @@ func removePartialDownloads(plan partialDownloadPlan) error {
 
 func (c *Cache) planPartialDownloadCleanup() (partialDownloadPlan, error) {
 	plan := partialDownloadPlan{}
-	root := c.downloadsRoot()
+	root := c.stagingRoot()
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

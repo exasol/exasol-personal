@@ -5,6 +5,7 @@ package resource
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -171,5 +172,90 @@ func TestCache_RejectsPriorSchemaVersion(t *testing.T) {
 	_, err := cache.readIndex()
 	if err == nil || !strings.Contains(err.Error(), "unsupported") {
 		t.Fatalf("expected the prior schema to be rejected, got %v", err)
+	}
+}
+
+// An interrupted materialization must leave nothing that a later request
+// mistakes for a complete entry.
+func TestManager_InterruptedFetchLeavesNoUsableEntry(t *testing.T) {
+	t.Parallel()
+
+	var attempts int
+	handler := func(writer http.ResponseWriter, _ *http.Request) {
+		attempts++
+		if attempts == 1 {
+			// Truncated body: the checksum will not match.
+			_, _ = writer.Write([]byte("partial"))
+
+			return
+		}
+		_, _ = writer.Write([]byte("payload"))
+	}
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+
+	cacheDir := t.TempDir()
+	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	def := ResourceDefinition{
+		Artifact: map[string]ArtifactSpec{
+			anyPlatformKey: {
+				URL:    server.URL + "/payload.bin",
+				Sha256: sha256OfBytes([]byte("payload")),
+			},
+		},
+	}
+
+	if _, err := manager.Get(context.Background(), def, "payload"); err == nil {
+		t.Fatal("expected the first attempt to fail")
+	}
+
+	index, err := manager.cache.readIndex()
+	if err != nil {
+		t.Fatalf("read index: %v", err)
+	}
+	if len(index.Entries) != 0 {
+		t.Fatalf("expected no entry recorded, got %d", len(index.Entries))
+	}
+	entries, err := os.ReadDir(filepath.Join(cacheDir, artifactsDirName))
+	if err == nil && len(entries) != 0 {
+		t.Fatalf("expected no entry directory, got %v", entries)
+	}
+
+	// A later request materializes the resource for real.
+	path, err := manager.Get(context.Background(), def, "payload")
+	if err != nil {
+		t.Fatalf("expected the second attempt to succeed, got %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected the artifact to exist, got %v", err)
+	}
+}
+
+// Space used by an interrupted materialization stays reclaimable.
+func TestCache_CleanupReclaimsInterruptedEntries(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+	cache := NewCache(cacheDir, filepath.Join(cacheDir, cacheConfigFileName))
+
+	stagingDir, err := cache.newStagingDir()
+	if err != nil {
+		t.Fatalf("staging dir: %v", err)
+	}
+	partial := filepath.Join(stagingDir, "partial.bin")
+	if err := os.WriteFile(partial, []byte("abc"), filePerm); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	opts := CleanOptions{Mode: CleanupModePartialDownloads}
+	summary, err := cache.Clean(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("clean: %v", err)
+	}
+	if summary.RemovedEntries != 1 {
+		t.Fatalf("expected one interrupted entry removed, got %+v", summary)
+	}
+	if _, err := os.Stat(stagingDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected the staged entry to be gone, got %v", err)
 	}
 }
