@@ -19,6 +19,7 @@ import (
 
 const (
 	resourcesDirName         = "resources"
+	legacyResourcesDirName   = "runtime-artifacts"
 	artifactsDirName         = "artifacts"
 	stagingDirName           = "staging"
 	cacheIndexFileName       = "index.json"
@@ -46,9 +47,10 @@ type CacheConfig struct {
 }
 
 type Cache struct {
-	root       string
-	configPath string
-	clock      func() time.Time
+	root        string
+	legacyRoots []string
+	configPath  string
+	clock       func() time.Time
 }
 
 type CacheEntryInfo struct {
@@ -113,6 +115,17 @@ func DefaultConfigPath() (string, error) {
 	return filepath.Join(rootDir, cacheConfigFileName), nil
 }
 
+// A launcher older than the rename to resources wrote its cache beside the
+// current root under its own name.
+func legacyCacheRoots() []string {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return nil
+	}
+
+	return []string{filepath.Join(launcherpaths.DirPath(cacheDir), legacyResourcesDirName)}
+}
+
 func NewDefaultCache() (*Cache, error) {
 	root, err := DefaultCacheRoot()
 	if err != nil {
@@ -123,15 +136,22 @@ func NewDefaultCache() (*Cache, error) {
 		return nil, err
 	}
 
-	return NewCache(root, configPath), nil
+	return NewCache(root, configPath, legacyCacheRoots()...), nil
 }
 
-func NewCache(root, configPath string) *Cache {
-	return newCacheWithClock(root, configPath, time.Now)
+func NewCache(root, configPath string, legacyRoots ...string) *Cache {
+	return newCacheWithClock(root, configPath, time.Now, legacyRoots...)
 }
 
-func newCacheWithClock(root, configPath string, clock func() time.Time) *Cache {
-	return &Cache{root: filepath.Clean(root), configPath: filepath.Clean(configPath), clock: clock}
+func newCacheWithClock(
+	root, configPath string, clock func() time.Time, legacyRoots ...string,
+) *Cache {
+	return &Cache{
+		root:        filepath.Clean(root),
+		legacyRoots: legacyRoots,
+		configPath:  filepath.Clean(configPath),
+		clock:       clock,
+	}
 }
 
 func (c *Cache) Root() string {
@@ -276,6 +296,11 @@ func (c *Cache) cleanIndexedEntries(cfg CacheConfig, opts CleanOptions) (CleanSu
 		index = emptyCacheIndex()
 	}
 	summary := c.planCleanup(index, cfg, opts)
+	if opts.Mode == CleanupModeAll {
+		if legacyErr := c.reclaimLegacyRoots(&summary, opts.DryRun); legacyErr != nil {
+			return summary, legacyErr
+		}
+	}
 	if !opts.DryRun {
 		if opts.Mode == CleanupModeAll {
 			err = c.wipeCacheContents(&index)
@@ -289,6 +314,37 @@ func (c *Cache) cleanIndexedEntries(cfg CacheConfig, opts CleanOptions) (CleanSu
 	index.LastCleanup = c.clock().UTC()
 
 	return summary, c.writeIndex(index)
+}
+
+// A legacy root keeps no index this launcher can read, so its whole tree is one
+// reclaimable unit.
+//
+//nolint:revive // dryRun mirrors the command-level --dry-run flag.
+func (c *Cache) reclaimLegacyRoots(summary *CleanSummary, dryRun bool) error {
+	for _, legacyRoot := range c.legacyRoots {
+		if !holdsCacheIndex(legacyRoot) {
+			continue
+		}
+		size, err := directorySize(legacyRoot)
+		if err != nil {
+			return err
+		}
+		summary.RemovedBytes += size
+		summary.Entries = append(summary.Entries, CacheEntryInfo{
+			ID:        filepath.Base(legacyRoot),
+			Path:      legacyRoot,
+			SizeBytes: size,
+		})
+		summary.RemovedEntries = len(summary.Entries)
+		if dryRun {
+			continue
+		}
+		if err := os.RemoveAll(legacyRoot); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *Cache) listEntries(index cacheIndex) []CacheEntryInfo {

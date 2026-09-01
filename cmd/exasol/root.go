@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/exasol/exasol-personal/assets/resourcedata"
@@ -173,6 +174,7 @@ func Execute() error {
 		return err
 	}
 	ctx := resource.NewContext(context.Background(), manager)
+	supersededCachePaths := manager.Cache().SupersededPaths()
 
 	// Register infrastructure variable flags only for commands that need them.
 	// This must happen before Cobra parses arguments.
@@ -205,11 +207,26 @@ func Execute() error {
 
 	err = rootCmd.ExecuteContext(ctx)
 	runDeploymentLogCleanup()
+	addSupersededCacheCallToAction(supersededCachePaths)
 	if err == nil {
 		printTerminalMessages()
 	}
 
 	return err
+}
+
+// A cache from an earlier launcher is never read again, so its contents sit
+// unreferenced until the user reclaims the space.
+func addSupersededCacheCallToAction(supersededPaths []string) {
+	if len(supersededPaths) == 0 {
+		return
+	}
+
+	addTerminalCallToAction(fmt.Sprintf(
+		"Cached resources from an earlier version of Exasol Personal are no "+
+			"longer used (%s). Run `exasol cache clean --all` to reclaim their space.",
+		strings.Join(supersededPaths, ", "),
+	))
 }
 
 func maybeAddVersionUpdateHint(cmd *cobra.Command, deployment config.DeploymentDir) {
