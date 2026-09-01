@@ -129,7 +129,7 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
-- Added support for external preset sources. Presets can now be resolved through the runtime artifact system from local files, HTTP sources, and Git repositories, including SSH-backed repositories and zip archives.
+- Added support for external preset sources. Presets can now be resolved through the resource system from local files, HTTP sources, and Git repositories, including SSH-backed repositories and zip archives.
 
   Example: `exasol install https://github.com/org/exasol-preset.git@v1.0.0` lets users install from a preset repository instead of only using bundled presets.
 
@@ -181,9 +181,9 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol connect --json -c "SELECT 1"` produces machine-readable output suitable for scripts and agent workflows.
 
-- Added runtime artifact management so OpenTofu and runtime resources can be downloaded on demand and reused through a per-user cache. New cache commands and diagnostics help users inspect and clean cached artifacts.
+- Added resource management so OpenTofu and runtime resources can be downloaded on demand and reused through a per-user cache. New cache commands and diagnostics help users inspect and clean cached artifacts.
 
-  Example: `exasol cache list` shows downloaded runtime artifacts, and `exasol diag cache` checks cache health.
+  Example: `exasol cache list` shows downloaded resources, and `exasol diag cache` checks cache health.
 
 - Added improved `exasol info` guidance and JSON output so users can more easily find connection details and next steps.
 

@@ -157,7 +157,7 @@ Keep a deployment directory until its deployment resources have been destroyed. 
 
 An initialized deployment directory is tied to the selected infrastructure and installation presets. Rerun `exasol install <preset>` with the same presets to retry a failed deployment safely, or use `exasol config get`, `exasol config set`, and `exasol config reset` to inspect or change parameters for the existing presets without deleting local state. To switch presets in the same deployment directory, run `exasol destroy --remove` before initializing again, or run `exasol remove` if the deployment resources are already gone.
 
-Runtime tools such as OpenTofu are downloaded on demand and reused from a per-user runtime artifact cache. Use `exasol cache list` to inspect cached artifacts, `exasol cache clean` to remove stale artifacts, `exasol cache clean --invalid` to remove artifacts that fail integrity checks, `exasol cache clean --partial-downloads` to remove staged partial downloads, `exasol cache clean --all` to wipe cached artifacts, and `exasol diag cache` to inspect cache health without changing it. Add `--dry-run` to a cleanup command to preview what would be removed.
+Runtime tools such as OpenTofu are downloaded on demand and reused from a per-user resource cache. Use `exasol cache list` to inspect cached artifacts, `exasol cache clean` to remove stale artifacts, `exasol cache clean --invalid` to remove artifacts that fail integrity checks, `exasol cache clean --partial-downloads` to remove staged partial downloads, `exasol cache clean --all` to wipe cached artifacts, and `exasol diag cache` to inspect cache health without changing it. Add `--dry-run` to a cleanup command to preview what would be removed.
 
 ## 📊 Load Sample Data
 

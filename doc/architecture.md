@@ -46,7 +46,7 @@ The Exasol Personal tool (`exasol`) is a command-line application that automates
 **Self-Contained**
 - Single binary with no external dependencies
 - Infrastructure-as-Code templates embedded in the binary
-- Runtime artifacts resolved on demand and cached per user
+- Resources resolved on demand and cached per user
 
 **Safety**
 - Explicit commands for destructive operations
@@ -239,11 +239,17 @@ The deployment directory is the central artifact containing everything needed to
 - `secrets.json` - Credentials required by the launcher (sensitive)
 - SSH private key referenced by cloud deployment node metadata
 
-### Runtime Artifact Cache
+### Resource Cache
 
-Launcher-managed runtime artifacts are resolved on demand and stored in a per-user cache so they can be reused across deployments. Cache metadata records source information, validation data, size, and last-use timestamps; cleanup uses the launcher cache retention configuration, with a built-in default when no user configuration exists.
+Launcher-managed resources are resolved on demand and stored in a per-user cache so they can be reused across deployments. Cache metadata records source information, validation data, size, and last-use timestamps; cleanup uses the launcher cache retention configuration, with a built-in default when no user configuration exists.
 
-Users can inspect and maintain the cache with `exasol cache list`, `exasol cache clean`, `exasol cache clean --invalid`, `exasol cache clean --partial-downloads`, `exasol cache clean --all`, `exasol cache unlock`, and `exasol diag cache`. Diagnostics are read-only and include cache, lock, metadata, and checksum state.
+The build resolves the launcher resource specification for its target platform and
+embeds only the referenced blobs. A `glob` resource expands during generation
+into independently resolvable `<group>/<member>` resources. Presets may carry a
+resource specification of their own; it forms a temporary layer over launcher
+resources while that preset is evaluated.
+
+Users can inspect and maintain the cache with `exasol cache list`, `exasol cache clean`, `exasol cache clean --invalid`, `exasol cache clean --incomplete`, `exasol cache clean --all`, `exasol cache unlock`, and `exasol diag cache`. Diagnostics are read-only and include cache, lock, metadata, and checksum state.
 
 **Key characteristics:**
 - Self-contained (portable to another machine if needed)
