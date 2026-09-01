@@ -5,22 +5,17 @@ package resource
 
 import "context"
 
-type managerContextKey struct{}
+type resolverContextKey struct{}
 
-// NewContext returns a copy of ctx carrying manager as the process's shared
-// resource manager, retrievable via FromContext.
-func NewContext(ctx context.Context, manager *Manager) context.Context {
-	return context.WithValue(ctx, managerContextKey{}, manager)
+func NewContext(ctx context.Context, resolver *Resolver) context.Context {
+	return context.WithValue(ctx, resolverContextKey{}, resolver)
 }
 
-// FromContext returns the resource manager attached to ctx by NewContext. It
-// panics if none is attached: every real code path runs under a context
-// Execute() (or a test) has already populated.
-func FromContext(ctx context.Context) *Manager {
-	manager, ok := ctx.Value(managerContextKey{}).(*Manager)
+func FromContext(ctx context.Context) *Resolver {
+	resolver, ok := ctx.Value(resolverContextKey{}).(*Resolver)
 	if !ok {
-		panic("resource: no Manager attached to context")
+		panic("resource: no Resolver attached to context")
 	}
 
-	return manager
+	return resolver
 }

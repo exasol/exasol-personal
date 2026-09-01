@@ -31,14 +31,14 @@ type Config struct {
 	varsOutputFile string
 	planeFile      string
 	stateFile      string
-	manager        *resource.Manager
+	resolver       *resource.Resolver
 }
 
 // NewTofuConfigFromDeployment constructs a Tofu config from a deployment and preset.
 func NewTofuConfigFromDeployment(
 	deploymentDir string,
 	presetTofuConfig presets.InfrastructureTofu,
-	manager *resource.Manager,
+	resolver *resource.Resolver,
 ) *Config {
 	infraDir := path.Join(deploymentDir, config.InfrastructureFilesDirectory)
 
@@ -46,7 +46,7 @@ func NewTofuConfigFromDeployment(
 		infraDir,
 		presetTofuConfig.VariablesFile,
 		presetTofuConfig.VarsOutputFile,
-		manager,
+		resolver,
 	)
 }
 
@@ -70,7 +70,7 @@ func newTofuConfig(
 	workDir string,
 	variablesRelFilepath string,
 	varsOutputRelFilepath string,
-	manager *resource.Manager,
+	resolver *resource.Resolver,
 ) *Config {
 	planFile := path.Join(workDir, DefaultPlanFile)
 	stateFile := path.Join(workDir, DefaultStateFile)
@@ -97,7 +97,7 @@ func newTofuConfig(
 		varsOutputFile: varsOutputFile,
 		planeFile:      planFile,
 		stateFile:      stateFile,
-		manager:        manager,
+		resolver:       resolver,
 	}
 }
 
@@ -112,11 +112,11 @@ func (c *Config) TofuBinaryPath(ctx context.Context) (string, error) {
 		return c.tofuBinaryPath, nil
 	}
 
-	if c.manager == nil {
+	if c.resolver == nil {
 		return "", errors.New("tofu binary path is not configured")
 	}
 
-	binaryPath, err := c.manager.Request(ctx, "tofu")
+	binaryPath, err := c.resolver.Resolve(ctx, "tofu")
 	if err != nil {
 		return "", err
 	}

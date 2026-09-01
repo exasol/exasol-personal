@@ -33,7 +33,7 @@ type resolution struct {
 	subpath      string
 }
 
-func (*Manager) newResolution(
+func (*Resolver) newResolution(
 	def ResourceDefinition,
 	artifact ArtifactSpec,
 	probe Probe,
@@ -82,28 +82,28 @@ func cacheKeyFor(identity string, loc Locator, downloadPath string) string {
 
 // artifactPath is where the fetched artifact is stored, empty when the content
 // stays where the source reported it.
-func (m *Manager) artifactPath(res resolution) string {
+func (r *Resolver) artifactPath(res resolution) string {
 	if res.local != "" {
 		return ""
 	}
 
-	return filepath.Join(m.cache.entryDir(res.key), res.downloadPath)
+	return filepath.Join(r.cache.entryDir(res.key), res.downloadPath)
 }
 
 // contentRoot is the directory or file a subpath is selected from.
-func (m *Manager) contentRoot(res resolution) string {
+func (r *Resolver) contentRoot(res resolution) string {
 	if res.extract {
-		return filepath.Join(m.cache.entryDir(res.key), extractRelPath)
+		return filepath.Join(r.cache.entryDir(res.key), extractRelPath)
 	}
 	if res.local != "" {
 		return res.local
 	}
 
-	return m.artifactPath(res)
+	return r.artifactPath(res)
 }
 
-func (m *Manager) resolvedPath(res resolution) (string, error) {
-	root := m.contentRoot(res)
+func (r *Resolver) resolvedPath(res resolution) (string, error) {
+	root := r.contentRoot(res)
 	if strings.TrimSpace(res.subpath) == "" {
 		return root, nil
 	}
@@ -111,13 +111,12 @@ func (m *Manager) resolvedPath(res resolution) (string, error) {
 	return pathWithinRoot(root, res.subpath, "subpath")
 }
 
-// Get resolves an artifact from a runtime-constructed definition.
-func (m *Manager) Get(
+func (r *Resolver) resolveDefinition(
 	ctx context.Context,
 	def ResourceDefinition,
 	resourceID string,
 ) (string, error) {
-	artifact, err := def.Resolve(m.platform.GOOS, m.platform.GOARCH)
+	artifact, err := def.Resolve(r.platform.GOOS, r.platform.GOARCH)
 	if err != nil {
 		return "", err
 	}
@@ -131,14 +130,14 @@ func (m *Manager) Get(
 	var probe Probe
 	locator := artifact.Locator()
 	if strings.TrimSpace(artifact.Sha256) == "" || (FileSource{}).Handles(locator) {
-		probe, err = m.probeSource(ctx, locator)
+		probe, err = r.probeSource(ctx, locator)
 		if err != nil {
 			return "", err
 		}
 	}
 
 	identity := contentIdentity(artifact.Sha256, probe.Identity)
-	res, err := m.newResolution(def, artifact, probe, identity)
+	res, err := r.newResolution(def, artifact, probe, identity)
 	if err != nil {
 		return "", err
 	}
@@ -146,13 +145,13 @@ func (m *Manager) Get(
 	// Content already in place that needs no unpacking is used where it is, so
 	// the cache neither stores nor tracks it.
 	if res.local != "" && !res.extract {
-		return m.resolvedPath(res)
+		return r.resolvedPath(res)
 	}
 
 	var resolvedPath string
-	err = m.cache.withExclusiveLock(ctx, func() error {
+	err = r.cache.withExclusiveLock(ctx, func() error {
 		var lockErr error
-		resolvedPath, lockErr = m.resolveUnderLock(ctx, resourceID, artifact, res)
+		resolvedPath, lockErr = r.resolveUnderLock(ctx, resourceID, artifact, res)
 
 		return lockErr
 	})
@@ -163,13 +162,13 @@ func (m *Manager) Get(
 	return resolvedPath, nil
 }
 
-func (m *Manager) resolveUnderLock(
+func (r *Resolver) resolveUnderLock(
 	ctx context.Context,
 	resourceID string,
 	artifact ArtifactSpec,
 	res resolution,
 ) (string, error) {
-	index, err := m.cache.readIndex()
+	index, err := r.cache.readIndex()
 	if err != nil {
 		return "", err
 	}
@@ -179,13 +178,13 @@ func (m *Manager) resolveUnderLock(
 			"re-fetching resource that cannot be identified, result may not be stable",
 			"id", resourceID, "url", artifact.Locator().String(),
 		)
-	} else if path, ok := m.reuse(&index, resourceID, res); ok {
+	} else if path, ok := r.reuse(&index, resourceID, res); ok {
 		slog.Debug("found resource in cache", "id", resourceID, "path", path)
 
 		return path, nil
 	}
 
-	resolvedPath, err := m.materialize(ctx, resourceID, artifact, res, &index)
+	resolvedPath, err := r.materialize(ctx, resourceID, artifact, res, &index)
 	if err != nil {
 		return "", err
 	}
@@ -198,18 +197,18 @@ func (m *Manager) resolveUnderLock(
 // reuse reports a cached path only when the index knows the identity and the
 // bytes this descriptor needs are actually present, so a user who deleted part
 // of the cache gets a refetch rather than a dangling path.
-func (m *Manager) reuse(index *cacheIndex, resourceID string, res resolution) (string, bool) {
+func (r *Resolver) reuse(index *cacheIndex, resourceID string, res resolution) (string, bool) {
 	entry, ok := index.Entries[res.key]
 	if !ok {
 		return "", false
 	}
 
-	needed := m.contentRoot(res)
+	needed := r.contentRoot(res)
 	if _, err := os.Stat(needed); err != nil {
 		return "", false
 	}
 
-	resolvedPath, err := m.resolvedPath(res)
+	resolvedPath, err := r.resolvedPath(res)
 	if err != nil {
 		return "", false
 	}
@@ -217,27 +216,27 @@ func (m *Manager) reuse(index *cacheIndex, resourceID string, res resolution) (s
 		return "", false
 	}
 
-	entry.LastUsedAt = m.cache.clock().UTC()
+	entry.LastUsedAt = r.cache.clock().UTC()
 	entry.ResourceIDs = withResourceID(entry.ResourceIDs, resourceID)
-	if size, statErr := directorySize(m.cache.entryDir(res.key)); statErr == nil {
+	if size, statErr := directorySize(r.cache.entryDir(res.key)); statErr == nil {
 		entry.SizeBytes = size
 	}
 	index.Entries[res.key] = entry
-	if err := m.writeIndexAfterCleanup(index); err != nil {
+	if err := r.writeIndexAfterCleanup(index); err != nil {
 		return "", false
 	}
 
 	return resolvedPath, true
 }
 
-func (m *Manager) materialize(
+func (r *Resolver) materialize(
 	ctx context.Context,
 	resourceID string,
 	artifact ArtifactSpec,
 	res resolution,
 	index *cacheIndex,
 ) (string, error) {
-	stagingDir, err := m.cache.newStagingDir()
+	stagingDir, err := r.cache.newStagingDir()
 	if err != nil {
 		return "", err
 	}
@@ -248,7 +247,7 @@ func (m *Manager) materialize(
 	content := res.local
 	needsFetch := res.local == ""
 	if needsFetch && res.extract {
-		cachedArtifact := m.artifactPath(res)
+		cachedArtifact := r.artifactPath(res)
 		if _, recorded := index.Entries[res.key]; recorded {
 			if _, statErr := os.Stat(cachedArtifact); statErr == nil {
 				content = cachedArtifact
@@ -258,27 +257,27 @@ func (m *Manager) materialize(
 	}
 	if needsFetch {
 		content = filepath.Join(stagingDir, res.downloadPath)
-		if err := m.fetch(ctx, artifact, content); err != nil {
+		if err := r.fetch(ctx, artifact, content); err != nil {
 			return "", errors.Join(fmt.Errorf("failed to fetch resource %q", resourceID), err)
 		}
 	}
 
 	if res.extract {
-		if err := extractInto(content, filepath.Join(stagingDir, extractRelPath)); err != nil {
+		if err := r.extractInto(content, filepath.Join(stagingDir, extractRelPath)); err != nil {
 			return "", errors.Join(fmt.Errorf("failed to extract resource %q", resourceID), err)
 		}
 	}
 
-	if err := m.cache.commitStaged(stagingDir, m.cache.entryDir(res.key)); err != nil {
+	if err := r.cache.commitStaged(stagingDir, r.cache.entryDir(res.key)); err != nil {
 		return "", err
 	}
 
-	size, sizeErr := directorySize(m.cache.entryDir(res.key))
+	size, sizeErr := directorySize(r.cache.entryDir(res.key))
 	if sizeErr != nil {
 		size = 0
 	}
 
-	now := m.cache.clock().UTC()
+	now := r.cache.clock().UTC()
 	entry := index.Entries[res.key]
 	entry.ResourceIDs = withResourceID(entry.ResourceIDs, resourceID)
 	entry.URL = artifact.Locator().String()
@@ -292,11 +291,11 @@ func (m *Manager) materialize(
 	entry.SizeBytes = size
 	index.Entries[res.key] = entry
 
-	if err := m.writeIndexAfterCleanup(index); err != nil {
+	if err := r.writeIndexAfterCleanup(index); err != nil {
 		return "", err
 	}
 
-	return m.resolvedPath(res)
+	return r.resolvedPath(res)
 }
 
 func withResourceID(ids []string, resourceID string) []string {
@@ -309,17 +308,17 @@ func withResourceID(ids []string, resourceID string) []string {
 	return ids
 }
 
-func (m *Manager) writeIndexAfterCleanup(index *cacheIndex) error {
-	if err := m.cache.cleanupStaleIfDue(index); err != nil {
+func (r *Resolver) writeIndexAfterCleanup(index *cacheIndex) error {
+	if err := r.cache.cleanupStaleIfDue(index); err != nil {
 		slog.Warn("failed to clean resource cache; continuing", "error", err)
 	}
 
-	return m.cache.writeIndex(*index)
+	return r.cache.writeIndex(*index)
 }
 
-func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, fetchPath string) error {
+func (r *Resolver) fetch(ctx context.Context, artifact ArtifactSpec, fetchPath string) error {
 	loc := artifact.Locator()
-	source, err := m.sourceFor(loc)
+	source, err := r.sourceFor(loc)
 	if err != nil {
 		return err
 	}
@@ -334,8 +333,8 @@ func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, fetchPath st
 	return verifyStored(fetchPath, normalizeSha256(artifact.Sha256))
 }
 
-func extractInto(filename, extractPath string) error {
-	for _, extractor := range extractors {
+func (r *Resolver) extractInto(filename, extractPath string) error {
+	for _, extractor := range r.extractors {
 		if extractor.CanExtract(filename) {
 			if err := os.MkdirAll(extractPath, dirPerm); err != nil {
 				return err

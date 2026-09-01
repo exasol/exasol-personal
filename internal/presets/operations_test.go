@@ -14,17 +14,17 @@ import (
 	"github.com/exasol/exasol-personal/internal/resource/resourcetest"
 )
 
-func testManagerContext(t *testing.T, spec resource.ResourceSpec) context.Context {
+func testResolverContext(t *testing.T, spec resource.ResourceSpec) context.Context {
 	t.Helper()
 
-	return resourcetest.NewManagerContext(t, spec)
+	return resourcetest.NewResolverContext(t, spec)
 }
 
 func TestPresetDir_UnknownInfrastructureNameReturnsErrUnknownInfrastructure(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	ctx := testManagerContext(t, resource.ResourceSpec{})
+	ctx := testResolverContext(t, resource.ResourceSpec{})
 
 	// When
 	_, err := presetDir(ctx, Infrastructure, "this-preset-does-not-exist")
@@ -38,7 +38,7 @@ func TestPresetDir_UnknownInstallationNameReturnsErrUnknownInstallation(t *testi
 	t.Parallel()
 
 	// Given
-	ctx := testManagerContext(t, resource.ResourceSpec{})
+	ctx := testResolverContext(t, resource.ResourceSpec{})
 
 	// When
 	_, err := presetDir(ctx, Installation, "this-preset-does-not-exist")
@@ -52,7 +52,7 @@ func TestListEmbeddedPresets_ReturnsNamesDeclaredUnderKind(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	ctx := testManagerContext(t, resource.ResourceSpec{
+	ctx := testResolverContext(t, resource.ResourceSpec{
 		infrastructurePresetsResource + "/aws":   memberDef(t.TempDir()),
 		infrastructurePresetsResource + "/azure": memberDef(t.TempDir()),
 	})
@@ -69,7 +69,7 @@ func TestListEmbeddedPresets_EmptyForKindWithNoMembers(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	ctx := testManagerContext(t, resource.ResourceSpec{})
+	ctx := testResolverContext(t, resource.ResourceSpec{})
 
 	// When
 	names := ListEmbeddedPresets(ctx, Infrastructure)
@@ -94,7 +94,7 @@ func TestWriteDir_NamedPresetCopiesResolvedDirectory(t *testing.T) {
 	); err != nil {
 		t.Fatalf("failed to write fixture: %v", err)
 	}
-	ctx := testManagerContext(t, resource.ResourceSpec{
+	ctx := testResolverContext(t, resource.ResourceSpec{
 		infrastructurePresetsResource + "/aws": memberDef(filepath.Join(srcDir, "aws")),
 	})
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -114,7 +114,7 @@ func TestWriteDir_UnknownNamedPresetReturnsErrUnknownInfrastructure(t *testing.T
 	t.Parallel()
 
 	// Given
-	ctx := testManagerContext(t, resource.ResourceSpec{})
+	ctx := testResolverContext(t, resource.ResourceSpec{})
 
 	// When
 	err := WriteDir(ctx, Infrastructure, PresetRef{Name: "does-not-exist"}, t.TempDir())
@@ -136,7 +136,7 @@ func TestWriteDir_PathPresetCopiesDirectoryDirectly(t *testing.T) {
 	); err != nil {
 		t.Fatalf("failed to write fixture: %v", err)
 	}
-	ctx := testManagerContext(t, resource.ResourceSpec{})
+	ctx := testResolverContext(t, resource.ResourceSpec{})
 	outDir := filepath.Join(t.TempDir(), "out")
 
 	// When
@@ -155,7 +155,7 @@ func TestWriteDir_ResolutionFailurePropagatesInsteadOfReportingUnknownPreset(t *
 
 	// Given: a declared member whose source can never resolve — not a name the
 	// specification does not declare at all.
-	ctx := testManagerContext(t, resource.ResourceSpec{
+	ctx := testResolverContext(t, resource.ResourceSpec{
 		infrastructurePresetsResource + "/aws": memberDef(
 			filepath.Join(t.TempDir(), "does-not-exist"),
 		),
@@ -188,7 +188,7 @@ func TestReadInfrastructureFile_RejectsPathEscapingThePresetDirectory(t *testing
 	); err != nil {
 		t.Fatalf("failed to write fixture file: %v", err)
 	}
-	ctx := testManagerContext(t, resource.ResourceSpec{
+	ctx := testResolverContext(t, resource.ResourceSpec{
 		infrastructurePresetsResource + "/aws": memberDef(filepath.Join(presetsRoot, "aws")),
 	})
 

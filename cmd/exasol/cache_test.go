@@ -90,20 +90,20 @@ func TestCacheListCommandShowsEmptyCache(t *testing.T) {
 //nolint:paralleltest // The terminal message queue is process-wide.
 func TestTextCommandReportsHowToReclaimSupersededCacheAfterIndexReplacement(t *testing.T) {
 	// Given
-	manager, err := resource.New(resource.Options{CacheRoot: t.TempDir()})
+	resolver, err := resource.New(resource.Options{CacheRoot: t.TempDir()})
 	if err != nil {
-		t.Fatalf("create resource manager: %v", err)
+		t.Fatalf("create resource resolver: %v", err)
 	}
 	if err := os.WriteFile(
-		manager.Cache().IndexPath(), []byte(`{"version":1,"entries":{}}`), 0o600,
+		resolver.Cache().IndexPath(), []byte(`{"version":1,"entries":{}}`), 0o600,
 	); err != nil {
 		t.Fatalf("write superseded index: %v", err)
 	}
 	resetTerminalMessages()
 	defer resetTerminalMessages()
-	supersededVersion := manager.Cache().SupersededIndexVersion()
+	supersededVersion := resolver.Cache().SupersededIndexVersion()
 	if err := os.WriteFile(
-		manager.Cache().IndexPath(), []byte(`{"version":2,"entries":{}}`), 0o600,
+		resolver.Cache().IndexPath(), []byte(`{"version":2,"entries":{}}`), 0o600,
 	); err != nil {
 		t.Fatalf("replace superseded index: %v", err)
 	}

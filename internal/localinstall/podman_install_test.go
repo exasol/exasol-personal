@@ -649,24 +649,26 @@ func newPodmanInstallFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanI
 	logPath := filepath.Join(root, "podman.log")
 	imagePath := filepath.Join(root, "nano-image.tar")
 	writeTestFile(t, imagePath, "image")
-	manager := resource.NewResourceManagerForPlatform(
-		resource.ResourceSpec{
+	resolver, err := resource.New(resource.Options{
+		Definitions: resource.ResourceSpec{
 			exasolNanoImageResourceID: {
 				Artifact: map[string]resource.ArtifactSpec{
 					"any": {URL: imagePath},
 				},
 			},
 		},
-		filepath.Join(root, "cache"),
-		runtime.GOOS,
-		runtime.GOARCH,
-	)
+		CacheRoot: filepath.Join(root, "cache"),
+		Platform:  resource.Platform{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH},
+	})
+	if err != nil {
+		t.Fatalf("create resolver: %v", err)
+	}
 
 	slcStagingDir := filepath.Join(root, "slc-packages")
 	slcStatusPath := filepath.Join(root, "slc-status.json")
 	install := NewPodmanInstall(
 		deployment,
-		manager,
+		resolver,
 		[]string{"/bin/sh", scriptPath, logPath, scenarioDir},
 		slcStagingDir,
 		slcStatusPath,

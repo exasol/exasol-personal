@@ -146,11 +146,11 @@ func updateLockfileForPreset(ctx context.Context, presetDir string, platforms []
 		return fmt.Errorf("copy preset dir to temp: %w", err)
 	}
 
-	manager, err := resource.NewResourceManagerWithSpec(resourcedata.ResourcesYAML)
+	resolver, err := resource.New(resource.Options{Spec: resourcedata.ResourcesYAML})
 	if err != nil {
-		return fmt.Errorf("create artifact manager: %w", err)
+		return fmt.Errorf("create artifact resolver: %w", err)
 	}
-	tofuPath, err := manager.Request(ctx, "tofu")
+	tofuPath, err := resolver.Resolve(ctx, "tofu")
 	if err != nil {
 		return fmt.Errorf("resolve tofu binary path: %w", err)
 	}

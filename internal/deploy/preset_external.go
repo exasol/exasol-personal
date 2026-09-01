@@ -32,24 +32,14 @@ func IsExternalPresetURI(arg string) bool {
 // verifies the expected manifest file is present for the given preset type.
 func ResolvePreset(
 	ctx context.Context,
-	manager *resource.Manager,
+	resolver *resource.Resolver,
 	uri string,
 	presetType string,
 ) (string, error) {
 	descriptor := resource.ParseURI(uri)
 
-	def := resource.ResourceDefinition{
-		Extract: needsExtraction(descriptor.Locator.URL),
-		Artifact: map[string]resource.ArtifactSpec{
-			"any": {
-				URL:     descriptor.Locator.URL,
-				Ref:     descriptor.Locator.Ref,
-				Subpath: descriptor.Subpath,
-			},
-		},
-	}
-
-	resolvedPath, err := manager.Get(ctx, def, presetType)
+	descriptor.Extract = needsExtraction(descriptor.Locator.URL)
+	resolvedPath, err := resolver.ResolveDescriptor(ctx, descriptor)
 	if err != nil {
 		return "", fmt.Errorf("resolving preset %q: %w", uri, err)
 	}

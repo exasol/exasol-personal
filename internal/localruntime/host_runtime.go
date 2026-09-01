@@ -80,31 +80,30 @@ func (linuxHostEnvironmentPreparer) NewExecutionEnvironment(
 type HostRuntime struct {
 	deployment  config.DeploymentDir
 	paths       runtimePaths
-	manager     *resource.Manager
+	resolver    *resource.Resolver
 	preparer    hostRuntimeEnvironmentPreparer
 	endpoint    *RuntimeEndpoint
 	runtimeExec []string
 	dialContext func(context.Context, string, string) (net.Conn, error)
 }
 
-// NewHostLinuxRuntime creates a Linux host runtime. The manager may be nil for operations
-// that never invoke the runner, such as destroying an unprepared deployment.
+// NewHostLinuxRuntime: a nil resolver is valid until an operation invokes the runner.
 func NewHostLinuxRuntime(
 	deployment config.DeploymentDir,
-	manager *resource.Manager,
+	resolver *resource.Resolver,
 ) *HostRuntime {
-	return newHostRuntime(deployment, manager, linuxHostEnvironmentPreparer{})
+	return newHostRuntime(deployment, resolver, linuxHostEnvironmentPreparer{})
 }
 
 func newHostRuntime(
 	deployment config.DeploymentDir,
-	manager *resource.Manager,
+	resolver *resource.Resolver,
 	preparer hostRuntimeEnvironmentPreparer,
 ) *HostRuntime {
 	return &HostRuntime{
 		deployment: deployment,
 		paths:      newRuntimePaths(deployment),
-		manager:    manager,
+		resolver:   resolver,
 		preparer:   preparer,
 	}
 }
@@ -333,7 +332,7 @@ func isPeerReachedDialError(err error) bool {
 
 func (runtime *HostRuntime) install() *localinstall.PodmanInstall {
 	resolveImage := func(ctx context.Context) (localinstall.RuntimePath, error) {
-		path, err := localinstall.ResolveNanoImage(ctx, runtime.manager)
+		path, err := localinstall.ResolveNanoImage(ctx, runtime.resolver)
 		if err != nil {
 			return localinstall.RuntimePath{}, err
 		}

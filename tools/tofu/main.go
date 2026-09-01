@@ -17,11 +17,11 @@ import (
 func main() {
 	flag.Parse()
 
-	manager, err := resource.NewResourceManagerWithSpec(resourcedata.ResourcesYAML)
+	resolver, err := resource.New(resource.Options{Spec: resourcedata.ResourcesYAML})
 	if err != nil {
 		log.Fatal(err)
 	}
-	binaryPath, err := manager.Request(context.Background(), "tofu")
+	binaryPath, err := resolver.Resolve(context.Background(), "tofu")
 	if err != nil {
 		log.Fatal(err)
 	}

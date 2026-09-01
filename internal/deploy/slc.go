@@ -573,9 +573,9 @@ func applySLCChange(
 }
 
 func isLocalDeploymentRunning(ctx context.Context, deployment config.DeploymentDir) bool {
-	manager := resource.FromContext(ctx)
+	resolver := resource.FromContext(ctx)
 
-	selectedRuntime, err := newLocalRuntime(deployment, manager)
+	selectedRuntime, err := newLocalRuntime(deployment, resolver)
 	if err != nil {
 		return false
 	}

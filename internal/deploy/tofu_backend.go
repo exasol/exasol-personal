@@ -60,11 +60,11 @@ type tofuBackend struct {
 func newTofuBackend(
 	deployment config.DeploymentDir,
 	manifest *presets.InfrastructureManifest,
-	manager *resource.Manager,
+	resolver *resource.Resolver,
 ) *tofuBackend {
 	b := &tofuBackend{deployment: deployment}
 	if manifest != nil && manifest.Tofu != nil {
-		b.cfg = tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu, manager)
+		b.cfg = tofu.NewTofuConfigFromDeployment(deployment.Root(), *manifest.Tofu, resolver)
 	}
 
 	return b

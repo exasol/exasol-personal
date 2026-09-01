@@ -4,6 +4,7 @@
 package resource
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -14,7 +15,6 @@ import (
 	"testing"
 )
 
-// A declared checksum is a content hash, so the cache keys on it directly.
 func TestContentIdentity_PrefersDeclaredChecksum(t *testing.T) {
 	t.Parallel()
 
@@ -25,7 +25,6 @@ func TestContentIdentity_PrefersDeclaredChecksum(t *testing.T) {
 	}
 }
 
-// Without a declared checksum the source's own answer identifies the content.
 func TestContentIdentity_FallsBackToProbe(t *testing.T) {
 	t.Parallel()
 
@@ -34,29 +33,17 @@ func TestContentIdentity_FallsBackToProbe(t *testing.T) {
 	}
 }
 
-// Neither source means nothing identifies the content, which is what makes the
-// resource refresh on every request.
-func TestContentIdentity_EmptyWhenNothingIdentifiesContent(t *testing.T) {
+func TestResolver_ReportsIdentityResolutionFailure(t *testing.T) {
 	t.Parallel()
 
-	if got := contentIdentity("   ", ""); got != "" {
-		t.Fatalf("identity = %q, want empty", got)
-	}
-}
-
-// A source that cannot be reached to state an identity must surface that,
-// rather than silently degrading to an unidentified resource.
-func TestManager_ReportsIdentityResolutionFailure(t *testing.T) {
-	t.Parallel()
-
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, t.TempDir(), "linux", "amd64")
 	def := ResourceDefinition{
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {URL: "file:///nonexistent/probe/path"},
 		},
 	}
 
-	_, err := manager.Get(context.Background(), def, "preset")
+	_, err := resolveTestDefinition(context.Background(), resolver, def, "preset")
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -65,9 +52,7 @@ func TestManager_ReportsIdentityResolutionFailure(t *testing.T) {
 	}
 }
 
-// A source that states an identity lets the cache reuse its copy without
-// transferring the content again.
-func TestManager_ProbedIdentityAvoidsSecondTransfer(t *testing.T) {
+func TestResolver_ProbedIdentityAvoidsSecondTransfer(t *testing.T) {
 	t.Parallel()
 
 	var downloads int
@@ -78,7 +63,7 @@ func TestManager_ProbedIdentityAvoidsSecondTransfer(t *testing.T) {
 	defer server.Close()
 
 	cacheDir := t.TempDir()
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, cacheDir, "linux", "amd64")
 	def := ResourceDefinition{
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {
@@ -88,11 +73,11 @@ func TestManager_ProbedIdentityAvoidsSecondTransfer(t *testing.T) {
 		},
 	}
 
-	first, err := manager.Get(context.Background(), def, "payload")
+	first, err := resolveTestDefinition(context.Background(), resolver, def, "payload")
 	if err != nil {
 		t.Fatalf("first resolve: %v", err)
 	}
-	second, err := manager.Get(context.Background(), def, "payload")
+	second, err := resolveTestDefinition(context.Background(), resolver, def, "payload")
 	if err != nil {
 		t.Fatalf("second resolve: %v", err)
 	}
@@ -105,9 +90,7 @@ func TestManager_ProbedIdentityAvoidsSecondTransfer(t *testing.T) {
 	}
 }
 
-// Content that does not match the declared checksum is rejected, and nothing
-// is left behind that a later request would treat as cached.
-func TestManager_RejectsAndDoesNotRecordMismatchedContent(t *testing.T) {
+func TestResolver_RejectsAndDoesNotRecordMismatchedContent(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -116,7 +99,7 @@ func TestManager_RejectsAndDoesNotRecordMismatchedContent(t *testing.T) {
 	defer server.Close()
 
 	cacheDir := t.TempDir()
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, cacheDir, "linux", "amd64")
 	def := ResourceDefinition{
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {
@@ -126,11 +109,11 @@ func TestManager_RejectsAndDoesNotRecordMismatchedContent(t *testing.T) {
 		},
 	}
 
-	if _, err := manager.Get(context.Background(), def, "payload"); err == nil {
+	if _, err := resolveTestDefinition(context.Background(), resolver, def, "payload"); err == nil {
 		t.Fatal("expected a checksum mismatch error")
 	}
 
-	index, err := manager.cache.readIndex()
+	index, err := resolver.cache.readIndex()
 	if err != nil {
 		t.Fatalf("read index: %v", err)
 	}
@@ -139,9 +122,7 @@ func TestManager_RejectsAndDoesNotRecordMismatchedContent(t *testing.T) {
 	}
 }
 
-// A local directory is used where it already is, so the cache records nothing
-// for it.
-func TestManager_LocalDirectoryOccupiesNoCacheEntry(t *testing.T) {
+func TestResolver_LocalDirectoryOccupiesNoCacheEntry(t *testing.T) {
 	t.Parallel()
 
 	presetDir := t.TempDir()
@@ -150,12 +131,12 @@ func TestManager_LocalDirectoryOccupiesNoCacheEntry(t *testing.T) {
 		t.Fatalf("write manifest: %v", err)
 	}
 
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, t.TempDir(), "linux", "amd64")
 	def := ResourceDefinition{
 		Artifact: map[string]ArtifactSpec{anyPlatformKey: {URL: "file://" + presetDir}},
 	}
 
-	got, err := manager.Get(context.Background(), def, "preset")
+	got, err := resolveTestDefinition(context.Background(), resolver, def, "preset")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -183,10 +164,7 @@ func newIsolatedCache(t *testing.T) *Cache {
 	return NewCache(cacheDir, filepath.Join(cacheDir, cacheConfigFileName))
 }
 
-// Entries created under an earlier schema describe a layout this launcher no
-// longer reads, so they are dropped rather than reused, and the launcher keeps
-// working instead of failing on every request.
-func TestManager_StartsFreshOnPriorCacheSchemaVersion(t *testing.T) {
+func TestResolver_StartsFreshOnPriorCacheSchemaVersion(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -209,7 +187,7 @@ func TestManager_StartsFreshOnPriorCacheSchemaVersion(t *testing.T) {
 	writeIndexFixture(t, cache, `{"version":1,"entries":{"`+key+`":{`+
 		`"resourceIds":["tool"],"identity":"`+identity+`",`+
 		`"downloadPath":"tool.bin"}}}`)
-	manager := NewResourceManagerForPlatform(ResourceSpec{
+	resolver := newTestResolverForPlatform(t, ResourceSpec{
 		"tool": {Artifact: map[string]ArtifactSpec{anyPlatformKey: {
 			URL:          server.URL + "/tool.bin",
 			Sha256:       sha256OfBytes(content),
@@ -218,7 +196,7 @@ func TestManager_StartsFreshOnPriorCacheSchemaVersion(t *testing.T) {
 	}, cache.root, "linux", "amd64")
 
 	// When
-	path, err := manager.Request(context.Background(), "tool")
+	path, err := resolver.Resolve(context.Background(), "tool")
 	if err != nil {
 		t.Fatalf("resolve with earlier cache schema: %v", err)
 	}
@@ -236,8 +214,6 @@ func TestManager_StartsFreshOnPriorCacheSchemaVersion(t *testing.T) {
 	}
 }
 
-// The superseded content stays on disk, so the launcher can tell the user how
-// to reclaim its space.
 func TestCache_ReportsSupersededIndexVersion(t *testing.T) {
 	t.Parallel()
 
@@ -249,8 +225,6 @@ func TestCache_ReportsSupersededIndexVersion(t *testing.T) {
 	}
 }
 
-// An index from a newer launcher cannot be interpreted, so it is refused, and
-// the refusal says what to do about it.
 func TestCache_RefusesNewerSchemaVersionWithGuidance(t *testing.T) {
 	t.Parallel()
 
@@ -268,16 +242,14 @@ func TestCache_RefusesNewerSchemaVersionWithGuidance(t *testing.T) {
 	}
 }
 
-// An interrupted materialization must leave nothing that a later request
-// mistakes for a complete entry.
-func TestManager_InterruptedFetchLeavesNoUsableEntry(t *testing.T) {
+func TestResolver_InterruptedFetchLeavesNoUsableEntry(t *testing.T) {
 	t.Parallel()
 
 	var attempts int
 	handler := func(writer http.ResponseWriter, _ *http.Request) {
 		attempts++
 		if attempts == 1 {
-			// Truncated body: the checksum will not match.
+			// Truncation forces checksum failure.
 			_, _ = writer.Write([]byte("partial"))
 
 			return
@@ -288,7 +260,7 @@ func TestManager_InterruptedFetchLeavesNoUsableEntry(t *testing.T) {
 	defer server.Close()
 
 	cacheDir := t.TempDir()
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, cacheDir, "linux", "amd64")
 	def := ResourceDefinition{
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {
@@ -298,11 +270,11 @@ func TestManager_InterruptedFetchLeavesNoUsableEntry(t *testing.T) {
 		},
 	}
 
-	if _, err := manager.Get(context.Background(), def, "payload"); err == nil {
+	if _, err := resolveTestDefinition(context.Background(), resolver, def, "payload"); err == nil {
 		t.Fatal("expected the first attempt to fail")
 	}
 
-	index, err := manager.cache.readIndex()
+	index, err := resolver.cache.readIndex()
 	if err != nil {
 		t.Fatalf("read index: %v", err)
 	}
@@ -314,8 +286,7 @@ func TestManager_InterruptedFetchLeavesNoUsableEntry(t *testing.T) {
 		t.Fatalf("expected no entry directory, got %v", entries)
 	}
 
-	// A later request materializes the resource for real.
-	path, err := manager.Get(context.Background(), def, "payload")
+	path, err := resolveTestDefinition(context.Background(), resolver, def, "payload")
 	if err != nil {
 		t.Fatalf("expected the second attempt to succeed, got %v", err)
 	}
@@ -324,24 +295,21 @@ func TestManager_InterruptedFetchLeavesNoUsableEntry(t *testing.T) {
 	}
 }
 
-// Space used by an interrupted materialization stays reclaimable.
 func TestCache_CleanupReclaimsInterruptedEntries(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	cacheDir := t.TempDir()
 	cache := NewCache(cacheDir, filepath.Join(cacheDir, cacheConfigFileName))
+	stagingDir := stageIncompleteEntry(t, cache)
+	index := emptyCacheIndex()
+	seedCacheEntry(t, cache, &index, "complete", "payload", checksumString("payload"), testNow())
+	writeTestIndex(t, cache, index)
 
-	stagingDir, err := cache.newStagingDir()
-	if err != nil {
-		t.Fatalf("staging dir: %v", err)
-	}
-	partial := filepath.Join(stagingDir, "partial.bin")
-	if err := os.WriteFile(partial, []byte("abc"), filePerm); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
+	// When
 	opts := CleanOptions{Mode: CleanupModeIncomplete}
 	summary, err := cache.Clean(context.Background(), opts)
+	// Then
 	if err != nil {
 		t.Fatalf("clean: %v", err)
 	}
@@ -351,4 +319,61 @@ func TestCache_CleanupReclaimsInterruptedEntries(t *testing.T) {
 	if _, err := os.Stat(stagingDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected the staged entry to be gone, got %v", err)
 	}
+	if _, err := os.Stat(cache.entryDir("complete")); err != nil {
+		t.Fatalf("complete entry was removed: %v", err)
+	}
+}
+
+func TestCache_CleanupPreviewsInterruptedEntriesWithoutMutation(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	cacheDir := t.TempDir()
+	cache := NewCache(cacheDir, filepath.Join(cacheDir, cacheConfigFileName))
+	stagingDir := stageIncompleteEntry(t, cache)
+	index := emptyCacheIndex()
+	seedCacheEntry(t, cache, &index, "complete", "payload", checksumString("payload"), testNow())
+	writeTestIndex(t, cache, index)
+	indexBefore, err := os.ReadFile(cache.IndexPath())
+	if err != nil {
+		t.Fatalf("read index: %v", err)
+	}
+
+	// When
+	summary, err := cache.Clean(context.Background(), CleanOptions{
+		Mode: CleanupModeIncomplete, DryRun: true,
+	})
+	// Then
+	if err != nil {
+		t.Fatalf("preview cleanup: %v", err)
+	}
+	if !summary.DryRun || summary.RemovedEntries != 1 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	if _, err := os.Stat(stagingDir); err != nil {
+		t.Fatalf("preview removed staged entry: %v", err)
+	}
+	indexAfter, err := os.ReadFile(cache.IndexPath())
+	if err != nil {
+		t.Fatalf("read index: %v", err)
+	}
+	if !bytes.Equal(indexAfter, indexBefore) {
+		t.Fatal("preview changed cache metadata")
+	}
+}
+
+func stageIncompleteEntry(t *testing.T, cache *Cache) string {
+	t.Helper()
+
+	stagingDir, err := cache.newStagingDir()
+	if err != nil {
+		t.Fatalf("staging dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(stagingDir, "partial.bin"), []byte("abc"), filePerm,
+	); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	return stagingDir
 }

@@ -35,9 +35,9 @@ func DiagnoseLocal(
 ) (*LocalDiagnostics, error) {
 	var diagnostics *LocalDiagnostics
 	err := withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
-		manager := resource.FromContext(ctx)
+		resolver := resource.FromContext(ctx)
 
-		selectedRuntime, err := newLocalRuntime(deployment, manager)
+		selectedRuntime, err := newLocalRuntime(deployment, resolver)
 		if err != nil {
 			return err
 		}

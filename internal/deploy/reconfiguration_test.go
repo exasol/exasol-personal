@@ -24,7 +24,7 @@ func TestEnsureDeploymentPresetIdentityMatches_RejectsDifferentPreset(t *testing
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := InitDeployment(
-		testManagerContext(t),
+		testResolverContext(t),
 		deployment,
 		InitOptions{
 			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
@@ -39,7 +39,7 @@ func TestEnsureDeploymentPresetIdentityMatches_RejectsDifferentPreset(t *testing
 
 	// When
 	err := EnsureDeploymentPresetIdentityMatches(
-		testManagerContext(t),
+		testResolverContext(t),
 		deployment,
 		PresetRef{Name: "stackit"},
 		PresetRef{Name: presets.DefaultInstallation},
@@ -55,7 +55,7 @@ func TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles(t *te
 	t.Parallel()
 
 	// Given
-	ctx := testManagerContext(t)
+	ctx := testResolverContext(t)
 	mgr := resource.FromContext(ctx)
 
 	deployment := config.NewDeploymentDir(t.TempDir())
@@ -76,7 +76,7 @@ func TestSetDeploymentConfiguration_UpdatesVariablesAndPreservesStateFiles(t *te
 	if err := os.WriteFile(statePath, []byte("state"), 0o600); err != nil {
 		t.Fatalf("write state file failed: %v", err)
 	}
-	tofuBinaryPath, err := mgr.Request(ctx, "tofu")
+	tofuBinaryPath, err := mgr.Resolve(ctx, "tofu")
 	if err != nil {
 		t.Fatalf("resolve tofu binary path failed: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestSetDeploymentConfiguration_PreservesDeploymentCreatedAt(t *testing.T) {
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := InitDeployment(
-		testManagerContext(t),
+		testResolverContext(t),
 		deployment,
 		InitOptions{
 			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},
@@ -147,7 +147,7 @@ func TestSetDeploymentConfiguration_PreservesDeploymentCreatedAt(t *testing.T) {
 
 	// When
 	if _, err := SetDeploymentConfiguration(
-		testManagerContext(t),
+		testResolverContext(t),
 		map[string]string{"cluster_size": "3"},
 		map[string]string{},
 		deployment,
@@ -445,7 +445,7 @@ func TestWorkflowStatePermitsStart_SkippedStatesSurfaceRecoveryGuidance(t *testi
 			t.Parallel()
 
 			deployment, state := deploymentInState(t, test.state)
-			decision, err := workflowStatePermitsStart(testManagerContext(t), state, deployment)
+			decision, err := workflowStatePermitsStart(testResolverContext(t), state, deployment)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -511,10 +511,10 @@ func TestDestroyThenRemoveLocalDeploymentDirectoryRemovesLocalFiles(t *testing.T
 	writeMinimalInitializedDeployment(t, deployment)
 
 	// When
-	if err := Destroy(testManagerContext(t), deployment, false); err != nil {
+	if err := Destroy(testResolverContext(t), deployment, false); err != nil {
 		t.Fatalf("destroy failed: %v", err)
 	}
-	if err := RemoveLocalDeploymentDirectory(testManagerContext(t), deployment); err != nil {
+	if err := RemoveLocalDeploymentDirectory(testResolverContext(t), deployment); err != nil {
 		t.Fatalf("remove local deployment directory failed: %v", err)
 	}
 
@@ -558,7 +558,7 @@ backend: unknown
 	}
 
 	// When
-	destroyErr := Destroy(testManagerContext(t), deployment, false)
+	destroyErr := Destroy(testResolverContext(t), deployment, false)
 
 	// Then
 	if destroyErr == nil {
@@ -596,7 +596,7 @@ func TestRemoveLocalDeploymentDirectory_RemovesDeploymentDirectory(t *testing.T)
 	}
 
 	// When
-	if err := RemoveLocalDeploymentDirectory(testManagerContext(t), deployment); err != nil {
+	if err := RemoveLocalDeploymentDirectory(testResolverContext(t), deployment); err != nil {
 		t.Fatalf("remove local deployment directory failed: %v", err)
 	}
 
@@ -617,7 +617,7 @@ func TestRemoveLocalDeploymentDirectory_RejectsNonDeploymentDirectory(t *testing
 	}
 
 	// When
-	err := RemoveLocalDeploymentDirectory(testManagerContext(t), deployment)
+	err := RemoveLocalDeploymentDirectory(testResolverContext(t), deployment)
 
 	// Then
 	if !errors.Is(err, ErrNotExasolPersonalDeploymentDirectory) {
@@ -642,7 +642,7 @@ func TestRemoveLocalDeploymentDirectory_RejectsCurrentDirectoryInsideDeployment(
 	t.Chdir(cwd)
 
 	// When
-	err := RemoveLocalDeploymentDirectory(testManagerContext(t), deployment)
+	err := RemoveLocalDeploymentDirectory(testResolverContext(t), deployment)
 
 	// Then
 	if !errors.Is(err, ErrDeploymentDirectoryRemovalUnsafe) {
@@ -717,7 +717,7 @@ install: []
 `)
 
 	// When
-	if err := RemoveLocalDeploymentDirectory(testManagerContext(t), deployment); err != nil {
+	if err := RemoveLocalDeploymentDirectory(testResolverContext(t), deployment); err != nil {
 		t.Fatalf("remove local deployment directory failed: %v", err)
 	}
 

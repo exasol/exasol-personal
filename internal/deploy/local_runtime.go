@@ -92,9 +92,9 @@ func reconcileLocalVMState(
 		return nil
 	}
 
-	manager := resource.FromContext(ctx)
+	resolver := resource.FromContext(ctx)
 
-	selectedRuntime, err := newLocalRuntime(deployment, manager)
+	selectedRuntime, err := newLocalRuntime(deployment, resolver)
 	if err != nil {
 		slog.Warn("could not select local runtime during reconciliation", "error", err)
 		return nil
