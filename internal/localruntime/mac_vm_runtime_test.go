@@ -202,7 +202,7 @@ func TestMacVMRuntimeWorkaroundNanoStartupDurabilityDelegatesToRunner(t *testing
 printf '%%s' "$*" > %q
 `, logPath)
 	localRuntime := NewMacVMRuntime(
-		deployment, newTestManagerForRunner(t, []byte(runnerScript)),
+		deployment, newTestResolverForRunner(t, []byte(runnerScript)),
 	)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
 		t.Fatalf("failed to create runtime work dir: %v", err)

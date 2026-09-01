@@ -21,7 +21,7 @@ func TestGetConnectionInstructionsTextStoppedDoesNotRequireConnectionHost(t *tes
 	writeDeploymentInfoWithoutConnectionHost(t, deployment)
 
 	// When
-	content, err := getConnectionInstructionsTextUnsafe(testManagerContext(t), deployment)
+	content, err := getConnectionInstructionsTextUnsafe(testResolverContext(t), deployment)
 	// Then
 	if err != nil {
 		t.Fatalf("expected stopped deployment info to be rendered, got error: %v", err)
@@ -38,7 +38,7 @@ func TestGetConnectionInstructionsTextNotInitializedRendersTechnicalState(t *tes
 	deployment := config.NewDeploymentDir(t.TempDir())
 
 	// When
-	content, err := GetConnectionInstructionsText(testManagerContext(t), deployment)
+	content, err := GetConnectionInstructionsText(testResolverContext(t), deployment)
 	// Then
 	if err != nil {
 		t.Fatalf("expected missing deployment info to render without error, got: %v", err)
@@ -54,7 +54,7 @@ func TestGetConnectionInstructionsTextNotInitializedHandlesMissingDirectory(t *t
 	deployment := config.NewDeploymentDir(t.TempDir() + "/missing")
 
 	// When
-	content, err := GetConnectionInstructionsText(testManagerContext(t), deployment)
+	content, err := GetConnectionInstructionsText(testResolverContext(t), deployment)
 	// Then
 	if err != nil {
 		t.Fatalf("expected missing deployment directory to render without error, got: %v", err)
@@ -67,7 +67,7 @@ func initDeploymentForInfoTest(t *testing.T, deployment config.DeploymentDir) {
 	t.Helper()
 
 	err := InitDeployment(
-		testManagerContext(t),
+		testResolverContext(t),
 		deployment,
 		InitOptions{
 			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},

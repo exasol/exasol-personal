@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/exasol/exasol-personal/internal/resource"
 )
@@ -38,16 +39,14 @@ var (
 
 // WriteDir materializes preset into outDir.
 func WriteDir(ctx context.Context, kind PresetKind, preset PresetRef, outDir string) error {
-	manager := resource.FromContext(ctx)
 	if preset.IsPath() {
-		def := resource.ResourceDefinition{
-			Artifact: map[string]resource.ArtifactSpec{"any": {URL: preset.Path}},
-		}
-
-		return manager.GetCopy(ctx, def, kind.resourceGroup, outDir)
+		return resource.Copy(preset.Path, outDir)
 	}
 
-	if err := manager.RequestMemberCopy(ctx, kind.resourceGroup, preset.Name, outDir); err != nil {
+	resolver := resource.FromContext(ctx)
+	resourceID := kind.resourceGroup + "/" + preset.Name
+	path, err := resolver.Resolve(ctx, resourceID)
+	if err != nil {
 		if errors.Is(err, resource.ErrUnknownMember) {
 			return fmt.Errorf("%w: %s", kind.unknownErr, preset.Name)
 		}
@@ -55,17 +54,29 @@ func WriteDir(ctx context.Context, kind PresetKind, preset PresetRef, outDir str
 		return err
 	}
 
-	return nil
+	return resource.Copy(path, outDir)
 }
 
 // WriteSharedDir materializes the deployment assets shared by every preset.
 func WriteSharedDir(ctx context.Context, outDir string) error {
-	return resource.FromContext(ctx).RequestCopy(ctx, sharedAssetsResource, outDir)
+	path, err := resource.FromContext(ctx).Resolve(ctx, sharedAssetsResource)
+	if err != nil {
+		return err
+	}
+
+	return resource.Copy(path, outDir)
 }
 
 // ListEmbeddedPresets lists every built-in preset name of kind.
 func ListEmbeddedPresets(ctx context.Context, kind PresetKind) []string {
-	return resource.FromContext(ctx).GroupMembers(kind.resourceGroup)
+	prefix := kind.resourceGroup + "/"
+	resourceIDs := resource.FromContext(ctx).List(prefix)
+	presets := make([]string, 0, len(resourceIDs))
+	for _, resourceID := range resourceIDs {
+		presets = append(presets, strings.TrimPrefix(resourceID, prefix))
+	}
+
+	return presets
 }
 
 // ReadInfrastructureFile reads a file from the named embedded infrastructure
@@ -96,7 +107,7 @@ func ReadInfrastructureFile(
 }
 
 func presetDir(ctx context.Context, kind PresetKind, name string) (string, error) {
-	dir, err := resource.FromContext(ctx).RequestMember(ctx, kind.resourceGroup, name)
+	dir, err := resource.FromContext(ctx).Resolve(ctx, kind.resourceGroup+"/"+name)
 	if err != nil {
 		if errors.Is(err, resource.ErrUnknownMember) {
 			return "", fmt.Errorf("%w: %s", kind.unknownErr, name)

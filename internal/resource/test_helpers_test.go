@@ -5,32 +5,12 @@ package resource
 
 import (
 	"archive/zip"
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 )
-
-func newGroupTestManager(t *testing.T, spec ResourceSpec, cacheRoot string) *Manager {
-	t.Helper()
-
-	raw, err := yaml.Marshal(spec)
-	if err != nil {
-		t.Fatalf("marshal resource specification: %v", err)
-	}
-	manager, err := New(Options{
-		Spec:      raw,
-		CacheRoot: cacheRoot,
-		Platform:  Platform{GOOS: "linux", GOARCH: "amd64"},
-	})
-	if err != nil {
-		t.Fatalf("create resource manager: %v", err)
-	}
-
-	return manager
-}
 
 func writeZipFixtureEntries(
 	t *testing.T,
@@ -71,4 +51,55 @@ func writeZipFixtureEntries(
 	}
 
 	return archivePath
+}
+
+func newTestResolverForPlatform(
+	t *testing.T,
+	spec ResourceSpec,
+	cacheRoot, goos, goarch string,
+) *Resolver {
+	t.Helper()
+
+	resolver, err := New(Options{
+		Definitions: spec,
+		CacheRoot:   cacheRoot,
+		Platform:    Platform{GOOS: goos, GOARCH: goarch},
+	})
+	if err != nil {
+		t.Fatalf("create resource resolver: %v", err)
+	}
+
+	return resolver
+}
+
+func newTestResolverWithCacheForPlatform(
+	t *testing.T,
+	spec ResourceSpec,
+	cache *Cache,
+	goos, goarch string,
+) *Resolver {
+	t.Helper()
+
+	resolver, err := New(Options{
+		Definitions: spec,
+		Cache:       cache,
+		Platform:    Platform{GOOS: goos, GOARCH: goarch},
+	})
+	if err != nil {
+		t.Fatalf("create resource resolver: %v", err)
+	}
+
+	return resolver
+}
+
+func resolveTestDefinition(
+	ctx context.Context,
+	resolver *Resolver,
+	definition ResourceDefinition,
+	resourceID string,
+) (string, error) {
+	testResolver := *resolver
+	testResolver.spec = ResourceSpec{resourceID: definition}
+
+	return testResolver.Resolve(ctx, resourceID)
 }

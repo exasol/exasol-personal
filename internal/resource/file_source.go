@@ -14,7 +14,6 @@ import (
 	"strings"
 )
 
-// FileURLScheme is the URL scheme identifying a local filesystem artifact.
 const FileURLScheme = "file://"
 
 type FileSource struct{}
@@ -23,14 +22,11 @@ func (FileSource) Handles(loc Locator) bool {
 	if strings.HasPrefix(loc.URL, FileURLScheme) {
 		return true
 	}
-	// Local filesystem path: no URL scheme and not a git@ remote
+
 	return !strings.Contains(loc.URL, "://") && !strings.HasPrefix(loc.URL, "git@")
 }
 
-// Probe reports the content's existing location, so the cache stores no copy
-// of it. Extracting it, when asked for, still lands in the cache, so a local
-// archive's identity has to change when the archive does; size and
-// modification time are what a local file offers without reading it whole.
+// Probe: size and modification time avoid hashing local archives before each resolution.
 func (FileSource) Probe(_ context.Context, loc Locator) (Probe, error) {
 	absPath, err := resolveLocalPath(loc.URL)
 	if err != nil {
@@ -49,8 +45,6 @@ func (FileSource) Probe(_ context.Context, loc Locator) (Probe, error) {
 	}, nil
 }
 
-// Fetch is unreachable: Probe always reports a local path, and the manager
-// never fetches content it has been told is already in place.
 func (FileSource) Fetch(_ context.Context, loc Locator, _ string) error {
 	return fmt.Errorf("local resource %q is used in place, not fetched", loc.URL)
 }

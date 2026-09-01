@@ -385,8 +385,7 @@ func TestDestroyLocalRuntime_RemovesLocalRuntimeAndArtifacts(t *testing.T) {
 		}
 	}
 
-	// When: paths.VMDir was never created, so destroyLocalRuntime never needs
-	// to resolve a runner, and a nil manager is safe here.
+	// When
 	err := destroyLocalRuntime(
 		context.Background(),
 		localruntime.NewMacVMRuntime(deployment, nil),
@@ -419,7 +418,7 @@ func TestStopLocalRuntime_UpdatesDeploymentInfoState(t *testing.T) {
 	if err := os.MkdirAll(paths.WorkDir, 0o750); err != nil {
 		t.Fatalf("failed to create local runtime work dir: %v", err)
 	}
-	manager := newTestManagerForRunner(t, []byte(`#!/bin/sh
+	resolver := newTestResolverForRunner(t, []byte(`#!/bin/sh
 case "$1" in
   status) printf '{"running":false}\n' ;;
   stop) exit 0 ;;
@@ -444,7 +443,7 @@ esac
 	// When
 	err := stopLocalRuntime(
 		context.Background(),
-		localruntime.NewMacVMRuntime(deployment, manager),
+		localruntime.NewMacVMRuntime(deployment, resolver),
 		nil,
 		nil,
 	)

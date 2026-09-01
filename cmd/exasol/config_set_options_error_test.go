@@ -61,7 +61,7 @@ func TestConfigSetClearErrorWhenDeploymentNotInitialized(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "not-a-deployment")
 
 	err := prepareConfigSetInfrastructureVariableFlags(
-		testManagerContext(t),
+		testResolverContext(t),
 		[]string{"config", "set", "--ports", "db:8000", "--deployment-dir", dir},
 	)
 	if err == nil {
@@ -89,7 +89,7 @@ func TestConfigSetHelpRendersWithoutResolvableDeployment(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "not-a-deployment")
 
 	if err := prepareConfigSetInfrastructureVariableFlags(
-		testManagerContext(t),
+		testResolverContext(t),
 		[]string{"config", "set", "--help", "--deployment-dir", dir},
 	); err != nil {
 		t.Fatalf("expected help to render (nil error), got: %v", err)
@@ -106,7 +106,7 @@ func TestConfigSetRegistersOptionsForInitializedLocalDeployment(t *testing.T) {
 	dir := writeInitializedLocalDeployment(t)
 
 	if err := prepareConfigSetInfrastructureVariableFlags(
-		testManagerContext(t),
+		testResolverContext(t),
 		[]string{"config", "set", "--ports", "db:8000", "--deployment-dir", dir},
 	); err != nil {
 		t.Fatalf("unexpected error resolving options for initialized deployment: %v", err)

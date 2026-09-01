@@ -57,9 +57,9 @@ func Connect(ctx context.Context, opts *connect.Opts, deployment config.Deployme
 			}
 
 			if err := connect.Connect(ctx, opts, deployment, connectionInfo); err != nil {
-				manager := resource.FromContext(ctx)
+				resolver := resource.FromContext(ctx)
 
-				selectedRuntime, runtimeErr := newLocalRuntime(deployment, manager)
+				selectedRuntime, runtimeErr := newLocalRuntime(deployment, resolver)
 				if runtimeErr != nil {
 					return err
 				}

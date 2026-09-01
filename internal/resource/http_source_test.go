@@ -52,8 +52,6 @@ func TestHttpSource_Handles_GitURLsExcluded(t *testing.T) {
 	}
 }
 
-// A strong entity tag identifies an otherwise unidentifiable download, so the
-// cached copy is reused while the tag is unchanged.
 func TestHttpSource_Probe_StrongETagIdentifiesContent(t *testing.T) {
 	t.Parallel()
 
@@ -99,7 +97,6 @@ func TestHttpSource_Probe_ScopesETagToLocation(t *testing.T) {
 	}
 }
 
-// A weak tag promises only semantic equivalence, so it cannot identify bytes.
 func TestHttpSource_Probe_WeakETagIsIgnored(t *testing.T) {
 	t.Parallel()
 
@@ -118,7 +115,6 @@ func TestHttpSource_Probe_WeakETagIsIgnored(t *testing.T) {
 	}
 }
 
-// A server offering no validator leaves the download unidentified.
 func TestHttpSource_Probe_NoETagStatesNoIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -134,9 +130,7 @@ func TestHttpSource_Probe_NoETagStatesNoIdentity(t *testing.T) {
 	}
 }
 
-// A strong tag lets a checksumless archive be served from the cache instead of
-// being downloaded again.
-func TestManager_StrongETagAvoidsRedownload(t *testing.T) {
+func TestResolver_StrongETagAvoidsRedownload(t *testing.T) {
 	t.Parallel()
 
 	var downloads int
@@ -151,17 +145,17 @@ func TestManager_StrongETagAvoidsRedownload(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(handler))
 	defer server.Close()
 
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, t.TempDir(), "linux", "amd64")
 	def := ResourceDefinition{
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {URL: server.URL + "/payload.bin"},
 		},
 	}
 
-	if _, err := manager.Get(context.Background(), def, "payload"); err != nil {
+	if _, err := resolveTestDefinition(context.Background(), resolver, def, "payload"); err != nil {
 		t.Fatalf("first resolve: %v", err)
 	}
-	if _, err := manager.Get(context.Background(), def, "payload"); err != nil {
+	if _, err := resolveTestDefinition(context.Background(), resolver, def, "payload"); err != nil {
 		t.Fatalf("second resolve: %v", err)
 	}
 	if downloads != 1 {
@@ -169,11 +163,8 @@ func TestManager_StrongETagAvoidsRedownload(t *testing.T) {
 	}
 }
 
-// Without any validator the download cannot be identified, so it is fetched
-// again on every request.
-//
 //nolint:paralleltest // The process-wide logger must capture both resolutions.
-func TestManager_UnidentifiableArchiveRefetches(t *testing.T) {
+func TestResolver_UnidentifiableArchiveRefetches(t *testing.T) {
 	// Given
 	var logs bytes.Buffer
 	originalLogger := slog.Default()
@@ -192,7 +183,7 @@ func TestManager_UnidentifiableArchiveRefetches(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(handler))
 	defer server.Close()
 
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, t.TempDir(), "linux", "amd64")
 	def := ResourceDefinition{
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {URL: server.URL + "/payload.bin"},
@@ -200,10 +191,10 @@ func TestManager_UnidentifiableArchiveRefetches(t *testing.T) {
 	}
 
 	// When
-	if _, err := manager.Get(context.Background(), def, "payload"); err != nil {
+	if _, err := resolveTestDefinition(context.Background(), resolver, def, "payload"); err != nil {
 		t.Fatalf("first resolve: %v", err)
 	}
-	path, err := manager.Get(context.Background(), def, "payload")
+	path, err := resolveTestDefinition(context.Background(), resolver, def, "payload")
 	if err != nil {
 		t.Fatalf("second resolve: %v", err)
 	}
@@ -224,9 +215,7 @@ func TestManager_UnidentifiableArchiveRefetches(t *testing.T) {
 	}
 }
 
-// A checksummed download is already identified, so resolution must not depend
-// on the server answering a validator request.
-func TestManager_ChecksummedDownloadNeedsNoValidatorRequest(t *testing.T) {
+func TestResolver_ChecksummedDownloadNeedsNoValidatorRequest(t *testing.T) {
 	t.Parallel()
 
 	var heads int
@@ -239,7 +228,7 @@ func TestManager_ChecksummedDownloadNeedsNoValidatorRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(handler))
 	defer server.Close()
 
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, t.TempDir(), "linux", "amd64")
 	def := ResourceDefinition{
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {
@@ -249,7 +238,7 @@ func TestManager_ChecksummedDownloadNeedsNoValidatorRequest(t *testing.T) {
 		},
 	}
 
-	if _, err := manager.Get(context.Background(), def, "payload"); err != nil {
+	if _, err := resolveTestDefinition(context.Background(), resolver, def, "payload"); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if heads != 0 {

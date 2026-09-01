@@ -27,7 +27,7 @@ const (
 	runnerZipEntryName = "launcher"
 )
 
-func newTestManagerForRunner(t *testing.T, scriptContent []byte) *resource.Manager {
+func newTestResolverForRunner(t *testing.T, scriptContent []byte) *resource.Resolver {
 	t.Helper()
 
 	zipPath := filepath.Join(t.TempDir(), "runner.zip")
@@ -61,9 +61,16 @@ func newTestManagerForRunner(t *testing.T, scriptContent []byte) *resource.Manag
 		},
 	}
 
-	return resource.NewResourceManagerForPlatform(
-		spec, t.TempDir(), runtime.GOOS, runtime.GOARCH,
-	)
+	resolver, err := resource.New(resource.Options{
+		Definitions: spec,
+		CacheRoot:   t.TempDir(),
+		Platform:    resource.Platform{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH},
+	})
+	if err != nil {
+		t.Fatalf("create resolver: %v", err)
+	}
+
+	return resolver
 }
 
 func writeExecutableTestFile(t *testing.T, path string, content []byte) {
@@ -80,7 +87,7 @@ func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
 	deployment := config.NewDeploymentDir(t.TempDir())
 	eventsPath := filepath.Join(t.TempDir(), "events")
 	runnerScript := fakeV2RunnerScript(eventsPath, 28563)
-	localRuntime := NewMacVMRuntime(deployment, newTestManagerForRunner(t, []byte(runnerScript)))
+	localRuntime := NewMacVMRuntime(deployment, newTestResolverForRunner(t, []byte(runnerScript)))
 	install := &recordingLocalInstall{eventsPath: eventsPath, running: true}
 	localRuntime.installFactory = func(string) (localinstall.LocalInstall, error) {
 		return install, nil
@@ -152,7 +159,7 @@ func TestMacVMRuntimeStartStopsVMWhenInstallFails(t *testing.T) {
 	eventsPath := filepath.Join(t.TempDir(), "events")
 	localRuntime := NewMacVMRuntime(
 		deployment,
-		newTestManagerForRunner(t, []byte(fakeV2RunnerScript(eventsPath, 28563))),
+		newTestResolverForRunner(t, []byte(fakeV2RunnerScript(eventsPath, 28563))),
 	)
 	localRuntime.installFactory = func(string) (localinstall.LocalInstall, error) {
 		return &recordingLocalInstall{
@@ -199,7 +206,7 @@ printf 'host-stdout'
 printf 'host-stderr' >&2
 `, argsPath, argsPath, workingDirPath, stdinPath)
 	localRuntime := NewMacVMRuntime(
-		deployment, newTestManagerForRunner(t, []byte(runnerScript)),
+		deployment, newTestResolverForRunner(t, []byte(runnerScript)),
 	)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
 		t.Fatalf("failed to create runtime work dir: %v", err)
@@ -266,7 +273,7 @@ printf 'container-stdout'
 printf 'container-stderr' >&2
 `, argsPath, argsPath, workingDirPath, stdinPath)
 	localRuntime := NewMacVMRuntime(
-		deployment, newTestManagerForRunner(t, []byte(runnerScript)),
+		deployment, newTestResolverForRunner(t, []byte(runnerScript)),
 	)
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
 		t.Fatalf("failed to create runtime work dir: %v", err)
@@ -330,7 +337,7 @@ func TestMacVMRuntimeOpenHostShellPreservesRunnerFailure(t *testing.T) {
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	runnerScript := []byte("#!/bin/sh\nexit 23\n")
-	localRuntime := NewMacVMRuntime(deployment, newTestManagerForRunner(t, runnerScript))
+	localRuntime := NewMacVMRuntime(deployment, newTestResolverForRunner(t, runnerScript))
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
 		t.Fatalf("failed to create runtime work dir: %v", err)
 	}

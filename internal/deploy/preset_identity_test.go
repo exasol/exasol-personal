@@ -26,7 +26,7 @@ func TestEnsureDeploymentPresetIdentityMatches_BackfillsAndPersistsOldStyleDeplo
 
 	// When the same preset is requested again.
 	err := EnsureDeploymentPresetIdentityMatches(
-		testManagerContext(t),
+		testResolverContext(t),
 		deployment,
 		PresetRef{Name: presets.DefaultInfrastructure},
 		PresetRef{Name: presets.DefaultInstallation},
@@ -58,7 +58,7 @@ func TestResolveDeploymentPresetIdentity_DerivesForOldStyleDeploymentWithoutWrit
 	clearPersistedPresetIdentity(t, deployment)
 
 	// When its preset identity is resolved for display.
-	identity, err := ResolveDeploymentPresetIdentity(testManagerContext(t), deployment)
+	identity, err := ResolveDeploymentPresetIdentity(testResolverContext(t), deployment)
 	// Then it derives a non-empty identity...
 	if err != nil {
 		t.Fatalf("expected identity resolution to succeed, got %v", err)
@@ -82,7 +82,7 @@ func initializedDeploymentOrFail(t *testing.T) config.DeploymentDir {
 
 	deployment := config.NewDeploymentDir(t.TempDir())
 	if err := InitDeployment(
-		testManagerContext(t),
+		testResolverContext(t),
 		deployment,
 		InitOptions{
 			InfrastructurePreset: PresetRef{Name: presets.DefaultInfrastructure},

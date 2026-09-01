@@ -86,20 +86,20 @@ type runnerState struct {
 type MacVMRuntime struct {
 	deployment     config.DeploymentDir
 	paths          vmRuntimePaths
-	manager        *resource.Manager
+	resolver       *resource.Resolver
 	endpoint       *RuntimeEndpoint
 	installFactory func(string) (localinstall.LocalInstall, error)
 }
 
-// NewMacVMRuntime creates a VM runtime. manager may be nil when no runner invocation is needed.
+// NewMacVMRuntime: a nil resolver is valid until an operation invokes the runner.
 func NewMacVMRuntime(
 	deployment config.DeploymentDir,
-	manager *resource.Manager,
+	resolver *resource.Resolver,
 ) *MacVMRuntime {
 	return &MacVMRuntime{
 		deployment: deployment,
 		paths:      newVMRuntimePaths(deployment),
-		manager:    manager,
+		resolver:   resolver,
 	}
 }
 
@@ -427,7 +427,7 @@ func (runtime *MacVMRuntime) install(
 		return nil, err
 	}
 	resolveImage := func(ctx context.Context) (localinstall.RuntimePath, error) {
-		sourcePath, err := localinstall.ResolveNanoImage(ctx, runtime.manager)
+		sourcePath, err := localinstall.ResolveNanoImage(ctx, runtime.resolver)
 		if err != nil {
 			return localinstall.RuntimePath{}, err
 		}
@@ -574,11 +574,11 @@ func (runtime *MacVMRuntime) resolveRunnerPath(ctx context.Context) (string, err
 	if override := strings.TrimSpace(os.Getenv(runnerOverridePathEnv)); override != "" {
 		return override, nil
 	}
-	if runtime.manager == nil {
-		return "", errors.New("local runner artifact manager is required")
+	if runtime.resolver == nil {
+		return "", errors.New("local runner artifact resolver is required")
 	}
 
-	return runtime.manager.Request(ctx, exasolLocalRunnerResourceID)
+	return runtime.resolver.Resolve(ctx, exasolLocalRunnerResourceID)
 }
 
 func (runtime *MacVMRuntime) initializeVMIfNeeded(

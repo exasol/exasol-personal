@@ -233,9 +233,9 @@ func localVMStoppedStatus(ctx context.Context, deployment config.DeploymentDir) 
 		return nil
 	}
 
-	manager := resource.FromContext(ctx)
+	resolver := resource.FromContext(ctx)
 
-	selectedRuntime, err := newLocalRuntime(deployment, manager)
+	selectedRuntime, err := newLocalRuntime(deployment, resolver)
 	if err != nil {
 		slog.Debug("failed to select local runtime for status check", "error", err)
 		return nil

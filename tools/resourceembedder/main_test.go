@@ -80,10 +80,17 @@ func newGenerator(t *testing.T, spec resource.ResourceSpec, skipEmbed bool) *gen
 		t.Fatalf("create platform dir: %v", err)
 	}
 
+	resolver, err := resource.New(resource.Options{
+		Definitions: spec,
+		CacheRoot:   cacheRoot,
+		Platform:    resource.Platform{GOOS: "linux", GOARCH: "amd64"},
+	})
+	if err != nil {
+		t.Fatalf("create resolver: %v", err)
+	}
+
 	return &generator{
-		manager: resource.NewResourceManagerForPlatform(
-			spec, cacheRoot, "linux", "amd64",
-		),
+		resolver:    resolver,
 		platformDir: platformDir,
 		goos:        "linux",
 		goarch:      "amd64",

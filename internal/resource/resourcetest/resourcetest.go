@@ -1,9 +1,6 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-// Package resourcetest provides shared test helpers for building a
-// context.Context carrying a *resource.Manager, for tests in other
-// packages that exercise code reading the shared Manager from context.
 package resourcetest
 
 import (
@@ -15,24 +12,25 @@ import (
 	"github.com/exasol/exasol-personal/internal/resource"
 )
 
-// NewManagerContext returns a context carrying a Manager built from spec,
-// backed by a throwaway cache root.
-func NewManagerContext(t *testing.T, spec resource.ResourceSpec) context.Context {
+func NewResolverContext(t *testing.T, spec resource.ResourceSpec) context.Context {
 	t.Helper()
 
-	manager := resource.NewResourceManagerForPlatform(
-		spec, t.TempDir(), runtime.GOOS, runtime.GOARCH,
-	)
+	resolver, err := resource.New(resource.Options{
+		Definitions: spec,
+		CacheRoot:   t.TempDir(),
+		Platform:    resource.Platform{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH},
+	})
+	if err != nil {
+		t.Fatalf("failed to build a resolver: %v", err)
+	}
 
-	return resource.NewContext(context.Background(), manager)
+	return resource.NewContext(context.Background(), resolver)
 }
 
-// NewContext returns a context carrying a Manager backed by the resolved
-// specification and data this build embeds, and a throwaway cache root.
 func NewContext(t *testing.T) context.Context {
 	t.Helper()
 
-	manager, err := resource.New(resource.Options{
+	resolver, err := resource.New(resource.Options{
 		Spec:      embedded.ResolvedSpec,
 		Blobs:     embedded.Blobs,
 		CacheRoot: t.TempDir(),
@@ -41,5 +39,5 @@ func NewContext(t *testing.T) context.Context {
 		t.Fatalf("failed to build a resolver: %v", err)
 	}
 
-	return resource.NewContext(context.Background(), manager)
+	return resource.NewContext(context.Background(), resolver)
 }

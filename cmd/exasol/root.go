@@ -166,18 +166,16 @@ func Execute() error {
 	resetTerminalMessages()
 	registerLogLevelFlag(rootCmd, commonFlags)
 
-	// One resource manager for the whole process, attached to the root
-	// context so every command reaches it via cmd.Context() instead of each
-	// building (and caching against) its own.
-	manager, err := resource.New(resource.Options{
+	// Sharing one resolver keeps command caches coherent.
+	resolver, err := resource.New(resource.Options{
 		Spec:  embedded.ResolvedSpec,
 		Blobs: embedded.Blobs,
 	})
 	if err != nil {
 		return err
 	}
-	ctx := resource.NewContext(context.Background(), manager)
-	supersededCachePaths := manager.Cache().SupersededPaths()
+	ctx := resource.NewContext(context.Background(), resolver)
+	supersededCachePaths := resolver.Cache().SupersededPaths()
 
 	// Register infrastructure variable flags only for commands that need them.
 	// This must happen before Cobra parses arguments.
@@ -218,8 +216,7 @@ func Execute() error {
 	return err
 }
 
-// A cache from an earlier launcher is never read again, so its contents sit
-// unreferenced until the user reclaims the space.
+// Superseded cache contents remain until the user removes them.
 func addSupersededCacheCallToAction(supersededPaths []string) {
 	if len(supersededPaths) == 0 {
 		return

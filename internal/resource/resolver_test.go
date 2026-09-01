@@ -40,7 +40,7 @@ func TestParseSpec_AllowsEmptySpec(t *testing.T) {
 	}
 }
 
-func TestManagerListGroupMembersWithoutMaterializingThem(t *testing.T) {
+func TestResolverListGroupMembersWithoutMaterializingThem(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -52,17 +52,17 @@ func TestManagerListGroupMembersWithoutMaterializingThem(t *testing.T) {
 		_, _ = writer.Write([]byte("payload"))
 	}))
 	defer server.Close()
-	manager := newGroupTestManager(t, ResourceSpec{
+	resolver := newTestResolverForPlatform(t, ResourceSpec{
 		"presets/aws":   testResourceDefinition(server.URL+"/aws", "aws"),
 		"presets/azure": testResourceDefinition(server.URL+"/azure", "azure"),
 		"other":         testResourceDefinition(server.URL+"/other", "other"),
-	}, t.TempDir())
+	}, t.TempDir(), "linux", "amd64")
 
 	// When
-	members := manager.GroupMembers("presets")
+	members := resolver.List("presets/")
 
 	// Then
-	if !slices.Equal(members, []string{"aws", "azure"}) {
+	if !slices.Equal(members, []string{"presets/aws", "presets/azure"}) {
 		t.Fatalf("members = %v", members)
 	}
 	if requests.Load() != 0 {
@@ -70,16 +70,16 @@ func TestManagerListGroupMembersWithoutMaterializingThem(t *testing.T) {
 	}
 }
 
-func TestManagerListUnknownGroupReturnsNoMembers(t *testing.T) {
+func TestResolverListUnknownGroupReturnsNoMembers(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	manager := newGroupTestManager(t, ResourceSpec{
+	resolver := newTestResolverForPlatform(t, ResourceSpec{
 		"presets/aws": testResourceDefinition("https://example.com/aws", "aws"),
-	}, t.TempDir())
+	}, t.TempDir(), "linux", "amd64")
 
 	// When
-	members := manager.GroupMembers("unknown")
+	members := resolver.List("unknown/")
 
 	// Then
 	if len(members) != 0 {
@@ -87,7 +87,7 @@ func TestManagerListUnknownGroupReturnsNoMembers(t *testing.T) {
 	}
 }
 
-func TestManagerResolveGroupMemberLeavesSiblingUnmaterialized(t *testing.T) {
+func TestResolverResolveGroupMemberLeavesSiblingUnmaterialized(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -107,13 +107,13 @@ func TestManagerResolveGroupMemberLeavesSiblingUnmaterialized(t *testing.T) {
 		_, _ = writer.Write([]byte(content))
 	}))
 	defer server.Close()
-	manager := newGroupTestManager(t, ResourceSpec{
+	resolver := newTestResolverForPlatform(t, ResourceSpec{
 		"presets/aws":   testResourceDefinition(server.URL+"/aws", "aws"),
 		"presets/azure": testResourceDefinition(server.URL+"/azure", "azure"),
-	}, t.TempDir())
+	}, t.TempDir(), "linux", "amd64")
 
 	// When
-	_, err := manager.RequestMember(context.Background(), "presets", "aws")
+	_, err := resolver.Resolve(context.Background(), "presets/aws")
 	// Then
 	if err != nil {
 		t.Fatalf("resolve member: %v", err)
@@ -123,14 +123,14 @@ func TestManagerResolveGroupMemberLeavesSiblingUnmaterialized(t *testing.T) {
 	}
 }
 
-func TestManagerUnknownGroupMemberErrorNamesMemberAndGroup(t *testing.T) {
+func TestResolverUnknownGroupMemberErrorNamesMemberAndGroup(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	manager := newGroupTestManager(t, ResourceSpec{}, t.TempDir())
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, t.TempDir(), "linux", "amd64")
 
 	// When
-	_, err := manager.RequestMember(context.Background(), "presets", "missing")
+	_, err := resolver.Resolve(context.Background(), "presets/missing")
 
 	// Then
 	if err == nil || !strings.Contains(err.Error(), "presets") ||
@@ -238,29 +238,33 @@ preset:
 	}
 }
 
-func newTestResolution(t *testing.T, manager *Manager, def ResourceDefinition) (resolution, error) {
+func newTestResolution(
+	t *testing.T,
+	resolver *Resolver,
+	def ResourceDefinition,
+) (resolution, error) {
 	t.Helper()
 
-	return manager.newResolution(def, def.Artifact[anyPlatformKey], Probe{}, "sha256:test")
+	return resolver.newResolution(def, def.Artifact[anyPlatformKey], Probe{}, "sha256:test")
 }
 
 // A subpath selects within resolved content whatever the source kind, so it
 // applies to a plain download just as it does to an extracted archive.
-func TestManager_Resolution_AppliesSubpathWithoutExtraction(t *testing.T) {
+func TestResolver_Resolution_AppliesSubpathWithoutExtraction(t *testing.T) {
 	t.Parallel()
 
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, t.TempDir(), "linux", "amd64")
 	def := ResourceDefinition{
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {URL: "https://example.com/repo.git", Subpath: "infra/aws"},
 		},
 	}
 
-	res, err := newTestResolution(t, manager, def)
+	res, err := newTestResolution(t, resolver, def)
 	if err != nil {
 		t.Fatalf("expected a resolution, got %v", err)
 	}
-	resolved, err := manager.resolvedPath(res)
+	resolved, err := resolver.resolvedPath(res)
 	if err != nil {
 		t.Fatalf("expected a resolved path, got %v", err)
 	}
@@ -271,17 +275,17 @@ func TestManager_Resolution_AppliesSubpathWithoutExtraction(t *testing.T) {
 	}
 }
 
-func TestManager_Resolution_RejectsTraversalSubpath(t *testing.T) {
+func TestResolver_Resolution_RejectsTraversalSubpath(t *testing.T) {
 	t.Parallel()
 
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, t.TempDir(), "linux", "amd64")
 	def := ResourceDefinition{
 		Artifact: map[string]ArtifactSpec{
 			anyPlatformKey: {URL: "https://example.com/repo.git", Subpath: "../escape"},
 		},
 	}
 
-	_, err := newTestResolution(t, manager, def)
+	_, err := newTestResolution(t, resolver, def)
 	if err == nil || !strings.Contains(err.Error(), "subpath") {
 		t.Fatalf("expected subpath traversal error, got %v", err)
 	}
@@ -289,7 +293,7 @@ func TestManager_Resolution_RejectsTraversalSubpath(t *testing.T) {
 
 // A subpath is presentation, not identity, so selecting two subpaths of one
 // source stores the source once instead of fetching it twice.
-func TestManager_Resolution_SubpathsShareOneCacheEntry(t *testing.T) {
+func TestResolver_Resolution_SubpathsShareOneCacheEntry(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -319,17 +323,17 @@ func TestManager_Resolution_SubpathsShareOneCacheEntry(t *testing.T) {
 			}},
 		}
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{
+	resolver := newTestResolverForPlatform(t, ResourceSpec{
 		"aws":   definition("infra/aws/manifest.yaml"),
 		"azure": definition("infra/azure/manifest.yaml"),
 	}, t.TempDir(), "linux", "amd64")
 
 	// When
-	awsPath, err := manager.Request(context.Background(), "aws")
+	awsPath, err := resolver.Resolve(context.Background(), "aws")
 	if err != nil {
 		t.Fatalf("resolve aws: %v", err)
 	}
-	azurePath, err := manager.Request(context.Background(), "azure")
+	azurePath, err := resolver.Resolve(context.Background(), "azure")
 	if err != nil {
 		t.Fatalf("resolve azure: %v", err)
 	}
@@ -353,7 +357,7 @@ func TestManager_Resolution_SubpathsShareOneCacheEntry(t *testing.T) {
 
 // Extraction is presentation too, so an extracted and an unextracted view of
 // one source share the download.
-func TestManager_Resolution_ExtractedAndPlainShareOneCacheEntry(t *testing.T) {
+func TestResolver_Resolution_ExtractedAndPlainShareOneCacheEntry(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -379,17 +383,17 @@ func TestManager_Resolution_ExtractedAndPlainShareOneCacheEntry(t *testing.T) {
 			}},
 		}
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{
+	resolver := newTestResolverForPlatform(t, ResourceSpec{
 		"plain":     definition(false),
 		"extracted": definition(true),
 	}, t.TempDir(), "linux", "amd64")
 
 	// When
-	plainPath, err := manager.Request(context.Background(), "plain")
+	plainPath, err := resolver.Resolve(context.Background(), "plain")
 	if err != nil {
 		t.Fatalf("resolve plain archive: %v", err)
 	}
-	extractedPath, err := manager.Request(context.Background(), "extracted")
+	extractedPath, err := resolver.Resolve(context.Background(), "extracted")
 	if err != nil {
 		t.Fatalf("resolve extracted archive: %v", err)
 	}
@@ -414,7 +418,7 @@ func TestManager_Resolution_ExtractedAndPlainShareOneCacheEntry(t *testing.T) {
 	}
 }
 
-func TestManager_RequestUsesDownloadPathFallback(t *testing.T) {
+func TestResolver_RequestUsesDownloadPathFallback(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -437,10 +441,10 @@ func TestManager_RequestUsesDownloadPathFallback(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, spec, deploymentDir, "linux", "amd64")
 
 	// When
-	path, err := manager.Request(context.Background(), "artifact")
+	path, err := resolver.Resolve(context.Background(), "artifact")
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -451,7 +455,7 @@ func TestManager_RequestUsesDownloadPathFallback(t *testing.T) {
 	}
 }
 
-func TestManager_RequestRejectsDownloadPathEscape(t *testing.T) {
+func TestResolver_RequestRejectsDownloadPathEscape(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -474,17 +478,17 @@ func TestManager_RequestRejectsDownloadPathEscape(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, spec, deploymentDir, "linux", "amd64")
 
 	// When
-	_, err = manager.Request(context.Background(), "artifact")
+	_, err = resolver.Resolve(context.Background(), "artifact")
 	// Then
 	if err == nil || !strings.Contains(err.Error(), "must stay within") {
 		t.Fatalf("expected resource-dir containment error, got %v", err)
 	}
 }
 
-func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
+func TestResolver_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -530,10 +534,10 @@ func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, spec, deploymentDir, "linux", "amd64")
 
 	// When
-	path1, err := manager.Request(context.Background(), "artifact")
+	path1, err := resolver.Resolve(context.Background(), "artifact")
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -560,12 +564,12 @@ func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 	if toolInfo.Mode().Perm() != 0o640 {
 		t.Fatalf("expected extracted tool mode 0640, got %v", toolInfo.Mode().Perm())
 	}
-	index, err := manager.cache.readIndex()
+	index, err := resolver.cache.readIndex()
 	if err != nil {
 		t.Fatalf("failed to read cache index: %v", err)
 	}
 	entryID, entry := onlyCacheEntry(t, index)
-	expectedSize, err := directorySize(manager.cache.entryDir(entryID))
+	expectedSize, err := directorySize(resolver.cache.entryDir(entryID))
 	if err != nil {
 		t.Fatalf("failed to calculate cache entry size: %v", err)
 	}
@@ -578,7 +582,7 @@ func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 	}
 
 	// When
-	path2, err := manager.Request(context.Background(), "artifact")
+	path2, err := resolver.Resolve(context.Background(), "artifact")
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error on cache hit, got %v", err)
@@ -588,7 +592,7 @@ func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 	}
 }
 
-func TestManager_RequestUpdatesLastUsedAtOnCacheHit(t *testing.T) {
+func TestResolver_RequestUpdatesLastUsedAtOnCacheHit(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -612,10 +616,10 @@ func TestManager_RequestUpdatesLastUsedAtOnCacheHit(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerWithCacheForPlatform(spec, cache, "linux", "amd64")
+	resolver := newTestResolverWithCacheForPlatform(t, spec, cache, "linux", "amd64")
 
 	// When
-	path1, err := manager.Request(context.Background(), "artifact")
+	path1, err := resolver.Resolve(context.Background(), "artifact")
 	// Then
 	if err != nil {
 		t.Fatalf("expected first request to succeed, got %v", err)
@@ -631,7 +635,7 @@ func TestManager_RequestUpdatesLastUsedAtOnCacheHit(t *testing.T) {
 
 	// When
 	clock.now = clock.now.Add(2 * time.Hour)
-	path2, err := manager.Request(context.Background(), "artifact")
+	path2, err := resolver.Resolve(context.Background(), "artifact")
 	// Then
 	if err != nil {
 		t.Fatalf("expected cache hit to succeed, got %v", err)
@@ -655,7 +659,7 @@ func TestManager_RequestUpdatesLastUsedAtOnCacheHit(t *testing.T) {
 	}
 }
 
-func TestManager_RequestRefreshesMissingCachedFile(t *testing.T) {
+func TestResolver_RequestRefreshesMissingCachedFile(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -679,8 +683,8 @@ func TestManager_RequestRefreshesMissingCachedFile(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerWithCacheForPlatform(spec, cache, "linux", "amd64")
-	path1, err := manager.Request(context.Background(), "artifact")
+	resolver := newTestResolverWithCacheForPlatform(t, spec, cache, "linux", "amd64")
+	path1, err := resolver.Resolve(context.Background(), "artifact")
 	if err != nil {
 		t.Fatalf("expected first request to succeed, got %v", err)
 	}
@@ -690,7 +694,7 @@ func TestManager_RequestRefreshesMissingCachedFile(t *testing.T) {
 
 	// When
 	clock.now = clock.now.Add(time.Hour)
-	path2, err := manager.Request(context.Background(), "artifact")
+	path2, err := resolver.Resolve(context.Background(), "artifact")
 	// Then
 	if err != nil {
 		t.Fatalf("expected missing file refresh to succeed, got %v", err)
@@ -709,7 +713,7 @@ func TestManager_RequestRefreshesMissingCachedFile(t *testing.T) {
 	}
 }
 
-func TestManager_RequestRunsAutomaticStaleCleanupWhenDue(t *testing.T) {
+func TestResolver_RequestRunsAutomaticStaleCleanupWhenDue(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -745,10 +749,10 @@ func TestManager_RequestRunsAutomaticStaleCleanupWhenDue(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerWithCacheForPlatform(spec, cache, "linux", "amd64")
+	resolver := newTestResolverWithCacheForPlatform(t, spec, cache, "linux", "amd64")
 
 	// When
-	_, err := manager.Request(context.Background(), "artifact")
+	_, err := resolver.Resolve(context.Background(), "artifact")
 	// Then
 	if err != nil {
 		t.Fatalf("expected request to succeed, got %v", err)
@@ -771,7 +775,7 @@ func TestManager_RequestRunsAutomaticStaleCleanupWhenDue(t *testing.T) {
 	}
 }
 
-func TestManager_RequestReportsChecksumMismatch(t *testing.T) {
+func TestResolver_RequestReportsChecksumMismatch(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -794,10 +798,10 @@ func TestManager_RequestReportsChecksumMismatch(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, spec, deploymentDir, "linux", "amd64")
 
 	// When
-	_, err = manager.Request(context.Background(), "artifact")
+	_, err = resolver.Resolve(context.Background(), "artifact")
 	// Then
 	if err == nil {
 		t.Fatal("expected checksum mismatch error")
@@ -807,7 +811,7 @@ func TestManager_RequestReportsChecksumMismatch(t *testing.T) {
 	}
 }
 
-func TestManager_RequestRefreshesWhenChecksumChanges(t *testing.T) {
+func TestResolver_RequestRefreshesWhenChecksumChanges(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -836,10 +840,10 @@ func TestManager_RequestRefreshesWhenChecksumChanges(t *testing.T) {
 			},
 		},
 	}
-	managerV1 := NewResourceManagerForPlatform(specV1, deploymentDir, "linux", "amd64")
+	resolverV1 := newTestResolverForPlatform(t, specV1, deploymentDir, "linux", "amd64")
 
 	// When
-	path1, err := managerV1.Request(context.Background(), "artifact")
+	path1, err := resolverV1.Resolve(context.Background(), "artifact")
 	// Then
 	if err != nil {
 		t.Fatalf("expected first request to succeed, got %v", err)
@@ -861,10 +865,10 @@ func TestManager_RequestRefreshesWhenChecksumChanges(t *testing.T) {
 			},
 		},
 	}
-	managerV2 := NewResourceManagerForPlatform(specV2, deploymentDir, "linux", "amd64")
+	resolverV2 := newTestResolverForPlatform(t, specV2, deploymentDir, "linux", "amd64")
 
 	// When
-	path2, err := managerV2.Request(context.Background(), "artifact")
+	path2, err := resolverV2.Resolve(context.Background(), "artifact")
 	// Then
 	if err != nil {
 		t.Fatalf("expected checksum refresh to succeed, got %v", err)
@@ -1000,11 +1004,6 @@ func writeTarGzFixtureEntry(
 	}
 }
 
-func writeZipFixture(t *testing.T, dir, name string, entries map[string]string) string {
-	t.Helper()
-	return writeZipFixtureEntries(t, dir, name, entries)
-}
-
 func sha256OfBytes(data []byte) string {
 	sum := sha256.Sum256(data)
 
@@ -1116,7 +1115,7 @@ func onlyCacheEntry(t *testing.T, index cacheIndex) (string, cacheIndexEntry) {
 	return "", cacheIndexEntry{}
 }
 
-func TestManager_GetWithRuntimeDefinition(t *testing.T) {
+func TestResolver_GetWithRuntimeDefinition(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -1133,10 +1132,10 @@ func TestManager_GetWithRuntimeDefinition(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, deploymentDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, deploymentDir, "linux", "amd64")
 
 	// When
-	path, err := manager.Get(context.Background(), def, "tool-binary")
+	path, err := resolveTestDefinition(context.Background(), resolver, def, "tool-binary")
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -1164,7 +1163,7 @@ myresource:
 	}
 }
 
-func TestManager_GetNoChecksumAlwaysRefetches(t *testing.T) {
+func TestResolver_GetNoChecksumAlwaysRefetches(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -1181,14 +1180,14 @@ func TestManager_GetNoChecksumAlwaysRefetches(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, deploymentDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, deploymentDir, "linux", "amd64")
 
 	// When
-	_, err := manager.Get(context.Background(), def, "tool-binary")
+	_, err := resolveTestDefinition(context.Background(), resolver, def, "tool-binary")
 	if err != nil {
 		t.Fatalf("expected first Get to succeed, got %v", err)
 	}
-	_, err = manager.Get(context.Background(), def, "tool-binary")
+	_, err = resolveTestDefinition(context.Background(), resolver, def, "tool-binary")
 	if err != nil {
 		t.Fatalf("expected second Get to succeed, got %v", err)
 	}
@@ -1198,7 +1197,7 @@ func TestManager_GetNoChecksumAlwaysRefetches(t *testing.T) {
 	}
 }
 
-func TestManager_GetGitSourceCachedOnSameCommit(t *testing.T) {
+func TestResolver_GetGitSourceCachedOnSameCommit(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -1210,10 +1209,10 @@ func TestManager_GetGitSourceCachedOnSameCommit(t *testing.T) {
 			anyPlatformKey: {URL: repoDir},
 		},
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, cacheDir, "linux", "amd64")
 
 	// When — first fetch clones the repo
-	path, err := manager.Get(context.Background(), def, "preset")
+	path, err := resolveTestDefinition(context.Background(), resolver, def, "preset")
 	if err != nil {
 		t.Fatalf("first Get failed: %v", err)
 	}
@@ -1225,7 +1224,7 @@ func TestManager_GetGitSourceCachedOnSameCommit(t *testing.T) {
 	}
 
 	// When — second Get with same commit; Identify returns same hash → cache hit
-	path2, err := manager.Get(context.Background(), def, "preset")
+	path2, err := resolveTestDefinition(context.Background(), resolver, def, "preset")
 	if err != nil {
 		t.Fatalf("second Get failed: %v", err)
 	}
@@ -1243,7 +1242,7 @@ func TestManager_GetGitSourceCachedOnSameCommit(t *testing.T) {
 	}
 }
 
-func TestManager_GetGitSourceRefetchesOnNewCommit(t *testing.T) {
+func TestResolver_GetGitSourceRefetchesOnNewCommit(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -1255,9 +1254,9 @@ func TestManager_GetGitSourceRefetchesOnNewCommit(t *testing.T) {
 			anyPlatformKey: {URL: repoDir},
 		},
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, cacheDir, "linux", "amd64")
 
-	_, err := manager.Get(context.Background(), def, "preset")
+	_, err := resolveTestDefinition(context.Background(), resolver, def, "preset")
 	if err != nil {
 		t.Fatalf("first Get failed: %v", err)
 	}
@@ -1266,7 +1265,7 @@ func TestManager_GetGitSourceRefetchesOnNewCommit(t *testing.T) {
 	addCommitToTestRepo(t, repoDir, "v2.txt", "v2")
 
 	// When — second Get with new commit
-	path, err := manager.Get(context.Background(), def, "preset")
+	path, err := resolveTestDefinition(context.Background(), resolver, def, "preset")
 	if err != nil {
 		t.Fatalf("second Get failed: %v", err)
 	}
@@ -1277,7 +1276,7 @@ func TestManager_GetGitSourceRefetchesOnNewCommit(t *testing.T) {
 	}
 }
 
-func TestManager_GetFileDirectoryReturnedDirectly(t *testing.T) {
+func TestResolver_GetFileDirectoryReturnedDirectly(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -1289,15 +1288,15 @@ func TestManager_GetFileDirectoryReturnedDirectly(t *testing.T) {
 			anyPlatformKey: {URL: "file://" + presetDir},
 		},
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, cacheDir, "linux", "amd64")
 
 	// When
-	path, err := manager.Get(context.Background(), def, "preset-dir")
+	path, err := resolveTestDefinition(context.Background(), resolver, def, "preset-dir")
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	// Fetch returns a redirect path for local directories; the Manager records it
+	// Fetch returns a redirect path for local directories; the Resolver records it
 	// in the cache index but does not write an artifact to the cache directory.
 	if strings.HasPrefix(path, cacheDir) {
 		t.Fatalf("expected original path, not a cache path; got %q", path)
@@ -1307,10 +1306,10 @@ func TestManager_GetFileDirectoryReturnedDirectly(t *testing.T) {
 	}
 }
 
-func TestManager_GetFileDirectoryWithResourcePathReturnsSubdirectory(t *testing.T) {
+func TestResolver_GetFileDirectoryWithResourcePathReturnsSubdirectory(t *testing.T) {
 	t.Parallel()
 
-	// Given — a preset root with a nested subdirectory. The manager must apply
+	// Given — a preset root with a nested subdirectory. The resolver must apply
 	// subpath to the redirect target, not silently return the root.
 	presetDir := t.TempDir()
 	subDir := filepath.Join(presetDir, "infra", "aws")
@@ -1323,10 +1322,10 @@ func TestManager_GetFileDirectoryWithResourcePathReturnsSubdirectory(t *testing.
 			anyPlatformKey: {URL: "file://" + presetDir, Subpath: "infra/aws"},
 		},
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, t.TempDir(), "linux", "amd64")
 
 	// When
-	path, err := manager.Get(context.Background(), def, "preset-dir")
+	path, err := resolveTestDefinition(context.Background(), resolver, def, "preset-dir")
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -1336,7 +1335,7 @@ func TestManager_GetFileDirectoryWithResourcePathReturnsSubdirectory(t *testing.
 	}
 }
 
-func TestManager_GetFileDirectoryRejectsTraversalResourcePath(t *testing.T) {
+func TestResolver_GetFileDirectoryRejectsTraversalResourcePath(t *testing.T) {
 	t.Parallel()
 
 	// Given — a subpath that tries to escape the redirect root.
@@ -1347,17 +1346,17 @@ func TestManager_GetFileDirectoryRejectsTraversalResourcePath(t *testing.T) {
 			anyPlatformKey: {URL: "file://" + presetDir, Subpath: "../escape"},
 		},
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, t.TempDir(), "linux", "amd64")
 
 	// When
-	_, err := manager.Get(context.Background(), def, "preset-dir")
+	_, err := resolveTestDefinition(context.Background(), resolver, def, "preset-dir")
 	// Then
 	if err == nil || !strings.Contains(err.Error(), "subpath") {
 		t.Fatalf("expected subpath traversal error, got %v", err)
 	}
 }
 
-func TestManager_GetFileBareFileReturnedDirectly(t *testing.T) {
+func TestResolver_GetFileBareFileReturnedDirectly(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -1372,10 +1371,10 @@ func TestManager_GetFileBareFileReturnedDirectly(t *testing.T) {
 			anyPlatformKey: {URL: "file://" + binaryPath},
 		},
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, cacheDir, "linux", "amd64")
 
 	// When
-	path, err := manager.Get(context.Background(), def, "local-launcher")
+	path, err := resolveTestDefinition(context.Background(), resolver, def, "local-launcher")
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -1385,7 +1384,7 @@ func TestManager_GetFileBareFileReturnedDirectly(t *testing.T) {
 	}
 }
 
-func TestManager_GetFileDirectoryMissingReturnsError(t *testing.T) {
+func TestResolver_GetFileDirectoryMissingReturnsError(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -1395,17 +1394,17 @@ func TestManager_GetFileDirectoryMissingReturnsError(t *testing.T) {
 			anyPlatformKey: {URL: "file:///nonexistent/path/to/preset"},
 		},
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, t.TempDir(), "linux", "amd64")
 
 	// When
-	_, err := manager.Get(context.Background(), def, "preset-missing")
+	_, err := resolveTestDefinition(context.Background(), resolver, def, "preset-missing")
 	// Then
 	if err == nil || !strings.Contains(err.Error(), "does not exist") {
 		t.Fatalf("expected does-not-exist error, got %v", err)
 	}
 }
 
-func TestManager_GetFileArchiveExtractedIntoCache(t *testing.T) {
+func TestResolver_GetFileArchiveExtractedIntoCache(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -1418,10 +1417,10 @@ func TestManager_GetFileArchiveExtractedIntoCache(t *testing.T) {
 			anyPlatformKey: {URL: "file://" + archivePath, Subpath: "tool"},
 		},
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, cacheDir, "linux", "amd64")
 
 	// When
-	path, err := manager.Get(context.Background(), def, "preset")
+	path, err := resolveTestDefinition(context.Background(), resolver, def, "preset")
 	// Then
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -1437,7 +1436,7 @@ func TestManager_GetFileArchiveExtractedIntoCache(t *testing.T) {
 	}
 }
 
-func TestManager_GetAnyPlatformFallback(t *testing.T) {
+func TestResolver_GetAnyPlatformFallback(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -1456,10 +1455,10 @@ func TestManager_GetAnyPlatformFallback(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "darwin", "arm64")
+	resolver := newTestResolverForPlatform(t, spec, deploymentDir, "darwin", "arm64")
 
 	// When
-	path, err := manager.Request(context.Background(), "tool")
+	path, err := resolver.Resolve(context.Background(), "tool")
 	// Then
 	if err != nil {
 		t.Fatalf("expected any-platform fallback to succeed, got %v", err)
@@ -1469,7 +1468,7 @@ func TestManager_GetAnyPlatformFallback(t *testing.T) {
 	}
 }
 
-func TestManager_GetPlatformSpecificTakesPriorityOverAny(t *testing.T) {
+func TestResolver_GetPlatformSpecificTakesPriorityOverAny(t *testing.T) {
 	t.Parallel()
 
 	// Given: a definition with both a platform-specific key and "any"
@@ -1495,10 +1494,10 @@ func TestManager_GetPlatformSpecificTakesPriorityOverAny(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, spec, deploymentDir, "linux", "amd64")
 
 	// When
-	path, err := manager.Request(context.Background(), "tool")
+	path, err := resolver.Resolve(context.Background(), "tool")
 	// Then
 	if err != nil {
 		t.Fatalf("expected platform-specific resolution to succeed, got %v", err)
@@ -1512,7 +1511,7 @@ func TestManager_GetPlatformSpecificTakesPriorityOverAny(t *testing.T) {
 	}
 }
 
-func TestManager_GetZipExtraction(t *testing.T) {
+func TestResolver_GetZipExtraction(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -1528,10 +1527,10 @@ func TestManager_GetZipExtraction(t *testing.T) {
 			},
 		},
 	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, cacheDir, "linux", "amd64")
+	resolver := newTestResolverForPlatform(t, ResourceSpec{}, cacheDir, "linux", "amd64")
 
 	// When
-	path, err := manager.Get(context.Background(), def, "preset")
+	path, err := resolveTestDefinition(context.Background(), resolver, def, "preset")
 	// Then
 	if err != nil {
 		t.Fatalf("expected zip extraction to succeed, got %v", err)
@@ -1550,108 +1549,4 @@ func writeZipArchiveFixture(t *testing.T, dir, archiveName, entryName, content s
 	return writeZipFixtureEntries(t, dir, archiveName, map[string]string{
 		entryName: content,
 	})
-}
-
-func TestManager_RequestCopyWritesAPlainFile(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	deploymentDir := t.TempDir()
-	server := newArtifactServer(t, "tool.bin", []byte("tool-content"))
-	spec := ResourceSpec{
-		"copy-file-test": {
-			Artifact: map[string]ArtifactSpec{
-				anyPlatformKey: {
-					URL:    server.URL + "/tool.bin",
-					Sha256: sha256OfBytes([]byte("tool-content")),
-				},
-			},
-		},
-	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "linux", "amd64")
-	destDir := filepath.Join(t.TempDir(), "nested", "destination")
-
-	// When
-	err := manager.RequestCopy(context.Background(), "copy-file-test", destDir)
-	// Then
-	if err != nil {
-		t.Fatalf("expected materialization to succeed, got %v", err)
-	}
-	data, err := os.ReadFile(filepath.Join(destDir, "tool.bin"))
-	if err != nil {
-		t.Fatalf("expected materialized file to exist, got %v", err)
-	}
-	if string(data) != "tool-content" {
-		t.Fatalf("expected materialized content %q, got %q", "tool-content", data)
-	}
-}
-
-func TestManager_RequestCopyExtractsAnArchive(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	deploymentDir := t.TempDir()
-	archivePath := writeZipFixture(t, deploymentDir, "artifact.zip", map[string]string{
-		"launcher": "runner-content",
-	})
-	archiveData, err := os.ReadFile(archivePath)
-	if err != nil {
-		t.Fatalf("failed to read artifact fixture: %v", err)
-	}
-	server := newArtifactServer(t, "artifact.zip", archiveData)
-	spec := ResourceSpec{
-		"copy-archive-test": {
-			Extract: true,
-			Artifact: map[string]ArtifactSpec{
-				anyPlatformKey: {
-					URL:    server.URL + "/artifact.zip",
-					Sha256: sha256OfTestFile(t, archivePath),
-				},
-			},
-		},
-	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "linux", "amd64")
-	destDir := filepath.Join(t.TempDir(), "destination")
-
-	// When
-	err = manager.RequestCopy(context.Background(), "copy-archive-test", destDir)
-	// Then
-	if err != nil {
-		t.Fatalf("expected materialization to succeed, got %v", err)
-	}
-	data, err := os.ReadFile(filepath.Join(destDir, "launcher"))
-	if err != nil {
-		t.Fatalf("expected extracted file to exist under destDir, got %v", err)
-	}
-	if string(data) != "runner-content" {
-		t.Fatalf("expected extracted content %q, got %q", "runner-content", data)
-	}
-}
-
-func TestManager_GetCopyMaterializesARuntimeConstructedDefinition(t *testing.T) {
-	t.Parallel()
-
-	// Given: an ad-hoc definition never registered in the manager's own spec,
-	// the way an external preset path is resolved.
-	srcDir := t.TempDir()
-	if err := os.WriteFile(
-		filepath.Join(srcDir, "preset.yaml"),
-		[]byte("content"),
-		filePerm,
-	); err != nil {
-		t.Fatalf("failed to write fixture: %v", err)
-	}
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
-	def := ResourceDefinition{Artifact: map[string]ArtifactSpec{anyPlatformKey: {URL: srcDir}}}
-	destDir := filepath.Join(t.TempDir(), "destination")
-
-	// When
-	err := manager.GetCopy(context.Background(), def, "external-preset", destDir)
-	// Then
-	if err != nil {
-		t.Fatalf("expected materialization to succeed, got %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(destDir, "preset.yaml")); err != nil {
-		t.Fatalf("expected copied file to exist, got %v", err)
-	}
 }

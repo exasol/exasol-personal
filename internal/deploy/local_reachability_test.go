@@ -23,8 +23,6 @@ import (
 // don't flag these test fixtures for needing an executable fake runner.
 const testRunnerExecutableMode = 0o700
 
-// runnerZipEntryName matches resources.yaml's subpath for
-// exasol-local-runner.
 const runnerZipEntryName = "launcher"
 
 // exasolLocalRunnerResourceID mirrors internal/localruntime's unexported
@@ -61,8 +59,8 @@ func TestClassifyLocalReachability_AllPortsBlocked(t *testing.T) {
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
 	blockedJSON := `{"ports":{"db":{"state":"blocked"},"ui":{"state":"blocked"}}}`
-	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, blockedJSON)
-	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
+	resolver := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, blockedJSON)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, resolver)
 
 	err := classifyLocalReachability(context.Background(), localRuntime)
 	if err == nil {
@@ -82,8 +80,8 @@ func TestClassifyLocalReachability_OnlyDatabasePortBlocked(t *testing.T) {
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
 	mixedJSON := `{"ports":{"db":{"state":"blocked"},"ui":{"state":"reachable"}}}`
-	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, mixedJSON)
-	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
+	resolver := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, mixedJSON)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, resolver)
 
 	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no reachability error when at least one port is reachable, got %v", err)
@@ -103,8 +101,6 @@ description: test infrastructure
 backend: tofu
 `)
 
-	// A nil manager is safe here: classifyLocalReachability short-circuits on
-	// isLocalDeployment before it would ever be dereferenced.
 	localRuntime := localruntime.NewMacVMRuntime(deployment, nil)
 	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no-op for non-local deployment, got %v", err)
@@ -130,8 +126,8 @@ func TestClassifyLocalReachability_HealthCheckUnavailableIsNoop(t *testing.T) {
 		"  if [ \"$1 $2 $3\" = 'podman container inspect' ]; then echo true; exit 0; fi\n" +
 		"fi\n" +
 		"echo 'Unknown command: health-check' >&2\nexit 1\n"
-	manager := newTestManagerForRunner(t, []byte(runnerScript))
-	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
+	resolver := newTestResolverForRunner(t, []byte(runnerScript))
+	localRuntime := localruntime.NewMacVMRuntime(deployment, resolver)
 
 	if err := classifyLocalReachability(context.Background(), localRuntime); err != nil {
 		t.Fatalf("expected no-op when health-check is unavailable, got %v", err)
@@ -149,8 +145,8 @@ func TestDiagnoseLocalFailurePreservesCausalError(t *testing.T) {
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
 	blockedJSON := `{"ports":{"ui":{"state":"blocked"},"db":{"state":"blocked"}}}`
-	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, blockedJSON)
-	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
+	resolver := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, blockedJSON)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, resolver)
 
 	cause := errors.New("failed to remove Nano container exasol-db-649d54af: exit status 125")
 
@@ -182,8 +178,8 @@ func TestDiagnoseLocalFailureReturnsCauseUnchangedWhenReachable(t *testing.T) {
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
 	mixedJSON := `{"ports":{"ui":{"state":"reachable"},"db":{"state":"blocked"}}}`
-	manager := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, mixedJSON)
-	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
+	resolver := writeFakeCombinedRunner(t, fakeRunnerRunningStatus, mixedJSON)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, resolver)
 
 	cause := errors.New("podman run failed")
 
@@ -207,8 +203,8 @@ func TestDiagnoseLocalFailureSkipsGuidanceWhenRuntimeNotRunning(t *testing.T) {
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
 	blockedJSON := `{"ports":{"ui":{"state":"blocked"},"db":{"state":"blocked"}}}`
-	manager := writeFakeCombinedRunner(t, `{"running":false}`, blockedJSON)
-	localRuntime := localruntime.NewMacVMRuntime(deployment, manager)
+	resolver := writeFakeCombinedRunner(t, `{"running":false}`, blockedJSON)
+	localRuntime := localruntime.NewMacVMRuntime(deployment, resolver)
 
 	cause := errors.New("failed to remove Nano container exasol-db-649d54af: exit status 125")
 
@@ -302,15 +298,10 @@ func ensureLocalRuntimeWorkDir(t *testing.T, deployment config.DeploymentDir) {
 	}
 }
 
-// writeFakeCombinedRunner builds a Manager whose "exasol-local-runner"
-// resource resolves to a single fake runner script that answers both
-// "status" and "health-check", since callers in this package may invoke
-// either against whatever the manager resolves. statusJSON is the raw
-// response body for "status" (e.g. `{"running":true}`).
 func writeFakeCombinedRunner(
 	t *testing.T,
 	statusJSON, healthCheckJSON string,
-) *resource.Manager {
+) *resource.Resolver {
 	t.Helper()
 
 	script := "#!/bin/sh\n" +
@@ -323,14 +314,10 @@ func writeFakeCombinedRunner(
 		"fi\n" +
 		"exit 1\n"
 
-	return newTestManagerForRunner(t, []byte(script))
+	return newTestResolverForRunner(t, []byte(script))
 }
 
-// newTestManagerForRunner builds a Manager whose "exasol-local-runner"
-// resource resolves through the same extract: true / subpath shape the
-// real resources.yaml entry uses: scriptContent is packed into a minimal,
-// single-entry zip (mirroring the real release archive).
-func newTestManagerForRunner(t *testing.T, scriptContent []byte) *resource.Manager {
+func newTestResolverForRunner(t *testing.T, scriptContent []byte) *resource.Resolver {
 	t.Helper()
 
 	zipPath := writeRunnerZip(t, scriptContent)
@@ -343,9 +330,16 @@ func newTestManagerForRunner(t *testing.T, scriptContent []byte) *resource.Manag
 		},
 	}
 
-	return resource.NewResourceManagerForPlatform(
-		spec, t.TempDir(), runtime.GOOS, runtime.GOARCH,
-	)
+	resolver, err := resource.New(resource.Options{
+		Definitions: spec,
+		CacheRoot:   t.TempDir(),
+		Platform:    resource.Platform{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH},
+	})
+	if err != nil {
+		t.Fatalf("create resolver: %v", err)
+	}
+
+	return resolver
 }
 
 func writeRunnerZip(t *testing.T, scriptContent []byte) string {

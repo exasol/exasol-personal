@@ -14,10 +14,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/resource/resourcetest"
 )
 
-// testManagerContext returns a context carrying a Manager backed by the real
-// embedded resource catalog, for tests that exercise code reading the shared
-// Manager from context.
-func testManagerContext(t *testing.T) context.Context {
+func testResolverContext(t *testing.T) context.Context {
 	t.Helper()
 
 	return resourcetest.NewContext(t)
@@ -76,7 +73,7 @@ func TestNewDeploymentBackend_ReturnsTofuBackendForTofuManifest(t *testing.T) {
 		Tofu:    &presets.InfrastructureTofu{},
 	}
 
-	backend, err := newDeploymentBackend(testManagerContext(t), deployment, manifest)
+	backend, err := newDeploymentBackend(testResolverContext(t), deployment, manifest)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -91,7 +88,7 @@ func TestNewDeploymentBackend_AcceptsTofuManifestWithoutTofuSectionAsNoop(t *tes
 	deployment := config.NewDeploymentDir(t.TempDir())
 	manifest := &presets.InfrastructureManifest{Backend: backendTypeTofu}
 
-	backend, err := newDeploymentBackend(testManagerContext(t), deployment, manifest)
+	backend, err := newDeploymentBackend(testResolverContext(t), deployment, manifest)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -106,7 +103,7 @@ func TestNewDeploymentBackend_ReturnsLocalBackendForLocalManifest(t *testing.T) 
 	deployment := config.NewDeploymentDir(t.TempDir())
 	manifest := &presets.InfrastructureManifest{Backend: backendTypeLocal}
 
-	backend, err := newDeploymentBackend(testManagerContext(t), deployment, manifest)
+	backend, err := newDeploymentBackend(testResolverContext(t), deployment, manifest)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

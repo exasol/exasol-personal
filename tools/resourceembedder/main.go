@@ -1,8 +1,6 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-// Command resourceembedder resolves one platform's specification and blobs.
-// It ignores prior output so every run fetches and verifies upstream content.
 package main
 
 import (
@@ -40,18 +38,13 @@ const (
 	tarGzExtension   = ".tar.gz"
 )
 
-// repoRoot resolves the repository root from this source file's own location
-// rather than the process's working directory: go generate invokes this tool
-// with the working directory set to wherever the //go:generate directive
-// lives, not the repo root, so a bare relative path would resolve to the wrong
-// place depending on how the tool was invoked.
+// go generate runs tools from the directive's directory, not the repository root.
 func repoRoot() (string, error) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		return "", errors.New("failed to resolve resourceembedder's own source path")
 	}
 
-	// This file lives at <repoRoot>/tools/resourceembedder/main.go.
 	return filepath.Abs(filepath.Join(filepath.Dir(thisFile), "..", ".."))
 }
 
@@ -128,12 +121,17 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 
+	resolver, err := resource.New(resource.Options{
+		Definitions: spec,
+		Cache:       cache,
+		Platform:    resource.Platform{GOOS: cfg.goos, GOARCH: cfg.goarch},
+	})
+	if err != nil {
+		return err
+	}
+
 	g := &generator{
-		// No blobs: the generator must never resolve a resource from data a
-		// previous run embedded.
-		manager: resource.NewResourceManagerWithCacheForPlatform(
-			spec, cache, cfg.goos, cfg.goarch,
-		),
+		resolver:    resolver,
 		platformDir: filepath.Join(root, embeddedDirRel, cfg.goos+"_"+cfg.goarch),
 		goos:        cfg.goos,
 		goarch:      cfg.goarch,
@@ -174,14 +172,12 @@ func parseFlags(args []string) (config, error) {
 }
 
 type generator struct {
-	manager     *resource.Manager
+	resolver    *resource.Resolver
 	platformDir string
 	goos        string
 	goarch      string
 	skipEmbed   bool
-	// written names every file this run produced, relative to platformDir, so
-	// anything else in the directory can be pruned.
-	written map[string]bool
+	written     map[string]bool
 }
 
 func (g *generator) generate(ctx context.Context, spec resource.ResourceSpec) error {
@@ -220,7 +216,6 @@ func (g *generator) resolveResource(
 ) (resource.ResourceSpec, error) {
 	artifact, err := def.Resolve(g.goos, g.goarch)
 	if err != nil {
-		// Nothing declared for this platform.
 		return nil, nil //nolint:nilnil
 	}
 
@@ -248,16 +243,14 @@ func (g *generator) resolveResource(
 	return resource.ResourceSpec{resourceID: embeddedEntry(def.Extract, blob, artifact.Subpath)}, nil
 }
 
-// expandGlob matches the pattern against the resource's own resolved content
-// and produces one independently addressable resource per match. The group
-// itself does not reach the resolved specification.
+// Groups are build-only; only their members enter the resolved specification.
 func (g *generator) expandGlob(
 	ctx context.Context,
 	resourceID string,
 	def resource.ResourceDefinition,
 	artifact resource.ArtifactSpec,
 ) (resource.ResourceSpec, error) {
-	root, err := g.manager.Get(ctx, rawDefFor(def), resourceID)
+	root, err := g.resolve(ctx, resourceID, rawDefFor(def))
 	if err != nil {
 		return nil, err
 	}
@@ -278,8 +271,6 @@ func (g *generator) expandGlob(
 	for _, name := range names {
 		memberID := resourceID + "/" + name
 		if !embed {
-			// The member is still addressable, resolved from the group's own
-			// source with the match selected out of it.
 			member := artifact
 			matchPath, err := filepath.Rel(root, matches[name])
 			if err != nil {
@@ -325,7 +316,7 @@ func (g *generator) shouldEmbed(def resource.ResourceDefinition) bool {
 	}
 }
 
-// Embedded data from a prior run must never satisfy this run.
+// Build input must not depend on output left by an earlier run.
 func rawDefFor(def resource.ResourceDefinition) resource.ResourceDefinition {
 	rawDef := def
 	rawDef.Embed = resource.EmbedNever
@@ -339,8 +330,6 @@ func (g *generator) rawResourceBytes(
 	resourceID string,
 	def resource.ResourceDefinition,
 ) ([]byte, error) {
-	// Fetch without extracting: a running binary extracts the embedded bytes
-	// itself when the resolved entry says to.
 	rawDef := rawDefFor(def)
 	rawDef.Extract = false
 	for platform, artifact := range rawDef.Artifact {
@@ -348,7 +337,7 @@ func (g *generator) rawResourceBytes(
 		rawDef.Artifact[platform] = artifact
 	}
 
-	rawPath, err := g.manager.Get(ctx, rawDef, resourceID)
+	rawPath, err := g.resolve(ctx, resourceID, rawDef)
 	if err != nil {
 		return nil, err
 	}
@@ -356,9 +345,24 @@ func (g *generator) rawResourceBytes(
 	return readResourceBytes(rawPath)
 }
 
-// rejectUnembeddedLocalSource refuses a local source that is not embedded: the
-// path names a location in this checkout, which a built binary running
-// anywhere else cannot reach.
+func (g *generator) resolve(
+	ctx context.Context,
+	resourceID string,
+	def resource.ResourceDefinition,
+) (string, error) {
+	artifact, err := def.Resolve(g.goos, g.goarch)
+	if err != nil {
+		return "", fmt.Errorf("resolve resource %q: %w", resourceID, err)
+	}
+
+	return g.resolver.ResolveDescriptor(ctx, resource.Descriptor{
+		Locator: artifact.Locator(), Sha256: artifact.Sha256,
+		Extract: def.Extract, Subpath: artifact.Subpath,
+		DownloadPath: artifact.DownloadPath,
+	})
+}
+
+// Non-embedded local paths would be invalid outside this checkout.
 func rejectUnembeddedLocalSource(resourceID string, artifact resource.ArtifactSpec) error {
 	if !(resource.FileSource{}).Handles(artifact.Locator()) {
 		return nil
@@ -396,7 +400,6 @@ func embeddedEntry(extract bool, blob blobRef, subpath string) resource.Resource
 }
 
 type blobRef struct {
-	// path locates the blob within the platform's embedded data.
 	path   string
 	sha256 string
 }
@@ -440,9 +443,7 @@ func (g *generator) writeResolvedSpec(resolved resource.ResourceSpec) error {
 	return nil
 }
 
-// prune removes anything this run did not produce. The wrapper embeds the
-// whole platform directory, so a file left behind by an earlier run would be
-// compiled into the binary rather than merely ignored.
+// Stale files would ship because wrappers embed the whole platform directory.
 func (g *generator) prune() error {
 	var stale []string
 	err := filepath.WalkDir(g.platformDir, func(pathValue string, entry fs.DirEntry, err error) error {
@@ -473,8 +474,6 @@ func (g *generator) prune() error {
 	return removeEmptyDirs(g.platformDir)
 }
 
-// removeEmptyDirs clears directories left behind by pruning, deepest first, so
-// a nested blob path does not leave its parents behind.
 func removeEmptyDirs(root string) error {
 	var dirs []string
 	err := filepath.WalkDir(root, func(pathValue string, entry fs.DirEntry, err error) error {
@@ -493,17 +492,13 @@ func removeEmptyDirs(root string) error {
 
 	sort.Sort(sort.Reverse(sort.StringSlice(dirs)))
 	for _, dir := range dirs {
-		// Fails harmlessly when the directory still holds something.
 		_ = os.Remove(dir)
 	}
 
 	return nil
 }
 
-// globMatches matches a pattern against an already-resolved root's own
-// entries. A matched ".git" directory is always excluded, since a pattern of
-// "*" at a cloned repository's root would otherwise match its metadata
-// directory like any other top-level entry.
+// Repository metadata is never a resource, even when a top-level glob matches it.
 func globMatches(root, pattern string) (map[string]string, error) {
 	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
@@ -542,8 +537,7 @@ func memberExtension(matchPath string) string {
 	return archiveExtension(filepath.Base(matchPath))
 }
 
-// blobExtension keeps the embedded blob's name honest, so the extractor a
-// build picks matches the content it holds.
+// Extractor selection depends on the generated blob's suffix.
 func blobExtension(artifact resource.ArtifactSpec) string {
 	if name := strings.TrimSpace(artifact.DownloadPath); name != "" {
 		return archiveExtension(name)
@@ -552,7 +546,6 @@ func blobExtension(artifact resource.ArtifactSpec) string {
 		return ext
 	}
 
-	// A bare directory is archived before embedding.
 	return tarGzExtension
 }
 
@@ -650,10 +643,7 @@ func tarGzDirectory(root string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// writeSymlinkEntry archives a symlink as a symlink, not as a copy of
-// whatever it currently resolves to: rootDir.Open would follow it (and
-// reject an escaping target), but a tar symlink header only needs the raw
-// link text, which Readlink returns without following anything.
+// Readlink preserves links without following targets outside the scoped root.
 func writeSymlinkEntry(
 	tarWriter *tar.Writer, rootDir *os.Root, relPath string, info fs.FileInfo,
 ) error {

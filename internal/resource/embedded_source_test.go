@@ -15,10 +15,10 @@ import (
 	"testing/fstest"
 )
 
-func embeddedResolver(t *testing.T, spec string, blobs fstest.MapFS) *Manager {
+func embeddedResolver(t *testing.T, spec string, blobs fstest.MapFS) *Resolver {
 	t.Helper()
 
-	manager, err := New(Options{
+	resolver, err := New(Options{
 		Spec:      []byte(spec),
 		Blobs:     blobs,
 		CacheRoot: t.TempDir(),
@@ -28,16 +28,14 @@ func embeddedResolver(t *testing.T, spec string, blobs fstest.MapFS) *Manager {
 		t.Fatalf("failed to build a resolver: %v", err)
 	}
 
-	return manager
+	return resolver
 }
 
-// Embedded data is compiled into the binary, so resolving it reaches no
-// network source.
 func TestEmbeddedSource_ResolvesWithoutNetworkAccess(t *testing.T) {
 	t.Parallel()
 
 	payload := []byte("embedded payload")
-	manager := embeddedResolver(t, `
+	resolver := embeddedResolver(t, `
 tool:
   artifact:
     any:
@@ -46,7 +44,7 @@ tool:
       download_path: tool.bin
 `, fstest.MapFS{"blobs/tool.bin": {Data: payload}})
 
-	path, err := manager.Request(context.Background(), "tool")
+	path, err := resolver.Resolve(context.Background(), "tool")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -59,12 +57,10 @@ tool:
 	}
 }
 
-// A resource pointing at data the build does not carry fails, rather than
-// falling back to a network source that was never declared.
 func TestEmbeddedSource_MissingDataIsAHardFailure(t *testing.T) {
 	t.Parallel()
 
-	manager := embeddedResolver(t, `
+	resolver := embeddedResolver(t, `
 tool:
   artifact:
     any:
@@ -73,7 +69,7 @@ tool:
       download_path: absent.bin
 `, fstest.MapFS{})
 
-	_, err := manager.Request(context.Background(), "tool")
+	_, err := resolver.Resolve(context.Background(), "tool")
 	if err == nil {
 		t.Fatal("expected resolution to fail")
 	}
@@ -82,19 +78,17 @@ tool:
 	}
 }
 
-// A resource whose source is not embedded never consults embedded data, even
-// when the blobs happen to hold something under a similar name.
 func TestEmbeddedSource_OtherSourcesNeverConsultEmbeddedData(t *testing.T) {
 	t.Parallel()
 
-	manager := embeddedResolver(t, `
+	resolver := embeddedResolver(t, `
 tool:
   artifact:
     any:
       url: file:///nonexistent/tool.bin
 `, fstest.MapFS{"blobs/tool.bin": {Data: []byte("embedded payload")}})
 
-	_, err := manager.Request(context.Background(), "tool")
+	_, err := resolver.Resolve(context.Background(), "tool")
 	if err == nil {
 		t.Fatal("expected resolution to fail rather than use embedded data")
 	}
@@ -103,8 +97,6 @@ tool:
 	}
 }
 
-// Each build records the hash of what it embedded, so two builds carrying
-// different content under one name never share a cache entry.
 func TestEmbeddedSource_DifferentContentResolvesToDistinctEntries(t *testing.T) {
 	t.Parallel()
 
@@ -112,7 +104,7 @@ func TestEmbeddedSource_DifferentContentResolvesToDistinctEntries(t *testing.T) 
 	resolve := func(payload []byte) string {
 		t.Helper()
 
-		manager, err := New(Options{
+		resolver, err := New(Options{
 			Spec: []byte(`
 tool:
   artifact:
@@ -128,7 +120,7 @@ tool:
 		if err != nil {
 			t.Fatalf("failed to build a resolver: %v", err)
 		}
-		path, err := manager.Request(context.Background(), "tool")
+		path, err := resolver.Resolve(context.Background(), "tool")
 		if err != nil {
 			t.Fatalf("resolve: %v", err)
 		}
@@ -153,13 +145,12 @@ tool:
 	}
 }
 
-// An embedded archive is unpacked with the same machinery as a downloaded one.
 func TestEmbeddedSource_ArchiveIsExtracted(t *testing.T) {
 	t.Parallel()
 
 	// Given
 	archive := tarGzBytes(t, map[string]string{"launcher": "#!/bin/sh\n"})
-	manager := embeddedResolver(t, `
+	resolver := embeddedResolver(t, `
 runner:
   extract: true
   artifact:
@@ -170,7 +161,7 @@ runner:
 `, fstest.MapFS{"blobs/runner.tar.gz": {Data: archive}})
 
 	// When
-	path, err := manager.Request(context.Background(), "runner")
+	path, err := resolver.Resolve(context.Background(), "runner")
 	// Then
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
@@ -184,7 +175,7 @@ runner:
 	}
 
 	// When
-	reusedPath, err := manager.Request(context.Background(), "runner")
+	reusedPath, err := resolver.Resolve(context.Background(), "runner")
 	// Then
 	if err != nil {
 		t.Fatalf("resolve again: %v", err)
@@ -198,8 +189,6 @@ runner:
 	}
 }
 
-// A build that embeds nothing still resolves every resource from its upstream
-// source, which is what makes placeholder-only generation usable.
 func TestEmbeddedSource_AbsentBlobsLeaveOtherSourcesWorking(t *testing.T) {
 	t.Parallel()
 
@@ -208,7 +197,7 @@ func TestEmbeddedSource_AbsentBlobsLeaveOtherSourcesWorking(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	manager, err := New(Options{
+	resolver, err := New(Options{
 		Spec:      []byte("preset:\n  artifact:\n    any:\n      url: file://" + dir + "\n"),
 		CacheRoot: t.TempDir(),
 		Platform:  Platform{GOOS: "linux", GOARCH: "amd64"},
@@ -217,7 +206,7 @@ func TestEmbeddedSource_AbsentBlobsLeaveOtherSourcesWorking(t *testing.T) {
 		t.Fatalf("failed to build a resolver: %v", err)
 	}
 
-	path, err := manager.Request(context.Background(), "preset")
+	path, err := resolver.Resolve(context.Background(), "preset")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}

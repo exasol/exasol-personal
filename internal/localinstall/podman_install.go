@@ -51,14 +51,14 @@ type PodmanInstall struct {
 
 func NewPodmanInstall(
 	deployment config.DeploymentDir,
-	manager *resource.Manager,
+	resolver *resource.Resolver,
 	runtimeExec []string,
 	slcStagingDir string,
 	slcStatusPath string,
 ) *PodmanInstall {
 	directEnvironment := NewDirectExecutionEnvironment(runtimeExec)
 	resolveImage := func(ctx context.Context) (RuntimePath, error) {
-		path, err := ResolveNanoImage(ctx, manager)
+		path, err := ResolveNanoImage(ctx, resolver)
 		if err != nil {
 			return RuntimePath{}, err
 		}
@@ -80,16 +80,16 @@ func NewPodmanInstall(
 // passing it back to PodmanInstall.
 func ResolveNanoImage(
 	ctx context.Context,
-	manager *resource.Manager,
+	resolver *resource.Resolver,
 ) (string, error) {
 	if override := strings.TrimSpace(os.Getenv(nanoImageOverridePathEnv)); override != "" {
 		return override, nil
 	}
-	if manager == nil {
-		return "", errors.New("nano resource manager is required")
+	if resolver == nil {
+		return "", errors.New("nano resource resolver is required")
 	}
 
-	return manager.Request(ctx, exasolNanoImageResourceID)
+	return resolver.Resolve(ctx, exasolNanoImageResourceID)
 }
 
 func NewPodmanInstallWithEnvironment(

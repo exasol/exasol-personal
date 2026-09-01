@@ -14,8 +14,8 @@ import (
 func TestFilterPresetCatalog_All(t *testing.T) {
 	t.Parallel()
 
-	cat := GetPresetCatalog(testManagerContext(t))
-	filtered, err := filterPresetCatalog(testManagerContext(t), "")
+	cat := GetPresetCatalog(testResolverContext(t))
+	filtered, err := filterPresetCatalog(testResolverContext(t), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -50,8 +50,8 @@ func TestFilterPresetCatalog_All(t *testing.T) {
 func TestFilterPresetCatalog_FilterInfrastructure(t *testing.T) {
 	t.Parallel()
 
-	cat := GetPresetCatalog(testManagerContext(t))
-	filtered, err := filterPresetCatalog(testManagerContext(t), presets.PresetTypeInfrastructure)
+	cat := GetPresetCatalog(testResolverContext(t))
+	filtered, err := filterPresetCatalog(testResolverContext(t), presets.PresetTypeInfrastructure)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -71,8 +71,8 @@ func TestFilterPresetCatalog_FilterInfrastructure(t *testing.T) {
 func TestFilterPresetCatalog_FilterInstallation(t *testing.T) {
 	t.Parallel()
 
-	cat := GetPresetCatalog(testManagerContext(t))
-	filtered, err := filterPresetCatalog(testManagerContext(t), presets.PresetTypeInstallation)
+	cat := GetPresetCatalog(testResolverContext(t))
+	filtered, err := filterPresetCatalog(testResolverContext(t), presets.PresetTypeInstallation)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestFilterPresetCatalog_FilterInstallation(t *testing.T) {
 func TestFilterPresetCatalog_InvalidType(t *testing.T) {
 	t.Parallel()
 
-	_, err := filterPresetCatalog(testManagerContext(t), "nonsense")
+	_, err := filterPresetCatalog(testResolverContext(t), "nonsense")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -101,7 +101,7 @@ func TestFilterPresetCatalog_InvalidType(t *testing.T) {
 func TestRenderPresetListJSON_ValidJSON(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := filterPresetCatalog(testManagerContext(t), "")
+	catalog, err := filterPresetCatalog(testResolverContext(t), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -45,7 +45,7 @@ func TestRequireEmptyDir_ErrOnNonEmptyDir(t *testing.T) {
 func TestExportEmbeddedPreset_Infrastructure_WritesManifest(t *testing.T) {
 	t.Parallel()
 
-	ctx := testManagerContext(t)
+	ctx := testResolverContext(t)
 	ids := presets.ListEmbeddedPresets(ctx, presets.Infrastructure)
 	if len(ids) == 0 {
 		t.Skip("no embedded infrastructure presets available")
@@ -79,7 +79,7 @@ func TestExportEmbeddedPreset_Infrastructure_WritesManifest(t *testing.T) {
 func TestExportEmbeddedPreset_Installation_WritesManifest(t *testing.T) {
 	t.Parallel()
 
-	ctx := testManagerContext(t)
+	ctx := testResolverContext(t)
 	ids := presets.ListEmbeddedPresets(ctx, presets.Installation)
 	if len(ids) == 0 {
 		t.Skip("no embedded installation presets available")

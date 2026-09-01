@@ -82,8 +82,8 @@ func resolvePresetRef(
 		return deploy.PresetRef{Name: arg}, nil
 	}
 
-	manager := resource.FromContext(ctx)
-	resolvedPath, err := deploy.ResolvePreset(ctx, manager, arg, presetType)
+	resolver := resource.FromContext(ctx)
+	resolvedPath, err := deploy.ResolvePreset(ctx, resolver, arg, presetType)
 	if err != nil {
 		return deploy.PresetRef{}, err
 	}

@@ -45,10 +45,10 @@ func TestDiagnoseLocalUnsafe_VMNotRunning(t *testing.T) {
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	manager := writeFakeCombinedRunner(t, `{"running":false}`, "")
+	resolver := writeFakeCombinedRunner(t, `{"running":false}`, "")
 
 	diagnostics := diagnoseLocalUnsafe(
-		context.Background(), localruntime.NewMacVMRuntime(deployment, manager),
+		context.Background(), localruntime.NewMacVMRuntime(deployment, resolver),
 	)
 
 	if diagnostics.VMRunning == nil || *diagnostics.VMRunning {
@@ -70,13 +70,13 @@ func TestDiagnoseLocalUnsafe_VMRunningReportsPortsAndHealth(t *testing.T) {
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
 	healthJSON := `{"ports":{"db":{"state":"blocked"}}}`
-	manager := writeFakeCombinedRunner(t, `{"running":true}`, healthJSON)
+	resolver := writeFakeCombinedRunner(t, `{"running":true}`, healthJSON)
 	writeFakeVMState(t, deployment, 28563)
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 
 	diagnostics := diagnoseLocalUnsafe(
-		ctx, localruntime.NewMacVMRuntime(deployment, manager),
+		ctx, localruntime.NewMacVMRuntime(deployment, resolver),
 	)
 
 	if diagnostics.VMRunning == nil || !*diagnostics.VMRunning {
@@ -99,14 +99,14 @@ func TestDiagnoseLocalUnsafe_VMRunningMatchesRunningState_NoWarning(t *testing.T
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	manager := writeFakeCombinedRunner(t, `{"running":true}`, `{"ports":{}}`)
+	resolver := writeFakeCombinedRunner(t, `{"running":true}`, `{"ports":{}}`)
 	writeFakeWorkflowState(t, deployment, &config.WorkflowStateRunning{})
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 
 	diagnostics := diagnoseLocalUnsafe(
 		ctx,
-		localruntime.NewMacVMRuntime(deployment, manager),
+		localruntime.NewMacVMRuntime(deployment, resolver),
 	)
 
 	if diagnostics.Warning != "" {
@@ -121,7 +121,7 @@ func TestDiagnoseLocalUnsafe_VMRunningButStateNotRunning_Warning(t *testing.T) {
 
 	deployment := newLocalTestDeployment(t)
 	ensureLocalRuntimeWorkDir(t, deployment)
-	manager := writeFakeCombinedRunner(t, `{"running":true}`, `{"ports":{}}`)
+	resolver := writeFakeCombinedRunner(t, `{"running":true}`, `{"ports":{}}`)
 	writeFakeWorkflowState(t, deployment, &config.WorkflowStateInterrupted{
 		Error:                      "boom",
 		InterruptedDuringOperation: "start",
@@ -131,7 +131,7 @@ func TestDiagnoseLocalUnsafe_VMRunningButStateNotRunning_Warning(t *testing.T) {
 
 	diagnostics := diagnoseLocalUnsafe(
 		ctx,
-		localruntime.NewMacVMRuntime(deployment, manager),
+		localruntime.NewMacVMRuntime(deployment, resolver),
 	)
 
 	if diagnostics.Warning == "" {
