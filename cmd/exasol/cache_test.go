@@ -5,7 +5,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -46,7 +46,7 @@ func TestCacheCommandsDoNotUseDeploymentDirectoryConcerns(t *testing.T) {
 }
 
 //nolint:paralleltest // modifies process environment and global flag state.
-func TestCacheListCommandInitializesConfig(t *testing.T) {
+func TestCacheListCommandShowsEmptyCache(t *testing.T) {
 	home := t.TempDir()
 	cacheHome := t.TempDir()
 	setCacheCommandTestEnv(t, home, cacheHome)
@@ -57,6 +57,7 @@ func TestCacheListCommandInitializesConfig(t *testing.T) {
 	})
 
 	cmd := *cacheListCmd
+	cmd.SetContext(context.Background())
 	var buf bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.SetOut(&buf)
@@ -70,10 +71,6 @@ func TestCacheListCommandInitializesConfig(t *testing.T) {
 		t.Fatalf("expected no stderr output, got %q", stderr.String())
 	}
 
-	expectedConfig := filepath.Join(config.LauncherDirPath(home), "resources.yaml")
-	if _, err := os.Stat(expectedConfig); err != nil {
-		t.Fatalf("expected cache config to be created, got %v", err)
-	}
 	userCacheDir, err := os.UserCacheDir()
 	if err != nil {
 		t.Fatalf("failed to resolve user cache dir: %v", err)
@@ -182,28 +179,6 @@ func TestDiagCacheHelpDescribesReadOnlyBehavior(t *testing.T) {
 	}
 }
 
-func TestRenderCacheListJSON(t *testing.T) {
-	t.Parallel()
-
-	entries := []resource.CacheEntryInfo{cacheEntryInfoFixture()}
-	var buf bytes.Buffer
-
-	if err := renderCacheListJSON(&buf, entries); err != nil {
-		t.Fatalf("expected json render to succeed, got %v", err)
-	}
-
-	var decoded []resource.CacheEntryInfo
-	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
-		t.Fatalf("expected valid json, got %v: %s", err, buf.String())
-	}
-	if len(decoded) != 1 ||
-		decoded[0].ResourceID != "tofu" ||
-		decoded[0].ArtifactPath != "artifacts/tofu/download.tgz" ||
-		decoded[0].ResolvedPath != "artifacts/tofu" {
-		t.Fatalf("unexpected decoded entries: %+v", decoded)
-	}
-}
-
 func TestRenderCacheListTextIncludesLastUsedTimestamp(t *testing.T) {
 	t.Parallel()
 
@@ -218,10 +193,10 @@ func TestRenderCacheListTextIncludesLastUsedTimestamp(t *testing.T) {
 	output := buf.String()
 	for _, expected := range []string{
 		"Resource cache: /cache",
-		"tofu linux/amd64",
+		"tofu last_used=",
 		"last_used=2026-06-08T12:00:00Z",
 		"size=1.5 KB",
-		"path=artifacts/tofu",
+		"path=artifacts/identity",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("expected %q in output, got %q", expected, output)
@@ -297,7 +272,7 @@ func TestRenderCacheDiagnosticsTextIncludesCacheState(t *testing.T) {
 		"Lock status: locked (exclusive)",
 		"Total size: 3 GB",
 		"Invalid artifacts: 1",
-		"tofu linux/amd64 integrity=mismatch stale=true path=artifacts/tofu",
+		"tofu integrity=mismatch stale=true path=artifacts/identity",
 		"Missing: missing",
 		"Unexpected: unexpected",
 	} {
@@ -365,16 +340,15 @@ func TestFormatByteSizeUsesHumanFriendlyUnits(t *testing.T) {
 
 func cacheEntryInfoFixture() resource.CacheEntryInfo {
 	return resource.CacheEntryInfo{
-		ID:           "identity",
-		ResourceID:   "tofu",
-		Platform:     "linux/amd64",
-		URL:          "https://example.com/tofu",
-		Sha256:       strings.Repeat("a", 64),
-		ArtifactPath: "artifacts/tofu/download.tgz",
-		ResolvedPath: "artifacts/tofu",
-		CreatedAt:    time.Date(2026, 6, 8, 11, 0, 0, 0, time.UTC),
-		LastUsedAt:   time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC),
-		SizeBytes:    1536,
+		ID:          "identity",
+		ResourceIDs: []string{"tofu"},
+		URL:         "https://example.com/tofu",
+		Identity:    "sha256:" + strings.Repeat("a", 64),
+		Sha256:      strings.Repeat("a", 64),
+		Path:        "artifacts/identity",
+		CreatedAt:   time.Date(2026, 6, 8, 11, 0, 0, 0, time.UTC),
+		LastUsedAt:  time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC),
+		SizeBytes:   1536,
 	}
 }
 

@@ -119,7 +119,7 @@ func TestManager_RejectsAndDoesNotRecordMismatchedContent(t *testing.T) {
 		t.Fatal("expected a checksum mismatch error")
 	}
 
-	index, _, err := manager.cache.readIndex()
+	index, err := manager.cache.readIndex()
 	if err != nil {
 		t.Fatalf("read index: %v", err)
 	}
@@ -150,5 +150,26 @@ func TestManager_LocalDirectoryOccupiesNoCacheEntry(t *testing.T) {
 	}
 	if got != presetDir {
 		t.Fatalf("expected the directory itself, got %q", got)
+	}
+}
+
+// Entries created under an earlier schema are not reused, so a layout change
+// cannot serve content from the wrong place.
+func TestCache_RejectsPriorSchemaVersion(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+	cache := NewCache(cacheDir, filepath.Join(cacheDir, cacheConfigFileName))
+	if err := os.MkdirAll(cacheDir, dirPerm); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	older := `{"version":1,"entries":{}}`
+	if err := os.WriteFile(cache.IndexPath(), []byte(older), filePerm); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	_, err := cache.readIndex()
+	if err == nil || !strings.Contains(err.Error(), "unsupported") {
+		t.Fatalf("expected the prior schema to be rejected, got %v", err)
 	}
 }

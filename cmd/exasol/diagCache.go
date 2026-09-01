@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/spf13/cobra"
@@ -56,12 +57,11 @@ func renderCacheDiagnosticsText(
 		lines = append(
 			lines,
 			fmt.Sprintf(
-				"%s %s integrity=%s stale=%t path=%s",
-				entry.ResourceID,
-				entry.Platform,
+				"%s integrity=%s stale=%t path=%s",
+				strings.Join(entry.ResourceIDs, ","),
 				entry.IntegrityStatus,
 				entry.Stale,
-				formatCachePath(report.CacheRoot, entry.ResolvedPath),
+				formatCachePath(report.CacheRoot, entry.Path),
 			),
 		)
 	}

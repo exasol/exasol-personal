@@ -9,7 +9,7 @@ from subprocess import CalledProcessError
 
 import pytest
 
-from tests.testcase_helpers import run_command
+from tests.testcase_helpers import first_infrastructure_preset_id_or_skip, run_command
 
 
 @pytest.mark.launcher_tests
@@ -22,13 +22,34 @@ def test_cache_list_text_output(exasol_path: str) -> None:
 
 
 @pytest.mark.launcher_tests
-def test_cache_list_json_is_valid(exasol_path: str) -> None:
+def test_cache_list_json_reports_entry_metadata(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a materialized resource
+    preset = first_infrastructure_preset_id_or_skip(exasol_path)
+    target = tmp_path / "preset"
+    target.mkdir()
+    run_command(
+        [
+            exasol_path,
+            "presets",
+            "export",
+            preset,
+            "--type",
+            "infrastructure",
+            "--to",
+            str(target),
+        ]
+    )
+
     # When the cache is listed as JSON
     output = run_command([exasol_path, "cache", "list", "--json"]).stdout
 
-    # Then the output parses as JSON
+    # Then each entry includes the metadata users need to identify it
     data = json.loads(output)
-    assert isinstance(data, (list, dict))
+    assert isinstance(data, list)
+    assert data
+    assert {"createdAt", "url", "identity"} <= data[0].keys()
 
 
 @pytest.mark.launcher_tests
