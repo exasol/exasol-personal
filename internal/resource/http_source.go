@@ -5,6 +5,8 @@ package resource
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,10 +22,33 @@ func (*HttpSource) Handles(loc Locator) bool {
 		!IsGitSourceURL(loc.URL)
 }
 
-// Probe states no identity: a download is identified by its declared checksum,
-// and without one it is re-fetched on every request.
-func (*HttpSource) Probe(_ context.Context, _ Locator) (Probe, error) {
-	return Probe{}, nil
+// Probe: only strong ETags identify exact bytes; failed probes defer errors to Fetch.
+func (*HttpSource) Probe(ctx context.Context, loc Locator) (Probe, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, loc.URL, nil)
+	if err != nil {
+		return Probe{}, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return Probe{}, nil //nolint:nilerr
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return Probe{}, nil
+	}
+
+	etag := strings.TrimSpace(resp.Header.Get("ETag"))
+	if etag == "" || strings.HasPrefix(etag, "W/") {
+		return Probe{}, nil
+	}
+
+	addressHash := sha256.Sum256([]byte(loc.URL))
+
+	return Probe{
+		Identity: "http-etag:" + hex.EncodeToString(addressHash[:]) + ":" + etag,
+	}, nil
 }
 
 func (*HttpSource) Fetch(ctx context.Context, loc Locator, dstPath string) error {
