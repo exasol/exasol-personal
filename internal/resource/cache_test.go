@@ -189,7 +189,7 @@ func TestCacheCleanRemovesStaleEntriesAndKeepsRecentEntries(t *testing.T) {
 	cache := newTestCache(t, now)
 	writeTestCacheConfig(t, cache, 10)
 	index := emptyCacheIndex()
-	seedCacheEntry(
+	stale := seedCacheEntry(
 		t,
 		cache,
 		&index,
@@ -198,7 +198,9 @@ func TestCacheCleanRemovesStaleEntriesAndKeepsRecentEntries(t *testing.T) {
 		checksumString("old"),
 		now.AddDate(0, 0, -30),
 	)
-	seedCacheEntry(
+	stale.ResourceIDs = []string{"presets/aws"}
+	index.Entries["stale"] = stale
+	recent := seedCacheEntry(
 		t,
 		cache,
 		&index,
@@ -207,6 +209,8 @@ func TestCacheCleanRemovesStaleEntriesAndKeepsRecentEntries(t *testing.T) {
 		checksumString("new"),
 		now.AddDate(0, 0, -1),
 	)
+	recent.ResourceIDs = []string{"presets/azure"}
+	index.Entries["recent"] = recent
 	writeTestIndex(t, cache, index)
 
 	summary, err := cache.Clean(context.Background(), CleanOptions{})
