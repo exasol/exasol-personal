@@ -16,6 +16,38 @@ import (
 // ResourceSpec contains all embedded runtime resources keyed by logical resource ID.
 type ResourceSpec map[string]ResourceDefinition
 
+type Specification struct {
+	definitions ResourceSpec
+	platform    Platform
+}
+
+func NewSpecification(definitions ResourceSpec, platform Platform) *Specification {
+	return &Specification{definitions: definitions, platform: platform}
+}
+
+func (s *Specification) Lookup(resourceID string) (Descriptor, error) {
+	definition, ok := s.definitions[resourceID]
+	if !ok {
+		return Descriptor{}, fmt.Errorf(
+			"%w: unknown resource %q", ErrUnknownMember, resourceID,
+		)
+	}
+
+	return definition.descriptor(s.platform.GOOS, s.platform.GOARCH)
+}
+
+func (s *Specification) List(prefix string) []string {
+	ids := make([]string, 0, len(s.definitions))
+	for resourceID := range s.definitions {
+		if strings.HasPrefix(resourceID, prefix) {
+			ids = append(ids, resourceID)
+		}
+	}
+	slices.Sort(ids)
+
+	return ids
+}
+
 // ResourceDefinition describes how to fetch and materialize a resource.
 //
 //nolint:golines // golines and tagalign disagree on struct tag alignment here; tagalign wins.
@@ -188,6 +220,21 @@ func (d ResourceDefinition) Resolve(goos, goarch string) (ArtifactSpec, error) {
 	}
 
 	return artifact, nil
+}
+
+func (d ResourceDefinition) descriptor(goos, goarch string) (Descriptor, error) {
+	artifact, err := d.Resolve(goos, goarch)
+	if err != nil {
+		return Descriptor{}, err
+	}
+
+	return Descriptor{
+		Locator:      artifact.Locator(),
+		Sha256:       artifact.Sha256,
+		Extract:      d.Extract,
+		Subpath:      artifact.Subpath,
+		DownloadPath: artifact.DownloadPath,
+	}, nil
 }
 
 func platformKey(goos, goarch string) string {

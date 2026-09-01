@@ -40,6 +40,27 @@ func TestParseSpec_AllowsEmptySpec(t *testing.T) {
 	}
 }
 
+func TestSpecificationDefersPlatformSelectionUntilLookup(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	specification := NewSpecification(ResourceSpec{
+		"other-platform": {
+			Artifact: map[string]ArtifactSpec{
+				"darwin/arm64": {URL: "file:///fixture"},
+			},
+		},
+	}, Platform{GOOS: "linux", GOARCH: "amd64"})
+
+	// When
+	_, err := specification.Lookup("other-platform")
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "linux/amd64") {
+		t.Fatalf("expected deferred platform error, got %v", err)
+	}
+}
+
 func TestResolverListGroupMembersWithoutMaterializingThem(t *testing.T) {
 	t.Parallel()
 
@@ -188,8 +209,7 @@ not-embedded:
 func TestParseSpec_AllowsResourcePathWithoutExtraction(t *testing.T) {
 	t.Parallel()
 
-	// Given — subpath selects a subpath inside whatever the source
-	// produces, and is valid regardless of source kind or extract flag.
+	// Given
 	raw := []byte(`
 artifact:
   extract: false
@@ -214,10 +234,7 @@ artifact:
 func TestParseSpec_GitURLWithRefIsRecognisedAsGitSource(t *testing.T) {
 	t.Parallel()
 
-	// Given — an ArtifactSpec.URL for a git source that still carries an @ref
-	// suffix (the shape produced by ResolvePreset when a user passes
-	// `repo.git@v1#subpath`). The spec must classify it as a git source so
-	// sha256 is not required.
+	// Given
 	raw := []byte(`
 preset:
   extract: false
@@ -244,12 +261,14 @@ func newTestResolution(
 	def ResourceDefinition,
 ) (resolution, error) {
 	t.Helper()
+	descriptor, err := def.descriptor("linux", "amd64")
+	if err != nil {
+		return resolution{}, err
+	}
 
-	return resolver.newResolution(def, def.Artifact[anyPlatformKey], Probe{}, "sha256:test")
+	return resolver.newResolution(descriptor, Probe{}, "sha256:test")
 }
 
-// A subpath selects within resolved content whatever the source kind, so it
-// applies to a plain download just as it does to an extracted archive.
 func TestResolver_Resolution_AppliesSubpathWithoutExtraction(t *testing.T) {
 	t.Parallel()
 
@@ -291,8 +310,6 @@ func TestResolver_Resolution_RejectsTraversalSubpath(t *testing.T) {
 	}
 }
 
-// A subpath is presentation, not identity, so selecting two subpaths of one
-// source stores the source once instead of fetching it twice.
 func TestResolver_Resolution_SubpathsShareOneCacheEntry(t *testing.T) {
 	t.Parallel()
 
@@ -355,8 +372,6 @@ func TestResolver_Resolution_SubpathsShareOneCacheEntry(t *testing.T) {
 	}
 }
 
-// Extraction is presentation too, so an extracted and an unextracted view of
-// one source share the download.
 func TestResolver_Resolution_ExtractedAndPlainShareOneCacheEntry(t *testing.T) {
 	t.Parallel()
 
@@ -885,9 +900,6 @@ func TestResolver_RequestRefreshesWhenChecksumChanges(t *testing.T) {
 	}
 }
 
-// Entries live in one flat directory named by the cache key, so a cached path
-// is identified by its root and its tail, not by a resource or platform
-// segment in the middle.
 func assertPathInCache(t *testing.T, cacheRoot, actualPath, suffix string) {
 	t.Helper()
 
@@ -1054,7 +1066,7 @@ func newCountingArtifactServer(
 
 	requests := &atomic.Int64{}
 	handler := func(writer http.ResponseWriter, request *http.Request) {
-		// Only transfers count: a validator request moves no artifact bytes.
+		// Validator requests do not transfer artifact bytes.
 		if request.Method != http.MethodHead {
 			requests.Add(1)
 		}
@@ -1211,25 +1223,24 @@ func TestResolver_GetGitSourceCachedOnSameCommit(t *testing.T) {
 	}
 	resolver := newTestResolverForPlatform(t, ResourceSpec{}, cacheDir, "linux", "amd64")
 
-	// When — first fetch clones the repo
+	// When
 	path, err := resolveTestDefinition(context.Background(), resolver, def, "preset")
 	if err != nil {
 		t.Fatalf("first Get failed: %v", err)
 	}
 
-	// Corrupt a file in the cache to detect whether Fetch is called again.
 	corruptedFile := filepath.Join(path, "preset.txt")
 	if err := os.WriteFile(corruptedFile, []byte("corrupted"), filePerm); err != nil {
 		t.Fatalf("corrupt failed: %v", err)
 	}
 
-	// When — second Get with same commit; Identify returns same hash → cache hit
+	// When
 	path2, err := resolveTestDefinition(context.Background(), resolver, def, "preset")
 	if err != nil {
 		t.Fatalf("second Get failed: %v", err)
 	}
 
-	// Then — same path returned, Fetch was not called (corrupted content preserved)
+	// Then
 	if path != path2 {
 		t.Fatalf("expected same cache path, got %q vs %q", path, path2)
 	}
@@ -1261,16 +1272,15 @@ func TestResolver_GetGitSourceRefetchesOnNewCommit(t *testing.T) {
 		t.Fatalf("first Get failed: %v", err)
 	}
 
-	// Advance the remote
 	addCommitToTestRepo(t, repoDir, "v2.txt", "v2")
 
-	// When — second Get with new commit
+	// When
 	path, err := resolveTestDefinition(context.Background(), resolver, def, "preset")
 	if err != nil {
 		t.Fatalf("second Get failed: %v", err)
 	}
 
-	// Then — new content is present
+	// Then
 	if _, err := os.Stat(filepath.Join(path, "v2.txt")); err != nil {
 		t.Fatalf("expected v2.txt after re-fetch, got %v", err)
 	}
@@ -1296,8 +1306,6 @@ func TestResolver_GetFileDirectoryReturnedDirectly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	// Fetch returns a redirect path for local directories; the Resolver records it
-	// in the cache index but does not write an artifact to the cache directory.
 	if strings.HasPrefix(path, cacheDir) {
 		t.Fatalf("expected original path, not a cache path; got %q", path)
 	}
@@ -1309,8 +1317,7 @@ func TestResolver_GetFileDirectoryReturnedDirectly(t *testing.T) {
 func TestResolver_GetFileDirectoryWithResourcePathReturnsSubdirectory(t *testing.T) {
 	t.Parallel()
 
-	// Given — a preset root with a nested subdirectory. The resolver must apply
-	// subpath to the redirect target, not silently return the root.
+	// Given
 	presetDir := t.TempDir()
 	subDir := filepath.Join(presetDir, "infra", "aws")
 	if err := os.MkdirAll(subDir, 0o750); err != nil {
@@ -1338,7 +1345,7 @@ func TestResolver_GetFileDirectoryWithResourcePathReturnsSubdirectory(t *testing
 func TestResolver_GetFileDirectoryRejectsTraversalResourcePath(t *testing.T) {
 	t.Parallel()
 
-	// Given — a subpath that tries to escape the redirect root.
+	// Given
 	presetDir := t.TempDir()
 	def := ResourceDefinition{
 		Extract: false,
@@ -1471,7 +1478,7 @@ func TestResolver_GetAnyPlatformFallback(t *testing.T) {
 func TestResolver_GetPlatformSpecificTakesPriorityOverAny(t *testing.T) {
 	t.Parallel()
 
-	// Given: a definition with both a platform-specific key and "any"
+	// Given
 	deploymentDir := t.TempDir()
 	platformData := []byte("platform-specific-tool")
 	anyData := []byte("any-platform-tool")

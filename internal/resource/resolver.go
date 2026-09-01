@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/util"
@@ -34,9 +33,8 @@ type Platform struct {
 }
 
 type Resolver struct {
-	spec       ResourceSpec
+	spec       *Specification
 	cache      *Cache
-	platform   Platform
 	sources    []Source
 	extractors []Extractor
 }
@@ -129,9 +127,8 @@ func New(opts Options) (*Resolver, error) {
 	}
 
 	return &Resolver{
-		spec:       spec,
+		spec:       NewSpecification(spec, platform),
 		cache:      cache,
-		platform:   platform,
 		sources:    defaultSources(opts.Blobs),
 		extractors: []Extractor{&TarGzExtractor{}, &ZipExtractor{}},
 	}, nil
@@ -147,24 +144,17 @@ func (o Options) cache() *Cache {
 
 // Resolve materializes a named resource.
 func (r *Resolver) Resolve(ctx context.Context, resourceID string) (string, error) {
-	def, ok := r.spec[resourceID]
-	if !ok {
-		return "", fmt.Errorf("%w: unknown runtime artifact %q", ErrUnknownMember, resourceID)
+	descriptor, err := r.spec.Lookup(resourceID)
+	if err != nil {
+		return "", err
 	}
 
-	return r.resolveDefinition(ctx, def, resourceID)
+	return r.resolveArtifact(ctx, descriptor, resourceID)
 }
 
 // ResolveDescriptor materializes an already selected artifact.
 func (r *Resolver) ResolveDescriptor(ctx context.Context, descriptor Descriptor) (string, error) {
-	return r.resolveDefinition(ctx, ResourceDefinition{
-		Extract: descriptor.Extract,
-		Artifact: map[string]ArtifactSpec{"any": {
-			URL: descriptor.Locator.URL, Ref: descriptor.Locator.Ref,
-			Sha256: descriptor.Sha256, Subpath: descriptor.Subpath,
-			DownloadPath: descriptor.DownloadPath,
-		}},
-	}, descriptor.Locator.String())
+	return r.resolveArtifact(ctx, descriptor, descriptor.Locator.String())
 }
 
 func Copy(path, destDir string) error {
@@ -186,15 +176,7 @@ func Copy(path, destDir string) error {
 
 // List returns declared resource IDs beginning with prefix.
 func (r *Resolver) List(prefix string) []string {
-	ids := make([]string, 0, len(r.spec))
-	for resourceID := range r.spec {
-		if strings.HasPrefix(resourceID, prefix) {
-			ids = append(ids, resourceID)
-		}
-	}
-	slices.Sort(ids)
-
-	return ids
+	return r.spec.List(prefix)
 }
 
 // Cache returns the cache this resolver stores resources in.

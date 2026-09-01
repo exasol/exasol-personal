@@ -69,8 +69,6 @@ func zipFixtureBytes(t *testing.T, entries map[string]string) []byte {
 	return buffer.Bytes()
 }
 
-// newGenerator builds a generator writing into a throwaway platform directory,
-// with a cache of its own so runs cannot interfere with each other.
 func newGenerator(t *testing.T, spec resource.ResourceSpec, skipEmbed bool) *generator {
 	t.Helper()
 
@@ -179,8 +177,6 @@ func archiveSpec(t *testing.T, embed resource.EmbedMode) (resource.ResourceSpec,
 	}, payload
 }
 
-// The resolved specification is what a build reads, so no directive that only
-// the generator understands may survive into it.
 func TestGenerate_ResolvedSpecCarriesNoBuildDirectives(t *testing.T) {
 	t.Parallel()
 
@@ -237,8 +233,6 @@ func TestGenerate_UnembeddedResourcePointsUpstream(t *testing.T) {
 	}
 }
 
-// A blob's name has to say what it holds, since the extractor a build picks is
-// chosen by that name.
 func TestGenerate_BlobKeepsItsSourceExtension(t *testing.T) {
 	t.Parallel()
 
@@ -252,8 +246,6 @@ func TestGenerate_BlobKeepsItsSourceExtension(t *testing.T) {
 	}
 }
 
-// A relative local location cannot be resolved by a built binary, which has an
-// arbitrary working directory and no repository root.
 func TestGenerate_RejectsRelativeLocalLocationThatIsNotEmbedded(t *testing.T) {
 	t.Parallel()
 
@@ -295,8 +287,6 @@ func TestGenerate_NoDataForUndeclaredPlatform(t *testing.T) {
 	}
 }
 
-// Placeholder-only generation exists for build speed, so it must embed nothing
-// while still leaving every resource resolvable.
 func TestGenerate_SkipEmbedPointsUpstreamInsteadOfEmbedding(t *testing.T) {
 	t.Parallel()
 
@@ -326,8 +316,6 @@ func TestGenerate_SkipEmbedStillEmbedsWhenAlways(t *testing.T) {
 	}
 }
 
-// The wrapper embeds the whole platform directory, so anything an earlier run
-// left behind would ship rather than merely be ignored.
 func TestGenerate_PrunesDataForAResourceNoLongerDeclared(t *testing.T) {
 	t.Parallel()
 
@@ -361,7 +349,6 @@ func TestGenerate_PrunesDataSkippedByPlaceholderOnlyMode(t *testing.T) {
 	}
 }
 
-// Pruning must not reach outside the platform being generated.
 func TestGenerate_PruningIsConfinedToTheTargetPlatform(t *testing.T) {
 	t.Parallel()
 
@@ -384,8 +371,6 @@ func TestGenerate_PruningIsConfinedToTheTargetPlatform(t *testing.T) {
 	}
 }
 
-// A tracked .gitignore keeps the directory alive through a clone and keeps the
-// embed compiling, so pruning must leave it be.
 func TestGenerate_KeepsTheTrackedGitignore(t *testing.T) {
 	t.Parallel()
 
@@ -430,8 +415,6 @@ func globSpec(t *testing.T, pattern string) (resource.ResourceSpec, string) {
 	}, srcDir
 }
 
-// A glob is matched once, at build time, and each match becomes a resource in
-// its own right; the group itself never reaches a build.
 func TestGenerate_GlobExpandsIntoOneResourcePerMatch(t *testing.T) {
 	t.Parallel()
 
@@ -449,7 +432,6 @@ func TestGenerate_GlobExpandsIntoOneResourcePerMatch(t *testing.T) {
 	}
 }
 
-// A pattern may match a file as readily as a directory.
 func TestGenerate_GlobMatchesFilesAndDirectoriesAlike(t *testing.T) {
 	t.Parallel()
 
@@ -481,20 +463,16 @@ func TestGenerate_GlobMatchesFilesAndDirectoriesAlike(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read embedded file blob: %v", err)
 	}
-	rawSpec, err := yaml.Marshal(resolved)
-	if err != nil {
-		t.Fatalf("marshal runtime spec: %v", err)
-	}
-	runtimeManager, err := resource.New(resource.Options{
-		Spec:      rawSpec,
-		Blobs:     fstest.MapFS{blobPath: {Data: blob}},
-		CacheRoot: t.TempDir(),
-		Platform:  resource.Platform{GOOS: "linux", GOARCH: "amd64"},
+	runtimeResolver, err := resource.New(resource.Options{
+		Definitions: resolved,
+		Blobs:       fstest.MapFS{blobPath: {Data: blob}},
+		CacheRoot:   t.TempDir(),
+		Platform:    resource.Platform{GOOS: "linux", GOARCH: "amd64"},
 	})
 	if err != nil {
 		t.Fatalf("create runtime resolver: %v", err)
 	}
-	resolvedPath, err := runtimeManager.Request(context.Background(), "presets/README.md")
+	resolvedPath, err := runtimeResolver.Resolve(context.Background(), "presets/README.md")
 	if err != nil {
 		t.Fatalf("resolve embedded file member: %v", err)
 	}
@@ -535,19 +513,15 @@ func TestGenerate_UnembeddedNestedGlobPreservesFullMatchedSubpath(t *testing.T) 
 	if artifact.Subpath != "catalog/modules/aws" {
 		t.Fatalf("subpath = %q, want %q", artifact.Subpath, "catalog/modules/aws")
 	}
-	rawSpec, err := yaml.Marshal(resolved)
-	if err != nil {
-		t.Fatalf("marshal runtime spec: %v", err)
-	}
-	runtimeManager, err := resource.New(resource.Options{
-		Spec:      rawSpec,
-		CacheRoot: t.TempDir(),
-		Platform:  resource.Platform{GOOS: "linux", GOARCH: "amd64"},
+	runtimeResolver, err := resource.New(resource.Options{
+		Definitions: resolved,
+		CacheRoot:   t.TempDir(),
+		Platform:    resource.Platform{GOOS: "linux", GOARCH: "amd64"},
 	})
 	if err != nil {
 		t.Fatalf("create runtime resolver: %v", err)
 	}
-	resolvedPath, err := runtimeManager.Request(context.Background(), "presets/aws")
+	resolvedPath, err := runtimeResolver.Resolve(context.Background(), "presets/aws")
 	if err != nil {
 		t.Fatalf("resolve upstream member: %v", err)
 	}
@@ -557,20 +531,48 @@ func TestGenerate_UnembeddedNestedGlobPreservesFullMatchedSubpath(t *testing.T) 
 	}
 }
 
+func TestGenerate_GlobUsesDownloadPathToSelectExtractor(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	archive := zipFixtureBytes(t, map[string]string{"aws/main.tf": "aws"})
+	server := newFixtureServer(t, "download", archive)
+	spec := resource.ResourceSpec{
+		"presets": {
+			Extract: true,
+			Embed:   resource.EmbedAlways,
+			Glob:    "*",
+			Artifact: map[string]resource.ArtifactSpec{
+				"any": {
+					URL:          server.URL + "/download",
+					Sha256:       sha256Hex(archive),
+					DownloadPath: "presets.zip",
+				},
+			},
+		},
+	}
+	generator := newGenerator(t, spec, false)
+
+	// When
+	resolved := generateSpec(t, generator, spec)
+
+	// Then
+	if _, ok := resolved["presets/aws"]; !ok {
+		t.Fatalf("expected presets/aws among %v", slices.Sorted(maps(resolved)))
+	}
+}
+
 func TestGenerate_GlobRejectsAnEmptyPattern(t *testing.T) {
 	t.Parallel()
 
 	spec, srcDir := globSpec(t, "")
-	// An empty pattern is indistinguishable from no glob at all in the struct,
-	// so drive the matcher directly.
+	// Empty and absent globs are indistinguishable after parsing.
 	if _, err := globMatches(srcDir, ""); err == nil {
 		t.Fatal("expected an empty pattern to be rejected")
 	}
 	_ = spec
 }
 
-// A clone's metadata directory would otherwise match a top-level pattern like
-// any other entry.
 func TestGlobMatches_ExcludesRepositoryMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -613,8 +615,6 @@ func TestGlobMatches_RejectsMatchesSharingAMemberName(t *testing.T) {
 	}
 }
 
-// Identical content must produce an identical identity, because a generated
-// blob's hash is what tells two builds' content apart.
 func TestGenerate_IdenticalContentProducesIdenticalIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -632,8 +632,6 @@ func TestGenerate_IdenticalContentProducesIdenticalIdentity(t *testing.T) {
 	}
 }
 
-// The real catalog must expand to the preset directories it ships, so adding
-// one needs no source-code edit.
 func TestGenerate_RealPresetDirectoriesExpandToTheirMembers(t *testing.T) {
 	t.Parallel()
 
@@ -672,7 +670,6 @@ func maps(spec resource.ResourceSpec) func(func(string) bool) {
 	}
 }
 
-// Generation must not depend on the working directory it is invoked from.
 func TestResolveRelativeLocalArtifacts_IsIndependentOfWorkingDirectory(t *testing.T) {
 	t.Parallel()
 
