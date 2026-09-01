@@ -23,8 +23,6 @@ const (
 	extractRelPath = "unpack"
 )
 
-// ErrUnknownMember distinguishes an unknown ID from a failure to resolve a
-// declared resource.
 var ErrUnknownMember = errors.New("unknown member")
 
 type Platform struct {
@@ -39,24 +37,16 @@ type Resolver struct {
 	extractors []Extractor
 }
 
-// Probe is what a source can determine about a locator without transferring
-// its content.
 type Probe struct {
-	// Identity changes exactly when the content changes. It is opaque to the
-	// resolver, which only keys the cache on it; each source formats its own.
-	// Empty means the source cannot tell, and the resource is refreshed on
-	// every request.
+	// Empty forces a transfer on every resolution.
 	Identity string
-	// Local names a path that already holds the artifact. When set, Fetch is
-	// never called and the cache stores no copy of the artifact itself, though
-	// an extraction of it is still cached.
+	// A non-empty path bypasses artifact storage but can still be extracted.
 	Local string
 }
 
 type Source interface {
 	Handles(loc Locator) bool
 	Probe(ctx context.Context, loc Locator) (Probe, error)
-	// Fetch places the content at loc into dstPath.
 	Fetch(ctx context.Context, loc Locator, dstPath string) error
 }
 
@@ -65,8 +55,6 @@ type Extractor interface {
 	Extract(srcPath, dstPath string) error
 }
 
-// defaultSources orders the sources a resolver dispatches through. Blobs may
-// be nil, in which case nothing resolves from embedded data.
 func defaultSources(blobs fs.FS) []Source {
 	return []Source{
 		&GitSource{},
@@ -77,28 +65,16 @@ func defaultSources(blobs fs.FS) []Source {
 	}
 }
 
-// Options describes the resolver a caller wants.
 type Options struct {
-	// Spec is the resolved resource specification, as YAML.
 	Spec []byte
-	// Definitions avoids serializing a specification that is already available
-	// in memory.
+	// Definitions takes precedence over Spec.
 	Definitions ResourceSpec
-	// Blobs holds data compiled into the binary, addressed by the paths Spec
-	// names. Nil means nothing is embedded and every resource resolves from
-	// its upstream source.
-	Blobs fs.FS
-	// CacheRoot overrides where resources are stored. Empty uses the per-user
-	// default.
-	CacheRoot string
-	// Cache overrides the cache constructed from CacheRoot.
-	Cache *Cache
-	// Platform overrides the host platform, for a build targeting another.
-	Platform Platform
+	Blobs       fs.FS
+	CacheRoot   string
+	Cache       *Cache
+	Platform    Platform
 }
 
-// New builds a resolver from a resolved specification and the data embedded
-// alongside it.
 func New(opts Options) (*Resolver, error) {
 	spec := opts.Definitions
 	if spec == nil {
@@ -142,7 +118,6 @@ func (o Options) cache() *Cache {
 	return NewCache(o.CacheRoot, filepath.Join(o.CacheRoot, cacheConfigFileName))
 }
 
-// Resolve materializes a named resource.
 func (r *Resolver) Resolve(ctx context.Context, resourceID string) (string, error) {
 	descriptor, err := r.spec.Lookup(resourceID)
 	if err != nil {
@@ -152,7 +127,6 @@ func (r *Resolver) Resolve(ctx context.Context, resourceID string) (string, erro
 	return r.resolveArtifact(ctx, descriptor, resourceID)
 }
 
-// ResolveDescriptor materializes an already selected artifact.
 func (r *Resolver) ResolveDescriptor(ctx context.Context, descriptor Descriptor) (string, error) {
 	return r.resolveArtifact(ctx, descriptor, descriptor.Locator.String())
 }
@@ -174,12 +148,23 @@ func Copy(path, destDir string) error {
 	return copyFileInto(path, destDir)
 }
 
-// List returns declared resource IDs beginning with prefix.
 func (r *Resolver) List(prefix string) []string {
 	return r.spec.List(prefix)
 }
 
-// Cache returns the cache this resolver stores resources in.
+func (r *Resolver) Layer(definitions ResourceSpec) *Resolver {
+	return &Resolver{
+		spec: &Specification{
+			definitions: definitions,
+			platform:    r.spec.platform,
+			parent:      r.spec,
+		},
+		cache:      r.cache,
+		sources:    r.sources,
+		extractors: r.extractors,
+	}
+}
+
 func (r *Resolver) Cache() *Cache {
 	return r.cache
 }
@@ -204,10 +189,6 @@ func copyFileInto(srcPath, destDir string) error {
 	return dst.Close()
 }
 
-// contentIdentity is what the cache keys on. A declared checksum is a content
-// hash, so it doubles as an identity; anything else comes from the source, and
-// an empty result means nothing can identify this content and it is refreshed
-// on every request.
 func contentIdentity(declaredSha256, probed string) string {
 	if normalized := normalizeSha256(declaredSha256); normalized != "" {
 		return "sha256:" + normalized

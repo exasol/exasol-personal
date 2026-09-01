@@ -98,10 +98,5 @@ func resolveTestDefinition(
 	definition ResourceDefinition,
 	resourceID string,
 ) (string, error) {
-	testResolver := *resolver
-	testResolver.spec = NewSpecification(
-		ResourceSpec{resourceID: definition}, resolver.spec.platform,
-	)
-
-	return testResolver.Resolve(ctx, resourceID)
+	return resolver.Layer(ResourceSpec{resourceID: definition}).Resolve(ctx, resourceID)
 }

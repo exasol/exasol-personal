@@ -58,12 +58,28 @@ func InitDeployment(
 	deployment config.DeploymentDir,
 	options InitOptions,
 ) error {
-	// Do an initial update version check if permitted
-	if options.VersionCheckEnabled {
-		_, _, _ = CheckLatestVersionUpdate(ctx, options.CurrentVersion, deployment)
+	launcherContext := ctx
+	infrastructureContext, infrastructureDir, err := presets.ResourceContext(
+		launcherContext, presets.Infrastructure, options.InfrastructurePreset,
+	)
+	if err != nil {
+		return err
+	}
+	_, installationDir, err := presets.ResourceContext(
+		launcherContext, presets.Installation, options.InstallationPreset,
+	)
+	if err != nil {
+		return err
 	}
 
-	if err := validateInitRequest(ctx, deployment, options); err != nil {
+	// Do an initial update version check if permitted
+	if options.VersionCheckEnabled {
+		_, _, _ = CheckLatestVersionUpdate(launcherContext, options.CurrentVersion, deployment)
+	}
+
+	if err := validateInitRequest(
+		infrastructureContext, deployment, options, infrastructureDir, installationDir,
+	); err != nil {
 		return err
 	}
 
@@ -72,31 +88,29 @@ func InitDeployment(
 	}
 
 	// Lock the deployment directory with exclusive access
-	return withDeploymentExclusiveLock(ctx, deployment,
+	return withDeploymentExclusiveLock(launcherContext, deployment,
 		func(deployment config.DeploymentDir) error {
-			return initializeDeploymentLocked(ctx, deployment, options)
+			return initializeDeploymentLocked(
+				launcherContext,
+				infrastructureContext,
+				deployment,
+				options,
+				infrastructureDir,
+				installationDir,
+			)
 		})
 }
 
 // validateInitRequest proactively validates the preset selection and target
 // environment to produce friendly errors before any state is mutated.
 func validateInitRequest(
-	ctx context.Context,
+	infrastructureContext context.Context,
 	deployment config.DeploymentDir,
 	options InitOptions,
+	infrastructureDir, installationDir string,
 ) error {
 	slog.Info("validating presets")
-	if err := ValidatePresetSelection(
-		ctx,
-		options.InfrastructurePreset,
-		options.InstallationPreset,
-	); err != nil {
-		return err
-	}
-	infrastructureManifest, err := readInfrastructureManifestFromPreset(
-		ctx,
-		options.InfrastructurePreset,
-	)
+	infrastructureManifest, err := presets.ReadInfrastructureManifestFromDir(infrastructureDir)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to load infrastructure preset %q: %w",
@@ -104,7 +118,28 @@ func validateInitRequest(
 			err,
 		)
 	}
-	backend, err := newDeploymentBackend(ctx, deployment, infrastructureManifest)
+	if _, err := resolveBackendKind(infrastructureManifest); err != nil {
+		return err
+	}
+	installationManifest, err := presets.ReadInstallManifestFromDir(installationDir)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to load installation preset %q: %w",
+			presetLabel(options.InstallationPreset),
+			err,
+		)
+	}
+	if err := validatePresetCompatibility(
+		options.InfrastructurePreset,
+		infrastructureManifest,
+		options.InstallationPreset,
+		installationManifest,
+	); err != nil {
+		return err
+	}
+	backend, err := newDeploymentBackend(
+		infrastructureContext, deployment, infrastructureManifest,
+	)
 	if err != nil {
 		return err
 	}
@@ -112,7 +147,9 @@ func validateInitRequest(
 		return err
 	}
 
-	return validateLocalInitMemory(ctx, infrastructureManifest, options.InfraVars)
+	return validateLocalInitMemory(
+		infrastructureContext, infrastructureManifest, options.InfraVars,
+	)
 }
 
 // ensureDeploymentDirReady makes sure the deployment directory has no prior
@@ -138,9 +175,10 @@ func ensureDeploymentDirReady(deployment config.DeploymentDir) error {
 }
 
 func initializeDeploymentLocked(
-	ctx context.Context,
+	launcherContext, infrastructureContext context.Context,
 	deployment config.DeploymentDir,
 	options InitOptions,
+	infrastructureDir, installationDir string,
 ) error {
 	deploymentId, err := GenerateDeploymentId()
 	if err != nil {
@@ -154,9 +192,9 @@ func initializeDeploymentLocked(
 
 	// Copy the presets into the deployment directory
 	if err := extractPresets(
-		ctx,
-		options.InfrastructurePreset,
-		options.InstallationPreset,
+		launcherContext,
+		infrastructureDir,
+		installationDir,
 		deployment,
 	); err != nil {
 		return err
@@ -176,15 +214,15 @@ func initializeDeploymentLocked(
 	if err != nil {
 		return err
 	}
-	backend, err := newDeploymentBackend(ctx, deployment, infraManifest)
+	backend, err := newDeploymentBackend(infrastructureContext, deployment, infraManifest)
 	if err != nil {
 		return err
 	}
-	if err := backend.SetupWorkspace(ctx); err != nil {
+	if err := backend.SetupWorkspace(infrastructureContext); err != nil {
 		return err
 	}
 	if err := writeDeploymentConfiguration(
-		ctx,
+		infrastructureContext,
 		deployment,
 		exasolState,
 		newDeploymentConfigurationFromRaw(options.InfraVars, options.InstallVars),
@@ -217,13 +255,12 @@ func initializeDeploymentLocked(
 // and shared assets into the deployment directory.
 func extractPresets(
 	ctx context.Context,
-	infrastructurePreset PresetRef,
-	installationPreset PresetRef,
+	infrastructureSourceDir, installationSourceDir string,
 	deployment config.DeploymentDir,
 ) error {
 	slog.Info("extracting preset files",
-		"infrastructure", infrastructurePreset,
-		"installation", installationPreset)
+		"infrastructure", infrastructureSourceDir,
+		"installation", installationSourceDir)
 
 	infrastructureDir := deployment.InfrastructureDir()
 	installationDir := deployment.InstallationDir()
@@ -243,12 +280,14 @@ func extractPresets(
 
 	// Write infrastructure preset
 	slog.Debug("writing infrastructure preset to deployment directory", "path", infrastructureDir)
-	err = presets.WriteDir(ctx, presets.Infrastructure, infrastructurePreset, infrastructureDir)
+	err = presets.WriteDir(
+		ctx, presets.Infrastructure, PresetRef{Path: infrastructureSourceDir}, infrastructureDir,
+	)
 	if err != nil {
 		slog.Error(
 			"Failed to write infrastructure preset",
 			"err", err,
-			"infrastructure", presetLabel(infrastructurePreset),
+			"infrastructure", infrastructureSourceDir,
 			"dir", util.AbsPathNoFail(infrastructureDir),
 		)
 
@@ -257,12 +296,14 @@ func extractPresets(
 
 	// Write installation preset into installation directory
 	slog.Debug("writing installation preset to deployment directory", "path", installationDir)
-	err = presets.WriteDir(ctx, presets.Installation, installationPreset, installationDir)
+	err = presets.WriteDir(
+		ctx, presets.Installation, PresetRef{Path: installationSourceDir}, installationDir,
+	)
 	if err != nil {
 		slog.Error(
 			"Failed to write installation preset",
 			"err", err,
-			"installation", presetLabel(installationPreset),
+			"installation", installationSourceDir,
 			"dir", util.AbsPathNoFail(installationDir),
 		)
 
