@@ -28,13 +28,20 @@ func (FileSource) Handles(loc Locator) bool {
 }
 
 // Probe reports the content's existing location, so the cache stores no copy
-// of it. Extracting it, when asked for, still lands in the cache.
+// of it. Extracting it, when asked for, still lands in the cache, so a local
+// archive's identity has to change when the archive does; size and
+// modification time are what a local file offers without reading it whole.
 func (FileSource) Probe(_ context.Context, loc Locator) (Probe, error) {
 	absPath, err := resolveLocalPath(loc.URL)
 	if err != nil {
 		return Probe{}, err
 	}
-	sum := sha256.Sum256([]byte(absPath))
+
+	identity := absPath
+	if info, err := os.Stat(absPath); err == nil && !info.IsDir() {
+		identity = fmt.Sprintf("%s|%d|%d", absPath, info.Size(), info.ModTime().UnixNano())
+	}
+	sum := sha256.Sum256([]byte(identity))
 
 	return Probe{
 		Identity: "local-path:" + hex.EncodeToString(sum[:]),
