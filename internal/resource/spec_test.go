@@ -40,6 +40,28 @@ myresource:
 	}
 }
 
+func TestParseSpec_RejectsAChecksumOnALocalSource(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	raw := []byte(`
+myresource:
+  extract: false
+  artifact:
+    any:
+      url: file:///tmp/does-not-need-to-exist-for-parsing
+      sha256: 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae
+`)
+
+	// When
+	_, err := ParseSpec(raw)
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "must not define sha256") {
+		t.Fatalf("expected a checksum on a local source to be rejected, got %v", err)
+	}
+}
+
 func TestParseSpec_HTTPSourceStillRequiresChecksum(t *testing.T) {
 	t.Parallel()
 

@@ -174,3 +174,55 @@ func TestFileSource_Probe_FileReportsIdentity(t *testing.T) {
 		t.Fatal("expected non-empty identity for file")
 	}
 }
+
+func TestFileSource_Probe_ChangedArchiveChangesIdentity(t *testing.T) {
+	t.Parallel()
+
+	archive := filepath.Join(t.TempDir(), "preset.tar.gz")
+	if err := os.WriteFile(archive, []byte("first"), filePerm); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	src := FileSource{}
+	loc := Locator{URL: "file://" + archive}
+
+	before, err := src.Probe(context.Background(), loc)
+	if err != nil {
+		t.Fatalf("first probe: %v", err)
+	}
+
+	// Changing size avoids coarse filesystem timestamp resolution.
+	if err := os.WriteFile(archive, []byte("second and longer"), filePerm); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+
+	after, err := src.Probe(context.Background(), loc)
+	if err != nil {
+		t.Fatalf("second probe: %v", err)
+	}
+	if before.Identity == after.Identity {
+		t.Fatalf("expected identity to change, both were %q", before.Identity)
+	}
+}
+
+func TestFileSource_Probe_UnchangedArchiveKeepsIdentity(t *testing.T) {
+	t.Parallel()
+
+	archive := filepath.Join(t.TempDir(), "preset.tar.gz")
+	if err := os.WriteFile(archive, []byte("stable"), filePerm); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	src := FileSource{}
+	loc := Locator{URL: "file://" + archive}
+
+	first, err := src.Probe(context.Background(), loc)
+	if err != nil {
+		t.Fatalf("first probe: %v", err)
+	}
+	second, err := src.Probe(context.Background(), loc)
+	if err != nil {
+		t.Fatalf("second probe: %v", err)
+	}
+	if first.Identity != second.Identity {
+		t.Fatalf("identity %q then %q", first.Identity, second.Identity)
+	}
+}

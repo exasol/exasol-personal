@@ -267,9 +267,14 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 			)
 		}
 	case (FileSource{}).Handles(locator):
-		// Local (file://, or bare local path) sources are first-party content whose
-		// integrity comes from being part of the same versioned repository commit,
-		// not from a hand-authored checksum, so a checksum is optional for them.
+		if strings.TrimSpace(a.Sha256) != "" {
+			return fmt.Errorf(
+				"resource %q artifact %q must not define sha256 for a local source"+
+					" (the file's own state is used instead)",
+				ctx.resourceID,
+				ctx.variant,
+			)
+		}
 	case isDigestPinnedImage(locator):
 		// A digest names the image content itself, so it is already the checksum.
 	default:
