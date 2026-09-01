@@ -144,14 +144,12 @@ func TestCacheIndexReadWriteRoundTripAndRejectsEscapingPaths(t *testing.T) {
 	}
 }
 
-// Content identity alone keys an entry, so the same bytes reached two ways are
-// stored once.
 func TestCacheKey_SameIdentityDeduplicates(t *testing.T) {
 	t.Parallel()
 
 	identity := "sha256:" + strings.Repeat("a", 64)
-	first := cacheKeyFor(identity, "https://example.com/tofu.tgz", "tofu.tgz")
-	second := cacheKeyFor(identity, "https://mirror.example.com/tofu.tgz", "tofu.tgz")
+	first := cacheKeyFor(identity, Locator{URL: "https://example.com/tofu.tgz"}, "tofu.tgz")
+	second := cacheKeyFor(identity, Locator{URL: "https://mirror.example.com/tofu.tgz"}, "tofu.tgz")
 
 	if first != second {
 		t.Fatalf("expected one entry for one identity, got %q and %q", first, second)
@@ -161,21 +159,20 @@ func TestCacheKey_SameIdentityDeduplicates(t *testing.T) {
 func TestCacheKey_DifferentIdentitiesDoNotCollide(t *testing.T) {
 	t.Parallel()
 
-	first := cacheKeyFor("sha256:"+strings.Repeat("a", 64), "https://example.com/a", "a")
-	second := cacheKeyFor("sha256:"+strings.Repeat("b", 64), "https://example.com/a", "a")
+	loc := Locator{URL: "https://example.com/a"}
+	first := cacheKeyFor("sha256:"+strings.Repeat("a", 64), loc, "a")
+	second := cacheKeyFor("sha256:"+strings.Repeat("b", 64), loc, "a")
 
 	if first == second {
 		t.Fatalf("expected distinct keys, both were %q", first)
 	}
 }
 
-// Content that nothing can identify still needs entries that do not collide,
-// so the location stands in for an identity.
 func TestCacheKey_UnidentifiedContentKeysOnLocation(t *testing.T) {
 	t.Parallel()
 
-	first := cacheKeyFor("", "https://example.com/a.tgz", "a.tgz")
-	second := cacheKeyFor("", "https://example.com/b.tgz", "b.tgz")
+	first := cacheKeyFor("", Locator{URL: "https://example.com/a.tgz"}, "a.tgz")
+	second := cacheKeyFor("", Locator{URL: "https://example.com/b.tgz"}, "b.tgz")
 
 	if first == second {
 		t.Fatalf("expected distinct keys, both were %q", first)
