@@ -1,8 +1,5 @@
-# glob-based-resource-groups Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change embed-presets-via-resource-cache. Update Purpose after archive.
-## Requirements
 ### Requirement: A resource definition can declare itself a glob template
 The resource specification format SHALL support a resource-level `glob` field holding a glob pattern. At build time, a resource declaring a pattern SHALL expand into one independently addressable resource per matched entry, named `<group>/<member>`, and the group itself SHALL NOT appear in the generated specification.
 
@@ -26,25 +23,11 @@ The resource specification format SHALL support a resource-level `glob` field ho
 - **THEN** that entry becomes a member resource regardless of whether it is a
   file or a directory
 
-#### Scenario: Nested matches use their entry names
-- **WHEN** a glob pattern matches an entry below a nested directory
-- **THEN** the generated member uses the matched entry's base name as its
-  member name
-- **AND** its selected subpath preserves the full match path within the source
-
-#### Scenario: Repeated entry names report an ambiguity
-- **WHEN** a glob pattern matches entries in different directories with the
-  same base name
-- **THEN** generation reports that the matches share a member name
-
-#### Scenario: Download path selects the generator's extractor
-- **WHEN** a glob template declares a `download_path`
-- **THEN** the generator uses that path to select the extractor before matching
-  the glob pattern
-
 #### Scenario: Repository metadata is not a member
 - **WHEN** a glob pattern is matched against a cloned git repository's own root
 - **THEN** the repository's metadata directory does not become a member
+
+## ADDED Requirements
 
 ### Requirement: A group's members SHALL be listed from the resource specification
 Listing the members of a group SHALL report every resource in the specification named under that group, without materializing, extracting, or matching anything at runtime.
@@ -74,3 +57,24 @@ Each member of an expanded group SHALL be a resource in its own right, with its 
 #### Scenario: Members are cleaned independently
 - **WHEN** cache cleanup selects one member of a group
 - **THEN** the other members of that group remain cached
+
+## REMOVED Requirements
+
+### Requirement: A glob template's member is resolved by matching within its resolved root
+**Reason**: A glob pattern is now matched once at build time, so the group has no
+runtime representation and there is nothing to match a member against. Members
+are resources in their own right, resolved by name.
+**Migration**: None required. A member is requested by the same name as before,
+and resolves to content with the same layout.
+
+### Requirement: A glob template embedded for real always embeds its matched entries as one archive
+**Reason**: Each matched entry is now embedded as its own resource, so there is no
+group archive to filter, and no need to override a group's declared extraction
+behavior when reading it back.
+**Migration**: None required. Built-in preset content resolves to the same
+directory layout as before.
+
+### Requirement: Build-time-registered member names answer group membership without extraction
+**Reason**: Member names are now resources in the generated specification, so
+listing reads the specification directly and no separate registry exists.
+**Migration**: None required. Listing reports the same member names.

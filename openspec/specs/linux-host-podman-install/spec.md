@@ -162,7 +162,7 @@ The system SHALL migrate a legacy deployment container whose `/exa` is not persi
 - **WHEN** the legacy `/exa` copy completes into a sibling staging directory and can be atomically installed
 - **THEN** the persistent destination becomes active before the old container is removed
 
-### Requirement: Podman image loading uses runtime artifact paths
+### Requirement: Podman image loading uses resource paths
 The system SHALL load a Nano image using `podman load -i` with the runtime path supplied for the materialized image and SHALL run the exact image reference reported by the load without creating a deployment-specific image tag.
 
 #### Scenario: Linux host loads Nano image

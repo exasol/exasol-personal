@@ -4,15 +4,26 @@
 TBD - created by syncing change external-preset-sources. Update Purpose after archive.
 ## Requirements
 ### Requirement: Plain preset name resolves to an embedded preset
-A preset argument that is a plain identifier (no URI scheme, no filesystem path separators) SHALL resolve exclusively against the binary's embedded asset catalog and SHALL NOT trigger any external fetch.
+A preset argument SHALL be matched against the binary's embedded preset catalog before being treated as a location. A plain identifier (no URI scheme, no filesystem path separators) naming an embedded preset SHALL resolve to it and SHALL NOT trigger any external fetch, even when a directory of the same name exists in the working directory.
 
 #### Scenario: Known embedded name uses embedded asset
 - **WHEN** the user passes a plain name that matches an embedded preset
 - **THEN** the system SHALL use the embedded asset
 
+#### Scenario: Embedded name is not shadowed by a local directory
+- **WHEN** the user passes a plain name that matches an embedded preset
+- **AND** a directory of the same name exists in the working directory
+- **THEN** the system SHALL use the embedded asset
+
 #### Scenario: Unknown plain name returns a descriptive error
 - **WHEN** the user passes a plain name that does not match any embedded preset
 - **THEN** the system SHALL return an error that includes the unknown name and the list of available embedded preset names
+
+#### Scenario: Unreachable location reports a fetch failure
+- **WHEN** the user passes an argument that names no embedded preset
+- **AND** the argument carries a URI scheme or resembles a filesystem path
+- **THEN** the system SHALL return an error describing why the location could not
+  be fetched, rather than listing available preset names
 
 ### Requirement: URI-scheme arguments identify external preset sources
 A preset argument that begins with a recognised URI scheme (`file://`, `https://`, `http://`, `git://`, or `git@`) SHALL be resolved as an external source and SHALL NOT be matched against the embedded asset catalog, regardless of what the path component contains.
@@ -57,9 +68,9 @@ A preset argument that begins with a recognised URI scheme (`file://`, `https://
 - **WHEN** the user passes a URI whose final path component matches an embedded preset name
 - **THEN** the system SHALL use the external source and SHALL NOT use the embedded asset
 
-#### Scenario: @ref suffix on a non-git source is rejected
-- **WHEN** the user passes a scheme-based URI that contains a `@`-separated suffix, and the URL before that suffix does not end in `.git` and does not use the `git://` scheme
-- **THEN** the system SHALL return an error stating that the `@ref` syntax is only supported for git source URLs
+#### Scenario: At sign in a non-git source remains in its location
+- **WHEN** the user passes a non-Git URI containing an `@`
+- **THEN** the system SHALL resolve the complete URI as the source location
 
 ### Requirement: Git repository URLs support an optional revision specifier
 A git repository URL MAY include a revision specifier appended as `@<ref>`, where `<ref>` is a branch name, tag name, or full commit SHA. When a specifier is present, the system SHALL fetch the repository at that revision. When absent, the system SHALL fetch the repository's default branch HEAD.
@@ -86,7 +97,6 @@ A preset argument that resembles a filesystem path (contains a path separator, o
 #### Scenario: Relative path resolves from local filesystem
 - **WHEN** the user passes `./my-preset`
 - **THEN** the system SHALL resolve the preset from that local directory
-
 #### Scenario: Windows relative path resolves from local filesystem
 - **WHEN** the user passes `.\my-preset`
 - **THEN** the system SHALL resolve the preset from that local directory
