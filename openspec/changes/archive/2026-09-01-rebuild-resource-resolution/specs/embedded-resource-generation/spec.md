@@ -1,18 +1,49 @@
-# embedded-resource-generation Specification
+## ADDED Requirements
 
-## Purpose
-TBD - created by archiving change add-embedded-resource-management. Update Purpose after archive.
-## Requirements
-### Requirement: Resources declare whether they are embeddable
-The resource specification format SHALL support a resource-level `embed: true` field, applying uniformly to every platform declared under that resource's artifact map.
+### Requirement: A build SHALL embed only what its resolved specification references
+Generation SHALL leave a platform's embedded data holding exactly what that platform's resolved specification references. Data written by an earlier generation that the current one does not reference SHALL NOT reach the build. Pruning SHALL be confined to the platform being generated.
 
-#### Scenario: Resource marked for embedding
-- **WHEN** a resource definition sets `embed: true`
-- **THEN** every platform declared under that resource's artifact map is eligible for build-time embedding
+#### Scenario: Data for a resource no longer declared is not embedded
+- **WHEN** a resource that was embedded previously is removed from the
+  specification, and generation runs again for that platform
+- **THEN** that resource's data is no longer present for the build to embed
 
-#### Scenario: Resource not marked for embedding is unaffected
-- **WHEN** a resource definition omits `embed: true`
-- **THEN** the resource resolves only through its normal network sources, exactly as before this capability existed
+#### Scenario: Data skipped by placeholder-only mode is not embedded
+- **WHEN** generation has previously embedded a resource for a platform
+- **AND** generation runs again for that platform in placeholder-only mode
+- **THEN** that resource's data is no longer present for the build to embed
+
+#### Scenario: Pruning is confined to the target platform
+- **WHEN** generation runs for one platform
+- **THEN** data generated for other platforms is left in place
+
+### Requirement: Build-time generation SHALL produce a fully concrete resource specification
+The build-time generator SHALL emit, for its target platform, a resource specification in which every resource states one source, one identity, and one presentation, with no embedding directive and no expansion pattern remaining. The launcher SHALL resolve resources from that generated specification.
+
+#### Scenario: Generated specification contains no build directives
+- **WHEN** the generator produces a specification for a platform
+- **THEN** no resource in it declares an embedding directive or an expansion
+  pattern
+
+#### Scenario: Embedded resource points at embedded data
+- **WHEN** the generator embeds a resource's content
+- **THEN** the generated specification declares that resource's source as
+  `embedded://`
+
+#### Scenario: Resource that was not embedded points at its upstream source
+- **WHEN** the generator does not embed a resource's content
+- **THEN** the generated specification declares that resource's original upstream
+  source
+
+#### Scenario: A local source that is not embedded is rejected
+- **WHEN** a resource declares a local source and the generator does not embed it
+- **THEN** generation fails with an error naming that resource
+
+  A local path names a location in the checkout that generated it, which a
+  launcher running anywhere else cannot reach, whether the path is relative or
+  absolute.
+
+## MODIFIED Requirements
 
 ### Requirement: Build-time generation produces embedded resource data for every declared platform
 For every resource marked `embed: true`, a build-time generator SHALL fetch and checksum-verify that resource's artifact for its target platform, and SHALL write the result where a build for that platform reads it. Generation SHALL produce data only, so a launcher targeting a platform nothing has been generated for still builds.
@@ -70,20 +101,6 @@ mode.
 - **AND** a resource is marked `embed: true` rather than `embed: always`
 - **THEN** the generator leaves that resource unembedded instead of fetching real data
 
-### Requirement: Generated embedded resource files are excluded from version control
-No resource-specific generated file SHALL be committed to the repository.
-
-#### Scenario: Generated output is gitignored
-- **WHEN** the generator writes embedded resource files
-- **THEN** those files are written to a location excluded from version control
-
-### Requirement: The generator always fetches independently of previously embedded data
-The build-time generator SHALL resolve each resource's artifact through the same fetch-and-verify path used for any network resource, without consulting any registry of previously embedded data.
-
-#### Scenario: Generator fetch is never satisfied by embedded data
-- **WHEN** the generator fetches an artifact for an `embed: true` resource
-- **THEN** it performs a real fetch and checksum verification, regardless of whether that resource's data has previously been embedded in any binary
-
 ### Requirement: An embedded resource's cache identity comes from its build-time content
 An embedded resource's cache identity SHALL be the content hash the build-time generator computes over the bytes it actually embedded, recorded in the generated specification.
 
@@ -118,46 +135,3 @@ Built-in infrastructure and installation preset directories SHALL be embedded th
 #### Scenario: Reading one preset does not materialize the others
 - **WHEN** the launcher reads one built-in preset directory
 - **THEN** no other preset directory in the same catalog is materialized
-
-### Requirement: A build SHALL embed only what its resolved specification references
-Generation SHALL leave a platform's embedded data holding exactly what that platform's resolved specification references. Data written by an earlier generation that the current one does not reference SHALL NOT reach the build. Pruning SHALL be confined to the platform being generated.
-
-#### Scenario: Data for a resource no longer declared is not embedded
-- **WHEN** a resource that was embedded previously is removed from the
-  specification, and generation runs again for that platform
-- **THEN** that resource's data is no longer present for the build to embed
-
-#### Scenario: Data skipped by placeholder-only mode is not embedded
-- **WHEN** generation has previously embedded a resource for a platform
-- **AND** generation runs again for that platform in placeholder-only mode
-- **THEN** that resource's data is no longer present for the build to embed
-
-#### Scenario: Pruning is confined to the target platform
-- **WHEN** generation runs for one platform
-- **THEN** data generated for other platforms is left in place
-
-### Requirement: Build-time generation SHALL produce a fully concrete resource specification
-The build-time generator SHALL emit, for its target platform, a resource specification in which every resource states one source, one identity, and one presentation, with no embedding directive and no expansion pattern remaining. The launcher SHALL resolve resources from that generated specification.
-
-#### Scenario: Generated specification contains no build directives
-- **WHEN** the generator produces a specification for a platform
-- **THEN** no resource in it declares an embedding directive or an expansion
-  pattern
-
-#### Scenario: Embedded resource points at embedded data
-- **WHEN** the generator embeds a resource's content
-- **THEN** the generated specification declares that resource's source as
-  `embedded://`
-
-#### Scenario: Resource that was not embedded points at its upstream source
-- **WHEN** the generator does not embed a resource's content
-- **THEN** the generated specification declares that resource's original upstream
-  source
-
-#### Scenario: A local source that is not embedded is rejected
-- **WHEN** a resource declares a local source and the generator does not embed it
-- **THEN** generation fails with an error naming that resource
-
-  A local path names a location in the checkout that generated it, which a
-  launcher running anywhere else cannot reach, whether the path is relative or
-  absolute.
