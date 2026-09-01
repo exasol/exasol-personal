@@ -86,7 +86,7 @@ GOOS=windows GOARCH=amd64 task build
 GOOS=darwin GOARCH=arm64 task build
 ```
 
-**Note:** The launcher resolves [OpenTofu](https://opentofu.org/) at runtime, so builds no longer need platform-specific OpenTofu downloads. The Exasol Local runner (macOS Apple Silicon only) is a different kind of resource: it's marked `embed: true` in `assets/resources/resources.yaml`, so it's fetched and baked directly into the binary at build time rather than resolved at runtime. `task build` stages it for whatever `GOOS`/`GOARCH` you're targeting automatically (as in the examples above). `task generate` itself always targets the host regardless of `GOOS`/`GOARCH` — pass `TARGET_GOOS`/`TARGET_GOARCH` to target a different platform's embedded resources on their own, without a full build:
+**Note:** The launcher resolves [OpenTofu](https://opentofu.org/) at runtime, so builds no longer need platform-specific OpenTofu downloads. The Exasol Local runner (macOS Apple Silicon only) is marked `embed: true` in `assets/resourcedata/resources.yaml`, so generation fetches it and includes it in the binary. `task build` stages it for the target `GOOS`/`GOARCH`. `task generate` targets the host unless `TARGET_GOOS`/`TARGET_GOARCH` is supplied:
 
 ```bash
 task generate TARGET_GOOS=darwin TARGET_GOARCH=arm64
@@ -112,7 +112,7 @@ GOOS=windows GOARCH=amd64 go build -tags=containers_image_openpgp -o bin/exasol.
 
 ### Embedded resources: generation and local overrides
 
-Resources marked `embed: true` in `assets/resources/resources.yaml` (e.g. `exasol-local-runner`) are fetched, checksum-verified, and baked into the binary at build time by `tools/resourceembedder`, generating build-tag-gated `.go` files under `assets/resources/generated/` (fully gitignored — nothing resource-specific is ever checked in). `task generate` (optionally parameterized by `TARGET_GOOS`/`TARGET_GOARCH`, used by `task build`'s cross-compile staging step and the release pipeline's per-target hook) performs a real, checksum-verified fetch for whatever platform it targets. `tests-unit`/`lint-golang`(-fix) instead depend on `task generate SKIP_EMBED=true`, which always writes an empty placeholder without fetching — they only need the package to compile, never the actual bytes. A platform with no declared artifact for a given resource (e.g. `exasol-local-runner` on anything but `darwin/arm64`) gets the same kind of placeholder automatically, with or without `SKIP_EMBED`. A resource marked `embed: always` instead of `embed: true` is exempt from `SKIP_EMBED` and is always fetched for real — for resources like the built-in presets (below), where code and tests need to resolve real content even when `SKIP_EMBED=true` is set to speed up an unrelated build.
+Resources marked `embed: true` in `assets/resourcedata/resources.yaml` are fetched and checksum-verified by `tools/resourceembedder`. It emits a resolved specification and blobs under `assets/resourcedata/embedded/data/<goos>_<goarch>/`; the hand-written platform wrapper embeds that data. `SKIP_EMBED=true` keeps `embed: true` resources upstream in the resolved specification, while `embed: always` still embeds them.
 
 To iterate locally on the embedded resource without waiting on the real network artifact, edit its `url` in `resources.yaml` to a local path (`file://` or a bare path) instead of the real URL, then re-run the generator and rebuild:
 
@@ -147,11 +147,11 @@ A few things worth knowing about this override:
 
 ### Glob-based resource groups
 
-A resource entry can declare `glob: true` instead of a single fixed `resource_path`: the entry stays one resource — fetched, embedded, and resolved through the exact same pipeline as any other — but its own `resource_path` is a pattern to match against the resolved artifact's own entries (files or directories, uniformly across a local directory, git checkout, or extracted archive) rather than a literal subpath. Built-in infrastructure and installation presets are declared this way:
+A resource entry can declare a `glob` pattern. Generation expands every match into an independent `<group>/<member>` resource. Built-in infrastructure and installation presets are declared this way:
 
 ```yaml
 infrastructure-presets:
-  glob: true
+  glob: "*"
   embed: always
   artifact:
     any:
@@ -160,7 +160,7 @@ infrastructure-presets:
       download_path: infrastructure-presets.tar.gz
 ```
 
-`Manager.RequestMember(ctx, resourceID, member)` resolves a single matched entry: it resolves the group `resourceID` normally, then matches `member` against the result. `download_path` matters specifically for a `glob: true` + embedded resource: `tools/resourceembedder` always embeds a glob group as one archive of its matched entries (even when the live source is already a bare directory needing no archiving to read), so a recognizable archive extension is required for the extractor to unpack it again at runtime. `Manager.GroupMembers(resourceID)` lists the member names `tools/resourceembedder` found when it matched the group's `resource_path` at build time — that's how a running binary answers "what presets exist" without extracting the embedded archive just to glob within it.
+`resource.Resolve(ctx, "<group>/<member>")` resolves one member. `resource.List("<group>/")` lists the members without materializing them. Each member has its own blob and cache entry.
 
 Adding a new built-in preset directory under `assets/infrastructure/` or `assets/installation/` needs no `resources.yaml` edit — it's picked up automatically the next time resources are generated, since `resourceembedder` re-matches each `glob: true` entry's `resource_path` against its current directory tree. For this reason, adding a category of built-in resources this way (rather than one hand-written catalog entry per item) is the model to follow for any future built-in resource category shaped like "one entry per subdirectory."
 
@@ -272,8 +272,8 @@ See [Best Practices](best_practices.md) for project-specific coding guidelines a
 ## Common Issues
 
 **OpenTofu binary not found:**
-- OpenTofu is resolved at runtime through the per-user runtime artifact cache.
-- Use `exasol diag cache` to inspect cache state, `exasol cache clean --invalid` to remove artifacts that fail integrity checks, and `exasol cache clean --partial-downloads` to remove interrupted downloads.
+- OpenTofu is resolved at runtime through the per-user resource cache.
+- Use `exasol diag cache` to inspect cache state, `exasol cache clean --invalid` to remove artifacts that fail integrity checks, and `exasol cache clean --incomplete` to remove interrupted downloads.
 - For direct tofu invocations in development workflows, use `task fmt-terraform` or `go run ./tools/tofu/main.go ...`.
 
 **Windows fails with `tofu init -lockfile=readonly` due to missing hashes in `.terraform.lock.hcl`:**

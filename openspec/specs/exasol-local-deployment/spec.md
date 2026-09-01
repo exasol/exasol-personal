@@ -29,12 +29,17 @@ The system SHALL provide the standard local deployment option through a VM-backe
 
 ### Requirement: Launcher-owned local runtime
 
-The system SHALL own the local VM disk/data and managed deployment share inside the deployment directory, and SHALL resolve the Exasol Local VM runner through the resource manager on every use rather than maintaining a per-deployment copy of it.
+The system SHALL own the local VM disk/data and managed deployment share inside
+the deployment directory, and SHALL resolve the Exasol Local VM runner through
+the resource resolver on every use rather than maintaining a per-deployment
+copy of it.
 
 #### Scenario: Runner is resolved without a per-deployment copy
 
 - **WHEN** the launcher initializes or starts a local deployment
-- **THEN** it resolves the Exasol Local runner through the resource manager and invokes it directly from the resolved location, without copying it into the deployment directory
+- **THEN** it resolves the Exasol Local runner through the resource resolver and
+  invokes it directly from the resolved location, without copying it into the
+  deployment directory
 
 #### Scenario: Missing version marker is initialized
 
