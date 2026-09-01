@@ -230,7 +230,7 @@ func extractPresets(
 
 	// Write shared assets
 	slog.Debug("writing shared files to deployment directory", "dest", ".")
-	err := presets.WriteSharedDir(deployment.Root())
+	err := presets.WriteSharedDir(ctx, deployment.Root())
 	if err != nil {
 		slog.Error(
 			"Failed to write shared assets",

@@ -210,3 +210,22 @@ func TestReadInfrastructureFile_RejectsPathEscapingThePresetDirectory(t *testing
 		t.Fatal("expected an error for a relPath escaping the preset directory, got none")
 	}
 }
+
+// The assets every deployment shares are distributed like any other resource,
+// and must still arrive in the deployment directory.
+func TestWriteSharedDir_WritesSharedAssets(t *testing.T) {
+	t.Parallel()
+
+	ctx := resourcetest.NewContext(t)
+	outDir := t.TempDir()
+
+	if err := WriteSharedDir(ctx, outDir); err != nil {
+		t.Fatalf("WriteSharedDir: %v", err)
+	}
+
+	for _, name := range []string{"eula.txt", "sample.sql"} {
+		if _, err := os.Stat(filepath.Join(outDir, name)); err != nil {
+			t.Fatalf("expected %s in the deployment directory: %v", name, err)
+		}
+	}
+}
