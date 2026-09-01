@@ -5,21 +5,18 @@ package presets
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
-	"path/filepath"
 
-	"github.com/exasol/exasol-personal/assets"
 	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
 	infrastructurePresetsResource = "infrastructure-presets"
 	installationPresetsResource   = "installation-presets"
+	sharedAssetsResource          = "shared-assets"
 )
 
 var (
@@ -61,8 +58,9 @@ func WriteDir(ctx context.Context, kind PresetKind, preset PresetRef, outDir str
 	return nil
 }
 
-func WriteSharedDir(outDir string) error {
-	return writeEmbeddedDir(assets.SharedAssets, assets.SharedAssetDir, outDir)
+// WriteSharedDir materializes the deployment assets shared by every preset.
+func WriteSharedDir(ctx context.Context, outDir string) error {
+	return resource.FromContext(ctx).RequestCopy(ctx, sharedAssetsResource, outDir)
 }
 
 // ListEmbeddedPresets lists every built-in preset name of kind.
@@ -108,59 +106,4 @@ func presetDir(ctx context.Context, kind PresetKind, name string) (string, error
 	}
 
 	return dir, nil
-}
-
-// Write an embedded directory to the filesystem.
-func writeEmbeddedDir(filesys embed.FS, embeddedDirPath string, outputDir string) error {
-	slog.Debug("writing directory", "path", embeddedDirPath)
-
-	entries, err := filesys.ReadDir(embeddedDirPath)
-	if err != nil {
-		return err
-	}
-
-	const perm = 0o700
-
-	for _, entry := range entries {
-		// Use path.Join for embedded asset paths ('/'), not OS paths.
-		if entry.IsDir() {
-			embeddedSubDir := embeddedDirPath + "/" + entry.Name()
-			physicalSubDir := filepath.Join(outputDir, entry.Name())
-			if err := writeEmbeddedDir(
-				filesys,
-				embeddedSubDir,
-				physicalSubDir,
-			); err != nil {
-				return err
-			}
-
-			continue
-		}
-
-		/* Use path.Join (not filepath.Join) here because embedded asset
-		paths always use '/' as a separator, regardless of OS. filepath.Join
-		inserts OS separators (e.g., '\' on Windows), which caused issues
-		accessing embedded binaries. path.Join ensures consistent asset paths. */
-		embeddedFilePath := embeddedDirPath + "/" + entry.Name()
-		outputFilePath := filepath.Join(outputDir, entry.Name())
-
-		data, err := filesys.ReadFile(embeddedFilePath)
-		if err != nil {
-			return fmt.Errorf("%w: reading file: %s", err, embeddedFilePath)
-		}
-
-		err = os.MkdirAll(filepath.FromSlash(outputDir), perm) // nolint:gosec
-		if err != nil {
-			return fmt.Errorf("%w: creating directory: %s", err, outputDir)
-		}
-
-		slog.Debug("writing file", "path", outputFilePath)
-
-		err = os.WriteFile(filepath.FromSlash(outputFilePath), data, perm) // nolint:gosec
-		if err != nil {
-			return fmt.Errorf("%w: writing file: %s", err, outputFilePath)
-		}
-	}
-
-	return nil
 }
