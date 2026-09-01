@@ -9,7 +9,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -39,6 +38,115 @@ func TestParseSpec_AllowsEmptySpec(t *testing.T) {
 	if len(spec) != 0 {
 		t.Fatalf("expected empty spec, got %d resources", len(spec))
 	}
+}
+
+func TestManagerListGroupMembersWithoutMaterializingThem(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(
+		writer http.ResponseWriter, _ *http.Request,
+	) {
+		requests.Add(1)
+		_, _ = writer.Write([]byte("payload"))
+	}))
+	defer server.Close()
+	manager := newGroupTestManager(t, ResourceSpec{
+		"presets/aws":   testResourceDefinition(server.URL+"/aws", "aws"),
+		"presets/azure": testResourceDefinition(server.URL+"/azure", "azure"),
+		"other":         testResourceDefinition(server.URL+"/other", "other"),
+	}, t.TempDir())
+
+	// When
+	members := manager.GroupMembers("presets")
+
+	// Then
+	if !slices.Equal(members, []string{"aws", "azure"}) {
+		t.Fatalf("members = %v", members)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("listing transferred %d resources", requests.Load())
+	}
+}
+
+func TestManagerListUnknownGroupReturnsNoMembers(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	manager := newGroupTestManager(t, ResourceSpec{
+		"presets/aws": testResourceDefinition("https://example.com/aws", "aws"),
+	}, t.TempDir())
+
+	// When
+	members := manager.GroupMembers("unknown")
+
+	// Then
+	if len(members) != 0 {
+		t.Fatalf("members = %v, want none", members)
+	}
+}
+
+func TestManagerResolveGroupMemberLeavesSiblingUnmaterialized(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	var awsRequests, azureRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(
+		writer http.ResponseWriter, request *http.Request,
+	) {
+		if request.URL.Path == "/aws" {
+			awsRequests.Add(1)
+		} else {
+			azureRequests.Add(1)
+		}
+		content := "azure"
+		if request.URL.Path == "/aws" {
+			content = "aws"
+		}
+		_, _ = writer.Write([]byte(content))
+	}))
+	defer server.Close()
+	manager := newGroupTestManager(t, ResourceSpec{
+		"presets/aws":   testResourceDefinition(server.URL+"/aws", "aws"),
+		"presets/azure": testResourceDefinition(server.URL+"/azure", "azure"),
+	}, t.TempDir())
+
+	// When
+	_, err := manager.RequestMember(context.Background(), "presets", "aws")
+	// Then
+	if err != nil {
+		t.Fatalf("resolve member: %v", err)
+	}
+	if awsRequests.Load() != 1 || azureRequests.Load() != 0 {
+		t.Fatalf("requests: aws=%d azure=%d", awsRequests.Load(), azureRequests.Load())
+	}
+}
+
+func TestManagerUnknownGroupMemberErrorNamesMemberAndGroup(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	manager := newGroupTestManager(t, ResourceSpec{}, t.TempDir())
+
+	// When
+	_, err := manager.RequestMember(context.Background(), "presets", "missing")
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "presets") ||
+		!strings.Contains(err.Error(), "missing") {
+		t.Fatalf("error = %v, want group and member names", err)
+	}
+}
+
+func testResourceDefinition(url, content string) ResourceDefinition {
+	return ResourceDefinition{Artifact: map[string]ArtifactSpec{
+		"any": {
+			URL:          url,
+			Sha256:       sha256OfBytes([]byte(content)),
+			DownloadPath: "payload.bin",
+		},
+	}}
 }
 
 func TestParseSpec_RoundTripsEmbedField(t *testing.T) {
@@ -477,247 +585,6 @@ func TestManager_RequestUsesPlatformVariantAndCachesIt(t *testing.T) {
 	}
 	if path2 != path1 {
 		t.Fatalf("expected cache hit to return same path, got %q and %q", path1, path2)
-	}
-}
-
-func TestManager_RequestExtractsZipResource(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	deploymentDir := t.TempDir()
-	archivePath := writeZipFixture(
-		t,
-		deploymentDir,
-		"artifact.zip",
-		map[string]string{
-			"launcher":      "runner",
-			"nested/README": "readme",
-		},
-	)
-	sum := sha256OfTestFile(t, archivePath)
-	archiveData, err := os.ReadFile(archivePath)
-	if err != nil {
-		t.Fatalf("failed to read artifact fixture: %v", err)
-	}
-	server := newArtifactServer(t, "artifact.zip", archiveData)
-	spec := ResourceSpec{
-		"artifact": {
-			Extract: true,
-			Artifact: map[string]ArtifactSpec{
-				"darwin/arm64": {
-					URL:          server.URL + "/artifact.zip",
-					Sha256:       sum,
-					DownloadPath: "artifact.zip",
-					Subpath:      "launcher",
-				},
-			},
-		},
-	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "darwin", "arm64")
-
-	// When
-	path, err := manager.Request(context.Background(), "artifact")
-	// Then
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	assertPathInCache(t, deploymentDir, path, filepath.Join("unpack", "launcher"))
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("expected resolved path to be readable, got %v", err)
-	}
-	if string(data) != "runner" {
-		t.Fatalf("expected resolved resource content, got %q", string(data))
-	}
-}
-
-//nolint:paralleltest // embeddedResources is shared; concurrent Register calls aren't safe.
-func TestManager_RequestResolvesEmbeddedResourceWithoutNetwork(t *testing.T) {
-	// Given
-	const resourceID = "embedded-resolve-test"
-	deploymentDir := t.TempDir()
-	fixtureDir := t.TempDir()
-	archivePath := writeZipFixture(t, fixtureDir, "artifact.zip", map[string]string{
-		"launcher": "runner",
-	})
-	archiveData, err := os.ReadFile(archivePath)
-	if err != nil {
-		t.Fatalf("failed to read artifact fixture: %v", err)
-	}
-	Register(resourceID, archiveData, sha256OfTestFile(t, archivePath))
-	t.Cleanup(func() {
-		delete(embeddedResources, resourceID)
-		delete(embeddedHashes, resourceID)
-	})
-
-	server, requests := newCountingArtifactServer(t, "artifact.zip", archiveData)
-	spec := ResourceSpec{
-		resourceID: {
-			Extract: true,
-			Embed:   EmbedDefault,
-			Artifact: map[string]ArtifactSpec{
-				"darwin/arm64": {
-					URL:     server.URL + "/artifact.zip",
-					Sha256:  sha256OfTestFile(t, archivePath),
-					Subpath: "launcher",
-				},
-			},
-		},
-	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "darwin", "arm64")
-
-	// When
-	path, err := manager.Request(context.Background(), resourceID)
-	// Then
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if requests.Load() != 0 {
-		t.Fatalf("expected embedded resolution to never contact the network, got %d requests",
-			requests.Load())
-	}
-	// Same cache layout (unpack/launcher) a network-fetched zip of this shape
-	// would produce — proves extraction reused the identical code path.
-	assertPathInCache(t, deploymentDir, path, filepath.Join("unpack", "launcher"))
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("expected resolved path to be readable, got %v", err)
-	}
-	if string(data) != "runner" {
-		t.Fatalf("expected resolved resource content, got %q", string(data))
-	}
-}
-
-func TestManager_RequestFailsWhenEmbeddedResourceNotRegistered(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	deploymentDir := t.TempDir()
-	server, requests := newCountingArtifactServer(t, "artifact.zip", []byte("unused"))
-	spec := ResourceSpec{
-		"embedded-missing-test": {
-			Extract: true,
-			Embed:   EmbedDefault,
-			Artifact: map[string]ArtifactSpec{
-				"darwin/arm64": {
-					URL:     server.URL + "/artifact.zip",
-					Sha256:  "deadbeef",
-					Subpath: "launcher",
-				},
-			},
-		},
-	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "darwin", "arm64")
-
-	// When
-	_, err := manager.Request(context.Background(), "embedded-missing-test")
-
-	// Then
-	if err == nil || !strings.Contains(err.Error(), "no embedded data registered") {
-		t.Fatalf("expected a hard error for a missing embedded registration, got %v", err)
-	}
-	if requests.Load() != 0 {
-		t.Fatalf("expected no fallback to network sources, got %d requests", requests.Load())
-	}
-}
-
-//nolint:paralleltest // embeddedResources is shared; concurrent Register calls aren't safe.
-func TestManager_EmbeddedResourceIdentityComesFromContentHash(t *testing.T) {
-	// Given: one cache root and spec shared across two "builds" that embed
-	// different content under the same resource ID.
-	const resourceID = "embedded-identity-test"
-	t.Cleanup(func() {
-		delete(embeddedResources, resourceID)
-		delete(embeddedHashes, resourceID)
-	})
-	spec := ResourceSpec{
-		resourceID: {
-			Embed: EmbedDefault,
-			Artifact: map[string]ArtifactSpec{
-				anyPlatformKey: {URL: "embedded://" + resourceID},
-			},
-		},
-	}
-	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
-
-	// When: the first build resolves its own embedded content.
-	firstData := []byte("build-one-content")
-	Register(resourceID, firstData, sha256OfBytes(firstData))
-	firstPath, err := manager.Request(context.Background(), resourceID)
-	if err != nil {
-		t.Fatalf("expected no error resolving the first payload, got %v", err)
-	}
-	firstResolved, err := os.ReadFile(firstPath)
-	if err != nil || string(firstResolved) != string(firstData) {
-		t.Fatalf("expected the first payload's own content, got %q, err %v", firstResolved, err)
-	}
-
-	// When: a second build, sharing the same cache root and resource ID,
-	// registers different content (simulating an upgraded binary).
-	secondData := []byte("build-two-content")
-	Register(resourceID, secondData, sha256OfBytes(secondData))
-	secondPath, err := manager.Request(context.Background(), resourceID)
-	if err != nil {
-		t.Fatalf("expected no error resolving the second payload, got %v", err)
-	}
-	secondResolved, err := os.ReadFile(secondPath)
-	if err != nil || string(secondResolved) != string(secondData) {
-		t.Fatalf("expected the second payload's own content, got %q, err %v", secondResolved, err)
-	}
-
-	// Then: the two payloads resolved to distinct cache entries, and the
-	// first entry's content was never overwritten by the second.
-	if firstPath == secondPath {
-		t.Fatalf(
-			"expected a different content hash to resolve to a different entry, got %q twice",
-			firstPath,
-		)
-	}
-	firstStillIntact, err := os.ReadFile(firstPath)
-	if err != nil || string(firstStillIntact) != string(firstData) {
-		t.Fatalf("expected the first entry to remain intact, got %q, err %v", firstStillIntact, err)
-	}
-}
-
-//nolint:paralleltest // embeddedResources is shared; concurrent Register calls aren't safe.
-func TestManager_RequestIgnoresEmbeddedRegistryWithoutEmbedFlag(t *testing.T) {
-	// Given
-	const resourceID = "embedded-ignored-test"
-	deploymentDir := t.TempDir()
-	Register(resourceID, []byte("should never be used"), "unused-hash")
-	t.Cleanup(func() {
-		delete(embeddedResources, resourceID)
-		delete(embeddedHashes, resourceID)
-	})
-
-	content := []byte("from the network")
-	server := newArtifactServer(t, "artifact.bin", content)
-	sum := sha256.Sum256(content)
-	spec := ResourceSpec{
-		resourceID: {
-			Artifact: map[string]ArtifactSpec{
-				"darwin/arm64": {
-					URL:          server.URL + "/artifact.bin",
-					Sha256:       hex.EncodeToString(sum[:]),
-					DownloadPath: "artifact.bin",
-				},
-			},
-		},
-	}
-	manager := NewResourceManagerForPlatform(spec, deploymentDir, "darwin", "arm64")
-
-	// When
-	path, err := manager.Request(context.Background(), resourceID)
-	// Then
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("expected resolved path to be readable, got %v", err)
-	}
-	if string(data) != string(content) {
-		t.Fatalf("expected network-fetched content, got %q", string(data))
 	}
 }
 
@@ -1331,66 +1198,6 @@ func TestManager_GetNoChecksumAlwaysRefetches(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // embeddedHashes/embeddedResources are shared globals.
-func TestManager_GetEmbeddedResourcePrefersRegisteredHashOverADeclaredChecksum(t *testing.T) {
-	// Given: an embedded resource whose artifact also declares a checksum,
-	// as tofu's local-runner and nano-image resources already do — the
-	// declared checksum verifies what got fetched, not necessarily what a
-	// given build ends up embedding.
-	const resourceID = "manager-test-embed-checksum-fix"
-	t.Cleanup(func() {
-		delete(embeddedResources, resourceID)
-		delete(embeddedHashes, resourceID)
-	})
-	def := ResourceDefinition{
-		Embed: EmbedDefault,
-		Artifact: map[string]ArtifactSpec{
-			anyPlatformKey: {
-				URL:    "https://example.invalid/archive.tar.gz",
-				Sha256: "source-archive-checksum",
-			},
-		},
-	}
-	cacheRoot := t.TempDir()
-
-	// When: a first build registers one set of embedded bytes...
-	Register(resourceID, []byte("old-content"), "hash-of-old-content")
-	oldManager := NewResourceManagerForPlatform(ResourceSpec{}, cacheRoot, "linux", "amd64")
-	oldPath, err := oldManager.Get(context.Background(), def, resourceID)
-	if err != nil {
-		t.Fatalf("expected first Get to succeed, got %v", err)
-	}
-	oldData, err := os.ReadFile(oldPath)
-	if err != nil {
-		t.Fatalf("failed to read first resolved artifact: %v", err)
-	}
-
-	// ...and a later build registers different bytes, while the source
-	// artifact's own declared checksum stays the same.
-	Register(resourceID, []byte("new-content"), "hash-of-new-content")
-	newManager := NewResourceManagerForPlatform(ResourceSpec{}, cacheRoot, "linux", "amd64")
-	newPath, err := newManager.Get(context.Background(), def, resourceID)
-	if err != nil {
-		t.Fatalf("expected second Get to succeed, got %v", err)
-	}
-	newData, err := os.ReadFile(newPath)
-	if err != nil {
-		t.Fatalf("failed to read second resolved artifact: %v", err)
-	}
-
-	// Then: the second build resolves its own embedded bytes, not a stale
-	// cache entry reused because the declared checksum never changed.
-	if string(oldData) != "old-content" {
-		t.Fatalf("expected the first build's own embedded content, got %q", oldData)
-	}
-	if string(newData) != "new-content" {
-		t.Fatalf(
-			"expected the second build's own embedded content, got %q (stale cache entry reused)",
-			newData,
-		)
-	}
-}
-
 func TestManager_GetGitSourceCachedOnSameCommit(t *testing.T) {
 	t.Parallel()
 
@@ -1743,277 +1550,6 @@ func writeZipArchiveFixture(t *testing.T, dir, archiveName, entryName, content s
 	return writeZipFixtureEntries(t, dir, archiveName, map[string]string{
 		entryName: content,
 	})
-}
-
-func TestGlobMatches_MatchesFilesAndDirectoriesAlike(t *testing.T) {
-	t.Parallel()
-
-	// Given: a plain-file match alongside a directory match — GlobMatches
-	// makes no assumption that a match must be a directory.
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "aws"), dirPerm); err != nil {
-		t.Fatalf("failed to create fixture subdirectory: %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(root, "azure.txt"), []byte("azure"), filePerm,
-	); err != nil {
-		t.Fatalf("failed to write fixture file: %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(root, "README.md"), []byte("not a module"), filePerm,
-	); err != nil {
-		t.Fatalf("failed to write fixture file: %v", err)
-	}
-
-	// When
-	matches, err := GlobMatches(root, "*")
-	// Then
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if len(matches) != 3 {
-		t.Fatalf("expected 3 matches, got %v", matches)
-	}
-	if matches["aws"] != filepath.Join(root, "aws") {
-		t.Fatalf("expected the aws subdirectory match, got %v", matches)
-	}
-	if matches["azure.txt"] != filepath.Join(root, "azure.txt") {
-		t.Fatalf("expected the azure.txt file match, got %v", matches)
-	}
-}
-
-func TestGlobMatches_MatchesWithinASubdirectory(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "modules", "aws"), dirPerm); err != nil {
-		t.Fatalf("failed to create fixture subdirectory: %v", err)
-	}
-
-	matches, err := GlobMatches(root, "modules/*")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if matches["aws"] != filepath.Join(root, "modules", "aws") {
-		t.Fatalf("expected the nested aws match, got %v", matches)
-	}
-}
-
-func TestGlobMatches_RejectsMatchesSharingAMemberName(t *testing.T) {
-	t.Parallel()
-
-	// Given: two directories under different parents share a basename, so a
-	// pattern spanning both would otherwise silently drop one via overwrite.
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "aws", "config"), dirPerm); err != nil {
-		t.Fatalf("failed to create fixture subdirectory: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(root, "azure", "config"), dirPerm); err != nil {
-		t.Fatalf("failed to create fixture subdirectory: %v", err)
-	}
-
-	// When
-	_, err := GlobMatches(root, "*/config")
-	// Then
-	if err == nil {
-		t.Fatal("expected an error for a pattern matching duplicate member names, got none")
-	}
-}
-
-func TestGlobMatches_ExcludesGitMetadataDirectory(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ".git"), dirPerm); err != nil {
-		t.Fatalf("failed to create fixture .git directory: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(root, "aws"), dirPerm); err != nil {
-		t.Fatalf("failed to create fixture subdirectory: %v", err)
-	}
-
-	matches, err := GlobMatches(root, "*")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if _, ok := matches[".git"]; ok {
-		t.Fatalf("expected .git to be excluded, got %v", matches)
-	}
-}
-
-func TestGlobMatches_PropagatesAMissingPatternError(t *testing.T) {
-	t.Parallel()
-
-	if _, err := GlobMatches(t.TempDir(), ""); err == nil {
-		t.Fatal("expected an error for an empty pattern, got none")
-	}
-}
-
-func TestManager_RequestMember_ResolvesAMatchWithinALocalDirectory(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	srcDir := t.TempDir()
-	for _, name := range []string{"aws", "azure"} {
-		if err := os.MkdirAll(filepath.Join(srcDir, name), dirPerm); err != nil {
-			t.Fatalf("failed to create fixture subdirectory: %v", err)
-		}
-	}
-	if err := os.WriteFile(
-		filepath.Join(srcDir, "README.md"), []byte("not a module"), filePerm,
-	); err != nil {
-		t.Fatalf("failed to write fixture file: %v", err)
-	}
-	spec := ResourceSpec{
-		"shared-modules": {
-			Glob:     true,
-			Artifact: map[string]ArtifactSpec{anyPlatformKey: {URL: srcDir, Subpath: "*"}},
-		},
-	}
-	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
-
-	// When
-	path, err := manager.RequestMember(context.Background(), "shared-modules", "aws")
-	// Then
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if path != filepath.Join(srcDir, "aws") {
-		t.Fatalf("expected the aws subdirectory path, got %q", path)
-	}
-}
-
-func TestManager_RequestMember_ResolvesAMatchWithinAnExtractedArchive(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	srcDir := t.TempDir()
-	archivePath := writeTarGzMultiFixture(t, srcDir, "presets.tar.gz", map[string]tarFixtureEntry{
-		"aws/main.tf":   {Content: "aws module"},
-		"azure/main.tf": {Content: "azure module"},
-		"README.md":     {Content: "not a module"},
-	})
-	spec := ResourceSpec{
-		"shared-modules": {
-			Extract: true,
-			Glob:    true,
-			Artifact: map[string]ArtifactSpec{
-				anyPlatformKey: {URL: "file://" + archivePath, Subpath: "*"},
-			},
-		},
-	}
-	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
-
-	// When
-	path, err := manager.RequestMember(context.Background(), "shared-modules", "aws")
-	// Then
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(path, "main.tf")); err != nil {
-		t.Fatalf("expected main.tf inside matched %q, got %v", path, err)
-	}
-}
-
-func TestManager_RequestMember_ReturnsErrorForUnknownMember(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	srcDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(srcDir, "aws"), dirPerm); err != nil {
-		t.Fatalf("failed to create fixture subdirectory: %v", err)
-	}
-	spec := ResourceSpec{
-		"shared-modules": {
-			Glob:     true,
-			Artifact: map[string]ArtifactSpec{anyPlatformKey: {URL: srcDir, Subpath: "*"}},
-		},
-	}
-	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
-
-	// When
-	_, err := manager.RequestMember(context.Background(), "shared-modules", "azure")
-	// Then
-	if !errors.Is(err, ErrUnknownMember) {
-		t.Fatalf("expected ErrUnknownMember, got %v", err)
-	}
-}
-
-//nolint:paralleltest // embeddedGroupMembers is shared; concurrent Register calls aren't safe.
-func TestManager_GroupMembers_ReturnsNamesRegisteredAtBuildTime(t *testing.T) {
-	// Given
-	const group = "infrastructure-presets"
-	t.Cleanup(func() { delete(embeddedGroupMembers, group) })
-	RegisterGroupMembers(group, []string{"aws", "azure"})
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
-
-	// When
-	members := manager.GroupMembers(group)
-	// Then
-	if !slices.Equal(members, []string{"aws", "azure"}) {
-		t.Fatalf("expected the registered member names, got %v", members)
-	}
-}
-
-func TestManager_GroupMembers_EmptyWhenNeverRegistered(t *testing.T) {
-	t.Parallel()
-
-	manager := NewResourceManagerForPlatform(ResourceSpec{}, t.TempDir(), "linux", "amd64")
-
-	if members := manager.GroupMembers("never-registered"); len(members) != 0 {
-		t.Fatalf("expected no members, got %v", members)
-	}
-}
-
-// A Glob:true resource whose live source is a bare directory declares
-// extract: false, since there is nothing to unpack to read it live. Once
-// embedded, its bytes are always an archive, so resolving it from embedded
-// data must still extract regardless of that declared value.
-//
-//nolint:paralleltest // embeddedResources/embeddedHashes are shared; concurrent Register isn't.
-func TestManager_RequestMember_EmbeddedGlobResourceIsExtractedForMatching(t *testing.T) {
-	// Given: a directory archived exactly as resourceembedder would for a
-	// Glob:true, embedded resource — download_path names it as an archive so
-	// Manager's extractor lookup recognizes the embedded blob.
-	const resourceID = "embedded-glob-test"
-	t.Cleanup(func() {
-		delete(embeddedResources, resourceID)
-		delete(embeddedHashes, resourceID)
-	})
-	archiveDir := t.TempDir()
-	archivePath := writeTarGzMultiFixture(
-		t, archiveDir, "embedded-glob-test.tar.gz", map[string]tarFixtureEntry{
-			"aws/main.tf": {Content: "aws module"},
-		},
-	)
-	data, err := os.ReadFile(archivePath)
-	if err != nil {
-		t.Fatalf("failed to read fixture archive: %v", err)
-	}
-	Register(resourceID, data, sha256OfBytes(data))
-	spec := ResourceSpec{
-		resourceID: {
-			Glob:  true,
-			Embed: EmbedDefault,
-			Artifact: map[string]ArtifactSpec{
-				anyPlatformKey: {
-					URL:          "https://example.com/" + resourceID + ".tar.gz",
-					Subpath:      "*",
-					DownloadPath: resourceID + ".tar.gz",
-				},
-			},
-		},
-	}
-	manager := NewResourceManagerForPlatform(spec, t.TempDir(), "linux", "amd64")
-
-	// When
-	path, err := manager.RequestMember(context.Background(), resourceID, "aws")
-	// Then
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(path, "main.tf")); err != nil {
-		t.Fatalf("expected main.tf inside the extracted match %q, got %v", path, err)
-	}
 }
 
 func TestManager_RequestCopyWritesAPlainFile(t *testing.T) {

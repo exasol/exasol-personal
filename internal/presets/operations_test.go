@@ -48,12 +48,14 @@ func TestPresetDir_UnknownInstallationNameReturnsErrUnknownInstallation(t *testi
 	}
 }
 
-//nolint:paralleltest // registers under the shared build-time group registry.
 func TestListEmbeddedPresets_ReturnsNamesDeclaredUnderKind(t *testing.T) {
+	t.Parallel()
+
 	// Given
-	t.Cleanup(func() { resource.RegisterGroupMembers(infrastructurePresetsResource, nil) })
-	resource.RegisterGroupMembers(infrastructurePresetsResource, []string{"aws", "azure"})
-	ctx := testManagerContext(t, resource.ResourceSpec{})
+	ctx := testManagerContext(t, resource.ResourceSpec{
+		infrastructurePresetsResource + "/aws":   memberDef(t.TempDir()),
+		infrastructurePresetsResource + "/azure": memberDef(t.TempDir()),
+	})
 
 	// When
 	names := ListEmbeddedPresets(ctx, Infrastructure)
@@ -93,12 +95,7 @@ func TestWriteDir_NamedPresetCopiesResolvedDirectory(t *testing.T) {
 		t.Fatalf("failed to write fixture: %v", err)
 	}
 	ctx := testManagerContext(t, resource.ResourceSpec{
-		infrastructurePresetsResource: {
-			Glob: true,
-			Artifact: map[string]resource.ArtifactSpec{
-				"any": {URL: srcDir, Subpath: "*"},
-			},
-		},
+		infrastructurePresetsResource + "/aws": memberDef(filepath.Join(srcDir, "aws")),
 	})
 	outDir := filepath.Join(t.TempDir(), "out")
 
@@ -156,15 +153,12 @@ func TestWriteDir_PathPresetCopiesDirectoryDirectly(t *testing.T) {
 func TestWriteDir_ResolutionFailurePropagatesInsteadOfReportingUnknownPreset(t *testing.T) {
 	t.Parallel()
 
-	// Given: a group whose own source can never resolve — not a member that
-	// fails to match a pattern within an otherwise-resolvable group.
+	// Given: a declared member whose source can never resolve — not a name the
+	// specification does not declare at all.
 	ctx := testManagerContext(t, resource.ResourceSpec{
-		infrastructurePresetsResource: {
-			Glob: true,
-			Artifact: map[string]resource.ArtifactSpec{
-				"any": {URL: filepath.Join(t.TempDir(), "does-not-exist"), Subpath: "*"},
-			},
-		},
+		infrastructurePresetsResource + "/aws": memberDef(
+			filepath.Join(t.TempDir(), "does-not-exist"),
+		),
 	})
 
 	// When
@@ -195,12 +189,7 @@ func TestReadInfrastructureFile_RejectsPathEscapingThePresetDirectory(t *testing
 		t.Fatalf("failed to write fixture file: %v", err)
 	}
 	ctx := testManagerContext(t, resource.ResourceSpec{
-		infrastructurePresetsResource: {
-			Glob: true,
-			Artifact: map[string]resource.ArtifactSpec{
-				"any": {URL: presetsRoot, Subpath: "*"},
-			},
-		},
+		infrastructurePresetsResource + "/aws": memberDef(filepath.Join(presetsRoot, "aws")),
 	})
 
 	// When
@@ -227,5 +216,12 @@ func TestWriteSharedDir_WritesSharedAssets(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(outDir, name)); err != nil {
 			t.Fatalf("expected %s in the deployment directory: %v", name, err)
 		}
+	}
+}
+
+// A group member is a resource in its own right, named "<group>/<member>".
+func memberDef(dir string) resource.ResourceDefinition {
+	return resource.ResourceDefinition{
+		Artifact: map[string]resource.ArtifactSpec{"any": {URL: dir}},
 	}
 }

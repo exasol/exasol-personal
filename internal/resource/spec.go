@@ -20,12 +20,15 @@ type ResourceSpec map[string]ResourceDefinition
 //
 //nolint:golines // golines and tagalign disagree on struct tag alignment here; tagalign wins.
 type ResourceDefinition struct {
-	Extract  bool                    `json:"extract"  yaml:"extract"`
-	Embed    EmbedMode               `json:"embed"    yaml:"embed"`
-	Artifact map[string]ArtifactSpec `json:"artifact" yaml:"artifact"`
-	// Glob marks subpath as a pattern to match within the artifact's
-	// resolved content, instead of a literal path.
-	Glob bool `json:"glob,omitempty" yaml:"glob,omitempty"`
+	Extract bool `json:"extract,omitempty" yaml:"extract,omitempty"`
+	// Embed is a build directive: it selects what a build embeds and never
+	// appears in a resolved specification.
+	Embed    EmbedMode               `json:"embed,omitempty" yaml:"embed,omitempty"`
+	Artifact map[string]ArtifactSpec `json:"artifact"        yaml:"artifact"`
+	// Glob is a build-time pattern matched against the resource's own resolved
+	// content. Each match becomes an independently addressable resource named
+	// "<resource>/<match>", and the group itself does not reach a build.
+	Glob string `json:"glob,omitempty" yaml:"glob,omitempty"`
 }
 
 // EmbedMode declares whether a resource's data is embedded into the compiled
@@ -131,7 +134,7 @@ type ArtifactSpec struct {
 	// Ref selects a revision within the source, such as a branch, tag, or
 	// commit for a git repository.
 	Ref    string `yaml:"ref,omitempty"`
-	Sha256 string `yaml:"sha256"`
+	Sha256 string `yaml:"sha256,omitempty"`
 	// DownloadPath's suffix picks the extractor (see extractors), so it must
 	// look like an archive even when the source itself is a bare directory.
 	//nolint:tagliatelle // YAML schema uses snake_case field names.
@@ -208,6 +211,9 @@ func ParseSpec(raw []byte) (ResourceSpec, error) {
 }
 
 func (d ResourceDefinition) validate(resourceID string) error {
+	if d.Glob != "" && strings.TrimSpace(d.Glob) == "" {
+		return fmt.Errorf("resource %q declares a blank glob pattern", resourceID)
+	}
 	if len(d.Artifact) == 0 {
 		return fmt.Errorf(
 			"resource %q must define a platform-specific artifact",
@@ -226,7 +232,6 @@ func (d ResourceDefinition) validate(resourceID string) error {
 			resourceID: resourceID,
 			variant:    key,
 			extract:    d.Extract,
-			glob:       d.Glob,
 		}); err != nil {
 			return err
 		}
@@ -247,7 +252,6 @@ type artifactValidationContext struct {
 	resourceID string
 	variant    string
 	extract    bool
-	glob       bool
 }
 
 func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
@@ -280,50 +284,6 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 				ctx.variant,
 			)
 		}
-	}
-
-	if ctx.glob {
-		return validateGlobSubpath(a, ctx)
-	}
-
-	return nil
-}
-
-// A git checkout is already a directory, so a glob template with a git
-// source must not declare extract: true. Any other non-local source must,
-// since a git checkout or an extracted archive is the only way to have a
-// directory tree to glob within.
-func validateGlobSubpath(artifact ArtifactSpec, ctx artifactValidationContext) error {
-	if strings.TrimSpace(artifact.Subpath) == "" {
-		return fmt.Errorf(
-			"resource %q artifact %q must define subpath with a glob pattern",
-			ctx.resourceID,
-			ctx.variant,
-		)
-	}
-	// ArtifactSpec.URL may carry an @ref suffix; strip it before classification.
-	gitRepoURL, _ := splitRef(artifact.URL)
-	if IsGitSourceURL(gitRepoURL) {
-		if ctx.extract {
-			return fmt.Errorf(
-				"resource %q artifact %q must not declare extract: true for a git source"+
-					" (a checkout is already a directory)",
-				ctx.resourceID,
-				ctx.variant,
-			)
-		}
-
-		return nil
-	}
-	if (FileSource{}).Handles(artifact.Locator()) {
-		return nil
-	}
-	if !ctx.extract {
-		return fmt.Errorf(
-			"resource %q artifact %q must declare extract: true to use a glob subpath",
-			ctx.resourceID,
-			ctx.variant,
-		)
 	}
 
 	return nil

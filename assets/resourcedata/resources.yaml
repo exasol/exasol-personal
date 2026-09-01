@@ -29,21 +29,17 @@ shared-assets:
       url: assets/shared
       download_path: shared-assets.tar.gz
 infrastructure-presets:
-  glob: true
+  glob: "*"
   embed: always
   artifact:
     any:
       url: assets/infrastructure
-      subpath: "*"
-      download_path: infrastructure-presets.tar.gz
 installation-presets:
-  glob: true
+  glob: "*"
   embed: always
   artifact:
     any:
       url: assets/installation
-      subpath: "*"
-      download_path: installation-presets.tar.gz
 exasol-local-runner:
   extract: true
   embed: true

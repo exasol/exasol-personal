@@ -57,60 +57,6 @@ myresource:
 	}
 }
 
-func TestParseSpec_LocalGlobTemplateValidates(t *testing.T) {
-	t.Parallel()
-
-	raw := []byte(`
-infra-presets:
-  glob: true
-  embed: true
-  artifact:
-    any:
-      url: assets/infrastructure
-      subpath: "*"
-`)
-
-	if _, err := ParseSpec(raw); err != nil {
-		t.Fatalf("expected a glob template with a local artifact pattern to validate, got %v", err)
-	}
-}
-
-func TestParseSpec_GitGlobTemplateValidates(t *testing.T) {
-	t.Parallel()
-
-	raw := []byte(`
-shared-modules:
-  glob: true
-  embed: true
-  artifact:
-    any:
-      url: https://github.com/org/shared-modules.git
-      subpath: "modules/*"
-`)
-
-	if _, err := ParseSpec(raw); err != nil {
-		t.Fatalf("expected a glob template with a git artifact pattern to validate, got %v", err)
-	}
-}
-
-func TestParseSpec_GitGlobTemplateRequiresAPattern(t *testing.T) {
-	t.Parallel()
-
-	raw := []byte(`
-shared-modules:
-  glob: true
-  embed: true
-  artifact:
-    any:
-      url: https://github.com/org/shared-modules.git
-`)
-
-	_, err := ParseSpec(raw)
-	if err == nil || !strings.Contains(err.Error(), "subpath with a glob pattern") {
-		t.Fatalf("expected a missing pattern error, got %v", err)
-	}
-}
-
 func TestParseSpec_GitGlobTemplateStillRejectsAChecksum(t *testing.T) {
 	t.Parallel()
 
@@ -131,91 +77,6 @@ shared-modules:
 	}
 }
 
-func TestParseSpec_GitGlobTemplateRejectsExtraction(t *testing.T) {
-	t.Parallel()
-
-	raw := []byte(`
-shared-modules:
-  glob: true
-  embed: true
-  extract: true
-  artifact:
-    any:
-      url: https://github.com/org/shared-modules.git
-      subpath: "modules/*"
-`)
-
-	_, err := ParseSpec(raw)
-	if err == nil || !strings.Contains(err.Error(), "must not declare extract: true") {
-		t.Fatalf("expected an extract-rejection error, got %v", err)
-	}
-}
-
-func TestParseSpec_ArchiveGlobTemplateValidates(t *testing.T) {
-	t.Parallel()
-
-	raw := []byte(`
-shared-archives:
-  glob: true
-  embed: true
-  extract: true
-  artifact:
-    any:
-      url: https://example.com/presets.tar.gz
-      subpath: "infra/*"
-      sha256: deadbeef
-`)
-
-	if _, err := ParseSpec(raw); err != nil {
-		t.Fatalf(
-			"expected a glob template with an archive artifact pattern to validate, got %v",
-			err,
-		)
-	}
-}
-
-func TestParseSpec_ArchiveGlobTemplateRequiresAPattern(t *testing.T) {
-	t.Parallel()
-
-	raw := []byte(`
-shared-archives:
-  glob: true
-  embed: true
-  extract: true
-  artifact:
-    any:
-      url: https://example.com/presets.tar.gz
-      sha256: deadbeef
-`)
-
-	_, err := ParseSpec(raw)
-	if err == nil || !strings.Contains(err.Error(), "subpath with a glob pattern") {
-		t.Fatalf("expected a missing pattern error, got %v", err)
-	}
-}
-
-func TestParseSpec_ArchiveGlobTemplateRequiresExtraction(t *testing.T) {
-	t.Parallel()
-
-	raw := []byte(`
-shared-archives:
-  glob: true
-  embed: true
-  extract: false
-  artifact:
-    any:
-      url: https://example.com/presets.tar.gz
-      subpath: "infra/*"
-      sha256: deadbeef
-`)
-
-	_, err := ParseSpec(raw)
-	if err == nil || !strings.Contains(err.Error(), "extract: true") {
-		t.Fatalf("expected an extract:true requirement error, got %v", err)
-	}
-}
-
-// A digest names the image content, so it already is the checksum.
 func TestParseSpec_DigestPinnedImageMayOmitChecksum(t *testing.T) {
 	t.Parallel()
 
@@ -231,7 +92,6 @@ nano:
 	}
 }
 
-// A tag can move, so it identifies nothing and a checksum is still required.
 func TestParseSpec_TagOnlyImageRequiresChecksum(t *testing.T) {
 	t.Parallel()
 
@@ -245,5 +105,21 @@ nano:
 	_, err := ParseSpec(raw)
 	if err == nil || !strings.Contains(err.Error(), "sha256") {
 		t.Fatalf("expected a tag-only image to require a checksum, got %v", err)
+	}
+}
+
+func TestParseSpec_RejectsABlankGlobPattern(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`
+presets:
+  glob: "   "
+  artifact:
+    any:
+      url: assets/infrastructure
+`)
+	_, err := ParseSpec(raw)
+	if err == nil || !strings.Contains(err.Error(), "glob") {
+		t.Fatalf("expected a blank glob pattern to be rejected, got %v", err)
 	}
 }

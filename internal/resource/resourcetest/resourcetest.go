@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/exasol/exasol-personal/assets/resourcedata"
+	"github.com/exasol/exasol-personal/assets/resourcedata/embedded"
 	"github.com/exasol/exasol-personal/internal/resource"
 )
 
@@ -27,17 +27,18 @@ func NewManagerContext(t *testing.T, spec resource.ResourceSpec) context.Context
 	return resource.NewContext(context.Background(), manager)
 }
 
-// NewContext returns a context carrying a Manager backed by the real embedded
-// resource catalog (so embedded presets resolve for real, since they are
-// embed: always) and a throwaway cache root.
+// NewContext returns a context carrying a Manager backed by the resolved
+// specification and data this build embeds, and a throwaway cache root.
 func NewContext(t *testing.T) context.Context {
 	t.Helper()
 
-	manager, err := resource.NewResourceManagerWithSpecForPlatform(
-		resourcedata.ResourcesYAML, t.TempDir(), runtime.GOOS, runtime.GOARCH,
-	)
+	manager, err := resource.New(resource.Options{
+		Spec:      embedded.ResolvedSpec,
+		Blobs:     embedded.Blobs,
+		CacheRoot: t.TempDir(),
+	})
 	if err != nil {
-		t.Fatalf("failed to parse resources.yaml: %v", err)
+		t.Fatalf("failed to build a resolver: %v", err)
 	}
 
 	return resource.NewContext(context.Background(), manager)

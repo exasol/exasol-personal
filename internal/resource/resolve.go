@@ -31,7 +31,6 @@ type resolution struct {
 	downloadPath string
 	extract      bool
 	subpath      string
-	embedded     bool
 }
 
 func (*Manager) newResolution(
@@ -52,24 +51,14 @@ func (*Manager) newResolution(
 	if err != nil {
 		return resolution{}, err
 	}
-	if def.Glob {
-		// A glob's subpath is a match pattern applied to the resolved result,
-		// not a path to select within it.
-		subpath = ""
-	}
-
-	// A glob resource's embedded bytes are always an archive of its matched
-	// entries, even when its live source is a bare directory needing none.
-	extract := def.Extract || (def.Glob && def.Embed != EmbedNever)
 
 	return resolution{
 		key:          cacheKeyFor(identity, artifact.URL, downloadPath),
 		identity:     identity,
 		local:        probe.Local,
 		downloadPath: downloadPath,
-		extract:      extract,
+		extract:      def.Extract,
 		subpath:      subpath,
-		embedded:     def.Embed != EmbedNever,
 	}, nil
 }
 
@@ -134,22 +123,16 @@ func (m *Manager) Get(
 	artifact.URL = artifact.Locator().String()
 	artifact.Ref = ""
 
-	// An embedded resource takes its identity from the build's own content hash
-	// even when the artifact also declares a checksum: the checksum describes
-	// what was fetched upstream, not what a particular build ended up
-	// embedding, so only the build's hash tells two builds' content apart.
-	//
 	// A declared checksum already identifies the content, so a source is asked
-	// to identify it only when none was declared. A local source is asked
-	// regardless, since only it can report content that is already in place.
+	// to identify it only when none was declared. An embedded resource always
+	// declares one, recorded by the generation that produced its blob, so two
+	// builds embedding different content never share a cache entry. A local
+	// source is asked regardless, since only it can report content already in
+	// place.
 	var probe Probe
 	locator := artifact.Locator()
-	if def.Embed != EmbedNever {
-		if hash, ok := lookupEmbeddedHash(resourceID); ok {
-			artifact.Sha256 = hash
-		}
-	} else if strings.TrimSpace(artifact.Sha256) == "" || (FileSource{}).Handles(locator) {
-		probe, err = probeSource(ctx, locator)
+	if strings.TrimSpace(artifact.Sha256) == "" || (FileSource{}).Handles(locator) {
+		probe, err = m.probeSource(ctx, locator)
 		if err != nil {
 			return "", err
 		}
@@ -264,27 +247,17 @@ func (m *Manager) materialize(
 	// content is what an extraction reads from: the staged artifact, or the
 	// source's own copy when it reported the content already in place.
 	content := res.local
-	switch {
-	case res.embedded:
-		content = filepath.Join(stagingDir, res.downloadPath)
-		if err := m.storeEmbedded(resourceID, content); err != nil {
-			return "", err
-		}
-	case res.local != "":
-		// The artifact stays where it is; only its extraction is cached.
-	case res.extract:
+	needsFetch := res.local == ""
+	if needsFetch && res.extract {
 		cachedArtifact := m.artifactPath(res)
 		if _, recorded := index.Entries[res.key]; recorded {
 			if _, statErr := os.Stat(cachedArtifact); statErr == nil {
 				content = cachedArtifact
-				break
+				needsFetch = false
 			}
 		}
-		content = filepath.Join(stagingDir, res.downloadPath)
-		if err := m.fetch(ctx, artifact, content); err != nil {
-			return "", errors.Join(fmt.Errorf("failed to fetch resource %q", resourceID), err)
-		}
-	default:
+	}
+	if needsFetch {
 		content = filepath.Join(stagingDir, res.downloadPath)
 		if err := m.fetch(ctx, artifact, content); err != nil {
 			return "", errors.Join(fmt.Errorf("failed to fetch resource %q", resourceID), err)
@@ -345,9 +318,9 @@ func (m *Manager) writeIndexAfterCleanup(index *cacheIndex) error {
 	return m.cache.writeIndex(*index)
 }
 
-func (*Manager) fetch(ctx context.Context, artifact ArtifactSpec, fetchPath string) error {
+func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, fetchPath string) error {
 	loc := artifact.Locator()
-	source, err := sourceFor(loc)
+	source, err := m.sourceFor(loc)
 	if err != nil {
 		return err
 	}
@@ -360,26 +333,6 @@ func (*Manager) fetch(ctx context.Context, artifact ArtifactSpec, fetchPath stri
 	}
 
 	return verifyStored(fetchPath, normalizeSha256(artifact.Sha256))
-}
-
-// storeEmbedded materializes a resource from data compiled into the binary. A
-// registry miss is a hard error, never a fallback to the network sources list.
-func (*Manager) storeEmbedded(resourceID, fetchPath string) error {
-	data, ok := lookupEmbedded(resourceID)
-	if !ok {
-		return fmt.Errorf("no embedded data registered for resource %q", resourceID)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(fetchPath), dirPerm); err != nil {
-		return err
-	}
-	if err := os.WriteFile(fetchPath, data, filePerm); err != nil {
-		return err
-	}
-
-	slog.Debug("resolved resource from embedded data", "id", resourceID)
-
-	return nil
 }
 
 func extractInto(filename, extractPath string) error {

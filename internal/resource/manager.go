@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,6 +42,7 @@ type Manager struct {
 	spec     ResourceSpec
 	cache    *Cache
 	platform Platform
+	sources  []Source
 }
 
 // Probe is what a source can determine about a locator without transferring
@@ -69,16 +71,74 @@ type Extractor interface {
 	Extract(srcPath, dstPath string) error
 }
 
-var sources = []Source{
-	&GitSource{},
-	&FileSource{},
-	&HttpSource{},
-	&DockerSource{},
+// defaultSources orders the sources a resolver dispatches through. Blobs may
+// be nil, in which case nothing resolves from embedded data.
+func defaultSources(blobs fs.FS) []Source {
+	return []Source{
+		&GitSource{},
+		&FileSource{},
+		&HttpSource{},
+		&DockerSource{},
+		&EmbeddedSource{blobs: blobs},
+	}
 }
 
 var extractors = []Extractor{
 	&TarGzExtractor{},
 	&ZipExtractor{},
+}
+
+// Options describes the resolver a caller wants.
+type Options struct {
+	// Spec is the resolved resource specification, as YAML.
+	Spec []byte
+	// Blobs holds data compiled into the binary, addressed by the paths Spec
+	// names. Nil means nothing is embedded and every resource resolves from
+	// its upstream source.
+	Blobs fs.FS
+	// CacheRoot overrides where resources are stored. Empty uses the per-user
+	// default.
+	CacheRoot string
+	// Platform overrides the host platform, for a build targeting another.
+	Platform Platform
+}
+
+// New builds a resolver from a resolved specification and the data embedded
+// alongside it.
+func New(opts Options) (*Manager, error) {
+	spec, err := ParseSpec(opts.Spec)
+	if err != nil {
+		return nil, err
+	}
+
+	cache := opts.cache()
+	if cache == nil {
+		defaultCache, err := NewDefaultCache()
+		if err != nil {
+			return nil, err
+		}
+		cache = defaultCache
+	}
+
+	platform := opts.Platform
+	if platform.GOOS == "" {
+		platform = Platform{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}
+	}
+
+	return &Manager{
+		spec:     spec,
+		cache:    cache,
+		platform: platform,
+		sources:  defaultSources(opts.Blobs),
+	}, nil
+}
+
+func (o Options) cache() *Cache {
+	if strings.TrimSpace(o.CacheRoot) == "" {
+		return nil
+	}
+
+	return NewCache(o.CacheRoot, filepath.Join(o.CacheRoot, cacheConfigFileName))
 }
 
 // NewManager creates a Manager backed by the default cache.
@@ -141,6 +201,7 @@ func NewResourceManagerWithCacheForPlatform(
 			GOOS:   goos,
 			GOARCH: goarch,
 		},
+		sources: defaultSources(nil),
 	}
 }
 
@@ -163,37 +224,25 @@ func (m *Manager) Request(ctx context.Context, resourceID string) (string, error
 	return m.RequestMember(ctx, resourceID, "")
 }
 
-// RequestMember treats an empty member as plain Request. Otherwise it
-// matches member against the resolved group's own subpath pattern:
-// never an independent fetch, cache entry, or embed, only a subpath of the
-// already-resolved group.
+// RequestMember treats an empty member as plain Request. Otherwise it resolves
+// the member as the resource it is, named "<group>/<member>".
 func (m *Manager) RequestMember(ctx context.Context, resourceID, member string) (string, error) {
+	if member != "" {
+		if _, ok := m.spec[resourceID+"/"+member]; !ok {
+			return "", fmt.Errorf(
+				"%w %q of group %q", ErrUnknownMember, member, resourceID,
+			)
+		}
+
+		resourceID += "/" + member
+	}
+
 	def, ok := m.spec[resourceID]
 	if !ok {
 		return "", fmt.Errorf("%w: unknown runtime artifact %q", ErrUnknownMember, resourceID)
 	}
-	if member == "" {
-		return m.Get(ctx, def, resourceID)
-	}
 
-	artifact, err := def.Resolve(m.platform.GOOS, m.platform.GOARCH)
-	if err != nil {
-		return "", err
-	}
-	root, err := m.Get(ctx, def, resourceID)
-	if err != nil {
-		return "", err
-	}
-	matches, err := GlobMatches(root, artifact.Subpath)
-	if err != nil {
-		return "", err
-	}
-	path, ok := matches[member]
-	if !ok {
-		return "", fmt.Errorf("%w %q of group %q", ErrUnknownMember, member, resourceID)
-	}
-
-	return path, nil
+	return m.Get(ctx, def, resourceID)
 }
 
 // RequestCopy is RequestMemberCopy with an empty member.
@@ -261,44 +310,20 @@ func copyFileInto(srcPath, destDir string) error {
 	return dst.Close()
 }
 
-// GroupMembers reports the names matched at build time, without
-// re-globbing or extracting the embedded archive live.
-func (*Manager) GroupMembers(group string) []string {
-	members, _ := lookupEmbeddedGroupMembers(group)
-
-	return slices.Clone(members)
-}
-
-// GlobMatches always excludes a matched ".git" directory, since a pattern
-// of "*" at a cloned repository's own root would otherwise match its
-// metadata directory like any other top-level entry.
-func GlobMatches(root, pattern string) (map[string]string, error) {
-	pattern = strings.TrimSpace(pattern)
-	if pattern == "" {
-		return nil, errors.New("must define subpath with a glob pattern")
-	}
-
-	globMatches, err := filepath.Glob(filepath.Join(root, pattern))
-	if err != nil {
-		return nil, err
-	}
-
-	matches := make(map[string]string, len(globMatches))
-	for _, match := range globMatches {
-		base := filepath.Base(match)
-		if base == ".git" {
-			continue
+// GroupMembers reports the members a group declares. A glob is expanded at
+// build time into resources named "<group>/<member>", so membership is read
+// from the specification rather than matched, extracted, or registered.
+func (m *Manager) GroupMembers(group string) []string {
+	prefix := group + "/"
+	members := make([]string, 0, len(m.spec))
+	for resourceID := range m.spec {
+		if name, ok := strings.CutPrefix(resourceID, prefix); ok && name != "" {
+			members = append(members, name)
 		}
-		if existing, ok := matches[base]; ok {
-			return nil, fmt.Errorf(
-				"pattern %q matches %q and %q, which share the member name %q",
-				pattern, existing, match, base,
-			)
-		}
-		matches[base] = match
 	}
+	slices.Sort(members)
 
-	return matches, nil
+	return members
 }
 
 // contentIdentity is what the cache keys on. A declared checksum is a content
@@ -313,8 +338,8 @@ func contentIdentity(declaredSha256, probed string) string {
 	return probed
 }
 
-func sourceFor(loc Locator) (Source, error) {
-	for _, source := range sources {
+func (m *Manager) sourceFor(loc Locator) (Source, error) {
+	for _, source := range m.sources {
 		if source.Handles(loc) {
 			return source, nil
 		}
@@ -323,8 +348,8 @@ func sourceFor(loc Locator) (Source, error) {
 	return nil, fmt.Errorf("unsupported resource scheme in %q", loc.URL)
 }
 
-func probeSource(ctx context.Context, loc Locator) (Probe, error) {
-	source, err := sourceFor(loc)
+func (m *Manager) probeSource(ctx context.Context, loc Locator) (Probe, error) {
+	source, err := m.sourceFor(loc)
 	if err != nil {
 		return Probe{}, err
 	}
