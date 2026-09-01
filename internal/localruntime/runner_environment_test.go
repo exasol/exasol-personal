@@ -37,8 +37,8 @@ func TestVMPathMapperMapsOnlySharedPaths(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // the test forks an executable fixture it just wrote.
 func TestRunnerExecutionEnvironmentPreservesCommandIOAndExitStatus(t *testing.T) {
-	t.Parallel()
 	requireRunnerEnvironmentPOSIX(t)
 
 	environment := newTestRunnerExecutionEnvironment(t)
@@ -60,8 +60,8 @@ func TestRunnerExecutionEnvironmentPreservesCommandIOAndExitStatus(t *testing.T)
 	}
 }
 
+//nolint:paralleltest // the test forks an executable fixture it just wrote.
 func TestRunnerExecutionEnvironmentSyncsInsideRuntime(t *testing.T) {
-	t.Parallel()
 	requireRunnerEnvironmentPOSIX(t)
 
 	environment := newTestRunnerExecutionEnvironment(t)
@@ -70,8 +70,8 @@ func TestRunnerExecutionEnvironmentSyncsInsideRuntime(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // the test forks an executable fixture it just wrote.
 func TestRunnerExecutionEnvironmentFilesystemOperations(t *testing.T) {
-	t.Parallel()
 	requireRunnerEnvironmentPOSIX(t)
 
 	ctx := context.Background()
