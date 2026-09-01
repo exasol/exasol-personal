@@ -5,7 +5,6 @@ package resource
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,80 +26,20 @@ func (*GitSource) Handles(loc Locator) bool {
 	return IsGitSourceURL(loc.URL) || (loc.Ref != "" && isLocalGitWorktree(loc.URL))
 }
 
+// Fetch always clones: the resolver hands every fetch its own empty staging
+// directory, so there is never a working copy here to update.
 func (*GitSource) Fetch(ctx context.Context, loc Locator, dstPath string) error {
-	repoURL, ref := loc.URL, loc.Ref
-
 	auth, err := gitAuth(loc.URL)
 	if err != nil {
 		return err
 	}
 
-	refName, commitHash, err := getRefName(ctx, repoURL, ref, auth)
+	refName, commitHash, err := getRefName(ctx, loc.URL, loc.Ref, auth)
 	if err != nil {
 		return err
 	}
 
-	// refName is empty when ref is a commit SHA not pointed to by any named
-	// ref; a full-depth clone is required to make the commit reachable.
-	repo, err := git.PlainOpen(dstPath)
-	if err != nil {
-		return cloneRepo(ctx, repoURL, dstPath, refName, commitHash, auth)
-	}
-
-	fetchOpts := &git.FetchOptions{
-		Force: true,
-		Prune: true,
-		Auth:  auth,
-	}
-	if refName != "" {
-		fetchOpts.Depth = 1
-	}
-
-	if err := repo.FetchContext(ctx, fetchOpts); err != nil &&
-		!errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return err
-	}
-
-	if refName == "" {
-		worktree, err := repo.Worktree()
-		if err != nil {
-			return err
-		}
-
-		return worktree.Reset(&git.ResetOptions{Commit: commitHash, Mode: git.HardReset})
-	}
-
-	head, err := repo.Head()
-	if err != nil {
-		return err
-	}
-
-	if !head.Name().IsBranch() {
-		// Detached HEAD (tag checkout) — tags are immutable, nothing to update.
-		return nil
-	}
-
-	remoteRef, err := repo.Reference(
-		plumbing.NewRemoteReferenceName("origin", head.Name().Short()),
-		true,
-	)
-	if err != nil {
-		if errors.Is(err, plumbing.ErrReferenceNotFound) {
-			return nil
-		}
-
-		return err
-	}
-
-	worktree, err := repo.Worktree()
-	if err != nil {
-		return err
-	}
-
-	return worktree.Reset(&git.ResetOptions{
-		Commit: remoteRef.Hash(),
-		Mode:   git.HardReset,
-	})
+	return cloneRepo(ctx, loc.URL, dstPath, refName, commitHash, auth)
 }
 
 func cloneRepo(

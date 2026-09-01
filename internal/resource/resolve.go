@@ -255,36 +255,54 @@ func (m *Manager) materialize(
 	res resolution,
 	index *cacheIndex,
 ) (string, error) {
+	stagingDir, err := m.cache.newStagingDir()
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = os.RemoveAll(stagingDir) }()
+
+	// content is what an extraction reads from: the staged artifact, or the
+	// source's own copy when it reported the content already in place.
+	content := res.local
 	switch {
 	case res.embedded:
-		if err := m.storeEmbedded(resourceID, res); err != nil {
+		content = filepath.Join(stagingDir, res.downloadPath)
+		if err := m.storeEmbedded(resourceID, content); err != nil {
 			return "", err
 		}
 	case res.local != "":
 		// The artifact stays where it is; only its extraction is cached.
 	case res.extract:
+		cachedArtifact := m.artifactPath(res)
 		if _, recorded := index.Entries[res.key]; recorded {
-			if _, statErr := os.Stat(m.artifactPath(res)); statErr == nil {
+			if _, statErr := os.Stat(cachedArtifact); statErr == nil {
+				content = cachedArtifact
 				break
 			}
 		}
-		if err := m.fetch(ctx, artifact, res); err != nil {
+		content = filepath.Join(stagingDir, res.downloadPath)
+		if err := m.fetch(ctx, artifact, content); err != nil {
 			return "", errors.Join(fmt.Errorf("failed to fetch resource %q", resourceID), err)
 		}
 	default:
-		if err := m.fetch(ctx, artifact, res); err != nil {
+		content = filepath.Join(stagingDir, res.downloadPath)
+		if err := m.fetch(ctx, artifact, content); err != nil {
 			return "", errors.Join(fmt.Errorf("failed to fetch resource %q", resourceID), err)
 		}
 	}
 
 	if res.extract {
-		if err := m.extract(res); err != nil {
+		if err := extractInto(content, filepath.Join(stagingDir, extractRelPath)); err != nil {
 			return "", errors.Join(fmt.Errorf("failed to extract resource %q", resourceID), err)
 		}
 	}
 
-	size, err := directorySize(m.cache.entryDir(res.key))
-	if err != nil {
+	if err := m.cache.commitStaged(stagingDir, m.cache.entryDir(res.key)); err != nil {
+		return "", err
+	}
+
+	size, sizeErr := directorySize(m.cache.entryDir(res.key))
+	if sizeErr != nil {
 		size = 0
 	}
 
@@ -327,14 +345,13 @@ func (m *Manager) writeIndexAfterCleanup(index *cacheIndex) error {
 	return m.cache.writeIndex(*index)
 }
 
-func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, res resolution) error {
+func (*Manager) fetch(ctx context.Context, artifact ArtifactSpec, fetchPath string) error {
 	loc := artifact.Locator()
 	source, err := sourceFor(loc)
 	if err != nil {
 		return err
 	}
 
-	fetchPath := m.artifactPath(res)
 	if err := os.MkdirAll(filepath.Dir(fetchPath), dirPerm); err != nil {
 		return err
 	}
@@ -347,13 +364,12 @@ func (m *Manager) fetch(ctx context.Context, artifact ArtifactSpec, res resoluti
 
 // storeEmbedded materializes a resource from data compiled into the binary. A
 // registry miss is a hard error, never a fallback to the network sources list.
-func (m *Manager) storeEmbedded(resourceID string, res resolution) error {
+func (*Manager) storeEmbedded(resourceID, fetchPath string) error {
 	data, ok := lookupEmbedded(resourceID)
 	if !ok {
 		return fmt.Errorf("no embedded data registered for resource %q", resourceID)
 	}
 
-	fetchPath := m.artifactPath(res)
 	if err := os.MkdirAll(filepath.Dir(fetchPath), dirPerm); err != nil {
 		return err
 	}
@@ -366,15 +382,9 @@ func (m *Manager) storeEmbedded(resourceID string, res resolution) error {
 	return nil
 }
 
-func (m *Manager) extract(res resolution) error {
-	filename := res.local
-	if filename == "" {
-		filename = m.artifactPath(res)
-	}
-
+func extractInto(filename, extractPath string) error {
 	for _, extractor := range extractors {
 		if extractor.CanExtract(filename) {
-			extractPath := filepath.Join(m.cache.entryDir(res.key), extractRelPath)
 			if err := os.MkdirAll(extractPath, dirPerm); err != nil {
 				return err
 			}

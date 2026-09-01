@@ -122,33 +122,6 @@ func TestGitSource_Fetch_ClonesLocalRepo(t *testing.T) {
 	}
 }
 
-func TestGitSource_Fetch_UpdatesWorkingTree(t *testing.T) {
-	t.Parallel()
-
-	repoDir, _ := createTestGitRepo(t, map[string]string{"file.txt": "v1"})
-	dstDir := t.TempDir()
-	cloneDir := filepath.Join(dstDir, "clone")
-	src := &GitSource{}
-
-	if err := src.Fetch(context.Background(), ParseURI(repoDir).Locator, cloneDir); err != nil {
-		t.Fatalf("first fetch failed: %v", err)
-	}
-
-	addCommitToTestRepo(t, repoDir, "file.txt", "v2")
-
-	if err := src.Fetch(context.Background(), ParseURI(repoDir).Locator, cloneDir); err != nil {
-		t.Fatalf("second fetch failed: %v", err)
-	}
-
-	content, err := os.ReadFile(filepath.Join(cloneDir, "file.txt"))
-	if err != nil {
-		t.Fatalf("expected file after update, got %v", err)
-	}
-	if string(content) != "v2" {
-		t.Fatalf("expected v2 content after working tree update, got %q", string(content))
-	}
-}
-
 func TestGitSource_Fetch_BranchRef(t *testing.T) {
 	t.Parallel()
 
@@ -198,36 +171,6 @@ func TestGitSource_Fetch_TagRef(t *testing.T) {
 	}
 	if head.Hash().String() != tagHash {
 		t.Fatalf("expected tag commit %s, got %s", tagHash, head.Hash().String())
-	}
-}
-
-func TestGitSource_Fetch_IdempotentOnSameCommit(t *testing.T) {
-	t.Parallel()
-
-	repoDir, _ := createTestGitRepo(t, map[string]string{"file.txt": "content"})
-	dstDir := t.TempDir()
-	cloneDir := filepath.Join(dstDir, "clone")
-	src := &GitSource{}
-
-	if err := src.Fetch(context.Background(), ParseURI(repoDir).Locator, cloneDir); err != nil {
-		t.Fatalf("first fetch failed: %v", err)
-	}
-	// Corrupt a file; second fetch (no new commit) should not change it.
-	corruptedPath := filepath.Join(cloneDir, "file.txt")
-	if err := os.WriteFile(corruptedPath, []byte("corrupted"), filePerm); err != nil {
-		t.Fatalf("corrupt failed: %v", err)
-	}
-	if err := src.Fetch(context.Background(), ParseURI(repoDir).Locator, cloneDir); err != nil {
-		t.Fatalf("second fetch failed: %v", err)
-	}
-	content, err := os.ReadFile(filepath.Join(cloneDir, "file.txt"))
-	if err != nil {
-		t.Fatalf("read failed: %v", err)
-	}
-	// Reset resets to the remote ref, which has the same commit — no real
-	// change is introduced, so the hard reset replaces the corrupted content.
-	if string(content) != "content" {
-		t.Fatalf("expected hard reset to restore original content, got %q", string(content))
 	}
 }
 

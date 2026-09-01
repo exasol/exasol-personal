@@ -71,8 +71,46 @@ func (c *Cache) artifactsRoot() string {
 	return filepath.Join(c.root, artifactsDirName)
 }
 
-func (c *Cache) downloadsRoot() string {
-	return filepath.Join(c.root, downloadsDirName)
+func (c *Cache) stagingRoot() string {
+	return filepath.Join(c.root, stagingDirName)
+}
+
+// newStagingDir returns a directory to assemble an entry in, so a partially
+// built entry never sits where a complete one is looked for.
+func (c *Cache) newStagingDir() (string, error) {
+	if err := os.MkdirAll(c.stagingRoot(), dirPerm); err != nil {
+		return "", err
+	}
+
+	return os.MkdirTemp(c.stagingRoot(), "entry-")
+}
+
+// commitStaged moves an assembled entry into place. A new entry arrives in one
+// rename; an entry gaining an extraction it did not have before takes one
+// rename per staged item, so each item still appears complete or not at all.
+func (*Cache) commitStaged(stagingDir, entryDir string) error {
+	if err := os.MkdirAll(filepath.Dir(entryDir), dirPerm); err != nil {
+		return err
+	}
+	if _, err := os.Stat(entryDir); errors.Is(err, os.ErrNotExist) {
+		return os.Rename(stagingDir, entryDir)
+	}
+
+	staged, err := os.ReadDir(stagingDir)
+	if err != nil {
+		return err
+	}
+	for _, item := range staged {
+		target := filepath.Join(entryDir, item.Name())
+		if err := os.RemoveAll(target); err != nil {
+			return err
+		}
+		if err := os.Rename(filepath.Join(stagingDir, item.Name()), target); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *Cache) clearLock() error {

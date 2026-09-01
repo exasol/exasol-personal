@@ -329,7 +329,7 @@ func TestCacheCleanAllWipesCacheContentsAndResetsMetadata(t *testing.T) {
 	if err := os.WriteFile(unexpected, []byte("orphan"), filePerm); err != nil {
 		t.Fatalf("failed to write unexpected entry: %v", err)
 	}
-	partialDownload := filepath.Join(cache.downloadsRoot(), ".tmp-partial", "download.bin")
+	partialDownload := filepath.Join(cache.stagingRoot(), ".tmp-partial", "download.bin")
 	if err := os.MkdirAll(filepath.Dir(partialDownload), dirPerm); err != nil {
 		t.Fatalf("failed to create partial download directory: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestCacheCleanAllWipesCacheContentsAndResetsMetadata(t *testing.T) {
 	if _, err := os.Stat(cache.artifactsRoot()); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected artifact tree to be removed, got %v", err)
 	}
-	if _, err := os.Stat(cache.downloadsRoot()); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(cache.stagingRoot()); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected downloads tree to be removed, got %v", err)
 	}
 	if _, err := os.Stat(rootUnexpected); !errors.Is(err, os.ErrNotExist) {
