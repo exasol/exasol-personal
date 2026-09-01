@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/resource"
@@ -18,6 +19,59 @@ func testResolverContext(t *testing.T, spec resource.ResourceSpec) context.Conte
 	t.Helper()
 
 	return resourcetest.NewResolverContext(t, spec)
+}
+
+func TestResourceContextWithoutSpecificationKeepsLauncherResources(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	presetDir := t.TempDir()
+	resourceDir := t.TempDir()
+	ctx := testResolverContext(t, resource.ResourceSpec{
+		"tool": {Artifact: map[string]resource.ArtifactSpec{
+			"any": {URL: "file://" + resourceDir},
+		}},
+	})
+
+	// When
+	layered, resolvedDir, err := ResourceContext(ctx, Infrastructure, PresetRef{Path: presetDir})
+	var resolvedResource string
+	if err == nil {
+		resolvedResource, err = resource.FromContext(layered).Resolve(layered, "tool")
+	}
+
+	// Then
+	if err != nil {
+		t.Fatalf("resolve launcher resource: %v", err)
+	}
+	if resolvedDir != presetDir {
+		t.Fatalf("preset directory = %q, want %q", resolvedDir, presetDir)
+	}
+	if resolvedResource != resourceDir {
+		t.Fatalf("resource = %q, want %q", resolvedResource, resourceDir)
+	}
+}
+
+func TestResourceContextReportsInvalidSpecificationWithPresetName(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	presetDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(presetDir, resourceSpecFilename), []byte("tool: ["), 0o600,
+	); err != nil {
+		t.Fatalf("write resource specification: %v", err)
+	}
+	ctx := testResolverContext(t, resource.ResourceSpec{})
+
+	// When
+	_, _, err := ResourceContext(ctx, Infrastructure, PresetRef{Path: presetDir})
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "invalid resource specification") ||
+		!strings.Contains(err.Error(), presetDir) {
+		t.Fatalf("error = %v, want invalid specification and preset name", err)
+	}
 }
 
 func TestPresetDir_UnknownInfrastructureNameReturnsErrUnknownInfrastructure(t *testing.T) {
@@ -31,6 +85,42 @@ func TestPresetDir_UnknownInfrastructureNameReturnsErrUnknownInfrastructure(t *t
 	// Then
 	if !errors.Is(err, ErrUnknownInfrastructure) {
 		t.Fatalf("expected ErrUnknownInfrastructure, got %v", err)
+	}
+}
+
+func TestResourceContextScopesPresetResources(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	presetDir := t.TempDir()
+	resourceDir := filepath.Join(presetDir, "resource")
+	if err := os.Mkdir(resourceDir, 0o700); err != nil {
+		t.Fatalf("create resource directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(presetDir, resourceSpecFilename), []byte(
+		"tool:\n  artifact:\n    any:\n      url: file://"+resourceDir+"\n",
+	), 0o600); err != nil {
+		t.Fatalf("write resource specification: %v", err)
+	}
+	ctx := testResolverContext(t, resource.ResourceSpec{})
+
+	// When
+	layered, _, err := ResourceContext(ctx, Infrastructure, PresetRef{Path: presetDir})
+	if err != nil {
+		t.Fatalf("build preset resource context: %v", err)
+	}
+	path, err := resource.FromContext(layered).Resolve(layered, "tool")
+	if err != nil {
+		t.Fatalf("resolve preset resource: %v", err)
+	}
+
+	// Then
+	if path != resourceDir {
+		t.Fatalf("expected %q, got %q", resourceDir, path)
+	}
+	_, err = resource.FromContext(ctx).Resolve(ctx, "tool")
+	if !errors.Is(err, resource.ErrUnknownMember) {
+		t.Fatalf("expected preset resource to stay scoped, got %v", err)
 	}
 }
 

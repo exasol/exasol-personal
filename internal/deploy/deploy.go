@@ -154,7 +154,21 @@ func deployLocked(
 	if err != nil {
 		return err
 	}
-	backend, err := newDeploymentBackend(ctx, deployment, infrastructureManifest)
+	infrastructureContext, err := presetPhaseContext(
+		ctx, deployment, presets.Infrastructure,
+	)
+	if err != nil {
+		return err
+	}
+	installationContext, err := presetPhaseContext(
+		ctx, deployment, presets.Installation,
+	)
+	if err != nil {
+		return err
+	}
+	backend, err := newDeploymentBackend(
+		infrastructureContext, deployment, infrastructureManifest,
+	)
 	if err != nil {
 		return err
 	}
@@ -166,40 +180,20 @@ func deployLocked(
 	// failed prerequisite must leave the deployment retryable rather than
 	// stranded mid-operation.
 	if err := backend.Prepare(
-		ctx, externalCommandOutput, externalCommandOutput, options.RuntimePreparation,
+		infrastructureContext,
+		externalCommandOutput,
+		externalCommandOutput,
+		options.RuntimePreparation,
 	); err != nil {
 		return err
 	}
 
-	// Set the workflowstate to deployment in-progress
 	if err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateOperationInProgress{
 		Operation: config.DeployOperation,
 	}, deployment); err != nil {
 		slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 	}
 
-	return runDeployBackend(
-		ctx, exasolState, deployment, backend, externalCommandOutput, options,
-	)
-}
-
-// runDeployBackend registers the interruption signal handler, runs the
-// manifest-driven deploy and installation phases, and commits the final
-// state. It is split out from deployLocked so the signal-handler lifetime
-// (registered right before the backend calls, unregistered right after)
-// stays scoped to a single, easy-to-audit block.
-//
-//nolint:revive // verbose mirrors the command-level --verbose flag.
-func runDeployBackend(
-	ctx context.Context,
-	exasolState *config.ExasolPersonalState,
-	deployment config.DeploymentDir,
-	backend deploymentBackend,
-	externalCommandOutput io.Writer,
-	options DeployOptions,
-) error {
-	// Register signal handler for catching interruptions and set state
-	// in case of interruption
 	unregister, _ := util.RegisterOnceSignalHandler(func() {
 		slog.Warn("Deployment interrupted")
 		if err := exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateInterrupted{
@@ -209,8 +203,6 @@ func runDeployBackend(
 			slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 		}
 	})
-
-	// Fallback cleanup
 	defer unregister()
 
 	installManifest, err := config.ReadInstallManifest(deployment)
@@ -219,7 +211,7 @@ func runDeployBackend(
 	}
 
 	if err := backend.Deploy(
-		ctx,
+		infrastructureContext,
 		externalCommandOutput,
 		externalCommandOutput,
 		options,
@@ -229,18 +221,42 @@ func runDeployBackend(
 		return recordDeployFailure(exasolState, deployment, err)
 	}
 
-	// Installation phase (remoteExec tasks)
-	if err := runInstallSteps(ctx, deployment, installManifest,
-		externalCommandOutput, externalCommandOutput); err != nil {
+	if err := runInstallSteps(
+		installationContext,
+		deployment,
+		installManifest,
+		externalCommandOutput,
+		externalCommandOutput,
+	); err != nil {
 		unregister()
 
 		return recordDeployFailure(exasolState, deployment, err)
 	}
 
-	// Stop handling interrupts before committing success state
 	unregister()
 
 	return finalizeSuccessfulDeploy(ctx, exasolState, deployment)
+}
+
+func presetPhaseContext(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	presetType presets.PresetKind,
+) (context.Context, error) {
+	presetDir := deployment.InstallationDir()
+	if presetType == presets.Infrastructure {
+		presetDir = deployment.InfrastructureDir()
+	}
+	phaseContext, _, err := presets.ResourceContext(
+		ctx,
+		presetType,
+		PresetRef{Path: presetDir},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return phaseContext, nil
 }
 
 // recordDeployFailure appends diagnostic hints to err and persists the

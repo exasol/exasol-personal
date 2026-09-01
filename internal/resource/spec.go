@@ -13,12 +13,12 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// ResourceSpec contains all embedded runtime resources keyed by logical resource ID.
 type ResourceSpec map[string]ResourceDefinition
 
 type Specification struct {
 	definitions ResourceSpec
 	platform    Platform
+	parent      *Specification
 }
 
 func NewSpecification(definitions ResourceSpec, platform Platform) *Specification {
@@ -28,6 +28,10 @@ func NewSpecification(definitions ResourceSpec, platform Platform) *Specificatio
 func (s *Specification) Lookup(resourceID string) (Descriptor, error) {
 	definition, ok := s.definitions[resourceID]
 	if !ok {
+		if s.parent != nil {
+			return s.parent.Lookup(resourceID)
+		}
+
 		return Descriptor{}, fmt.Errorf(
 			"%w: unknown resource %q", ErrUnknownMember, resourceID,
 		)
@@ -38,9 +42,18 @@ func (s *Specification) Lookup(resourceID string) (Descriptor, error) {
 
 func (s *Specification) List(prefix string) []string {
 	ids := make([]string, 0, len(s.definitions))
+	seen := map[string]struct{}{}
 	for resourceID := range s.definitions {
 		if strings.HasPrefix(resourceID, prefix) {
 			ids = append(ids, resourceID)
+			seen[resourceID] = struct{}{}
+		}
+	}
+	if s.parent != nil {
+		for _, resourceID := range s.parent.List(prefix) {
+			if _, ok := seen[resourceID]; !ok {
+				ids = append(ids, resourceID)
+			}
 		}
 	}
 	slices.Sort(ids)
@@ -48,41 +61,23 @@ func (s *Specification) List(prefix string) []string {
 	return ids
 }
 
-// ResourceDefinition describes how to fetch and materialize a resource.
-//
 //nolint:golines // golines and tagalign disagree on struct tag alignment here; tagalign wins.
 type ResourceDefinition struct {
-	Extract bool `json:"extract,omitempty" yaml:"extract,omitempty"`
-	// Embed is a build directive: it selects what a build embeds and never
-	// appears in a resolved specification.
-	Embed    EmbedMode               `json:"embed,omitempty" yaml:"embed,omitempty"`
-	Artifact map[string]ArtifactSpec `json:"artifact"        yaml:"artifact"`
-	// Glob is a build-time pattern matched against the resource's own resolved
-	// content. Each match becomes an independently addressable resource named
-	// "<resource>/<match>", and the group itself does not reach a build.
+	Extract  bool                    `json:"extract,omitempty" yaml:"extract,omitempty"`
+	Embed    EmbedMode               `json:"embed,omitempty"   yaml:"embed,omitempty"`
+	Artifact map[string]ArtifactSpec `json:"artifact"          yaml:"artifact"`
+	// A non-empty pattern expands during generation and is omitted from resolved specs.
 	Glob string `json:"glob,omitempty" yaml:"glob,omitempty"`
 }
 
-// EmbedMode declares whether a resource's data is embedded into the compiled
-// binary, and whether that still happens for a build that otherwise skips
-// real embedding for speed (SKIP_EMBED=true, used by lint/test builds that
-// never look at the bytes). It parses from YAML/JSON as one of the values
-// false, true, or "always".
-// Unmarshal* needs a pointer receiver to mutate; Marshal* deliberately stays
-// on a value receiver so it still works on a non-addressable EmbedMode, such
-// as a ResourceDefinition read from a map value.
+// EmbedMode: pointer unmarshalling and value marshalling support non-addressable map values.
 //
 //nolint:recvcheck
 type EmbedMode int
 
 const (
-	// EmbedNever fetches this resource at runtime; it is never embedded.
 	EmbedNever EmbedMode = iota
-	// EmbedDefault embeds this resource in real builds, but is skipped under
-	// SKIP_EMBED=true.
 	EmbedDefault
-	// EmbedAlways embeds this resource even under SKIP_EMBED=true. Reserved
-	// for small, locally-sourced resources that cost nothing to embed.
 	EmbedAlways
 )
 
@@ -160,22 +155,16 @@ func (m EmbedMode) embedValue() (any, error) {
 	}
 }
 
-// ArtifactSpec describes one downloadable artifact for a specific platform.
 type ArtifactSpec struct {
-	URL string `yaml:"url"`
-	// Ref selects a revision within the source, such as a branch, tag, or
-	// commit for a git repository.
+	URL    string `yaml:"url"`
 	Ref    string `yaml:"ref,omitempty"`
 	Sha256 string `yaml:"sha256,omitempty"`
-	// DownloadPath's suffix picks the extractor (see extractors), so it must
-	// look like an archive even when the source itself is a bare directory.
+	// The suffix selects the extractor even when the source is a bare directory.
 	//nolint:tagliatelle // YAML schema uses snake_case field names.
 	DownloadPath string `yaml:"download_path,omitempty"`
 	Subpath      string `yaml:"subpath,omitempty"`
 }
 
-// Locator resolves the artifact's location, taking a Git revision from Ref
-// when declared and from the URL's own "@ref" suffix otherwise.
 func (a ArtifactSpec) Locator() Locator {
 	if strings.TrimSpace(a.Ref) != "" {
 		return Locator{URL: a.URL, Ref: a.Ref}
@@ -185,8 +174,6 @@ func (a ArtifactSpec) Locator() Locator {
 	return Locator{URL: rawURL, Ref: ref}
 }
 
-// isDigestPinnedImage reports whether loc is a container image reference that
-// names its content by digest.
 func isDigestPinnedImage(loc Locator) bool {
 	if !(&DockerSource{}).Handles(loc) {
 		return false
@@ -198,7 +185,6 @@ func isDigestPinnedImage(loc Locator) bool {
 
 const anyPlatformKey = "any"
 
-// Resolve returns the artifact for the requested platform.
 func (d ResourceDefinition) Resolve(goos, goarch string) (ArtifactSpec, error) {
 	key := platformKey(goos, goarch)
 	artifact, ok := d.Artifact[key]
@@ -241,7 +227,6 @@ func platformKey(goos, goarch string) string {
 	return goos + "/" + goarch
 }
 
-// ParseSpec parses an embedded resource specification from YAML.
 func ParseSpec(raw []byte) (ResourceSpec, error) {
 	var spec ResourceSpec
 	if err := yaml.Unmarshal(raw, &spec); err != nil {
@@ -318,11 +303,9 @@ func (a ArtifactSpec) validate(ctx artifactValidationContext) error {
 			)
 		}
 	case (FileSource{}).Handles(locator):
-		// Local (file://, or bare local path) sources are first-party content whose
-		// integrity comes from being part of the same versioned repository commit,
-		// not from a hand-authored checksum, so a checksum is optional for them.
+		// Local sources inherit trust from the repository that contains them.
 	case isDigestPinnedImage(locator):
-		// A digest names the image content itself, so it is already the checksum.
+		// A digest already identifies the image content.
 	default:
 		if strings.TrimSpace(a.Sha256) == "" {
 			return fmt.Errorf(

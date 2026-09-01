@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/resource"
@@ -18,7 +19,36 @@ const (
 	infrastructurePresetsResource = "infrastructure-presets"
 	installationPresetsResource   = "installation-presets"
 	sharedAssetsResource          = "shared-assets"
+	resourceSpecFilename          = "resources.yaml"
 )
+
+func ResourceContext(
+	ctx context.Context, kind PresetKind, preset PresetRef,
+) (context.Context, string, error) {
+	dir, err := presetDirectory(ctx, kind, preset)
+	if err != nil {
+		return nil, "", err
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, resourceSpecFilename))
+	if errors.Is(err, os.ErrNotExist) {
+		return ctx, dir, nil
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf(
+			"read resource specification for preset %q: %w", presetLabel(preset), err,
+		)
+	}
+
+	spec, err := resource.ParseSpec(raw)
+	if err != nil {
+		return nil, "", fmt.Errorf(
+			"invalid resource specification for preset %q: %w", presetLabel(preset), err,
+		)
+	}
+
+	return resource.NewContext(ctx, resource.FromContext(ctx).Layer(spec)), dir, nil
+}
 
 var (
 	ErrUnknownInfrastructure = errors.New("the specified infrastructure preset does not exist")
@@ -117,4 +147,20 @@ func presetDir(ctx context.Context, kind PresetKind, name string) (string, error
 	}
 
 	return dir, nil
+}
+
+func presetDirectory(ctx context.Context, kind PresetKind, preset PresetRef) (string, error) {
+	if preset.IsPath() {
+		return preset.Path, nil
+	}
+
+	return presetDir(ctx, kind, preset.Name)
+}
+
+func presetLabel(preset PresetRef) string {
+	if preset.IsPath() {
+		return preset.Path
+	}
+
+	return preset.Name
 }
