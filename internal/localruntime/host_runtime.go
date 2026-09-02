@@ -287,17 +287,48 @@ func classifyHostPortHealth(err error) PortState {
 	if errors.As(err, &netError) && netError.Timeout() {
 		return PortStateTimeout
 	}
-	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) {
+	if isPeerReachedDialError(err) {
 		return PortStateRefused
 	}
-	// The error slipped past every well-known classifier. This is where
-	// Windows-specific errnos (WSAENOTCONN, WSAECONNABORTED, etc.) end
-	// up today; logging the underlying error keeps future occurrences
-	// diagnosable from deployment.log alone.
+	// The error slipped past every well-known classifier, so the network
+	// path cannot be shown to work; logging the underlying error keeps
+	// future occurrences diagnosable from deployment.log alone.
 	slog.Debug("classifying host port dial error as blocked",
 		"error", err.Error(), "errorType", fmt.Sprintf("%T", err))
 
 	return PortStateBlocked
+}
+
+// Winsock error codes for the dial outcomes that prove a peer answered.
+// syscall's POSIX-named errnos are unusable for this on Windows: there they
+// are invented APPLICATION_ERROR placeholders that Winsock never returns,
+// and Errno.Is bridges only the os.Err* sentinels, so matching them silently
+// misses every real Windows dial error. The numeric codes are matched on
+// every platform because no other platform issues errnos in this range,
+// which keeps the Windows path exercisable by tests that do not run there.
+const (
+	wsaeConnAborted = 10053
+	wsaeConnReset   = 10054
+	wsaeNotConn     = 10057
+	wsaeConnRefused = 10061
+)
+
+// isPeerReachedDialError reports whether a failed dial still proves the
+// host-to-container network path carries traffic: the peer refused the
+// connection or tore it down, rather than the packets going unanswered. A
+// port with no listener yet, as during database startup, lands here.
+func isPeerReachedDialError(err error) bool {
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+
+	var errno syscall.Errno
+	if !errors.As(err, &errno) {
+		return false
+	}
+
+	return errno == wsaeConnRefused || errno == wsaeConnReset ||
+		errno == wsaeConnAborted || errno == wsaeNotConn
 }
 
 func (runtime *HostRuntime) install() *localinstall.PodmanInstall {

@@ -295,22 +295,79 @@ func TestLinuxHostHealthCheck_ProbesRecoveredPublishedPort(t *testing.T) {
 	}
 }
 
-func TestClassifyHostPortHealth_ConnectionResetIsRefused(t *testing.T) {
+// The Winsock cases are asserted with the numeric codes Windows actually
+// reports rather than syscall's POSIX-named errnos, whose Windows values are
+// placeholders no dial ever returns.
+func TestClassifyHostPortHealth_ClassifiesDialOutcomes(t *testing.T) {
 	t.Parallel()
 
-	// Given
-	dialError := &net.OpError{
-		Op:  "dial",
-		Net: "tcp",
-		Err: os.NewSyscallError("connect", syscall.ECONNRESET),
+	for name, testCase := range map[string]struct {
+		dialError error
+		expected  PortState
+	}{
+		"connection refused": {
+			dialError: syscall.ECONNREFUSED,
+			expected:  PortStateRefused,
+		},
+		"connection reset": {
+			dialError: syscall.ECONNRESET,
+			expected:  PortStateRefused,
+		},
+		"winsock connection refused": {
+			dialError: syscall.Errno(10061),
+			expected:  PortStateRefused,
+		},
+		"winsock connection reset": {
+			dialError: syscall.Errno(10054),
+			expected:  PortStateRefused,
+		},
+		"winsock connection aborted": {
+			dialError: syscall.Errno(10053),
+			expected:  PortStateRefused,
+		},
+		"winsock not connected": {
+			dialError: syscall.Errno(10057),
+			expected:  PortStateRefused,
+		},
+		"deadline exceeded": {
+			dialError: context.DeadlineExceeded,
+			expected:  PortStateTimeout,
+		},
+		"unrecognised failure": {
+			dialError: errors.New("no route to host"),
+			expected:  PortStateBlocked,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given
+			dialError := &net.OpError{
+				Op:  "dial",
+				Net: "tcp",
+				Err: os.NewSyscallError("connect", testCase.dialError),
+			}
+
+			// When
+			state := classifyHostPortHealth(dialError)
+
+			// Then
+			if state != testCase.expected {
+				t.Fatalf("expected %q, got %q", testCase.expected, state)
+			}
+		})
 	}
+}
+
+func TestClassifyHostPortHealth_ReachableWithoutError(t *testing.T) {
+	t.Parallel()
 
 	// When
-	state := classifyHostPortHealth(dialError)
+	state := classifyHostPortHealth(nil)
 
 	// Then
-	if state != PortStateRefused {
-		t.Fatalf("expected a connection reset to be refused, got %q", state)
+	if state != PortStateReachable {
+		t.Fatalf("expected a successful dial to be reachable, got %q", state)
 	}
 }
 
