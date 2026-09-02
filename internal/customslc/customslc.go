@@ -32,7 +32,7 @@ func NormalizeLanguage(raw string) (Language, error) {
 	if !languageIdentifierPattern.MatchString(language) {
 		return "", fmt.Errorf(
 			"invalid language identifier %q: must start with a letter or digit and use only "+
-				"letters, digits, dots, hyphens, and underscores", raw,
+				"ASCII letters, digits, dots, hyphens, and underscores", raw,
 		)
 	}
 
