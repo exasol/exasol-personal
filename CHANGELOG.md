@@ -46,6 +46,7 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- Fixed Windows local deployments blaming the host-to-VM network path for a database that failed to start. When the forwarded port refused the connection, `exasol start` and `exasol deploy` reported that the network path appeared blocked, listing Windows Firewall and port conflict causes, instead of reporting the underlying failure. `exasol diag local` reported such a port as `blocked` rather than `refused`.
 - `exasol deployments list` now reports the same live status as `exasol status` instead of treating persisted workflow state as current state. Deployment checks run concurrently under one five-second bound.
 - `exasol status` now stops waiting after five seconds by default instead of hanging indefinitely on an unresponsive deployment. Use `--timeout <seconds>` to select another positive limit, for example `exasol status --timeout 10`.
 - Fixed infrastructure and installation presets being unavailable. `exasol presets list` reported no presets, and commands that resolve one, such as `exasol install local` and `exasol presets export`, could not find it. Embedded preset archives are now extracted completely.
