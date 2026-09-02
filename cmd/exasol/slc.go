@@ -764,7 +764,7 @@ func init() {
 	slcCustomInstallCmd.Flags().StringVar(&slcCustomInstallOpts.Alias, "alias", "",
 		"Alias for the custom SLC (used in CREATE <alias> SCALAR SCRIPT)")
 	slcCustomInstallCmd.Flags().StringVar(&slcCustomInstallOpts.Language, "language", "",
-		"Language identifier provided by the custom SLC client")
+		"Language identifier provided by the custom SLC client (normalized to lowercase)")
 
 	requireDefaultDeploymentCompatibility(slcCustomUpdateCmd)
 	requireInitializedDeploymentDir(slcCustomUpdateCmd)
@@ -782,7 +782,7 @@ func init() {
 	slcCustomUpdateCmd.Flags().StringVar(&slcCustomUpdateOpts.Alias, "alias", "",
 		"Alias of the custom SLC to update")
 	slcCustomUpdateCmd.Flags().StringVar(&slcCustomUpdateOpts.Language, "language", "",
-		"Override the language identifier provided by the custom SLC client")
+		"Override the custom SLC language identifier (normalized to lowercase)")
 
 	requireDefaultDeploymentCompatibility(slcCustomRemoveCmd)
 	requireInitializedDeploymentDir(slcCustomRemoveCmd)
