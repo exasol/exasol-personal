@@ -255,9 +255,7 @@ func writeLocalRuntimeArtifactsAndWait(
 		return nil
 	}
 
-	if waitTimeoutSeconds <= 0 {
-		waitTimeoutSeconds = LocalDatabaseStartedDefaultTimeoutSeconds
-	}
+	waitTimeoutSeconds = boundedLocalDatabaseStartedTimeout(waitTimeoutSeconds)
 
 	return waitForLocalDatabaseAndSync(
 		ctx,
@@ -267,6 +265,14 @@ func writeLocalRuntimeArtifactsAndWait(
 		outErr,
 		WaitForLocalDatabaseStarted,
 	)
+}
+
+func boundedLocalDatabaseStartedTimeout(waitTimeoutSeconds int) int {
+	if waitTimeoutSeconds <= 0 || waitTimeoutSeconds > LocalDatabaseStartedDefaultTimeoutSeconds {
+		return LocalDatabaseStartedDefaultTimeoutSeconds
+	}
+
+	return waitTimeoutSeconds
 }
 
 func waitForLocalDatabaseAndSync(
