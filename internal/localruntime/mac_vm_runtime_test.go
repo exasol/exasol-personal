@@ -5,7 +5,6 @@ package localruntime
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 )
 
 func TestReadRunnerStateUsesLabeledForwardsWithoutTransportMetadata(t *testing.T) {
@@ -93,6 +93,77 @@ func TestResolveMacHostDBPort(t *testing.T) {
 		if _, err := resolveMacHostDBPort(ports); err == nil {
 			t.Fatalf("expected invalid mapping %q to fail", ports)
 		}
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable fixtures.
+func TestMacVMRuntimePrepareCreatesAndReusesManagedHostDataLink(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	// Given
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	runtime := NewMacVMRuntime(
+		config.NewDeploymentDir(t.TempDir()),
+		newTestManagerForRunner(t, []byte(fakeV2RunnerScript(eventsPath))),
+	)
+
+	// When
+	if err := runtime.Prepare(context.Background(), nil, nil, PrepareOptions{}); err != nil {
+		t.Fatalf("failed to prepare runtime: %v", err)
+	}
+	if err := runtime.Prepare(context.Background(), nil, nil, PrepareOptions{}); err != nil {
+		t.Fatalf("failed to prepare runtime again: %v", err)
+	}
+
+	// Then
+	target, err := os.Readlink(runtime.paths.HostNanoDataDir)
+	if err != nil {
+		t.Fatalf("failed to read host data link: %v", err)
+	}
+	wantTarget := filepath.Join(sharedDirName, nanoDataDirName)
+	if target != wantTarget {
+		t.Fatalf("host data link target = %q, want %q", target, wantTarget)
+	}
+}
+
+func TestMacVMRuntimePrepareRejectsConflictingHostDataPath(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]func(t *testing.T, path string){
+		"directory": func(t *testing.T, path string) {
+			t.Helper()
+			if err := os.Mkdir(path, dirMode); err != nil {
+				t.Fatalf("failed to create conflicting directory: %v", err)
+			}
+		},
+		"file": func(t *testing.T, path string) {
+			t.Helper()
+			if err := os.WriteFile(path, []byte("data"), markerFileMode); err != nil {
+				t.Fatalf("failed to create conflicting file: %v", err)
+			}
+		},
+		"different symlink": func(t *testing.T, path string) {
+			t.Helper()
+			if err := os.Symlink("somewhere-else", path); err != nil {
+				t.Fatalf("failed to create conflicting symlink: %v", err)
+			}
+		},
+	}
+	for name, createConflict := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			runtime := NewMacVMRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+			if err := os.MkdirAll(runtime.paths.WorkDir, dirMode); err != nil {
+				t.Fatalf("failed to create runtime directory: %v", err)
+			}
+			createConflict(t, runtime.paths.HostNanoDataDir)
+
+			err := runtime.Prepare(context.Background(), nil, nil, PrepareOptions{})
+
+			if err == nil || !strings.Contains(err.Error(), runtime.paths.HostNanoDataDir) {
+				t.Fatalf("expected path-rich conflict error, got %v", err)
+			}
+		})
 	}
 }
 
@@ -192,18 +263,17 @@ func TestMaterializeFileAtomicallyRejectsDirectorySource(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // test runner scripts fork executable fixtures.
-func TestMacVMRuntimeWorkaroundNanoStartupDurabilityDelegatesToRunner(t *testing.T) {
-	requirePOSIXRunnerTest(t)
+func TestMacVMRuntimeWorkaroundNanoStartupDurabilityFinalizesMigration(t *testing.T) {
+	t.Parallel()
 
 	deployment := config.NewDeploymentDir(t.TempDir())
-	logPath := filepath.Join(t.TempDir(), "runner-args")
-	runnerScript := fmt.Sprintf(`#!/bin/sh
-printf '%%s' "$*" > %q
-`, logPath)
 	localRuntime := NewMacVMRuntime(
-		deployment, newTestManagerForRunner(t, []byte(runnerScript)),
+		deployment, newTestManagerForRunner(t, []byte("#!/bin/sh\n")),
 	)
+	migration := &recordingMacDataMigrator{}
+	localRuntime.migrationFactory = func(localinstall.ExecutionEnvironment) macDataMigrator {
+		return migration
+	}
 	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
 		t.Fatalf("failed to create runtime work dir: %v", err)
 	}
@@ -211,11 +281,10 @@ printf '%%s' "$*" > %q
 	if err := localRuntime.WorkaroundNanoStartupDurability(
 		context.Background(), nil, nil,
 	); err != nil {
-		t.Fatalf("expected VM sync to succeed, got %v", err)
+		t.Fatalf("expected migration finalization to succeed, got %v", err)
 	}
-	args, err := os.ReadFile(logPath)
-	if err != nil || string(args) != "run -- sync" {
-		t.Fatalf("expected sync through runner, got %q, %v", string(args), err)
+	if migration.finalizeCalls != 1 {
+		t.Fatalf("migration finalize calls = %d, want 1", migration.finalizeCalls)
 	}
 }
 

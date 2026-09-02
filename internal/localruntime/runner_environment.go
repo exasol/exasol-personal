@@ -107,7 +107,9 @@ func (environment *runnerExecutionEnvironment) MkdirAll(
 ) error {
 	return environment.Run(
 		ctx, nil, nil, nil,
-		"sh", "-c", `umask 0; mkdir -p -- "$2"; chmod "$1" "$2"`,
+		// Leaving an existing directory's mode alone keeps this usable on the
+		// host share's mount point, which the guest cannot chmod.
+		"sh", "-c", `umask 0; [ -d "$2" ] || { mkdir -p -- "$2" && chmod "$1" "$2"; }`,
 		"sh", formatFileMode(mode), directory,
 	)
 }

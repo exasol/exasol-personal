@@ -91,6 +91,9 @@ func TestRunnerExecutionEnvironmentFilesystemOperations(t *testing.T) {
 	if err := os.Chmod(directory, 0o700); err != nil { //nolint:gosec
 		t.Fatalf("failed to set existing directory mode: %v", err)
 	}
+	if err := environment.MkdirAll(ctx, directory, 0o750); err != nil {
+		t.Fatalf("mkdir all on existing directory failed: %v", err)
+	}
 
 	filePath := filepath.Join(directory, "state file")
 	if err := environment.WriteFileAtomically(
