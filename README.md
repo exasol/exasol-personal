@@ -147,7 +147,7 @@ Use `exasol deployments list` to see every default and named deployment director
 
 ```bash
 $ exasol deployments list
-default status=running preset=local/ubuntu path=/Users/me/.exasol/personal/deployments/default
+default status=database_ready preset=local/ubuntu path=/Users/me/.exasol/personal/deployments/default
 staging status=stopped preset=aws/ubuntu path=/Users/me/.exasol/personal/deployments/staging
 ```
 

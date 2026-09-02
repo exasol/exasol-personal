@@ -95,12 +95,10 @@ def _set_workflow_state(
     launcher_state_path.write_text(json.dumps(state))
 
 
-def test_deployments_list_reports_running_status_for_deployed_deployment(
+def test_deployments_list_reports_same_status_as_status_command(
     exasol_path: str, tmp_path: Path
 ) -> None:
-    # Given a named deployment that has been initialized and is now running
-    # (simulated by writing the running workflow state directly, the same
-    # approach test_reconfiguration.py uses to avoid a real deploy)
+    # Given a named deployment whose persisted workflow state is running
     home = tmp_path / "home"
     home.mkdir()
     infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
@@ -118,6 +116,13 @@ def test_deployments_list_reports_running_status_for_deployed_deployment(
         env=_env_with_home(home),
     )
     _set_workflow_state(named_dir, {"running": {}})
+    status_result = subprocess.run(
+        [launcher, "status", "--deployment", "staging", "--json"],
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
 
     # When deployments list is invoked with --json
     result = subprocess.run(
@@ -128,10 +133,10 @@ def test_deployments_list_reports_running_status_for_deployed_deployment(
         check=True,
     )
 
-    # Then the entry reports status "running" and keeps its preset identity
+    # Then the entry reports the canonical status and keeps its preset identity
     entries = json.loads(result.stdout)
     staging = next(entry for entry in entries if entry["name"] == "staging")
-    assert staging["status"] == "running"
+    assert staging["status"] == json.loads(status_result.stdout)["status"]
     assert staging["infrastructure"]
     assert staging["installation"]
     assert "active" not in staging

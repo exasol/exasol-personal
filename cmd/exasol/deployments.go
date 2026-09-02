@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -31,10 +32,8 @@ deployment directories selected via an arbitrary --deployment-dir path.
 `, deploymentsRootDisplayPath())
 
 // deploymentListEntry describes one launcher-managed deployment directory for
-// `exasol deployments list`. Status uses the same lifecycle vocabulary as
-// `exasol status` (deploy.StatusNotInitialized, deploy.StatusRunning, etc.),
-// computed via the lock-free, connection-check-free deploy.GetStatus — see
-// deploymentListEntryFor.
+// `exasol deployments list`. Status is resolved through the same live path as
+// `exasol status`.
 type deploymentListEntry struct {
 	Name           string `json:"name"`
 	Path           string `json:"path"`
@@ -42,6 +41,8 @@ type deploymentListEntry struct {
 	Infrastructure string `json:"infrastructure,omitempty"`
 	Installation   string `json:"installation,omitempty"`
 }
+
+var deploymentStatusFn = deploy.Status
 
 var deploymentsCmd = &cobra.Command{
 	Use:   "deployments",
@@ -94,6 +95,12 @@ func listDeploymentDirectories(ctx context.Context) ([]deploymentListEntry, erro
 		return nil, fmt.Errorf("read deployments directory %q: %w", root, err)
 	}
 
+	statusCtx, cancel, err := contextWithStatusTimeout(ctx, defaultStatusTimeoutSeconds)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	entries := make([]deploymentListEntry, 0, len(dirEntries))
 	for _, dirEntry := range dirEntries {
 		if !dirEntry.IsDir() {
@@ -101,8 +108,20 @@ func listDeploymentDirectories(ctx context.Context) ([]deploymentListEntry, erro
 		}
 
 		path := filepath.Join(root, dirEntry.Name())
-		entries = append(entries, deploymentListEntryFor(ctx, dirEntry.Name(), path))
+		entries = append(entries, deploymentListEntry{
+			Name: dirEntry.Name(),
+			Path: path,
+		})
 	}
+
+	var waitGroup sync.WaitGroup
+	for index := range entries {
+		waitGroup.Go(func() {
+			entry := entries[index]
+			entries[index] = deploymentListEntryFor(statusCtx, entry.Name, entry.Path)
+		})
+	}
+	waitGroup.Wait()
 
 	slices.SortFunc(entries, func(a, b deploymentListEntry) int {
 		return cmp.Compare(a.Name, b.Name)
@@ -122,12 +141,7 @@ func deploymentListEntryFor(ctx context.Context, name, path string) deploymentLi
 		Status: deploy.StatusNotInitialized,
 	}
 
-	// deploy.GetStatus with checkConnection=false reads only the persisted
-	// workflow state — no per-directory lock, no DB/VM probe — so it is cheap
-	// enough to call once per listed directory. It already treats a missing
-	// or unreadable state file as StatusNotInitialized, which is exactly the
-	// tolerant fallback this function wants for a malformed entry.
-	status, err := deploy.GetStatus(ctx, config.NewDeploymentDir(path), false)
+	status, err := deploymentStatusFn(ctx, config.NewDeploymentDir(path))
 	if err != nil || status == nil {
 		return entry
 	}

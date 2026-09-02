@@ -15,27 +15,31 @@ type discardLogger struct{}
 func (discardLogger) Print(_ ...any)            { /* suppressed */ }
 func (discardLogger) Printf(_ string, _ ...any) { /* suppressed */ }
 
-var loggerMutex sync.Mutex
+var (
+	loggerMutex               sync.Mutex
+	silencedDriverErrorUsers  int
+	originalDriverErrorLogger logger.Logger
+)
 
-// withDriverErrorLogger runs fn with the driver ErrorLogger temporarily replaced.
-// It restores the original logger afterwards. Not safe for concurrent mixed usage;
-// guarded by a mutex.
-func withDriverErrorLogger(temp logger.Logger, callback func() error) error {
+// WithSilencedDriverErrors runs fn with driver errors suppressed.
+func WithSilencedDriverErrors(callback func() error) error { //nolint:revive
 	loggerMutex.Lock()
-	old := logger.ErrorLogger
-	_ = logger.SetLogger(temp)
+	if silencedDriverErrorUsers == 0 {
+		originalDriverErrorLogger = logger.ErrorLogger
+		_ = logger.SetLogger(discardLogger{})
+	}
+	silencedDriverErrorUsers++
 	loggerMutex.Unlock()
 
 	defer func() {
 		loggerMutex.Lock()
-		_ = logger.SetLogger(old)
+		silencedDriverErrorUsers--
+		if silencedDriverErrorUsers == 0 {
+			_ = logger.SetLogger(originalDriverErrorLogger)
+			originalDriverErrorLogger = nil
+		}
 		loggerMutex.Unlock()
 	}()
 
 	return callback()
-}
-
-// WithSilencedDriverErrors runs fn with driver errors suppressed.
-func WithSilencedDriverErrors(fn func() error) error { //nolint:revive
-	return withDriverErrorLogger(discardLogger{}, fn)
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -112,7 +113,7 @@ func TestListDeploymentDirectories_ReportsUnparseableStateFileAsNotInitialized(t
 }
 
 //nolint:paralleltest // t.Chdir and t.Setenv change process state.
-func TestListDeploymentDirectories_ReportsRunningStatusAndPresetIdentity(t *testing.T) {
+func TestListDeploymentDirectories_ReportsCanonicalStatusAndPresetIdentity(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)
 	t.Chdir(t.TempDir())
@@ -120,6 +121,17 @@ func TestListDeploymentDirectories_ReportsRunningStatusAndPresetIdentity(t *test
 	runningDir := filepath.Join(deploymentsRoot, "running")
 	mkdirTest(t, runningDir)
 	writeRunningStateWithPresetIdentity(t, runningDir, "name:aws", "name:standard")
+	stubDeploymentStatus(t, func(
+		ctx context.Context,
+		_ config.DeploymentDir,
+	) (*deploy.StatusOutput, error) {
+		deadline, ok := ctx.Deadline()
+		if !ok || time.Until(deadline) > time.Duration(defaultStatusTimeoutSeconds)*time.Second {
+			t.Fatal("expected bounded status context")
+		}
+
+		return &deploy.StatusOutput{Status: deploy.StatusDatabaseReady}, nil
+	})
 
 	entries, err := listDeploymentDirectories(context.Background())
 	if err != nil {
@@ -128,11 +140,91 @@ func TestListDeploymentDirectories_ReportsRunningStatusAndPresetIdentity(t *test
 	if len(entries) != 1 {
 		t.Fatalf("expected a single entry, got: %#v", entries)
 	}
-	if entries[0].Status != deploy.StatusRunning {
-		t.Fatalf("expected status %q, got %#v", deploy.StatusRunning, entries[0])
+	if entries[0].Status != deploy.StatusDatabaseReady {
+		t.Fatalf("expected status %q, got %#v", deploy.StatusDatabaseReady, entries[0])
 	}
 	if entries[0].Infrastructure != "aws" || entries[0].Installation != "standard" {
 		t.Fatalf("expected preset identity to be displayed, got: %#v", entries[0])
+	}
+}
+
+//nolint:paralleltest // t.Chdir, t.Setenv, and deploymentStatusFn change process state.
+func TestListDeploymentDirectories_ResolvesStatusesConcurrently(t *testing.T) {
+	home := t.TempDir()
+	setTestHome(t, home)
+	t.Chdir(t.TempDir())
+	deploymentsRoot := filepath.Join(config.LauncherDirPath(home), "deployments")
+	mkdirTest(t, filepath.Join(deploymentsRoot, "alpha"))
+	mkdirTest(t, filepath.Join(deploymentsRoot, "beta"))
+
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	stubDeploymentStatus(t, func(
+		context.Context,
+		config.DeploymentDir,
+	) (*deploy.StatusOutput, error) {
+		started <- struct{}{}
+		<-release
+
+		return &deploy.StatusOutput{Status: deploy.StatusInitialized}, nil
+	})
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := listDeploymentDirectories(context.Background())
+		result <- err
+	}()
+
+	for range 2 {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			close(release)
+			t.Fatal("expected both status checks to start concurrently")
+		}
+	}
+	close(release)
+
+	if err := <-result; err != nil {
+		t.Fatalf("expected listing to succeed, got: %v", err)
+	}
+}
+
+//nolint:paralleltest // t.Chdir, t.Setenv, and deploymentStatusFn change process state.
+func TestListDeploymentDirectories_StopsWaitingAtParentDeadline(t *testing.T) {
+	home := t.TempDir()
+	setTestHome(t, home)
+	t.Chdir(t.TempDir())
+	deploymentsRoot := filepath.Join(config.LauncherDirPath(home), "deployments")
+	mkdirTest(t, filepath.Join(deploymentsRoot, "alpha"))
+	mkdirTest(t, filepath.Join(deploymentsRoot, "beta"))
+	stubDeploymentStatus(t, func(
+		ctx context.Context,
+		_ config.DeploymentDir,
+	) (*deploy.StatusOutput, error) {
+		<-ctx.Done()
+
+		return nil, ctx.Err()
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+
+	entries, err := listDeploymentDirectories(ctx)
+	if err != nil {
+		t.Fatalf("expected listing to tolerate timed-out entries, got: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed >= time.Second {
+		t.Fatalf("expected listing to honor the shared deadline, took %s", elapsed)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected both entries after timeout, got: %#v", entries)
+	}
+	for _, entry := range entries {
+		if entry.Status != deploy.StatusNotInitialized {
+			t.Fatalf("expected timed-out entry fallback, got: %#v", entry)
+		}
 	}
 }
 
@@ -153,6 +245,16 @@ func mkdirTest(t *testing.T, path string) {
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		t.Fatalf("failed to create directory: %v", err)
 	}
+}
+
+func stubDeploymentStatus(
+	t *testing.T,
+	stub func(context.Context, config.DeploymentDir) (*deploy.StatusOutput, error),
+) {
+	t.Helper()
+	original := deploymentStatusFn
+	deploymentStatusFn = stub
+	t.Cleanup(func() { deploymentStatusFn = original })
 }
 
 func writeRunningStateWithPresetIdentity(
