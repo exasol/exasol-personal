@@ -85,36 +85,41 @@ func WaitForDatabaseStarted(
 	)
 }
 
-// localReachabilityRecheckDelay absorbs a transient container-startup race
-// in which the runtime's port forwarder is briefly in an ambiguous state
-// (accepts SYN but has no listener behind it yet) and returns errors that
-// classifyHostPortHealth cannot map to "refused" on Windows.
-const localReachabilityRecheckDelay = 3 * time.Second
-
 func WaitForLocalDatabaseStarted(ctx context.Context, runtime localruntime.Runtime) error {
-	// Fail fast on a *persistently* blocked network path instead of waiting
-	// out the whole backoff window. A single classification failure is not
-	// enough: container startup can transiently look blocked before the
-	// forwarder settles. Re-check once after a short delay before giving up.
-	if err := classifyLocalReachability(ctx, runtime); err != nil {
-		slog.Debug("initial local reachability check reported network blocked; retrying",
-			"error", err, "retryAfter", localReachabilityRecheckDelay)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(localReachabilityRecheckDelay):
-		}
-		if err := classifyLocalReachability(ctx, runtime); err != nil {
-			return err
-		}
-	}
+	waitCtx, cancel := localReadinessPollingContext(ctx)
+	defer cancel()
 
-	return waitForDatabaseStartedWithBackoff(
-		ctx,
+	err := waitForDatabaseStartedWithBackoff(
+		waitCtx,
 		runtime.Deployment(),
 		LocalDatabaseStartedInitialBackoff,
 		LocalDatabaseStartedMaxBackoff,
 	)
+	if err != nil {
+		diagnosisCtx, cancel := context.WithTimeout(ctx, localReadinessDiagnosisWindow)
+		defer cancel()
+
+		return diagnoseLocalFailure(diagnosisCtx, runtime, err)
+	}
+
+	return nil
+}
+
+const (
+	localReadinessDiagnosisWindow        = 2 * time.Second
+	localReadinessDiagnosisWindowDivisor = 2
+)
+
+func localReadinessPollingContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return ctx, func() {}
+	}
+
+	remaining := time.Until(deadline)
+	reserved := min(localReadinessDiagnosisWindow, remaining/localReadinessDiagnosisWindowDivisor)
+
+	return context.WithTimeout(ctx, remaining-reserved)
 }
 
 func waitForDatabaseStartedWithBackoff(
