@@ -18,8 +18,9 @@ Thank you for your interest in contributing! We welcome contributions from the c
 
 ## OpenSpec Guidelines
 
-- **Use positive requirements** - always specify what should happen, never what should not.
-- **Only specify user-visible side-effects** - never include implementation details in requirements. User-visible side-effects include CLI behavior or output, file modifications, network access, process management, etc.
+- **Use positive, observable requirements** - specify what users can verify at a stable boundary, never negative requirements, internal mechanisms, or what must remain unchanged.
+- **Keep requirements and scenarios precise** - state the relevant condition and its observable outcome, using measurable limits where needed.
+- **Avoid overlap** - give each behavior one canonical specification; unchanged behavior is implied by its existing, unmodified specification.
 
 ## Commit Guidelines
 
