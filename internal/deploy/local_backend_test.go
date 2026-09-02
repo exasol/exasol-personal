@@ -359,6 +359,27 @@ func TestLocalBackendReadConfiguration_ExposesSizingValues(t *testing.T) {
 	assertConfigValue(t, values, localDataSizeGBConfigName, 250, localDefaultDataSizeGB)
 }
 
+func TestLocalBackendDescribesMacOSRuntimeDisk(t *testing.T) {
+	t.Parallel()
+
+	backend := newLocalBackendForPlatform(
+		config.NewDeploymentDir(t.TempDir()),
+		&presets.InfrastructureManifest{},
+		nil,
+		localMacOS,
+		localMacArch,
+	)
+	definitions, err := backend.ReadDeploymentConfigVariables()
+	if err != nil {
+		t.Fatalf("expected local configuration definitions, got %v", err)
+	}
+	definition := definitions[localDataSizeGBConfigName]
+	const wantDescription = "VM runtime disk size in GB for Podman images and runtime state."
+	if definition.Description != wantDescription {
+		t.Fatalf("runtime disk description = %q, want %q", definition.Description, wantDescription)
+	}
+}
+
 func TestLocalBackendReadConfiguration_LinuxExposesOnlyPorts(t *testing.T) {
 	t.Parallel()
 
