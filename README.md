@@ -237,7 +237,7 @@ exasol slc custom update  --source ./my-python-v2.tar.gz --alias MYPY3
 exasol slc remove MYPY3
 ```
 
-`--source` takes a local tarball path or an `https` URL, `--alias` is the name you then use in `CREATE <alias> SCALAR SCRIPT`, and `--language` is the language the container provides (`python`, `java`, or `r`). `custom install` and `custom update` restart the database and accept `--auto-approve` and `--no-restart` just like the official commands. If the container cannot be made available, the database still starts but the command fails, reporting that the container is recorded but not active.
+`--source` takes a local tarball path or an `https` URL, `--alias` is the name you then use in `CREATE <alias> SCALAR SCRIPT`, and `--language` is the language identifier passed to the custom SLC client. The identifier must start with a letter or digit and contain only letters, digits, dots, hyphens, or underscores. Custom clients can use identifiers such as `rust` when they implement the Exasol UDF protocol. `custom install` and `custom update` restart the database and accept `--auto-approve` and `--no-restart` just like the official commands. If the container cannot be made available, the database still starts but the command fails, reporting that the container is recorded but not active.
 
 Removing a custom container works differently: it takes effect immediately without a restart, so `--auto-approve` and `--no-restart` do not apply. Because the alias is cleared through the database, the deployment must be running to remove an active container; one that was recorded but never activated can be removed while stopped.
 

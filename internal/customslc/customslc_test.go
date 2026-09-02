@@ -4,6 +4,7 @@
 package customslc_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/customslc"
@@ -15,27 +16,49 @@ func TestNormalizeLanguage(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	for _, testCase := range []struct {
+	testCases := []struct {
+		name string
 		in   string
 		want customslc.Language
 		ok   bool
 	}{
-		{"python", customslc.LanguagePython, true},
-		{"PYTHON", customslc.LanguagePython, true},
-		{" Java ", customslc.LanguageJava, true},
-		{"r", customslc.LanguageR, true},
-		{"go", "", false},
-		{"", "", false},
-	} {
-		// When
-		got, err := customslc.NormalizeLanguage(testCase.in)
-		// Then
-		if testCase.ok {
-			require.NoError(t, err)
-			assert.Equal(t, testCase.want, got)
-		} else {
-			require.Error(t, err)
-		}
+		{"python", "python", "python", true},
+		{"uppercase is normalized", "PYTHON", "python", true},
+		{"trimmed value is normalized", " Java ", "java", true},
+		{"r", "r", "r", true},
+		{"rust", "rust", "rust", true},
+		{"custom runtime", "custom-runtime_2", "custom-runtime_2", true},
+		{"unknown client-defined value", "pyhton", "pyhton", true},
+		{"digit prefix", "123-rust.v2", "123-rust.v2", true},
+		{
+			"long client-defined value",
+			"a" + strings.Repeat("-rust", 30),
+			customslc.Language("a" + strings.Repeat("-rust", 30)),
+			true,
+		},
+		{"leading hyphen", "-rust", "", false},
+		{"space", "rust runtime", "", false},
+		{"tab", "rust\truntime", "", false},
+		{"single quote", "rust'client", "", false},
+		{"percent escape", "rust%20", "", false},
+		{"query delimiter", "rust?client", "", false},
+		{"fragment delimiter", "rust#client", "", false},
+		{"non ASCII", "rúst", "", false},
+		{"empty", "", "", false},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			// When
+			got, err := customslc.NormalizeLanguage(testCase.in)
+			// Then
+			if testCase.ok {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.want, got)
+			} else {
+				require.Error(t, err)
+			}
+		})
 	}
 }
 
@@ -43,7 +66,7 @@ func TestBuildActivationURI(t *testing.T) {
 	t.Parallel()
 
 	// When
-	uri := customslc.BuildActivationURI("custom-mypy3", customslc.LanguagePython)
+	uri := customslc.BuildActivationURI("custom-mypy3", customslc.Language("python"))
 
 	// Then
 	assert.Equal(t,
@@ -147,7 +170,7 @@ func TestDirFromURI(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	uri := customslc.BuildActivationURI("custom-mypy3", customslc.LanguagePython)
+	uri := customslc.BuildActivationURI("custom-mypy3", customslc.Language("python"))
 
 	// When / Then
 	if got := customslc.DirFromURI(uri); got != "custom-mypy3" {

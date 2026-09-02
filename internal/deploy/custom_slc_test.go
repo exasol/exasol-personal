@@ -279,18 +279,18 @@ func TestCustomSLCUnchanged(t *testing.T) {
 	recorded := config.InstalledCustomSLC{Sha256: "abc", Language: "python", Activated: true}
 
 	// When / Then
-	if !customSLCUnchanged(recorded, "abc", customslc.LanguagePython) {
+	if !customSLCUnchanged(recorded, "abc", customslc.Language("python")) {
 		t.Fatal("same digest and language must be a no-op")
 	}
-	if customSLCUnchanged(recorded, "abc", customslc.LanguageJava) {
+	if customSLCUnchanged(recorded, "abc", customslc.Language("java")) {
 		t.Fatal("a language-only change must not be treated as unchanged")
 	}
-	if customSLCUnchanged(recorded, "def", customslc.LanguagePython) {
+	if customSLCUnchanged(recorded, "def", customslc.Language("python")) {
 		t.Fatal("a content change must not be treated as unchanged")
 	}
 
 	pending := config.InstalledCustomSLC{Sha256: "abc", Language: "python"}
-	if customSLCUnchanged(pending, "abc", customslc.LanguagePython) {
+	if customSLCUnchanged(pending, "abc", customslc.Language("python")) {
 		t.Fatal("an inactive container must be retried, not treated as unchanged")
 	}
 }
