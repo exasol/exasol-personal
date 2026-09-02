@@ -43,6 +43,7 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- `exasol deployments list` now reports the same live status as `exasol status` instead of treating persisted workflow state as current state. Deployment checks run concurrently under one five-second bound.
 - `exasol status` now stops waiting after five seconds by default instead of hanging indefinitely on an unresponsive deployment. Use `--timeout <seconds>` to select another positive limit, for example `exasol status --timeout 10`.
 - Fixed infrastructure and installation presets being unavailable. `exasol presets list` reported no presets, and commands that resolve one, such as `exasol install local` and `exasol presets export`, could not find it. Embedded preset archives are now extracted completely.
 - Fixed `exasol connect` omitting its shell exit hint when standard input was piped and emitting it for interactive `--json` sessions. The hint now follows the CLI output contract: it is written to stderr for text shell sessions and suppressed under `--json`.
