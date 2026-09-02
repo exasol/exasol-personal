@@ -95,6 +95,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- Fixed local install and start operations to fail within 30 seconds when the database does not accept connections, retaining the latest connection failure and applicable reachability guidance.
+
 - Fixed the personal installer script so it remains compatible with POSIX shell environments.
 
 - Fixed `exasol connect` so `CREATE SCRIPT` / `CREATE FUNCTION` definitions terminate on a line containing only `/` (the EXAplus rule) instead of the first `;`. UDF bodies that contain semicolons (for example Java and R) now parse and run correctly through `-c`, `-f`, and interactive input.

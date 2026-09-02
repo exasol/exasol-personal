@@ -82,13 +82,13 @@ const (
 	InstanceRefreshTimeoutMinutes      = 5
 	StartedDefaultTimeoutSeconds       = StartedDefaultTimeoutInMinutes * 60
 	InstanceRefreshTimeoutSeconds      = InstanceRefreshTimeoutMinutes * 60
-	LocalDatabaseStartedInitialBackoff = 2
-	LocalDatabaseStartedMaxBackoff     = 8
+	LocalDatabaseStartedInitialBackoff = 1
+	LocalDatabaseStartedMaxBackoff     = 2
 	StartedInitialBackoff              = 10
 	StartedMaxBackoff                  = 60
-	// LocalDatabaseStartedDefaultTimeoutSeconds is shorter than the cloud
-	// default since a local VM boots in seconds, not minutes.
-	LocalDatabaseStartedDefaultTimeoutSeconds = 5 * 60
+	// LocalDatabaseStartedDefaultTimeoutSeconds bounds local startup because
+	// a healthy local database accepts connections within seconds.
+	LocalDatabaseStartedDefaultTimeoutSeconds = 30
 )
 
 func Getn11Details(deployment config.DeploymentDir) (*config.SSHDetails, error) {
