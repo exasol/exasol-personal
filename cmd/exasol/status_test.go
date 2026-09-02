@@ -5,12 +5,89 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
 )
+
+func TestStatusCommandRegistersDefaultTimeout(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	flag := statusCmd.Flags().Lookup("timeout")
+
+	// Then
+	if flag == nil {
+		t.Fatal("expected status command to register --timeout")
+	}
+	if flag.DefValue != strconv.FormatInt(defaultStatusTimeoutSeconds, 10) {
+		t.Fatalf("expected default timeout %d, got %q", defaultStatusTimeoutSeconds, flag.DefValue)
+	}
+}
+
+func TestContextWithStatusTimeoutUsesSeconds(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	const timeoutSeconds int64 = 1
+
+	// When
+	ctx, cancel, err := contextWithStatusTimeout(context.Background(), timeoutSeconds)
+	if err != nil {
+		t.Fatalf("expected timeout context, got: %v", err)
+	}
+	defer cancel()
+
+	// Then
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("expected status context to have a deadline")
+	}
+	if remaining := time.Until(deadline); remaining <= 0 || remaining > time.Second {
+		t.Fatalf("expected a one-second deadline, got %s", remaining)
+	}
+}
+
+func TestContextWithStatusTimeoutRejectsNonPositiveSeconds(t *testing.T) {
+	t.Parallel()
+
+	for _, timeoutSeconds := range []int64{0, -1} {
+		// When
+		ctx, cancel, err := contextWithStatusTimeout(context.Background(), timeoutSeconds)
+
+		// Then
+		if err == nil {
+			cancel()
+			t.Fatalf("expected timeout %d to be rejected", timeoutSeconds)
+		}
+		if ctx != nil || cancel != nil {
+			t.Fatalf("expected no context for timeout %d", timeoutSeconds)
+		}
+		if !strings.Contains(err.Error(), "--timeout must be positive") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+}
+
+func TestContextWithStatusTimeoutRejectsOverflow(t *testing.T) {
+	t.Parallel()
+
+	// When
+	ctx, cancel, err := contextWithStatusTimeout(
+		context.Background(),
+		maxStatusTimeoutSeconds+1,
+	)
+
+	// Then
+	if err == nil || ctx != nil || cancel != nil {
+		t.Fatalf("expected oversized timeout to be rejected, got context=%v error=%v", ctx, err)
+	}
+}
 
 func TestFormatStatusText(t *testing.T) {
 	t.Parallel()
