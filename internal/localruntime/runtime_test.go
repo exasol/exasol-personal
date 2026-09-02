@@ -119,6 +119,18 @@ func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
 	if err := localRuntime.Stop(context.Background(), nil, nil); err != nil {
 		t.Fatalf("stop failed: %v", err)
 	}
+	if err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
+		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
+		CPUCount:      4,
+		MemoryMB:      8192,
+		DataSizeGB:    100,
+	}); err != nil {
+		t.Fatalf("restart failed: %v", err)
+	}
+	restartedEndpoint, err := localRuntime.ReadEndpoints()
+	if err != nil || restartedEndpoint.DBPort != 28563 {
+		t.Fatalf("unexpected restarted endpoint %#v, err=%v", restartedEndpoint, err)
+	}
 
 	events, err := os.ReadFile(eventsPath)
 	if err != nil {
@@ -165,7 +177,10 @@ func TestMacVMRuntimeStartStopsVMWhenInstallFails(t *testing.T) {
 	}
 
 	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
-		CPUCount: 2, MemoryMB: 4096, DataSizeGB: 100,
+		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
+		CPUCount:      2,
+		MemoryMB:      4096,
+		DataSizeGB:    100,
 	})
 	if err == nil || !strings.Contains(err.Error(), "podman failed") {
 		t.Fatalf("expected install failure, got %v", err)
@@ -176,6 +191,44 @@ func TestMacVMRuntimeStartStopsVMWhenInstallFails(t *testing.T) {
 	}
 	if !strings.Contains(string(events), "install-start\nrunner-stop\n") {
 		t.Fatalf("expected failed installation to stop VM, got:\n%s", events)
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable files.
+func TestMacVMRuntimeStartRejectsMismatchedReportedPort(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	localRuntime := NewMacVMRuntime(
+		deployment,
+		newTestManagerForRunner(t, []byte(fakeV2RunnerScript(eventsPath, 38563))),
+	)
+	install := &recordingLocalInstall{eventsPath: eventsPath}
+	localRuntime.installFactory = func(string) (localinstall.LocalInstall, error) {
+		return install, nil
+	}
+	if err := localRuntime.Prepare(context.Background(), nil, nil, PrepareOptions{}); err != nil {
+		t.Fatalf("prepare failed: %v", err)
+	}
+
+	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
+		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
+		CPUCount:      2,
+		MemoryMB:      4096,
+		DataSizeGB:    100,
+	})
+
+	if err == nil || !strings.Contains(err.Error(), "expected configured port 28563") {
+		t.Fatalf("expected mismatched endpoint error, got %v", err)
+	}
+	events, readErr := os.ReadFile(eventsPath)
+	if readErr != nil {
+		t.Fatalf("failed to read lifecycle events: %v", readErr)
+	}
+	if strings.Contains(string(events), "install-start") ||
+		!strings.Contains(string(events), "runner-start\nrunner-stop\n") {
+		t.Fatalf("expected mismatched VM to stop before installation, got:\n%s", events)
 	}
 }
 
