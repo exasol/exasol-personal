@@ -7,6 +7,7 @@ package customslc
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -17,6 +18,8 @@ const clientRelPath = "exaudf/exaudfclient"
 
 const builtinBucketPath = "__builtin__/slc"
 
+var languageIdentifierPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+
 type AliasEntry struct {
 	Alias string
 	URI   string
@@ -24,26 +27,16 @@ type AliasEntry struct {
 
 type Language string
 
-const (
-	LanguagePython Language = "python"
-	LanguageJava   Language = "java"
-	LanguageR      Language = "r"
-)
-
 func NormalizeLanguage(raw string) (Language, error) {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case string(LanguagePython):
-		return LanguagePython, nil
-	case string(LanguageJava):
-		return LanguageJava, nil
-	case string(LanguageR):
-		return LanguageR, nil
-	default:
+	language := strings.ToLower(strings.TrimSpace(raw))
+	if !languageIdentifierPattern.MatchString(language) {
 		return "", fmt.Errorf(
-			"unsupported language %q; supported languages are: python, java, r",
-			raw,
+			"invalid language identifier %q: must start with a letter or digit and use only "+
+				"letters, digits, dots, hyphens, and underscores", raw,
 		)
 	}
+
+	return Language(language), nil
 }
 
 // NormalizeAlias upper-cases aliases to match database-reported identifiers.
