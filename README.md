@@ -76,6 +76,16 @@ exasol install local
 
 In a few seconds you'll have a local Exasol instance running. Run `exasol info` at any time to see how to connect, then head to the **Load Sample Data** section to start querying.
 
+The launcher automatically selects and saves a database port, preferring `8563`; the port stays fixed across restarts. To choose one explicitly, use `exasol install local --ports db:9563`. To change a local deployment later, stop it first, update the port, and start it again:
+
+```bash
+exasol stop
+exasol config set --ports db:9563  # or: exasol config set --ports auto
+exasol start
+```
+
+If another process claims the saved port while the deployment is stopped, startup reports the conflict and shows the same explicit and automatic replacement commands.
+
 To run UDFs locally, install a script language container — see **UDFs and Script Language Containers** below. To run several local databases side by side, see **Deployments and Named Deployments**.
 
 Prefer to run in your own cloud? See the **Deploy to the Cloud** section below.
