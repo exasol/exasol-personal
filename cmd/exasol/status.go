@@ -4,16 +4,23 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
 
-const statusCmdShortDesc = `Get the status a deployment`
+const statusCmdShortDesc = `Get the status of a deployment`
+
+const (
+	defaultStatusTimeoutSeconds int64 = 5
+	maxStatusTimeoutSeconds           = int64(1<<63-1) / int64(time.Second)
+)
 
 const statusCmdLongDesc = statusCmdShortDesc + `
 
@@ -31,7 +38,8 @@ Display the status of the current deployment.
 `
 
 var statusOpts = struct {
-	unsafe bool
+	unsafe         bool
+	timeoutSeconds int64
 }{}
 
 var statusCmd = &cobra.Command{
@@ -41,16 +49,21 @@ var statusCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
+		ctx, cancel, err := contextWithStatusTimeout(cmd.Context(), statusOpts.timeoutSeconds)
+		if err != nil {
+			return err
+		}
+		defer cancel()
+
 		deployment := commonFlags.Deployment()
 		var status *deploy.StatusOutput
-		var err error
 
 		if statusOpts.unsafe {
 			slog.Debug("acquiring deployment status without lock")
-			status, err = deploy.StatusUnsafe(cmd.Context(), deployment)
+			status, err = deploy.StatusUnsafe(ctx, deployment)
 		} else {
 			slog.Debug("acquiring deployment status with lock")
-			status, err = deploy.Status(cmd.Context(), deployment)
+			status, err = deploy.Status(ctx, deployment)
 		}
 		if err != nil {
 			return err
@@ -69,6 +82,24 @@ var statusCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+func contextWithStatusTimeout(
+	parent context.Context,
+	timeoutSeconds int64,
+) (context.Context, context.CancelFunc, error) {
+	if timeoutSeconds <= 0 {
+		return nil, nil, fmt.Errorf("--timeout must be positive, got %d", timeoutSeconds)
+	}
+	if timeoutSeconds > maxStatusTimeoutSeconds {
+		return nil, nil, fmt.Errorf("--timeout is too large, got %d", timeoutSeconds)
+	}
+
+	timeout := time.Duration(timeoutSeconds) * time.Second
+
+	ctx, cancel := context.WithTimeout(parent, timeout)
+
+	return ctx, cancel, nil
 }
 
 func formatStatusJSON(status deploy.StatusOutput) (string, error) {
@@ -95,7 +126,12 @@ func registerStatusFlags() {
 	statusCmd.Flags().BoolVar(
 		&statusOpts.unsafe,
 		"unsafe", false,
-		"Try to read the deployment folder state even it is locked. May fail.",
+		"Try to read the deployment folder state even if it is locked. May fail.",
+	)
+	statusCmd.Flags().Int64Var(
+		&statusOpts.timeoutSeconds,
+		"timeout", defaultStatusTimeoutSeconds,
+		"Maximum number of seconds to wait for the complete status check",
 	)
 }
 

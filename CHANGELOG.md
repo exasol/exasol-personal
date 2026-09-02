@@ -43,6 +43,7 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- `exasol status` now stops waiting after five seconds by default instead of hanging indefinitely on an unresponsive deployment. Use `--timeout <seconds>` to select another positive limit, for example `exasol status --timeout 10`.
 - Fixed infrastructure and installation presets being unavailable. `exasol presets list` reported no presets, and commands that resolve one, such as `exasol install local` and `exasol presets export`, could not find it. Embedded preset archives are now extracted completely.
 - Fixed `exasol connect` omitting its shell exit hint when standard input was piped and emitting it for interactive `--json` sessions. The hint now follows the CLI output contract: it is written to stderr for text shell sessions and suppressed under `--json`.
 - Fixed Data Lakehouse Turbo activation failing on cloud deployments. Activating the feature in the AdminUI hung on a spinner and reported `Activation status for database Exasol could not be retrieved`. Podman is now installed during cloud-init on all supported cloud providers (AWS, Azure, Exoscale, STACKIT), and the provisioned hosts now ship a Podman release that includes the Quadlet systemd generator the feature depends on. Deployments created before this change must be recreated to pick it up.
