@@ -270,7 +270,3 @@ The system SHALL check local database readiness every one to two seconds and SHA
 - **WHEN** a local readiness wait ends and the runtime identifies a network-wide reachability problem
 - **THEN** the launcher reports actionable reachability guidance together with the most recent connection failure
 
-#### Scenario: Cloud database readiness is unchanged
-- **WHEN** a cloud deployment waits for its database to accept connections
-- **THEN** the launcher continues to use the cloud readiness timing behavior
-
