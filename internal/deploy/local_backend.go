@@ -412,7 +412,7 @@ func localConfigVariableDefinitionsForPlatform(
 	}
 	definitions[localDataSizeGBConfigName] = ConfigVariableDefinition{
 		Name:           localDataSizeGBConfigName,
-		Description:    "Data disk size in GB for the Exasol Local VM",
+		Description:    "VM runtime disk size in GB for Podman images and runtime state.",
 		Type:           ConfigVariableTypeNumber,
 		DefaultDisplay: strconv.Itoa(runtimeConfig.dataSizeGB),
 	}
