@@ -232,6 +232,59 @@ def test_start_migrates_legacy_automatic_local_port_before_runtime(
     assert int(match.group(1)) > 0
 
 
+def test_local_bind_conflict_restores_stopped_state_with_recovery_guidance(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a stopped local deployment and a runtime reporting an exact bind conflict
+    deployment_dir = tmp_path / "deployment"
+    _init_stopped_local_deployment(exasol_path, deployment_dir, 28563)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_podman = fake_bin / "podman"
+    fake_podman.write_text(
+        """#!/bin/sh
+set -eu
+case "$1" in
+  container)
+    if [ "$2" = "exists" ]; then exit 1; fi
+    if [ "$2" = "inspect" ]; then printf 'false\\n'; exit 0; fi
+    ;;
+  load) printf 'Loaded image: docker.io/exasol/nano:test\\n' ;;
+  images|info|ps|logs) ;;
+  run) printf 'bind: address already in use\\n' >&2; exit 125 ;;
+esac
+"""
+    )
+    fake_podman.chmod(0o700)
+    environment = os.environ.copy()
+    environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
+
+    # When start reaches the runtime's authoritative bind attempt
+    result = subprocess.run(
+        [exasol_path, "start", "--deployment-dir", str(deployment_dir)],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=environment,
+    )
+
+    # Then the fixed mapping and stopped state remain, with both recovery choices
+    assert result.returncode != 0
+    assert 'local service "db" cannot bind configured host port 28563' in result.stderr
+    assert "exasol config set --ports db:<available-port>" in result.stderr
+    assert "exasol config set --ports auto" in result.stderr
+    assert (
+        _get_active_configuration(exasol_path, deployment_dir)["infrastructure"][
+            "options"
+        ]["ports"]
+        == "db:28563"
+    )
+    launcher_state = json.loads(
+        (deployment_dir / ".exasolLauncherState.json").read_text()
+    )
+    assert launcher_state["currentWorkflowState"] == {"stopped": {}}
+
+
 def _get_active_configuration(
     exasol_path: str,
     deployment_dir: Path,
