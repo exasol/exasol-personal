@@ -84,11 +84,17 @@ type runnerState struct {
 }
 
 type MacVMRuntime struct {
-	deployment     config.DeploymentDir
-	paths          vmRuntimePaths
-	manager        *runtimeartifacts.Manager
-	endpoint       *RuntimeEndpoint
-	installFactory func(string) (localinstall.LocalInstall, error)
+	deployment       config.DeploymentDir
+	paths            vmRuntimePaths
+	manager          *runtimeartifacts.Manager
+	endpoint         *RuntimeEndpoint
+	installFactory   func(string) (localinstall.LocalInstall, error)
+	migrationFactory func(localinstall.ExecutionEnvironment) macDataMigrator
+}
+
+type macDataMigrator interface {
+	prepare(ctx context.Context, out, outErr io.Writer, stopNano func() error) error
+	finalize(ctx context.Context, out, outErr io.Writer) error
 }
 
 // NewMacVMRuntime creates a VM runtime. manager may be nil when no runner invocation is needed.
@@ -117,6 +123,9 @@ func (runtime *MacVMRuntime) Prepare(
 	if err := os.MkdirAll(runtime.paths.WorkDir, dirMode); err != nil {
 		return fmt.Errorf("failed to create local runtime directory: %w", err)
 	}
+	if err := ensureMacHostDataLink(runtime.paths); err != nil {
+		return err
+	}
 	runnerPath, err := runtime.resolveRunnerPath(ctx)
 	if err != nil {
 		return err
@@ -126,6 +135,42 @@ func (runtime *MacVMRuntime) Prepare(
 	}
 
 	return runtime.initializeVMIfNeeded(ctx, runnerPath, out, outErr)
+}
+
+func ensureMacHostDataLink(paths vmRuntimePaths) error {
+	wantTarget := filepath.Join(sharedDirName, nanoDataDirName)
+	info, err := os.Lstat(paths.HostNanoDataDir)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := os.Symlink(wantTarget, paths.HostNanoDataDir); err != nil {
+			return fmt.Errorf("failed to create host Nano data link: %w", err)
+		}
+
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to inspect host Nano data path: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return fmt.Errorf(
+			"host Nano data path %s already exists and is not the managed symlink to %s",
+			paths.HostNanoDataDir,
+			wantTarget,
+		)
+	}
+	target, err := os.Readlink(paths.HostNanoDataDir)
+	if err != nil {
+		return fmt.Errorf("failed to read host Nano data link: %w", err)
+	}
+	if target != wantTarget {
+		return fmt.Errorf(
+			"host Nano data path %s points to %s instead of the managed target %s",
+			paths.HostNanoDataDir,
+			target,
+			wantTarget,
+		)
+	}
+
+	return nil
 }
 
 func (runtime *MacVMRuntime) Start(
@@ -168,9 +213,15 @@ func (runtime *MacVMRuntime) Start(
 	if err != nil {
 		return runtime.stopAfterStartFailure(ctx, runnerPath, out, outErr, err)
 	}
+	migration := runtime.dataMigration(runnerPath)
+	if err := migration.prepare(ctx, out, outErr, func() error {
+		return install.Stop(ctx, out, outErr)
+	}); err != nil {
+		return runtime.stopAfterStartFailure(ctx, runnerPath, out, outErr, err)
+	}
 	startConfig := localinstall.StartConfig{
 		ContainerDBPort:      nanoDBPort,
-		DataDir:              vmNanoDataDir,
+		DataDir:              vmSharedNanoDataDir,
 		InitParams:           append([]string(nil), nanoInitParams...),
 		VersionCheck:         runtimeConfig.VersionCheck,
 		SLCs:                 runtimeConfig.SLCs,
@@ -339,9 +390,8 @@ func (runtime *MacVMRuntime) WorkaroundNanoStartupDurability(
 	if err != nil {
 		return err
 	}
-	environment := newRunnerExecutionEnvironment(runnerPath, runtime.paths.WorkDir)
-	if err := environment.Sync(ctx, out, outErr); err != nil {
-		return fmt.Errorf("failed to apply Nano startup durability workaround: %w", err)
+	if err := runtime.dataMigration(runnerPath).finalize(ctx, out, outErr); err != nil {
+		return fmt.Errorf("failed to finalize Nano data migration: %w", err)
 	}
 
 	return nil
@@ -452,6 +502,15 @@ func (runtime *MacVMRuntime) install(
 		slcStagingDir,
 		slcStatusPath,
 	), nil
+}
+
+func (runtime *MacVMRuntime) dataMigration(runnerPath string) macDataMigrator {
+	environment := newRunnerExecutionEnvironment(runnerPath, runtime.paths.WorkDir)
+	if runtime.migrationFactory != nil {
+		return runtime.migrationFactory(environment)
+	}
+
+	return newMacDataMigration(environment)
 }
 
 func materializeFileAtomically(sourcePath, targetPath string) error {
