@@ -480,6 +480,7 @@ type endpointRuntimeStub struct {
 	syncOutErr        io.Writer
 	healthResult      *localruntime.HealthCheckResult
 	healthCalls       int
+	honorContext      bool
 	hostShellErr      error
 	containerShellErr error
 }
@@ -513,7 +514,13 @@ func (*endpointRuntimeStub) Stop(context.Context, io.Writer, io.Writer) error {
 	return nil
 }
 
-func (*endpointRuntimeStub) Status(context.Context) (*localruntime.RuntimeStatus, error) {
+func (runtime *endpointRuntimeStub) Status(
+	ctx context.Context,
+) (*localruntime.RuntimeStatus, error) {
+	if runtime.honorContext && ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	return &localruntime.RuntimeStatus{Running: true}, nil
 }
 
@@ -537,8 +544,12 @@ func (runtime *endpointRuntimeStub) ReadEndpoints() (*localruntime.VMRuntimeEndp
 }
 
 func (runtime *endpointRuntimeStub) HealthCheck(
-	context.Context,
+	ctx context.Context,
 ) (*localruntime.HealthCheckResult, error) {
+	if runtime.honorContext && ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	runtime.healthCalls++
 	if runtime.healthResult != nil {
 		return runtime.healthResult, nil
