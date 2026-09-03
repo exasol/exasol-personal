@@ -11,6 +11,7 @@ exasol slc list
 exasol slc install python3
 exasol slc install java
 exasol slc install r
+exasol slc install rust
 exasol slc update python3
 exasol slc remove python3
 ```
@@ -18,6 +19,14 @@ exasol slc remove python3
 The language argument is an alias used by `CREATE ... SCRIPT` and is matched case-insensitively. For
 example, the Python container enables the `PYTHON3` and `PYTHON312` aliases, the Java container
 enables `JAVA` and `JAVA17`, and the R container enables `R` and `R44`.
+
+The alias `rust` is reserved and is not part of the official catalog. Instead of resolving a catalog
+entry, it installs the latest release of
+[language-container-rs](https://github.com/exasol-labs/language-container-rs) that matches this
+machine's CPU architecture, under the alias `RUST`. `exasol slc update rust` re-resolves the latest
+release and applies it if it has changed. To install a specific Rust container instead of whatever
+`rust` currently resolves to, use `exasol slc custom install --alias RUST --language rust --source
+<path-or-url>`.
 
 `exasol slc list` displays each available container's flavor, aliases, version, and installation
 state.
