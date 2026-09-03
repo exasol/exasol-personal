@@ -17,6 +17,9 @@ import (
 const (
 	minPresetArgs = 1
 	maxPresetArgs = 2
+
+	infrastructurePresetArgIndex = 0
+	installationPresetArgIndex   = 1
 )
 
 var initCmdShortDesc = `Initialize a new deployment directory`
@@ -30,27 +33,34 @@ var deploymentDirectoryResolutionHelp = fmt.Sprintf(`
 	%s%c<name> instead.
 `, defaultDeploymentDirDisplayPath(), deploymentsRootDisplayPath(), os.PathSeparator)
 
+// presetArgumentsHelp and presetDiscoveryTipHelp are separate fragments because
+// preset-specific help substitutes the selected preset's description for the positional
+// argument explanation while keeping the discovery tip (see applySelectedPresetHelp).
 const (
-	presetSelectionHelp = `
+	presetArgumentsHelp = `
 	Preset arguments:
 	  - The first argument selects the infrastructure preset (required).
 	  - The optional second argument selects the installation preset.
 
 	Each argument can be either an embedded preset name (e.g. "aws") or a preset directory path.
 	To force path selection, pass a path-like value such as "./my-preset" or "/abs/path/to/preset".
-
+`
+	presetDiscoveryTipHelp = `
 	Tip: use "exasol presets" to discover and export presets.
 	`
 )
 
-var initCmdLongDesc = initCmdShortDesc + `
+// initCmdBaseDesc is the part of the long description that preset-specific help keeps.
+var initCmdBaseDesc = initCmdShortDesc + `
 
 	Extracts the specified infrastructure and installation presets into the deployment directory.
 	For an already initialized deployment with the same presets, supplied configuration
 	flags update only the selected parameters. Omitted parameters keep their values.
 	To switch presets, run exasol destroy --remove first, or exasol remove if the
 	deployment resources are already gone.` +
-	deploymentDirectoryResolutionHelp + presetSelectionHelp
+	deploymentDirectoryResolutionHelp
+
+var initCmdLongDesc = presetCommandLongDesc(initCmdBaseDesc, presetArgumentsHelp)
 
 var initCmd = &cobra.Command{
 	Use:   "init <infra preset name-or-path> [install preset name-or-path]",
@@ -75,7 +85,7 @@ func init() {
 	// Embedded preset names and the compatibility matrix are appended to help
 	// text lazily (see deferPresetHelpText) since resolving them needs a
 	// request context this package-init function doesn't have.
-	deferPresetHelpText(initCmd)
+	deferPresetHelpText(initCmd, initCmdBaseDesc)
 
 	initCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true

@@ -183,6 +183,10 @@ func Execute() error {
 		return err
 	}
 
+	// Record the preset selection that preset-specific help describes; scans only when
+	// help is requested.
+	preparePresetHelpSelection(ctx, os.Args[1:])
+
 	// Customize usage/help formatting.
 	rootCmd.SetUsageTemplate(customUsageTemplate)
 	rootCmd.SetHelpTemplate(

@@ -225,15 +225,7 @@ func collectInstallationVariableOverrides(cmd *cobra.Command) map[string]string 
 func scanInstallationPresetSelection(
 	ctx context.Context, args []string,
 ) (*deploy.PresetRef, error) {
-	if len(args) > 0 && args[0] == helpCommandName {
-		args = args[1:]
-	}
-	cmd, remainingArgs := preregisteredCommand(args)
-	if cmd != initCmd && cmd != installCmd {
-		return nil, errors.New("no command with installation preset argument found")
-	}
-
-	positionals, err := preregisteredPositionals(cmd, remainingArgs)
+	positionals, err := scanPresetPositionals(args)
 	if err != nil {
 		return nil, err
 	}
@@ -242,9 +234,9 @@ func scanInstallationPresetSelection(
 		return nil, errors.New("infra preset not provided")
 	}
 
-	if len(positionals) > 1 {
+	if len(positionals) > installationPresetArgIndex {
 		ref, err := resolvePresetRef(
-			ctx, positionals[1], presets.PresetTypeInstallation,
+			ctx, positionals[installationPresetArgIndex], presets.PresetTypeInstallation,
 		)
 		if err != nil {
 			return nil, err
@@ -254,7 +246,7 @@ func scanInstallationPresetSelection(
 	}
 
 	infraRef, err := resolvePresetRef(
-		ctx, positionals[0], presets.PresetTypeInfrastructure,
+		ctx, positionals[infrastructurePresetArgIndex], presets.PresetTypeInfrastructure,
 	)
 	if err != nil {
 		return nil, err
