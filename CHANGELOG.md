@@ -50,6 +50,9 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- Corrected the local Virtual Schema setup guide to use the active deployment's shared directory on
+  macOS instead of obsolete SSH paths, and added the required deployment selection and PostgreSQL
+  timezone configuration steps.
 - Fixed Windows local deployments blaming the host-to-VM network path for a database that failed to start. When the forwarded port refused the connection, `exasol start` and `exasol deploy` reported that the network path appeared blocked, listing Windows Firewall and port conflict causes, instead of reporting the underlying failure. `exasol diag local` reported such a port as `blocked` rather than `refused`.
 - `exasol deployments list` now reports the same live status as `exasol status` instead of treating persisted workflow state as current state. Deployment checks run concurrently under one five-second bound.
 - `exasol status` now stops waiting after five seconds by default instead of hanging indefinitely on an unresponsive deployment. Use `--timeout <seconds>` to select another positive limit, for example `exasol status --timeout 10`.
