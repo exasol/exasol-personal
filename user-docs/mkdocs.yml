@@ -1,0 +1,20 @@
+site_name: Exasol Personal
+site_url: https://exasol.github.io/exasol-personal/
+repo_url: https://github.com/exasol/exasol-personal
+repo_name: exasol/exasol-personal
+
+docs_dir: content
+site_dir: site
+
+theme:
+  name: material
+
+plugins:
+  - search
+
+extra:
+  version:
+    provider: mike
+    default: latest
+
+remote_branch: gh-pages
