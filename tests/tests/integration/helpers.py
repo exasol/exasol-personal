@@ -85,6 +85,51 @@ def installation_preset_id_or_skip(exasol_path: str, preset_id: str) -> str:
     return preset_id_or_skip(exasol_path, "installations", preset_id)
 
 
+def preset_description_or_skip(
+    exasol_path: str, preset_type: str, preset_id: str
+) -> str:
+    """Return an embedded preset's description as reported by the preset listing."""
+    result = run_command([exasol_path, "presets", "list", "--json"])
+    data = json.loads(result.stdout)
+    presets_list = data.get(preset_type)
+    if not isinstance(presets_list, list):
+        pytest.skip(f"no presets found for type {preset_type!r}")
+
+    for preset in presets_list:
+        if preset.get("id") != preset_id:
+            continue
+        description = preset.get("description")
+        if isinstance(description, str) and description.strip() != "":
+            return description
+        pytest.skip(f"preset {preset_id!r} reports no description")
+
+    pytest.skip(f"preset {preset_id!r} not found for type {preset_type!r}")
+
+
+def compatible_preset_pair_or_skip(exasol_path: str) -> tuple[str, str]:
+    """Return a preset pair the generic compatibility matrix reports as compatible.
+
+    The pair is read from the generic help's matrix rather than from preset-specific
+    help, so a test asserting preset-specific output does not source its own input
+    from the output it verifies.
+    """
+    result = run_command([exasol_path, "install", "--help"])
+    lines = result.stdout.splitlines()
+    for index, line in enumerate(lines):
+        if "Compatibility matrix" not in line:
+            continue
+        installation_ids = lines[index + 1].split()[1:]
+        for row in lines[index + 2 :]:
+            cells = row.split()
+            if len(cells) != len(installation_ids) + 1:
+                break
+            for installation_id, cell in zip(installation_ids, cells[1:], strict=True):
+                if cell == "yes":
+                    return cells[0], installation_id
+
+    pytest.skip("the compatibility matrix reports no compatible preset pair")
+
+
 def export_preset(
     exasol_path: str, preset_id: str, preset_type: str, to_dir: str
 ) -> None:

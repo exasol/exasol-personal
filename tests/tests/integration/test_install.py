@@ -13,7 +13,13 @@ from typing import Final
 
 import pytest
 
-from .helpers import first_infrastructure_preset_id_or_skip, run_command
+from .helpers import (
+    compatible_preset_pair_or_skip,
+    export_preset,
+    first_infrastructure_preset_id_or_skip,
+    preset_description_or_skip,
+    run_command,
+)
 
 LOCAL_TEST_DB_PORT = 28563
 LOCAL_MINIMUM_MEMORY_MB = 4096
@@ -182,6 +188,137 @@ def test_install_help(exasol_path: str) -> None:
     assert infra_id in output
     assert "Available installation presets:" in output
     assert "exasol presets" in output
+
+    # Then I see how the presets can be combined
+    assert "Compatibility matrix" in output
+
+
+def test_install_help_describes_the_selected_infrastructure_preset(
+    exasol_path: str,
+) -> None:
+    # Given an infrastructure preset
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+    description = preset_description_or_skip(exasol_path, "infrastructures", infra_id)
+
+    # When help is invoked for that preset
+    result = run_command([exasol_path, "install", infra_id, "--help"])
+    output: str = result.stdout.strip()
+
+    # Then the help describes the selected preset and how to combine it
+    assert f"Infrastructure preset `{infra_id}`:" in output
+    assert description in output
+    assert "Compatible installation presets:" in output
+
+    # Then the help exemplifies the command with the selected preset
+    assert f"exasol install {infra_id}" in output
+
+    # Then the help does not repeat the overview of every preset
+    assert "Available infrastructure presets:" not in output
+    assert "Compatibility matrix" not in output
+
+    # Then preset discovery stays reachable
+    assert "exasol presets" in output
+
+
+def test_install_help_describes_both_selected_presets(exasol_path: str) -> None:
+    # Given a compatible infrastructure and installation preset pair
+    infra_id, install_id = compatible_preset_pair_or_skip(exasol_path)
+    install_description = preset_description_or_skip(
+        exasol_path, "installations", install_id
+    )
+
+    # When help is invoked for both presets
+    result = run_command([exasol_path, "install", infra_id, install_id, "--help"])
+    output: str = result.stdout.strip()
+
+    # Then the help describes both selected presets
+    assert f"Infrastructure preset `{infra_id}`:" in output
+    assert f"Installation preset `{install_id}`:" in output
+    assert install_description in output
+
+    # Then the help exemplifies the selected pair
+    assert f"exasol install {infra_id} {install_id}" in output
+
+    # Then the help does not repeat the overview of every preset
+    assert "Available installation presets:" not in output
+    assert "Compatibility matrix" not in output
+
+
+def test_install_help_describes_a_preset_selected_by_path(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given an infrastructure preset exported to a directory
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+    description = preset_description_or_skip(exasol_path, "infrastructures", infra_id)
+    infra_dir = tmp_path / "infra_export"
+    infra_dir.mkdir()
+    export_preset(exasol_path, infra_id, "infrastructure", str(infra_dir))
+
+    # When help is invoked with that directory as the preset argument
+    result = run_command([exasol_path, "install", str(infra_dir), "--help"])
+    output: str = result.stdout.strip()
+
+    # Then the help identifies the preset by its path and describes it
+    assert f"Infrastructure preset `{infra_dir}`:" in output
+    assert description in output
+    assert "Compatible installation presets:" in output
+
+    # Then the help does not repeat the overview of every preset
+    assert "Available infrastructure presets:" not in output
+
+
+def test_install_help_quotes_a_preset_path_containing_spaces(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given an infrastructure preset exported to a directory whose path contains a space
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+    infra_dir = tmp_path / "my preset"
+    infra_dir.mkdir()
+    export_preset(exasol_path, infra_id, "infrastructure", str(infra_dir))
+
+    # When help is invoked with that directory as the preset argument
+    result = run_command([exasol_path, "install", str(infra_dir), "--help"])
+    output: str = result.stdout.strip()
+
+    # Then the examples keep the path as a single argument
+    assert f'exasol install "{infra_dir}"' in output
+
+    # Then no example splits the path across two arguments
+    assert f"exasol install {infra_dir}\n" not in output
+
+
+def test_install_help_keeps_the_overview_for_an_unresolvable_installation_preset(
+    exasol_path: str,
+) -> None:
+    # Given a resolvable infrastructure preset, and an installation preset
+    # argument that names nothing
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+
+    # When help is invoked for both
+    result = run_command([exasol_path, "install", infra_id, "no-such-preset", "--help"])
+    output: str = result.stdout.strip()
+
+    # Then the overview of every preset is shown, not a description of one of them
+    assert "Available infrastructure presets:" in output
+    assert "Compatibility matrix" in output
+
+    # Then no example advertises the preset that could not be described
+    assert "no-such-preset" not in output
+
+
+def test_install_help_keeps_the_overview_for_an_unresolvable_preset(
+    exasol_path: str,
+) -> None:
+    # Given a preset argument naming neither an embedded preset nor a preset directory
+
+    # When help is invoked for it
+    result = run_command([exasol_path, "install", "no-such-preset", "--help"])
+    output: str = result.stdout.strip()
+
+    # Then help is printed with the overview of every preset
+    assert "Available infrastructure presets:" in output
+    assert "Available installation presets:" in output
+    assert "Compatibility matrix" in output
 
 
 def test_install_executes_init_step(exasol_path: str, tmp_path: Path) -> None:

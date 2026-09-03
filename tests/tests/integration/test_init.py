@@ -17,6 +17,7 @@ from .helpers import (
     export_preset,
     first_infrastructure_preset_id_or_skip,
     installation_preset_id_or_skip,
+    preset_description_or_skip,
     run_command,
 )
 
@@ -39,6 +40,33 @@ def test_init_defaults_and_help(exasol_path: str) -> None:
 
     # And the help nudges users towards presets discovery/export
     assert "exasol presets" in output
+
+    # Then I see how the presets can be combined
+    assert "Compatibility matrix" in output
+
+
+def test_init_help_describes_the_selected_infrastructure_preset(
+    exasol_path: str,
+) -> None:
+    # Given an infrastructure preset
+    infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
+    description = preset_description_or_skip(exasol_path, "infrastructures", infra_id)
+
+    # When help is invoked for that preset
+    result = run_command([exasol_path, "init", infra_id, "--help"])
+    output: str = result.stdout.strip()
+
+    # Then the help describes the selected preset and how to combine it
+    assert f"Infrastructure preset `{infra_id}`:" in output
+    assert description in output
+    assert "Compatible installation presets:" in output
+
+    # Then the help exemplifies the command with the selected preset
+    assert f"exasol init {infra_id}" in output
+
+    # Then the help does not repeat the overview of every preset
+    assert "Available infrastructure presets:" not in output
+    assert "Compatibility matrix" not in output
 
 
 def test_init_requires_infra_preset_arg(exasol_path: str) -> None:
