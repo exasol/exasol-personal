@@ -9,7 +9,7 @@
 
 **The Analytics Database for Agentic AI — Free for Personal Use**
 
-*Run a full Exasol database locally on macOS, Linux, or Windows, or deploy to your own cloud*
+*Run a full Exasol database locally on your Mac or deploy to your own cloud*
 
 [![Documentation](https://img.shields.io/badge/docs-exasol.com-blue)](https://docs.exasol.com/db/latest/home.htm)
 [![Community](https://img.shields.io/badge/community-exasol-green)](https://community.exasol.com)
@@ -21,7 +21,7 @@
 
 ## 🔥 Key Features
 
-- 💻 **Runs Locally in Seconds** — Spin up a full Exasol database on macOS, Linux, or Windows with one command
+- 💻 **Runs Locally in Seconds** — Spin up a full Exasol database on your own Mac with one command (macOS today; Windows & Linux coming soon)
 - 🤖 **Built for Agentic AI** — Connect AI agents and LLM tools directly through a scriptable CLI
 - 🧠 **Built-in AI Functions** — Leverage native AI/ML capabilities with GPU acceleration, right where your data lives
 - 🏎️ **In-Memory Performance** — Run complex analytics at in-memory speed with Exasol's industry-leading analytics engine
@@ -34,13 +34,9 @@
 
 ## ✅ Prerequisites
 
-**Local deployment (recommended — fastest):**
+**Local deployment (recommended — fastest):** a Mac with at least 8 GB RAM.
 
-- **macOS:** Apple Silicon with at least 8 GB RAM. Podman is included in the managed VM; no host Podman installation is required.
-- **Linux:** amd64 or arm64 with Podman installed and available on `PATH`.
-- **Windows:** amd64 with Windows Package Manager (`winget`) and the prerequisites for a Podman machine. If Podman is missing, the launcher offers to install it; that installation may request administrator approval.
-
-On Windows the launcher also creates or starts Podman's default machine, and leaves an existing machine's configuration alone. Installing Podman changes state shared beyond the deployment, so the launcher shows the exact command and asks first. Pass `--auto-approve` to `install`, `deploy`, or `start` for unattended setup; without it, commands that cannot prompt refuse the change rather than assuming consent. Windows arm64 is not supported for local deployments.
+> Local deployment is currently **macOS only**. Windows and Linux support is coming soon — until then, use a cloud deployment on those platforms.
 
 **Cloud deployment:** an account on one of the supported providers, with permission to provision compute instances:
 
@@ -67,7 +63,9 @@ Verify the installation with `exasol version`.
 
 ## 🏎️ Quick Start — Run Exasol Locally
 
-The fastest way to try Exasol: a full database running on your own macOS, Linux, or Windows machine.
+The fastest way to try Exasol: a full database running on your own Mac.
+
+> **Currently macOS only.** Windows and Linux support is coming soon — to run Exasol on those platforms today, use a cloud deployment (see the **Deploy to the Cloud** section below).
 
 With the launcher installed (see **Install the Launcher** above), start a local Exasol database:
 ```bash
@@ -147,7 +145,7 @@ Use `exasol deployments list` to see every default and named deployment director
 
 ```bash
 $ exasol deployments list
-default status=database_ready preset=local/ubuntu path=/Users/me/.exasol/personal/deployments/default
+default status=running preset=local/local path=/Users/me/.exasol/personal/deployments/default
 staging status=stopped preset=aws/ubuntu path=/Users/me/.exasol/personal/deployments/staging
 ```
 
@@ -189,16 +187,6 @@ CREATE OR REPLACE TABLE PRODUCT_REVIEWS AS (
 
 Exasol infers the table schema directly from the Parquet files, so there's no need to define columns up front.
 
-For a Parquet file on your computer, use the bundled SQL client and the `LOCAL` form:
-
-```sql
-CREATE TABLE LOCAL_PRODUCTS AS (
-    IMPORT FROM LOCAL PARQUET FILE '/path/to/products.parquet'
-);
-```
-
-Run this statement with `exasol connect -c` or from a SQL file passed to `exasol connect -f`. The file is read from the client machine and the local import supports one Parquet file per statement. This launcher support does not change engine-side Parquet semantics or add cloud/object-storage import behavior.
-
 | Table | Rows | Size |
 |---|---|---|
 | `PRODUCTS` | 1,000,000 | 27.3 MiB |
@@ -223,27 +211,9 @@ exasol slc remove python3
 
 The argument is a language alias as used in `CREATE ... SCRIPT`, matched case-insensitively. `exasol slc list` shows each container's flavor, its aliases, its version, and whether it is installed.
 
-Script language containers are also used by features that execute script language code, such as virtual schema adapter scripts. Install the SLC required by the adapter language before creating the adapter script. For JDBC-based virtual schemas on local deployments, see [Virtual schemas on local deployments](doc/virtual_schemas.md).
+Installing, updating, or removing an SLC restarts the local database so the change takes effect, which drops open connections and aborts running statements. The command asks for confirmation first; pass `--auto-approve` to skip the prompt (required for non-interactive use), or `--no-restart` to record the change and activate it on the next start.
 
-Operations that restart the local database — official `install`, `update`, and `remove`, plus `slc custom install` and `slc custom update` — drop open connections and abort running statements. The command asks for confirmation first; pass `--auto-approve` to skip the prompt (required for non-interactive use), or `--no-restart` to record the change and activate it on the next start.
-
-### Custom containers
-
-When the official catalog does not ship what you need — for example a Python container with extra packages — install your own container with `exasol slc custom`:
-
-```bash
-exasol slc custom install --source ./my-python.tar.gz --alias MYPY3 --language python
-exasol slc custom update  --source ./my-python-v2.tar.gz --alias MYPY3
-exasol slc remove MYPY3
-```
-
-`--source` takes a local tarball path or an `https` URL, `--alias` is the name you then use in `CREATE <alias> SCALAR SCRIPT`, and `--language` is the language the container provides (`python`, `java`, or `r`). `custom install` and `custom update` restart the database and accept `--auto-approve` and `--no-restart` just like the official commands. If the container cannot be made available, the database still starts but the command fails, reporting that the container is recorded but not active.
-
-Removing a custom container works differently: it takes effect immediately without a restart, so `--auto-approve` and `--no-restart` do not apply. Because the alias is cleared through the database, the deployment must be running to remove an active container; one that was recorded but never activated can be removed while stopped.
-
-`exasol slc list` lists custom containers in their own table below the official ones, showing each alias, its language, its status (`active` or `pending`), and its source; under `--json` they carry a `custom` type and an `available` field. Use `exasol slc remove <alias>` to remove either kind.
-
-`exasol slc` applies to local deployments only.
+`exasol slc install`, `update`, and `remove` apply to local deployments only.
 
 ## ⏯️ Start and stop Exasol Personal
 
@@ -261,9 +231,9 @@ exasol start
 ```
 The IP addresses of the nodes will change when you restart Exasol Personal. Check the output of the `start` command to know how to connect to the deployment after a restart.
 
-On macOS, the launcher manages a local VM and runs the same Podman-based database installation used on the other platforms inside it. If you do not configure VM memory explicitly, it defaults to about 50% of detected host memory; configured VM memory must be at least 4096 MB. On Linux and Windows, the database runs directly through host Podman and uses host-managed resources, so VM sizing options do not apply. On Windows those containers run inside Podman's default machine, which is shared host-wide: stopping or destroying a deployment leaves that machine running. The initial local database credentials are `sys` / `exasol`. The `exasol shell host` and `exasol shell container` commands are available for macOS local deployments but are not supported on Linux or Windows.
+For local deployments, which currently require macOS with at least 8 GB RAM, the launcher manages a local VM runtime and an internal deployment share inside the deployment directory. If you do not configure local VM memory explicitly, it defaults to about 50% of detected host memory. Configured local VM memory must be at least 4096 MB. The initial local database credentials are `sys` / `exasol`. `exasol shell host` opens the local VM shell, and `exasol shell container` opens a shell inside the local database container.
 
-If a local deployment does not behave as expected, `exasol diag local` prints a JSON snapshot of its runtime state, bound host ports, reachability, and database readiness. It is safe to run whether or not the deployment is currently running.
+If a local deployment does not behave as expected, `exasol diag local` prints a JSON snapshot of its runtime state — platform support, VM status, per-port reachability, and database readiness. It is safe to run whether or not the deployment is currently running.
 
 ## 🗑️ Remove Exasol Personal
 
@@ -286,7 +256,7 @@ Deleting the deployment directory and the Exasol Launcher will not remove the re
 
 If you have already deleted the deployment directory and the Exasol Launcher, you must remove the resources manually in the target environment.
 
-For local deployments, `exasol destroy` deletes the launcher-managed runtime and database data for that deployment.
+For local deployments, `exasol destroy` deletes the local VM disk/data and launcher-managed share for that deployment.
 
 ## ⚙️ Cloud: Choosing cluster size and compute instance types
 
@@ -338,9 +308,9 @@ Your browser may show a security warning when connecting to Exasol Admin because
 
 Currently, Exasol Admin is only available on cloud deployments.
 
-## 🔒 Shell access
+## 🔒 Connect using SSH
 
-Use the runtime-managed shell commands without needing to know how the deployment is reached:
+To connect with SSH to your deployment use one of the following commands:
 
 ```bash
 # Connect to the compute instance your database is running on:
@@ -390,8 +360,6 @@ In addition to built-in names and local paths, `exasol install` accepts external
 - **Local directory via URI** — `file:///absolute/path`. The directory is used directly without copying.
 - **Local archive via URI** — `file:///absolute/path/to/preset.tar.gz`. The archive is re-extracted on every run.
 
-Git repositories and archives also accept an optional `#<subpath>` fragment (e.g. `repo.git@v1#infra/aws`) to select a preset from a subdirectory of a monorepo or multi-preset archive.
-
 See [doc/presets.md](doc/presets.md) for the full preset contract, caching behavior, and troubleshooting.
 
 ### Building your own preset
@@ -408,19 +376,17 @@ The Exasol Launcher runs on:
 
 Where the database runs depends on the deployment type:
 
-- **Cloud deployments** — the database runs on your provider's infrastructure, so any supported launcher platform above works. The launcher provisions **Ubuntu 24.04 LTS (x86-64)** compute instances on all cloud providers.
-- **Local deployments on macOS** — the database runs with the bundled Podman installation in a managed VM and requires macOS 15 (Sequoia) or later on Apple Silicon, with at least 8 GB RAM.
-- **Local deployments on Linux** — the database runs in Podman on amd64 or arm64 and uses host resources without launcher-managed limits.
-- **Local deployments on Windows** — the database runs through host Podman on amd64, inside Podman's default machine. The launcher can install Podman and prepare that machine, asking before it changes the host.
+- **Cloud deployments** — the database runs on your provider's infrastructure, so any supported launcher platform above works. The launcher provisions **Ubuntu 22.04 LTS (x86-64)** compute instances on all cloud providers.
+- **Local deployments** — the database runs in a VM on your machine, which requires macOS 15 (Sequoia) or later, with at least 8 GB RAM.
 
 ## 🚧 Limitations
 
 Local deployments are intended for development and exploration and do not yet support every feature of a cloud deployment:
 
 - **UDFs** — supported, but no script language container is installed by default. Install one with `exasol slc install <language>` (see **UDFs and Script Language Containers** above); on cloud deployments UDFs work out of the box.
-- **Virtual schemas** — supported when the required adapter runtime and dependencies are installed. Depending on the adapter, this may require installing an SLC and staging adapter or driver files. See [Virtual schemas on local deployments](doc/virtual_schemas.md).
+- **Virtual schemas** — virtual schemas are not available yet (coming soon).
 - **Admin UI** — the Administration UI is not available yet (coming soon).
-- **Multi-node clusters** — a local deployment runs as a single node by design.
+- **Multi-node clusters** — a local deployment is a single VM on your machine by design and always runs as a single node.
 
 Cloud deployments support all of the above.
 
