@@ -260,7 +260,7 @@ def test_custom_slc_rejects_invalid_input(slc_deployment: Deployment) -> None:
     invalid = [
         ["--alias", CUSTOM_ALIAS, "--language", "python"],
         ["--source", "c.tar.gz", "--alias", "123bad", "--language", "python"],
-        ["--source", "c.tar.gz", "--alias", CUSTOM_ALIAS, "--language", "cobol"],
+        ["--source", "c.tar.gz", "--alias", CUSTOM_ALIAS, "--language", "cobol/"],
         [
             "--source",
             "http://example.com/c.tar.gz",
