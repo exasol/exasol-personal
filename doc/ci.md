@@ -76,16 +76,23 @@ Maintainers publish versioned user documentation with the manually dispatched do
 workflow. GitHub Pages must be enabled with **GitHub Actions** as its source, and the existing
 `github-pages` environment must allow deployments only from `main`.
 
-The workflow accepts two inputs:
+The workflow accepts three inputs:
 
 - `operation`: `publish` or `delete`.
-- `target`: an existing Git tag for publication, such as `v2.3.0-rc1`, or a published version for
-  deletion, such as `2.3.0-rc1`.
+- `source_ref`: an exact Git tag or full 40-character commit SHA, required for publication.
+- `version`: the published semantic version. It is required for deletion and optional for
+  publication when `source_ref` is a tag named `v<version>` or ending in `/v<version>`.
 
-Publication builds the documentation and validates its internal links from the selected tag before
-updating the version catalog. Stable versions update `latest` and the site root; release candidates
-remain independently selectable. Deletion preserves all other versions and rejects removal of the
-version referenced by `latest` until a newer stable version is published.
+An explicit version can map historical documentation content to an older release without changing
+an existing release tag. For example, publish a reviewed `docs/v2.2.0` snapshot based on a current
+commit as `2.2.0`, or map its full commit SHA by supplying `2.2.0` explicitly. Branch references
+are not accepted.
+
+Publication shallow-checks out the source once and builds its self-contained `user-docs/` directory,
+including its content, configuration, scripts, and locked uv environment, before updating the
+version catalog. Stable versions update `latest` and the site root; release candidates remain
+independently selectable. Deletion preserves all other versions and rejects removal of the version
+referenced by `latest` until a newer stable version is published.
 
 All operations are serialized in request order. If Pages deployment fails after the version
 catalog is updated, rerun the same operation to deploy the complete stored catalog. A repeated

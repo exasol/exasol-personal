@@ -36,6 +36,11 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
+- Documentation publication now selects an immutable Git tag or full commit SHA independently
+  from the published version. Conventional version tags still derive the version automatically,
+  while an explicit version supports publishing reviewed documentation snapshots for older
+  releases without changing their release tags.
+
 - Custom SLC language identifiers are no longer limited to Python, Java, and R. The launcher now
   accepts any valid client-defined identifier, such as `rust`, for a custom SLC.
 
