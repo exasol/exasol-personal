@@ -34,6 +34,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol start --auto-approve`
 
+- Added Windows/WSL2 IPv6 troubleshooting guidance for Podman-machine SSH connection failures, including a loopback-scoped IPv4 SSH configuration workaround.
+
 ### Changed
 
 - Custom SLC language identifiers are no longer limited to Python, Java, and R. The launcher now

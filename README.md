@@ -265,6 +265,17 @@ On macOS, the launcher manages a local VM and runs the same Podman-based databas
 
 If a local deployment does not behave as expected, `exasol diag local` prints a JSON snapshot of its runtime state, bound host ports, reachability, and database readiness. It is safe to run whether or not the deployment is currently running.
 
+### Windows/WSL2 IPv6 troubleshooting
+
+If a Windows local deployment fails during startup because `podman machine ssh` reports a connection reset or timeout, force SSH connections to local Podman machine endpoints to use IPv4. Add this to `%USERPROFILE%\.ssh\config`:
+
+```sshconfig
+Host localhost 127.0.0.1
+    AddressFamily inet
+```
+
+This limits the setting to loopback connections and does not affect remote SSH hosts.
+
 ## 🗑️ Remove Exasol Personal
 
 To completely remove an Exasol Personal deployment, use `exasol destroy`. This command deletes the deployment resources and all associated data.
