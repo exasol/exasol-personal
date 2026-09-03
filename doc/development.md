@@ -74,9 +74,9 @@ The generated site is written to `user-docs/site/`. Warnings fail the build, inc
 internal documentation links. Run `task docs-check` to lint and test the publishing tooling before
 performing the strict build.
 
-Version-catalog operations are implemented by `user-docs/scripts/versions.py`. The script updates
-only a local `gh-pages` branch and never pushes; use a disposable clone when exercising publication
-operations manually.
+Publication-request validation and version-catalog operations are implemented by
+`user-docs/scripts/versions.py`. The script updates only a local `gh-pages` branch and never pushes;
+use a disposable clone when exercising catalog operations manually.
 
 ## Building
 
