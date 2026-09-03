@@ -279,17 +279,22 @@ def postgres_source(
     prepared_virtual_schema_deployment: Deployment,
     _local_infra: None,
 ) -> Iterator[PostgresSource]:
-    """Start PostgreSQL on an independent network and create a private schema."""
+    """Start PostgreSQL and create a private schema for the Virtual Schema test."""
     podman = _container_runtime(prepared_virtual_schema_deployment)
     config = json.loads(_ARTIFACT_CONFIG.read_text(encoding="utf-8"))
     container = "exasol-vs-postgres-" + uuid.uuid4().hex[:12]
-    network = "exasol-vs-network-" + uuid.uuid4().hex[:12]
     postgres_image = config["postgres_image"]
     deployment_container = _deployment_container(prepared_virtual_schema_deployment)
+    network: str | None = None
     schema_created = False
     try:
-        podman(["network", "create", network], None)
-        podman(["network", "connect", network, deployment_container], None)
+        if platform.system() == "Darwin":
+            network = "exasol-vs-network-" + uuid.uuid4().hex[:12]
+            podman(["network", "create", network], None)
+            podman(["network", "connect", network, deployment_container], None)
+            postgres_network = network
+        else:
+            postgres_network = "container:" + deployment_container
         run_args = [
             "run",
             "--detach",
@@ -297,7 +302,7 @@ def postgres_source(
             "--name",
             container,
             "--network",
-            network,
+            postgres_network,
         ]
         run_args.extend(
             [
@@ -316,7 +321,11 @@ def postgres_source(
         source = PostgresSource(
             podman=podman,
             container=container,
-            runtime_host=_container_ip(podman, container),
+            runtime_host=(
+                _container_ip(podman, container)
+                if platform.system() == "Darwin"
+                else "127.0.0.1"
+            ),
             port=5432,
             database=_POSTGRES_DATABASE,
             user=_POSTGRES_USER,
@@ -348,10 +357,13 @@ def postgres_source(
         finally:
             with suppress(subprocess.CalledProcessError):
                 podman(["rm", "--force", container], None)
-            with suppress(subprocess.CalledProcessError):
-                podman(["network", "disconnect", network, deployment_container], None)
-            with suppress(subprocess.CalledProcessError):
-                podman(["network", "rm", network], None)
+            if network is not None:
+                with suppress(subprocess.CalledProcessError):
+                    podman(
+                        ["network", "disconnect", network, deployment_container], None
+                    )
+                with suppress(subprocess.CalledProcessError):
+                    podman(["network", "rm", network], None)
 
 
 def _download_artifact(spec: ArtifactSpec, target: Path) -> Path:
