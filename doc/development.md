@@ -57,6 +57,27 @@ task build
 ./bin/exasol version
 ```
 
+## User Documentation
+
+The published user documentation and its tooling configuration live under `user-docs/`. Its Python
+dependencies are isolated from the integration test environment and locked by uv.
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then run the strict build. uv
+synchronizes the locked dependencies into the isolated `user-docs/.venv` environment
+automatically:
+
+```bash
+task docs-build
+```
+
+The generated site is written to `user-docs/site/`. Warnings fail the build, including unresolved
+internal documentation links. Run `task docs-check` to lint and test the publishing tooling before
+performing the strict build.
+
+Version-catalog operations are implemented by `user-docs/scripts/versions.py`. The script updates
+only a local `gh-pages` branch and never pushes; use a disposable clone when exercising publication
+operations manually.
+
 ## Building
 
 ### Standard Build
