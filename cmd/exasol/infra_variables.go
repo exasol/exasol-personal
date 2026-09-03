@@ -270,9 +270,9 @@ func collectInfrastructureVariableOverrides(cmd *cobra.Command) map[string]strin
 	return overrides
 }
 
-func scanInfrastructurePresetSelection(
-	ctx context.Context, args []string,
-) (*deploy.PresetRef, error) {
+// scanPresetPositionals returns the positional arguments of the pre-registered command when
+// that command takes preset arguments.
+func scanPresetPositionals(args []string) ([]string, error) {
 	// Handle "exasol help init local" form: strip the leading "help" token so the
 	// preset scanner finds the actual command. Cobra registers its help subcommand
 	// lazily inside ExecuteC, so rootCmd.Find won't resolve it at this point.
@@ -281,10 +281,16 @@ func scanInfrastructurePresetSelection(
 	}
 	cmd, remainingArgs := preregisteredCommand(args)
 	if cmd != initCmd && cmd != installCmd {
-		return nil, errors.New("no command with infrastructure preset argument found")
+		return nil, errors.New("no command with preset arguments found")
 	}
 
-	positionals, err := preregisteredPositionals(cmd, remainingArgs)
+	return preregisteredPositionals(cmd, remainingArgs)
+}
+
+func scanInfrastructurePresetSelection(
+	ctx context.Context, args []string,
+) (*deploy.PresetRef, error) {
+	positionals, err := scanPresetPositionals(args)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +300,7 @@ func scanInfrastructurePresetSelection(
 	}
 
 	ref, err := resolvePresetRef(
-		ctx, positionals[0], presets.PresetTypeInfrastructure,
+		ctx, positionals[infrastructurePresetArgIndex], presets.PresetTypeInfrastructure,
 	)
 	if err != nil {
 		return nil, err

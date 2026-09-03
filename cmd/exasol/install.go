@@ -14,14 +14,17 @@ import (
 
 var installCmdShortDesc = `Initialize, apply configuration, and deploy Exasol in one step`
 
-var installCmdLongDesc = installCmdShortDesc + `
+// installCmdBaseDesc is the part of the long description that preset-specific help keeps.
+var installCmdBaseDesc = installCmdShortDesc + `
 
 	Initializes the deployment directory or applies supplied configuration, prepares infrastructure,
 	and installs Exasol.
 	Rerunning install with the same presets is safe for retrying failed deployments.
 	To switch presets, run exasol destroy --remove first, or exasol remove if the
 	deployment resources are already gone.` +
-	deploymentDirectoryResolutionHelp + presetSelectionHelp
+	deploymentDirectoryResolutionHelp
+
+var installCmdLongDesc = presetCommandLongDesc(installCmdBaseDesc, presetArgumentsHelp)
 
 var installCmd = &cobra.Command{
 	Use:   "install <infra preset name-or-path> [install preset name-or-path]",
@@ -62,7 +65,7 @@ func init() {
 // their compatibility matrix to the command's long description (see
 // deferPresetHelpText).
 func appendInstallCmdPresetHelp() {
-	deferPresetHelpText(installCmd)
+	deferPresetHelpText(installCmd, installCmdBaseDesc)
 }
 
 func runInstallPreRun(cmd *cobra.Command, args []string) error {
