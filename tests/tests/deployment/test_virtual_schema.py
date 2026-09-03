@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import secrets
 import shlex
 import shutil
@@ -247,6 +248,25 @@ def _deployment_container(deployment: Deployment) -> str:
     return "exasol-db-" + deployment_id
 
 
+def _container_ip(podman: PodmanRunner, container: str) -> str:
+    marker = "VIRTUAL_SCHEMA_POSTGRES_IP="
+    result = podman(
+        [
+            "inspect",
+            container,
+            "--format",
+            marker + "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+        ],
+        None,
+    )
+    match = re.search(
+        rf"{re.escape(marker)}((?:\d{{1,3}}\.){{3}}\d{{1,3}})", result.stdout
+    )
+    if match is None:
+        pytest.fail(f"Podman did not report an IP address for {container}")
+    return match.group(1)
+
+
 @pytest.fixture(scope="module", name="_local_infra")
 def local_infra(infra: str) -> None:
     """Gate Virtual Schema smoke-test resources to local deployments."""
@@ -259,48 +279,51 @@ def postgres_source(
     prepared_virtual_schema_deployment: Deployment,
     _local_infra: None,
 ) -> Iterator[PostgresSource]:
-    """Start PostgreSQL and create a private schema for this test module."""
+    """Start PostgreSQL on an independent network and create a private schema."""
     podman = _container_runtime(prepared_virtual_schema_deployment)
     config = json.loads(_ARTIFACT_CONFIG.read_text(encoding="utf-8"))
     container = "exasol-vs-postgres-" + uuid.uuid4().hex[:12]
+    network = "exasol-vs-network-" + uuid.uuid4().hex[:12]
     postgres_image = config["postgres_image"]
     deployment_container = _deployment_container(prepared_virtual_schema_deployment)
-    run_args = [
-        "run",
-        "--detach",
-        "--rm",
-        "--name",
-        container,
-        "--network",
-        f"container:{deployment_container}",
-    ]
-    run_args.extend(
-        [
-            "--env",
-            f"POSTGRES_DB={_POSTGRES_DATABASE}",
-            "--env",
-            f"POSTGRES_USER={_POSTGRES_USER}",
-            "--env",
-            f"POSTGRES_PASSWORD={_POSTGRES_PASSWORD}",
-            postgres_image,
-            "-c",
-            "timezone=UTC",
-        ]
-    )
-    podman(run_args, None)
-    source = PostgresSource(
-        podman=podman,
-        container=container,
-        runtime_host="127.0.0.1",
-        port=5432,
-        database=_POSTGRES_DATABASE,
-        user=_POSTGRES_USER,
-        password=_POSTGRES_PASSWORD,
-        schema="vs_smoke_" + uuid.uuid4().hex[:12],
-    )
-    schema = _sql_identifier(source.schema)
     schema_created = False
     try:
+        podman(["network", "create", network], None)
+        podman(["network", "connect", network, deployment_container], None)
+        run_args = [
+            "run",
+            "--detach",
+            "--rm",
+            "--name",
+            container,
+            "--network",
+            network,
+        ]
+        run_args.extend(
+            [
+                "--env",
+                f"POSTGRES_DB={_POSTGRES_DATABASE}",
+                "--env",
+                f"POSTGRES_USER={_POSTGRES_USER}",
+                "--env",
+                f"POSTGRES_PASSWORD={_POSTGRES_PASSWORD}",
+                postgres_image,
+                "-c",
+                "timezone=UTC",
+            ]
+        )
+        podman(run_args, None)
+        source = PostgresSource(
+            podman=podman,
+            container=container,
+            runtime_host=_container_ip(podman, container),
+            port=5432,
+            database=_POSTGRES_DATABASE,
+            user=_POSTGRES_USER,
+            password=_POSTGRES_PASSWORD,
+            schema="vs_smoke_" + uuid.uuid4().hex[:12],
+        )
+        schema = _sql_identifier(source.schema)
         _wait_for_postgres(source)
         _run_postgres(
             source,
@@ -325,6 +348,10 @@ def postgres_source(
         finally:
             with suppress(subprocess.CalledProcessError):
                 podman(["rm", "--force", container], None)
+            with suppress(subprocess.CalledProcessError):
+                podman(["network", "disconnect", network, deployment_container], None)
+            with suppress(subprocess.CalledProcessError):
+                podman(["network", "rm", network], None)
 
 
 def _download_artifact(spec: ArtifactSpec, target: Path) -> Path:

@@ -15,8 +15,13 @@ virtual schema adapter before creating its adapter script. JDBC-based adapters a
 JDBC data transfer also needs a Java runtime:
 
 ```bash
-exasol slc install java --no-restart
+DEPLOY_DIR=$(exasol info --json | jq -r '.deploymentDir')
+exasol slc install java --no-restart --deployment-dir "$DEPLOY_DIR"
 ```
+
+The command above requires `jq`. It selects the deployment reported by `exasol info`; use the
+same `--deployment` or `--deployment-dir` selector with `info` when working with a named or
+explicitly selected deployment.
 
 Use the corresponding language alias for adapters implemented in another supported language. If
 the adapter needs packages that are not in an official SLC, install a custom SLC as described in
@@ -63,20 +68,33 @@ BucketFS contents are reachable from adapter scripts under `/buckets`, so files 
 
 ## Accessing local deployment files
 
-Run the commands below from the deployment directory. On Linux, Nano's `/exa` is the persistent
-Podman data directory on the host:
+The launcher reports the active deployment directory in machine-readable form. Use this value so
+files are staged for the deployment that the following commands operate on:
 
 ```bash
-EXA_DATA=./local/runtime/exa
+DEPLOY_DIR=$(exasol info --json | jq -r '.deploymentDir')
+VS_DIR="$DEPLOY_DIR/local/runtime/vm-shared/vs"
+mkdir -p "$VS_DIR"
 ```
 
-On macOS, the database runs inside the managed VM. Use its SSH key and forwarded port to copy
-files into the VM:
+For a named deployment or an explicitly selected directory, pass the same selector to `info`:
 
 ```bash
-KEY=./local/node_access.pem
-PORT=$(jq -r '.ports.ssh' ./local/runtime/vm-state.json)
+DEPLOY_DIR=$(exasol info --json --deployment demo | jq -r '.deploymentDir')
+# or
+DEPLOY_DIR=$(exasol info --json --deployment-dir /path/to/deployment | jq -r '.deploymentDir')
 ```
+
+On Linux, Nano's `/exa` is the persistent Podman data directory on the host:
+
+```bash
+EXA_DATA="$DEPLOY_DIR/local/runtime/exa"
+```
+
+On macOS, the database runs inside a managed VM. The deployment's
+`local/runtime/vm-shared` directory is mounted in the VM as `/mnt/host`. Use
+`exasol shell host` to copy staged files into the database directories; do not rely on VM IP
+addresses, SSH keys, or SSH ports.
 
 ## Worked example: PostgreSQL JDBC adapter
 
@@ -84,100 +102,151 @@ This example uses the [PostgreSQL virtual schema](https://github.com/exasol/post
 adapter. Check its releases page and the [PostgreSQL JDBC driver](https://jdbc.postgresql.org/download/)
 site for current versions before downloading. The versions below are examples.
 
-### 1. Download the adapter and driver
+### 1. Select the deployment and download the adapter and driver
 
 ```bash
+DEPLOY_DIR=$(exasol info --json | jq -r '.deploymentDir')
+VS_DIR="$DEPLOY_DIR/local/runtime/vm-shared/vs"
+mkdir -p "$VS_DIR"
+
 ADAPTER_VERSION=4.0.0
 ADAPTER_JAR=virtual-schema-dist-14.0.2-postgresql-4.0.0.jar
 DRIVER_JAR=postgresql-42.7.13.jar
 
-curl -L -o "$ADAPTER_JAR" \
+curl -L -o "$VS_DIR/$ADAPTER_JAR" \
   "https://github.com/exasol/postgresql-virtual-schema/releases/download/$ADAPTER_VERSION/$ADAPTER_JAR"
-curl -L -o "$DRIVER_JAR" "https://jdbc.postgresql.org/download/$DRIVER_JAR"
+curl -L -o "$VS_DIR/$DRIVER_JAR" \
+  "https://repo.maven.apache.org/maven2/org/postgresql/postgresql/42.7.13/$DRIVER_JAR"
 ```
 
-### 2. Copy both JARs into BucketFS
+Create the JDBC driver configuration in the same shared directory:
+
+```bash
+cat > "$VS_DIR/settings.cfg" <<EOF
+DRIVERNAME=POSTGRESQL
+PREFIX=jdbc:postgresql:
+DRIVERMAIN=org.postgresql.Driver
+FETCHSIZE=100000
+INSERTSIZE=-1
+JAR=$DRIVER_JAR
+
+EOF
+```
+
+`settings.cfg` must end with an empty line. The driver JAR is needed in both BucketFS and the JDBC
+directory because the adapter reads it for metadata and the ETL layer uses it for data transfer.
+
+### 2. Copy the files into the database
 
 On Linux:
 
 ```bash
 mkdir -p "$EXA_DATA/bucketfs/bfsdefault/default/vs"
-cp "$ADAPTER_JAR" "$DRIVER_JAR" "$EXA_DATA/bucketfs/bfsdefault/default/vs/"
-```
-
-On macOS:
-
-```bash
-ssh -i "$KEY" -p "$PORT" root@127.0.0.1 \
-  'mkdir -p /var/lib/exa/bucketfs/bfsdefault/default/vs'
-
-scp -i "$KEY" -P "$PORT" \
-  "$ADAPTER_JAR" "$DRIVER_JAR" \
-  root@127.0.0.1:/var/lib/exa/bucketfs/bfsdefault/default/vs/
-```
-
-### 3. Register the JDBC driver
-
-On Linux:
-
-```bash
+cp "$VS_DIR/$ADAPTER_JAR" "$VS_DIR/$DRIVER_JAR" \
+  "$EXA_DATA/bucketfs/bfsdefault/default/vs/"
 mkdir -p "$EXA_DATA/jdbc/POSTGRESQL"
-cp "$DRIVER_JAR" "$EXA_DATA/jdbc/POSTGRESQL/"
-cat > "$EXA_DATA/jdbc/POSTGRESQL/settings.cfg" <<CFG
-DRIVERNAME=POSTGRESQL
-PREFIX=jdbc:postgresql:
-DRIVERMAIN=org.postgresql.Driver
-FETCHSIZE=100000
-INSERTSIZE=-1
-JAR=postgresql-42.7.13.jar
-
-CFG
+cp "$VS_DIR/$DRIVER_JAR" "$VS_DIR/settings.cfg" "$EXA_DATA/jdbc/POSTGRESQL/"
 ```
 
 On macOS:
 
 ```bash
-ssh -i "$KEY" -p "$PORT" root@127.0.0.1 'mkdir -p /var/lib/exa/jdbc/POSTGRESQL'
-
-scp -i "$KEY" -P "$PORT" "$DRIVER_JAR" \
-  root@127.0.0.1:/var/lib/exa/jdbc/POSTGRESQL/
-
-ssh -i "$KEY" -p "$PORT" root@127.0.0.1 'cat > /var/lib/exa/jdbc/POSTGRESQL/settings.cfg <<CFG
-DRIVERNAME=POSTGRESQL
-PREFIX=jdbc:postgresql:
-DRIVERMAIN=org.postgresql.Driver
-FETCHSIZE=100000
-INSERTSIZE=-1
-JAR=postgresql-42.7.13.jar
-
-CFG'
+exasol shell host --deployment-dir "$DEPLOY_DIR"
 ```
 
-`DRIVERNAME` is the name used in `IMPORT ... DRIVER = '...'`. The file must end with an empty
-line. If either example filename changes, use the resulting filenames for `JAR` and the `%jar`
-lines in the adapter script.
-
-### 4. Apply the setup
+Inside the VM shell, run:
 
 ```bash
-exasol stop && exasol start
+mkdir -p /var/lib/exa/bucketfs/bfsdefault/default/vs /var/lib/exa/jdbc/POSTGRESQL && \
+cp /mnt/host/vs/virtual-schema-dist-14.0.2-postgresql-4.0.0.jar \
+   /mnt/host/vs/postgresql-42.7.13.jar \
+   /var/lib/exa/bucketfs/bfsdefault/default/vs/ && \
+cp /mnt/host/vs/postgresql-42.7.13.jar \
+   /mnt/host/vs/settings.cfg \
+   /var/lib/exa/jdbc/POSTGRESQL/ && \
+ls -lh /var/lib/exa/bucketfs/bfsdefault/default/vs /var/lib/exa/jdbc/POSTGRESQL
+```
+
+Then run `exit` to return to the macOS shell. `DRIVERNAME` is the name used in
+`IMPORT ... DRIVER = '...'`. If either example filename changes, use the resulting filenames for
+`JAR` and the `%jar` lines in the adapter script.
+
+### 3. Apply the setup
+
+```bash
+exasol stop --deployment-dir "$DEPLOY_DIR"
+exasol start --deployment-dir "$DEPLOY_DIR"
 ```
 
 This activates the SLC and makes the JDBC driver configuration available to the database.
 
-### 5. Create the connection and virtual schema
+### Optional: run PostgreSQL inside the macOS VM
 
-From here, the SQL is the standard Exasol flow:
+For a self-contained test, PostgreSQL can run inside the managed VM. Put it on a dedicated Podman
+network and attach Nano to that network:
 
-```sql
+```bash
+exasol shell host --deployment-dir "$DEPLOY_DIR"
+```
+
+Inside the VM shell, run:
+
+```bash
+EXASOL_CONTAINER=$(podman ps --format '{{.Names}}' | sed -n '/^exasol-db-/p' | head -n 1)
+VS_NETWORK="vs-net-${EXASOL_CONTAINER#exasol-db-}"
+podman network create "$VS_NETWORK"
+podman network connect "$VS_NETWORK" "$EXASOL_CONTAINER"
+podman run -d --rm \
+  --name exasol-vs-postgres \
+  --network "$VS_NETWORK" \
+  --env POSTGRES_DB=vs_test \
+  --env POSTGRES_USER=vs_test \
+  --env POSTGRES_PASSWORD=vs_test \
+  docker.io/library/postgres@sha256:c1b3783309b6499c795eed7c20135a1a4d25cae1b575c3d52c6f536129a1b109 \
+  -c timezone=UTC
+until podman exec exasol-vs-postgres pg_isready --username vs_test --dbname vs_test; do
+  sleep 1
+done
+podman exec exasol-vs-postgres psql --no-password --username vs_test --dbname vs_test \
+  -c "CREATE SCHEMA source_schema"
+podman exec exasol-vs-postgres psql --no-password --username vs_test --dbname vs_test \
+  -c "CREATE TABLE source_schema.source_data (id INTEGER PRIMARY KEY, payload TEXT)"
+podman exec exasol-vs-postgres psql --no-password --username vs_test --dbname vs_test \
+  -c "INSERT INTO source_schema.source_data VALUES (1, 'before-refresh')"
+podman inspect exasol-vs-postgres \
+  --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
+  > /mnt/host/vs/postgres-ip
+exit
+```
+
+The dedicated network is required because Nano and PostgreSQL use separate network namespaces. It
+gives Nano a route to PostgreSQL while keeping PostgreSQL independent of Nano's network namespace.
+Do not use `--network container:<Nano-container>`: that makes PostgreSQL dependent on Nano and can
+prevent `exasol destroy` from removing the deployment until PostgreSQL is removed first.
+
+The PostgreSQL address is written to the shared directory because Podman DNS aliases are not
+available reliably in every managed VM environment. Use the address from `postgres-ip` in the
+connection below. Remove the test container with `podman rm --force exasol-vs-postgres` inside
+`exasol shell host` when it is no longer needed; it is also removed when the VM is destroyed.
+
+### 4. Create the connection and virtual schema
+
+Create the SQL file in the deployment directory. The connection host must be reachable from the
+database VM or container; `localhost` refers to that environment, not necessarily to the machine
+running the source database.
+
+```bash
+PG_HOST=$(tr -d '\r\n' < "$VS_DIR/postgres-ip")
+cat > "$DEPLOY_DIR/create-vs.sql" <<EOF
 CREATE OR REPLACE CONNECTION POSTGRES_CONN
-  TO 'jdbc:postgresql://<host>:5432/<database>'
-  USER '<user>' IDENTIFIED BY '<password>';
+  TO 'jdbc:postgresql://$PG_HOST:5432/vs_test'
+  USER 'vs_test' IDENTIFIED BY 'vs_test';
 
 CREATE SCHEMA IF NOT EXISTS VS;
 
 CREATE OR REPLACE JAVA ADAPTER SCRIPT VS.POSTGRES_ADAPTER AS
   %scriptclass com.exasol.adapter.RequestDispatcher;
+  %jvmoption -Duser.timezone=UTC;
   %jar /buckets/bfsdefault/default/vs/virtual-schema-dist-14.0.2-postgresql-4.0.0.jar;
   %jar /buckets/bfsdefault/default/vs/postgresql-42.7.13.jar;
 /
@@ -185,14 +254,37 @@ CREATE OR REPLACE JAVA ADAPTER SCRIPT VS.POSTGRES_ADAPTER AS
 CREATE VIRTUAL SCHEMA VS_POSTGRES
   USING VS.POSTGRES_ADAPTER
   WITH CONNECTION_NAME = 'POSTGRES_CONN'
-       SCHEMA_NAME = 'public';
+       SCHEMA_NAME = 'source_schema';
 
-SELECT * FROM VS_POSTGRES.<table>;
+SELECT * FROM VS_POSTGRES.source_data;
+EOF
 ```
 
-Use `ALTER VIRTUAL SCHEMA VS_POSTGRES REFRESH` when the source schema changes. The connection host
-must be reachable from the database container or VM; `localhost` refers to that environment, not
-necessarily to the machine running the source database.
+An external PostgreSQL instance is any source outside the managed Exasol VM. It may run on the
+Mac host, another machine, or a cloud service. Replace the `PG_HOST` assignment with an address
+reachable from the database VM, for example:
+
+```bash
+PG_HOST="192.168.1.20"
+```
+
+When PostgreSQL runs on the Mac host, do not use `127.0.0.1`: inside the Exasol VM that address
+refers to the VM itself. Publish PostgreSQL on a reachable host interface and verify connectivity
+from `exasol shell host` before creating the Virtual Schema.
+
+For an external PostgreSQL instance, also change the database name, user, and password in the
+connection definition to match that database. Change `SCHEMA_NAME` and the example table name to
+match its schema and table.
+
+Then run the SQL-file creation block again.
+
+Run the SQL file with the same deployment selection:
+
+```bash
+exasol connect --deployment-dir "$DEPLOY_DIR" -f "$DEPLOY_DIR/create-vs.sql"
+```
+
+Use `ALTER VIRTUAL SCHEMA VS_POSTGRES REFRESH` when the source schema changes.
 
 ## Other adapters and JDBC dialects
 
