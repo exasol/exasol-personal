@@ -138,9 +138,7 @@ tasks:
     dir: '{{.TESTS_DIR}}'
     cmds:
       - poetry sync
-    status:
-      - poetry run ruff --version
-      - poetry run mypy --version
+    # There is no `poetry sync --status` to check if the venv is up-to-date, so no `status:` here
     deps:
       - deps-install-poetry
 
