@@ -39,6 +39,16 @@ runs:
       uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
         version: "2.4.1"
+    - name: Select Python 3.13 for Poetry
+      if: ${{ inputs.system-python == 'true' }}
+      shell: bash
+      working-directory: tests
+      run: |
+        python_path="$(uv python find 3.13)"
+        echo "Using Python: ${python_path}"
+        "${python_path}" --version
+        poetry env use "${python_path}"
+        poetry env info
     - name: Install test dependencies (system Python path)
       if: ${{ inputs.system-python == 'true' }}
       shell: bash
