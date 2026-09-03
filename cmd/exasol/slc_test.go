@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -35,16 +36,23 @@ func TestSLCCustomRemoveIsHiddenInFavourOfUnifiedRemove(t *testing.T) {
 	}
 }
 
-func TestSLCCustomOnlyFlagsAreNotOnOfficialInstall(t *testing.T) {
+// `slc install rust` and `slc update rust` are dispatched by alias, so they must not have grown
+// custom-SLC flags: the shared command keeps one uniform contract for every alias.
+func TestSLCCustomOnlyFlagsAreNotOnOfficialCommands(t *testing.T) {
 	t.Parallel()
+
+	// Given
+	official := map[string]*cobra.Command{"install": slcInstallCmd, "update": slcUpdateCmd}
 
 	// When / Then
 	for _, flag := range []string{"source", "alias", "language"} {
 		if slcCustomInstallCmd.Flags().Lookup(flag) == nil {
 			t.Fatalf("slc custom install is missing --%s", flag)
 		}
-		if slcInstallCmd.Flags().Lookup(flag) != nil {
-			t.Fatalf("official install must not carry --%s", flag)
+		for name, cmd := range official {
+			if cmd.Flags().Lookup(flag) != nil {
+				t.Fatalf("official %s must not carry --%s", name, flag)
+			}
 		}
 	}
 }
@@ -68,6 +76,80 @@ func TestSLCCustomInstallAndUpdateCarryRestartFlags(t *testing.T) {
 	}
 	if slcInstallCmd.Flags().Lookup("no-restart") == nil {
 		t.Fatal("official install must keep --no-restart")
+	}
+}
+
+// Rust support must not widen the flag surface of the shared install/update commands, so the
+// expected flag set is asserted exactly rather than only checking for known additions.
+func TestSLCInstallAndUpdateFlagSurfaceIsUnchangedByRustSupport(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	want := []string{
+		"auto-approve", "no-restart", "deployment", "deployment-dir", "json", "verbose",
+	}
+
+	// When / Then
+	for name, cmd := range map[string]*cobra.Command{
+		"install": slcInstallCmd,
+		"update":  slcUpdateCmd,
+	} {
+		for _, flag := range want {
+			if cmd.Flags().Lookup(flag) == nil {
+				t.Errorf("slc %s is missing --%s", name, flag)
+			}
+		}
+		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+			if !slices.Contains(want, flag.Name) {
+				t.Errorf("slc %s carries unexpected flag --%s", name, flag.Name)
+			}
+		})
+	}
+}
+
+// The `rust` alias is a documented part of the shared commands, so dropping it from the help
+// would silently hide the only way to discover it.
+func TestSLCInstallAndUpdateDocumentTheRustAlias(t *testing.T) {
+	t.Parallel()
+
+	// When / Then
+	for name, long := range map[string]string{
+		"install": slcInstallCmd.Long,
+		"update":  slcUpdateCmd.Long,
+	} {
+		for _, want := range []string{
+			"`rust`",
+			"exasol-labs/language-container-rs",
+			"exasol slc custom install --language rust --source",
+		} {
+			if !strings.Contains(long, want) {
+				t.Errorf("slc %s help does not mention %q", name, want)
+			}
+		}
+	}
+}
+
+// The alias dispatch is the only thing wiring the Rust SLC into the shared commands; keep both
+// entry points at the signature the RunE handlers call them with.
+func TestSLCRustDispatchFunctionsAreWired(t *testing.T) {
+	t.Parallel()
+
+	// Given: the dispatch targets, typed as the RunE handlers call them.
+	dispatch := map[string]func(*cobra.Command) error{
+		"install": runSLCInstallRust,
+		"update":  runSLCUpdateRust,
+	}
+
+	// When / Then
+	for name, run := range dispatch {
+		if run == nil {
+			t.Errorf("slc %s has no Rust dispatch target", name)
+		}
+	}
+
+	if !strings.EqualFold("rust", deploy.RustSLCAlias) {
+		t.Fatalf("the documented alias `rust` does not match deploy.RustSLCAlias (%q)",
+			deploy.RustSLCAlias)
 	}
 }
 
