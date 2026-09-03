@@ -5,15 +5,19 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Publish a Git tag or delete a published version
+        description: Publish from a Git source or delete a published version
         required: true
         type: choice
         options:
           - publish
           - delete
-      target:
-        description: Git tag for publish (v2.3.0-rc1) or version for delete (2.3.0-rc1)
-        required: true
+      source_ref:
+        description: Exact Git tag or full commit SHA (publish only)
+        required: false
+        type: string
+      version:
+        description: Published version (optional for conventional tags; required for delete)
+        required: false
         type: string
 
 permissions: {}
@@ -31,11 +35,35 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout trusted workflow source
+      - name: Checkout documentation snapshot
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-          ref: refs/heads/main
+          fetch-depth: 1
+          ref: ${{ inputs.operation == 'publish' && inputs.source_ref || 'refs/heads/main' }}
+
+      - name: Validate documentation source
+        if: inputs.operation == 'publish'
+        id: source
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
+          fail() {
+            echo "::error::source_ref must be an exact Git tag or full 40-character commit SHA"
+            exit 1
+          }
+          commit="$(git rev-parse HEAD)"
+          if [[ "${SOURCE_REF}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            [[ "${commit,,}" == "${SOURCE_REF,,}" ]] || fail
+          else
+            tag="${SOURCE_REF#refs/tags/}"
+            if [[ "${SOURCE_REF}" == refs/* && "${SOURCE_REF}" != refs/tags/* ]]; then
+              fail
+            fi
+            tag_commit="$(git rev-parse --verify --end-of-options "refs/tags/${tag}^{commit}")" || fail
+            [[ "${tag_commit}" == "${commit}" ]] || fail
+          fi
+          echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -45,26 +73,47 @@ jobs:
           enable-cache: true
           cache-dependency-glob: user-docs/uv.lock
 
-      - name: Validate request
+      - name: Prepare publication request
         id: request
         env:
           OPERATION: ${{ inputs.operation }}
-          TARGET: ${{ inputs.target }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          version="$(uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py validate "${OPERATION}" "${TARGET}")"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-
-      - name: Checkout documentation tag
-        if: inputs.operation == 'publish'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: refs/tags/v${{ steps.request.outputs.version }}
+          if [[ "${OPERATION}" == "publish" ]]; then
+            arguments=("${SOURCE_REF}")
+            if [[ -n "${REQUESTED_VERSION}" ]]; then
+              arguments+=(--version "${REQUESTED_VERSION}")
+            fi
+            version="$(uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py validate-publish "${arguments[@]}")"
+            echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          else
+            version="$(uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py validate-delete "${REQUESTED_VERSION}")"
+            echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: Validate documentation
         if: inputs.operation == 'publish'
         run: task docs-build
+
+      - name: Summarize request
+        env:
+          OPERATION: ${{ inputs.operation }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          COMMIT: ${{ steps.source.outputs.commit }}
+          VERSION: ${{ steps.request.outputs.version }}
+        run: |
+          {
+            echo "## Documentation publication"
+            echo ""
+            echo "- Operation: \`${OPERATION}\`"
+            echo "- Version: \`${VERSION}\`"
+            if [[ "${OPERATION}" == "publish" ]]; then
+              echo "- Source: \`${SOURCE_REF}\`"
+              echo "- Commit: \`${COMMIT}\`"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Configure publication identity
         run: |
