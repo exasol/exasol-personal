@@ -1,0 +1,116 @@
+# .github/workflows/docs.yml
+name: Publish documentation
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Publish a Git tag or delete a published version
+        required: true
+        type: choice
+        options:
+          - publish
+          - delete
+      target:
+        description: Git tag for publish (v2.3.0-rc1) or version for delete (2.3.0-rc1)
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: documentation-publication
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  update-version-catalog:
+    name: Update version catalog
+    runs-on: ubuntu-latest
+    environment: github-pages
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout trusted workflow source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: refs/heads/main
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.21"
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: user-docs/uv.lock
+
+      - name: Validate request
+        id: request
+        env:
+          OPERATION: ${{ inputs.operation }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          version="$(uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py validate "${OPERATION}" "${TARGET}")"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout documentation tag
+        if: inputs.operation == 'publish'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: refs/tags/v${{ steps.request.outputs.version }}
+
+      - name: Validate documentation
+        if: inputs.operation == 'publish'
+        run: task docs-build
+
+      - name: Configure publication identity
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Fetch published versions
+        env:
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages:gh-pages
+          elif [[ "${OPERATION}" == "delete" ]]; then
+            echo "::error::No published documentation versions exist"
+            exit 1
+          fi
+
+      - name: Update published versions
+        env:
+          OPERATION: ${{ inputs.operation }}
+          VERSION: ${{ steps.request.outputs.version }}
+        run: |
+          set -euo pipefail
+          uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py "${OPERATION}" "${VERSION}"
+          git push origin gh-pages
+
+      - name: Export complete published site
+        run: git worktree add --detach "${RUNNER_TEMP}/pages" gh-pages
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/pages
+
+  deploy:
+    name: Deploy GitHub Pages
+    needs: update-version-catalog
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
