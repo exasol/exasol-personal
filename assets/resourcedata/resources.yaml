@@ -1,0 +1,66 @@
+tofu:
+  extract: true
+  artifact:
+    darwin/amd64:
+      url: https://github.com/opentofu/opentofu/releases/download/v1.11.5/tofu_1.11.5_darwin_amd64.tar.gz
+      sha256: f514761be893f49b6ca12c2df672c010fad6c88f92588dcfc95db750211c2594
+      subpath: tofu
+    darwin/arm64:
+      url: https://github.com/opentofu/opentofu/releases/download/v1.11.5/tofu_1.11.5_darwin_arm64.tar.gz
+      sha256: abf2be18c49b7b8338d4addc5f64bcf68b3af03ca860b414b3705c20c4b455a6
+      subpath: tofu
+    linux/amd64:
+      url: https://github.com/opentofu/opentofu/releases/download/v1.11.5/tofu_1.11.5_linux_amd64.tar.gz
+      sha256: e73868ab8abaca15d3c974dcf6a5e878860d6f2212867433aa3d8f2b43a492d9
+      subpath: tofu
+    linux/arm64:
+      url: https://github.com/opentofu/opentofu/releases/download/v1.11.5/tofu_1.11.5_linux_arm64.tar.gz
+      sha256: b31a2af2a99d49da6eb429cbbb5f4e8323f9c48d1aeb8c1294e4e5bdb5012416
+      subpath: tofu
+    windows/amd64:
+      url: https://github.com/opentofu/opentofu/releases/download/v1.11.5/tofu_1.11.5_windows_amd64.tar.gz
+      sha256: 69be358054afcc6a84c0ffb917056d21afc3ec5a0e0f66ffd4f498a1763a0fb8
+      subpath: tofu.exe
+shared-assets:
+  extract: true
+  embed: always
+  artifact:
+    any:
+      url: assets/shared
+      download_path: shared-assets.tar.gz
+infrastructure-presets:
+  glob: "*"
+  embed: always
+  artifact:
+    any:
+      url: assets/infrastructure
+installation-presets:
+  glob: "*"
+  embed: always
+  artifact:
+    any:
+      url: assets/installation
+exasol-local-runner:
+  extract: true
+  embed: true
+  artifact:
+    darwin/arm64:
+      url: https://github.com/exasol/exasol-local-vm/releases/download/v2.0.0-alpha.1/mac-launcher-aarch64.zip
+      sha256: 8386bc7f1816ac6994bf6bc0ac0d2067670de9ff5039acea923cef55c4b6dc40
+      subpath: launcher
+exasol-nano-image:
+  extract: false
+  embed: true
+  artifact:
+    darwin/arm64:
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.2@sha256:93512673ca38053cb45fa33eaa9ac999fc93c2c8f70c873d054432433c5e81bf
+      download_path: nano.tar
+    linux/arm64:
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.2@sha256:93512673ca38053cb45fa33eaa9ac999fc93c2c8f70c873d054432433c5e81bf
+      download_path: nano.tar
+    linux/amd64:
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.2@sha256:2ac98412bd8fdf046714636710182bb93ad221ec423317e9a5f2be78298cd950
+      download_path: nano.tar
+    windows/amd64:
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.2@sha256:2ac98412bd8fdf046714636710182bb93ad221ec423317e9a5f2be78298cd950
+      download_path: nano.tar

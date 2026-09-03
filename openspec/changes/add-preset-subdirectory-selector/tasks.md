@@ -1,7 +1,7 @@
-## 1. Runtime-artifact layer
+## 1. Resource layer
 
-- [x] 1.1 Allow `ResourcePath` on git sources with `Extract: false` in `ArtifactSpec.validate` ([internal/runtimeartifacts/spec.go](internal/runtimeartifacts/spec.go)).
-- [x] 1.2 Apply `ResourcePath` in the non-extract branch of `Manager.resolveEntry` when the URL is a git source ([internal/runtimeartifacts/manager.go](internal/runtimeartifacts/manager.go)). Reuse `pathWithinRoot` for traversal safety.
+- [x] 1.1 Allow `ResourcePath` on git sources with `Extract: false` in `ArtifactSpec.validate` ([internal/resource/spec.go](internal/resource/spec.go)).
+- [x] 1.2 Apply `ResourcePath` in the non-extract branch of `Manager.resolveEntry` when the URL is a git source ([internal/resource/manager.go](internal/resource/manager.go)). Reuse `pathWithinRoot` for traversal safety.
 - [x] 1.3 Add `ParsePresetURI(uri) (cleanURI, subpath string)` helper that strips a trailing `#<subpath>` fragment; keep `ParseGitURL` untouched.
 
 ## 2. Deploy layer wiring
@@ -13,8 +13,8 @@
 ## 3. Tests
 
 - [x] 3.1 Unit tests for `ParsePresetURI`: bare URL, URL with only ref, URL with only fragment, URL with both, empty fragment, encoded `%23`.
-- [x] 3.2 Runtime-artifact unit tests: git source with `ResourcePath` returns the subdirectory path; git source with `..` in `ResourcePath` is rejected; different subpaths produce distinct cache entries; `ParseSpec` accepts git + `resource_path` + `extract: false`.
-- [x] 3.3 Deploy-layer unit tests for `ResolvePreset` covering: `file://` directory + fragment errors; `file://` archive + fragment resolves the subpath; archive subdir missing the required manifest surfaces the existing "does not contain the expected … manifest" error. (Git-clone-plus-fragment is exercised at the runtime-artifact layer via `resolveEntry`; a live git integration test is left for the higher-level suite because unit tests cannot spin up a git server.)
+- [x] 3.2 Resource unit tests: git source with `ResourcePath` returns the subdirectory path; git source with `..` in `ResourcePath` is rejected; different subpaths produce distinct cache entries; `ParseSpec` accepts git + `resource_path` + `extract: false`.
+- [x] 3.3 Deploy-layer unit tests for `ResolvePreset` covering: `file://` directory + fragment errors; `file://` archive + fragment resolves the subpath; archive subdir missing the required manifest surfaces the existing "does not contain the expected … manifest" error. (Git-clone-plus-fragment is exercised at the resource layer via `resolveEntry`; a live git integration test is left for the higher-level suite because unit tests cannot spin up a git server.)
 - [x] 3.4 CLI classification: no new test needed — `IsExternalPresetURI` inspects only the scheme prefix, so a trailing `#subpath` cannot affect classification; existing coverage still applies.
 
 ## 4. Documentation

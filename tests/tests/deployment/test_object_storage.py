@@ -47,7 +47,7 @@ def test_first_run_downloads_then_reuses_opentofu(
     skip_unless_infra(infra, "aws", "azure", "exoscale", "stackit")
     skip_without_cloud_deploy_optin()
 
-    # Given a clean runtime-artifact cache
+    # Given
     run_command([exasol_path, "cache", "clean", "--all"])
 
     # When a deployment that resolves OpenTofu runs (install performs init+deploy)
@@ -59,11 +59,11 @@ def test_first_run_downloads_then_reuses_opentofu(
 
         # Then the cache now contains a resolved artifact
         listing = run_command([exasol_path, "cache", "list"]).stdout
-        assert "No cached runtime artifacts." not in listing
+        assert "No cached resources." not in listing
 
         # And a second resolve reuses the cache (no error, artifact still present)
         run_command([exasol_path, "deploy", *base])
-        assert "No cached runtime artifacts." not in (
+        assert "No cached resources." not in (
             run_command([exasol_path, "cache", "list"]).stdout
         )
     finally:

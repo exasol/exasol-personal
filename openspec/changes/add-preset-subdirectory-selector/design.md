@@ -33,14 +33,14 @@ untouched and the added parser is a single split-on-last-`#` step.
 
 Alternatives considered:
 
-- Extend `runtimeartifacts.ParseGitURL` to return `(repoURL, ref, subpath)` and update every
+- Extend `resource.ParseGitURL` to return `(repoURL, ref, subpath)` and update every
   call site.
-- **Add `runtimeartifacts.ParsePresetURI(uri) (cleanURI, subpath string)`** (chosen), called
+- **Add `resource.ParsePresetURI(uri) (cleanURI, subpath string)`** (chosen), called
   by `deploy.ResolvePreset` before it hands the URL to the manager.
 
 Rationale: the subpath applies equally to non-git archive sources, so tying it to
 `ParseGitURL` would either force a git-specific helper into unrelated call sites or add a
-second parser. A single helper on the runtime-artifact package keeps the concept in one
+second parser. A single helper on the resource package keeps the concept in one
 place. `ParseGitURL` continues to see a URL with no fragment, so ref parsing is unchanged.
 
 ### D3. Scope covers git and archive sources; `file://` directories still reject the fragment
@@ -69,7 +69,7 @@ Alternatives considered:
   do not typically install many subpaths from the same repo in one launcher install. The
   refactor can happen later without breaking the URI syntax.
 
-### D5. Runtime-artifact validation loosening is git-only
+### D5. Resource validation loosening is git-only
 
 `ArtifactSpec.validate` currently rejects `ResourcePath` when `Extract: false`. That guard
 protected against nonsensical archive-less configs. It remains in force for non-git,

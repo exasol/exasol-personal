@@ -67,7 +67,7 @@ The system SHALL use one platform-selection policy for backend creation, status 
 - **THEN** every local workflow rejects it consistently
 
 ### Requirement: Launcher startup state is translated once
-The system SHALL translate launcher version-check state, installed SLC state, service ports, initialization parameters, deployment paths, and runtime artifact paths into runtime-neutral installation settings through shared policy.
+The system SHALL translate launcher version-check state, installed SLC state, service ports, initialization parameters, deployment paths, and resource paths into runtime-neutral installation settings through shared policy.
 
 #### Scenario: Installed SLC state is unavailable
 - **WHEN** the caller does not know the deployment's SLC state

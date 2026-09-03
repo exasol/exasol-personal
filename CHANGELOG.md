@@ -6,6 +6,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Presets can include a `resources.yaml` file. Its resources are available only
+  while that preset is evaluated, override launcher resources with the same
+  name, and resolve relative local paths from the preset directory.
+
 - Added an **Install with AI Agent** section to the README, showing the single `claude`/`codex` command that has an AI coding agent install the [Exasol agent skills](https://github.com/exasol-labs/exasol-agent-skills) and set up Exasol Personal.
 
 - Enabled Virtual Schema support in local deployments when the required adapter runtime and dependencies are installed.
@@ -39,6 +43,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 - Custom SLC language identifiers are no longer limited to Python, Java, and R. The launcher now
   accepts any valid client-defined identifier, such as `rust`, for a custom SLC.
 
+- Renamed `exasol cache clean --partial-downloads` to `exasol cache clean --incomplete`, and it now removes entries left behind by an interrupted operation. The previous flag targeted a location nothing wrote to, so it never reclaimed anything.
+- Cached resources from an earlier version are no longer reused. The launcher starts a fresh cache and reports that the previous contents can be reclaimed with `exasol cache clean --all`.
+- Preset arguments now match built-in preset names before locations. An unknown plain name lists the available presets; use a path-like argument or URI to resolve an external preset location.
+- Resources are now cached by content, so one copy serves every resource that resolves to it. `exasol cache list` and `exasol diag cache` therefore report the resources sharing an entry instead of a single resource and platform, and show one entry path. With `--json`, the `resourceId`, `platform`, `artifactPath`, and `resolvedPath` fields are replaced by `resourceIds`, `identity`, and `path`.
 - Documented named deployments, the `exasol slc` command group, and `exasol diag local` in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers UDFs and script language containers, and the Limitations section no longer states that UDFs are unavailable on local deployments.
 - macOS local deployments now run the same Podman installation used on Linux inside a managed VM. The VM launcher is responsible only for VM lifecycle, port forwarding, shared files, and command execution; deployment state no longer exposes its SSH transport.
 - Local runtime host preparation now runs before a deployment records an operation in progress, so a declined or failed prerequisite leaves the deployment in its previous state and the command can simply be retried.
@@ -121,7 +129,7 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
-- Added support for external preset sources. Presets can now be resolved through the runtime artifact system from local files, HTTP sources, and Git repositories, including SSH-backed repositories and zip archives.
+- Added support for external preset sources. Presets can now be resolved through the resource system from local files, HTTP sources, and Git repositories, including SSH-backed repositories and zip archives.
 
   Example: `exasol install https://github.com/org/exasol-preset.git@v1.0.0` lets users install from a preset repository instead of only using bundled presets.
 
@@ -173,9 +181,9 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol connect --json -c "SELECT 1"` produces machine-readable output suitable for scripts and agent workflows.
 
-- Added runtime artifact management so OpenTofu and runtime resources can be downloaded on demand and reused through a per-user cache. New cache commands and diagnostics help users inspect and clean cached artifacts.
+- Added resource management so OpenTofu and runtime resources can be downloaded on demand and reused through a per-user cache. New cache commands and diagnostics help users inspect and clean cached artifacts.
 
-  Example: `exasol cache list` shows downloaded runtime artifacts, and `exasol diag cache` checks cache health.
+  Example: `exasol cache list` shows downloaded resources, and `exasol diag cache` checks cache health.
 
 - Added improved `exasol info` guidance and JSON output so users can more easily find connection details and next steps.
 

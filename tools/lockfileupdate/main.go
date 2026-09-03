@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/exasol/exasol-personal/assets/resources"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/assets/resourcedata"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/exasol/exasol-personal/internal/util"
 	"gopkg.in/yaml.v3"
 )
@@ -146,11 +146,11 @@ func updateLockfileForPreset(ctx context.Context, presetDir string, platforms []
 		return fmt.Errorf("copy preset dir to temp: %w", err)
 	}
 
-	manager, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
+	resolver, err := resource.New(resource.Options{Spec: resourcedata.ResourcesYAML})
 	if err != nil {
-		return fmt.Errorf("create artifact manager: %w", err)
+		return fmt.Errorf("create artifact resolver: %w", err)
 	}
-	tofuPath, err := manager.Request(ctx, "tofu")
+	tofuPath, err := resolver.Resolve(ctx, "tofu")
 	if err != nil {
 		return fmt.Errorf("resolve tofu binary path: %w", err)
 	}

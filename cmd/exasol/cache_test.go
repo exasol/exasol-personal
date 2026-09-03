@@ -5,7 +5,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +46,7 @@ func TestCacheCommandsDoNotUseDeploymentDirectoryConcerns(t *testing.T) {
 }
 
 //nolint:paralleltest // modifies process environment and global flag state.
-func TestCacheListCommandInitializesConfig(t *testing.T) {
+func TestCacheListCommandShowsEmptyCache(t *testing.T) {
 	home := t.TempDir()
 	cacheHome := t.TempDir()
 	setCacheCommandTestEnv(t, home, cacheHome)
@@ -57,6 +57,7 @@ func TestCacheListCommandInitializesConfig(t *testing.T) {
 	})
 
 	cmd := *cacheListCmd
+	cmd.SetContext(context.Background())
 	var buf bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.SetOut(&buf)
@@ -70,23 +71,53 @@ func TestCacheListCommandInitializesConfig(t *testing.T) {
 		t.Fatalf("expected no stderr output, got %q", stderr.String())
 	}
 
-	expectedConfig := filepath.Join(config.LauncherDirPath(home), "runtime-artifacts.yaml")
-	if _, err := os.Stat(expectedConfig); err != nil {
-		t.Fatalf("expected cache config to be created, got %v", err)
-	}
 	userCacheDir, err := os.UserCacheDir()
 	if err != nil {
 		t.Fatalf("failed to resolve user cache dir: %v", err)
 	}
 	expectedCacheRoot := filepath.Join(
 		config.LauncherDirPath(userCacheDir),
-		"runtime-artifacts",
+		"resources",
 	)
-	if !strings.Contains(buf.String(), "Runtime artifact cache: "+expectedCacheRoot) {
+	if !strings.Contains(buf.String(), "Resource cache: "+expectedCacheRoot) {
 		t.Fatalf("expected cache root in output, got %q", buf.String())
 	}
-	if !strings.Contains(buf.String(), "No cached runtime artifacts.") {
+	if !strings.Contains(buf.String(), "No cached resources.") {
 		t.Fatalf("expected empty-cache message, got %q", buf.String())
+	}
+}
+
+//nolint:paralleltest // The terminal message queue is process-wide.
+func TestTextCommandReportsHowToReclaimSupersededCacheAfterIndexReplacement(t *testing.T) {
+	// Given
+	resolver, err := resource.New(resource.Options{CacheRoot: t.TempDir()})
+	if err != nil {
+		t.Fatalf("create resource resolver: %v", err)
+	}
+	if err := os.WriteFile(
+		resolver.Cache().IndexPath(), []byte(`{"version":1,"entries":{}}`), 0o600,
+	); err != nil {
+		t.Fatalf("write superseded index: %v", err)
+	}
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+	supersededVersion := resolver.Cache().SupersededIndexVersion()
+	if err := os.WriteFile(
+		resolver.Cache().IndexPath(), []byte(`{"version":2,"entries":{}}`), 0o600,
+	); err != nil {
+		t.Fatalf("replace superseded index: %v", err)
+	}
+
+	// When
+	addSupersededCacheCallToAction(supersededVersion)
+	var stderr bytes.Buffer
+	writeTerminalMessages(terminalConfig{stderr: &stderr, showCallsToAction: true})
+
+	// Then
+	output := stderr.String()
+	if !strings.Contains(output, "earlier version") ||
+		!strings.Contains(output, "cache clean --all") {
+		t.Fatalf("call to action = %q", output)
 	}
 }
 
@@ -108,10 +139,10 @@ func TestCacheUnlockCommandReportsConfirmationOnStderr(t *testing.T) {
 
 	// The unlock confirmation is an operational notice: it belongs on stderr and
 	// must not pollute stdout, which stays reserved for primary/JSON output.
-	if strings.Contains(stdout.String(), "Runtime artifact cache lock cleared.") {
+	if strings.Contains(stdout.String(), "Resource cache lock cleared.") {
 		t.Fatalf("confirmation must not appear on stdout, got %q", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "Runtime artifact cache lock cleared.") {
+	if !strings.Contains(stderr.String(), "Resource cache lock cleared.") {
 		t.Fatalf("expected confirmation on stderr, got %q", stderr.String())
 	}
 }
@@ -127,15 +158,15 @@ func TestCacheListCommandRegistersJSONFlag(t *testing.T) {
 func TestCacheCleanCommandRegistersCleanupFlags(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"invalid", "all", "partial-downloads", "dry-run"} {
+	for _, name := range []string{"invalid", "all", "incomplete", "dry-run"} {
 		if cacheCleanCmd.Flags().Lookup(name) == nil {
 			t.Fatalf("expected cache clean to register --%s", name)
 		}
 	}
-	for _, name := range []string{"invalid", "all", "partial-downloads"} {
+	for _, name := range []string{"invalid", "all", "incomplete"} {
 		flag := cacheCleanCmd.Flags().Lookup(name)
 		annotations := flag.Annotations["cobra_annotation_mutually_exclusive"]
-		if len(annotations) != 1 || annotations[0] != "invalid all partial-downloads" {
+		if len(annotations) != 1 || annotations[0] != "invalid all incomplete" {
 			t.Fatalf(
 				"expected --%s mutually exclusive with cleanup selectors, got %+v",
 				name,
@@ -150,7 +181,7 @@ func TestCacheCleanRejectsMultipleCleanupSelectors(t *testing.T) {
 	oldOpts := cacheCleanOpts
 	cacheCleanOpts.Invalid = true
 	cacheCleanOpts.All = false
-	cacheCleanOpts.PartialDownloads = true
+	cacheCleanOpts.Incomplete = true
 	cacheCleanOpts.DryRun = true
 	t.Cleanup(func() {
 		cacheCleanOpts = oldOpts
@@ -182,34 +213,12 @@ func TestDiagCacheHelpDescribesReadOnlyBehavior(t *testing.T) {
 	}
 }
 
-func TestRenderCacheListJSON(t *testing.T) {
-	t.Parallel()
-
-	entries := []runtimeartifacts.CacheEntryInfo{cacheEntryInfoFixture()}
-	var buf bytes.Buffer
-
-	if err := renderCacheListJSON(&buf, entries); err != nil {
-		t.Fatalf("expected json render to succeed, got %v", err)
-	}
-
-	var decoded []runtimeartifacts.CacheEntryInfo
-	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
-		t.Fatalf("expected valid json, got %v: %s", err, buf.String())
-	}
-	if len(decoded) != 1 ||
-		decoded[0].ResourceID != "tofu" ||
-		decoded[0].ArtifactPath != "artifacts/tofu/download.tgz" ||
-		decoded[0].ResolvedPath != "artifacts/tofu" {
-		t.Fatalf("unexpected decoded entries: %+v", decoded)
-	}
-}
-
 func TestRenderCacheListTextIncludesLastUsedTimestamp(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
 
-	if err := renderCacheListText(&buf, "/cache", []runtimeartifacts.CacheEntryInfo{
+	if err := renderCacheListText(&buf, "/cache", []resource.CacheEntryInfo{
 		cacheEntryInfoFixture(),
 	}); err != nil {
 		t.Fatalf("expected text render to succeed, got %v", err)
@@ -217,11 +226,11 @@ func TestRenderCacheListTextIncludesLastUsedTimestamp(t *testing.T) {
 
 	output := buf.String()
 	for _, expected := range []string{
-		"Runtime artifact cache: /cache",
-		"tofu linux/amd64",
+		"Resource cache: /cache",
+		"tofu last_used=",
 		"last_used=2026-06-08T12:00:00Z",
 		"size=1.5 KB",
-		"path=artifacts/tofu",
+		"path=artifacts/identity",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("expected %q in output, got %q", expected, output)
@@ -234,7 +243,7 @@ func TestRenderCacheCleanTextUsesDryRunAndInvalidWording(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	err := renderCacheCleanText(&buf, runtimeartifacts.CleanSummary{
+	err := renderCacheCleanText(&buf, resource.CleanSummary{
 		Mode:           "invalid",
 		DryRun:         true,
 		RemovedEntries: 2,
@@ -247,7 +256,7 @@ func TestRenderCacheCleanTextUsesDryRunAndInvalidWording(t *testing.T) {
 
 	output := buf.String()
 	for _, expected := range []string{
-		"Would remove 2 runtime artifact(s), 2 MB (mode: invalid).",
+		"Would remove 2 resource(s), 2 MB (mode: invalid).",
 		"Invalid artifacts: 2",
 	} {
 		if !strings.Contains(output, expected) {
@@ -260,21 +269,21 @@ func TestRenderCacheDiagnosticsTextIncludesCacheState(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	report := runtimeartifacts.DiagnosticReport{
+	report := resource.DiagnosticReport{
 		CacheRoot:        "/cache",
-		ConfigPath:       "/config/runtime-artifacts.yaml",
+		ConfigPath:       "/config/resources.yaml",
 		ConfigExists:     true,
 		RetentionDays:    30,
 		IndexPath:        "/cache/index.json",
 		IndexExists:      true,
-		Lock:             runtimeartifacts.CacheLockStatus{Locked: true, Mode: "exclusive"},
+		Lock:             resource.CacheLockStatus{Locked: true, Mode: "exclusive"},
 		ArtifactCount:    1,
 		TotalBytes:       3 * 1024 * 1024 * 1024,
 		StaleCandidates:  1,
 		InvalidArtifacts: 1,
 		MissingFiles:     []string{"/cache/missing"},
 		UnexpectedPaths:  []string{"/cache/unexpected"},
-		Entries: []runtimeartifacts.DiagnosticEntry{
+		Entries: []resource.DiagnosticEntry{
 			{
 				CacheEntryInfo:  cacheEntryInfoFixture(),
 				Stale:           true,
@@ -290,14 +299,14 @@ func TestRenderCacheDiagnosticsTextIncludesCacheState(t *testing.T) {
 	output := buf.String()
 	for _, expected := range []string{
 		"Cache root: /cache",
-		"Config file: /config/runtime-artifacts.yaml",
+		"Config file: /config/resources.yaml",
 		"Index file: index.json",
 		"Config status: ok (retention_days=30)",
 		"Index status: ok",
 		"Lock status: locked (exclusive)",
 		"Total size: 3 GB",
 		"Invalid artifacts: 1",
-		"tofu linux/amd64 integrity=mismatch stale=true path=artifacts/tofu",
+		"tofu integrity=mismatch stale=true path=artifacts/identity",
 		"Missing: missing",
 		"Unexpected: unexpected",
 	} {
@@ -325,8 +334,8 @@ func TestFormatCachePathReturnsRelativePathsInsideCacheRoot(t *testing.T) {
 		{
 			name:      "outside root",
 			cacheRoot: "/cache",
-			pathValue: "/config/runtime-artifacts.yaml",
-			expected:  "/config/runtime-artifacts.yaml",
+			pathValue: "/config/resources.yaml",
+			expected:  "/config/resources.yaml",
 		},
 		{
 			name:      "already relative",
@@ -363,18 +372,17 @@ func TestFormatByteSizeUsesHumanFriendlyUnits(t *testing.T) {
 	}
 }
 
-func cacheEntryInfoFixture() runtimeartifacts.CacheEntryInfo {
-	return runtimeartifacts.CacheEntryInfo{
-		ID:           "identity",
-		ResourceID:   "tofu",
-		Platform:     "linux/amd64",
-		URL:          "https://example.com/tofu",
-		Sha256:       strings.Repeat("a", 64),
-		ArtifactPath: "artifacts/tofu/download.tgz",
-		ResolvedPath: "artifacts/tofu",
-		CreatedAt:    time.Date(2026, 6, 8, 11, 0, 0, 0, time.UTC),
-		LastUsedAt:   time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC),
-		SizeBytes:    1536,
+func cacheEntryInfoFixture() resource.CacheEntryInfo {
+	return resource.CacheEntryInfo{
+		ID:          "identity",
+		ResourceIDs: []string{"tofu"},
+		URL:         "https://example.com/tofu",
+		Identity:    "sha256:" + strings.Repeat("a", 64),
+		Sha256:      strings.Repeat("a", 64),
+		Path:        "artifacts/identity",
+		CreatedAt:   time.Date(2026, 6, 8, 11, 0, 0, 0, time.UTC),
+		LastUsedAt:  time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC),
+		SizeBytes:   1536,
 	}
 }
 

@@ -14,7 +14,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/podmanmachine"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/exasol/exasol-personal/internal/winget"
 )
 
@@ -27,14 +27,12 @@ import (
 // system, and the launcher never alters an existing machine's configuration.
 type windowsHostEnvironmentPreparer struct{}
 
-// NewHostWindowsRuntime creates a Windows host runtime. The manager may be
-// nil for operations that never invoke Podman, such as destroying a
-// deployment that was never prepared.
+// NewHostWindowsRuntime: a nil resolver is valid until an operation invokes the runner.
 func NewHostWindowsRuntime(
 	deployment config.DeploymentDir,
-	manager *runtimeartifacts.Manager,
+	resolver *resource.Resolver,
 ) *HostRuntime {
-	return newHostRuntime(deployment, manager, windowsHostEnvironmentPreparer{})
+	return newHostRuntime(deployment, resolver, windowsHostEnvironmentPreparer{})
 }
 
 func (windowsHostEnvironmentPreparer) Platform() HostPlatform { return HostPlatformWindows }

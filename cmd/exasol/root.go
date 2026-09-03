@@ -11,10 +11,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/exasol/exasol-personal/assets/resources"
+	"github.com/exasol/exasol-personal/assets/resourcedata/embedded"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/lmittmann/tint"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -165,14 +165,16 @@ func Execute() error {
 	resetTerminalMessages()
 	registerLogLevelFlag(rootCmd, commonFlags)
 
-	// One resource manager for the whole process, attached to the root
-	// context so every command reaches it via cmd.Context() instead of each
-	// building (and caching against) its own.
-	manager, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
+	// Sharing one resolver keeps command caches coherent.
+	resolver, err := resource.New(resource.Options{
+		Spec:  embedded.ResolvedSpec,
+		Blobs: embedded.Blobs,
+	})
 	if err != nil {
 		return err
 	}
-	ctx := runtimeartifacts.NewContext(context.Background(), manager)
+	ctx := resource.NewContext(context.Background(), resolver)
+	supersededCacheVersion := resolver.Cache().SupersededIndexVersion()
 
 	// Register infrastructure variable flags only for commands that need them.
 	// This must happen before Cobra parses arguments.
@@ -205,11 +207,24 @@ func Execute() error {
 
 	err = rootCmd.ExecuteContext(ctx)
 	runDeploymentLogCleanup()
+	addSupersededCacheCallToAction(supersededCacheVersion)
 	if err == nil {
 		printTerminalMessages()
 	}
 
 	return err
+}
+
+// Superseded cache contents remain until the user removes them.
+func addSupersededCacheCallToAction(supersededVersion int) {
+	if supersededVersion == 0 {
+		return
+	}
+
+	addTerminalCallToAction(
+		"Cached resources from an earlier version of Exasol Personal are no " +
+			"longer used. Run `exasol cache clean --all` to reclaim their space.",
+	)
 }
 
 func maybeAddVersionUpdateHint(cmd *cobra.Command, deployment config.DeploymentDir) {

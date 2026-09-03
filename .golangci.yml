@@ -31,7 +31,7 @@ linters:
   exclusions:
     paths:
       - assets/tofubin/
-      - assets/resources/generated/
+      - assets/resourcedata/embedded/data/
       - tools/
 
   enable:

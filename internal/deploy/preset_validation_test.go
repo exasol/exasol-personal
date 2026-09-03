@@ -11,6 +11,8 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/presets"
+	"github.com/exasol/exasol-personal/internal/resource"
+	"github.com/exasol/exasol-personal/internal/resource/resourcetest"
 )
 
 func TestValidatePresetSelection_AcceptsDefaultEmbeddedPair(t *testing.T) {
@@ -21,7 +23,7 @@ func TestValidatePresetSelection_AcceptsDefaultEmbeddedPair(t *testing.T) {
 	installationPreset := PresetRef{Name: presets.DefaultInstallation}
 
 	// When
-	err := ValidatePresetSelection(testManagerContext(t), infrastructurePreset, installationPreset)
+	err := ValidatePresetSelection(testResolverContext(t), infrastructurePreset, installationPreset)
 	// Then
 	if err != nil {
 		t.Fatalf("expected default preset pair to be valid, got %v", err)
@@ -55,7 +57,7 @@ install: []
 
 	// When
 	err := InitDeployment(
-		testManagerContext(t),
+		testResolverContext(t),
 		config.NewDeploymentDir(deploymentDir),
 		InitOptions{
 			InfrastructurePreset: PresetRef{Path: infrastructureDir},
@@ -86,6 +88,95 @@ install: []
 	}
 }
 
+func TestInitDeploymentFetchesInstallationPresetFromLauncherResources(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	infrastructureDir := t.TempDir()
+	installationDir := t.TempDir()
+	wrongInfrastructureDir := t.TempDir()
+	wrongInstallationDir := t.TempDir()
+	writeTestFile(t, filepath.Join(infrastructureDir, presets.InfrastructureManifestFilename), `
+name: Test Infrastructure
+description: Test infrastructure
+backend: tofu
+`)
+	writeTestFile(t, filepath.Join(installationDir, presets.InstallationManifestFilename), `
+name: Launcher Installation
+description: Launcher installation
+install: []
+`)
+	writeTestFile(
+		t,
+		filepath.Join(wrongInstallationDir, presets.InstallationManifestFilename),
+		`
+name: Infrastructure Override
+description: Infrastructure override
+install: []
+`,
+	)
+	writeTestFile(
+		t,
+		filepath.Join(wrongInfrastructureDir, presets.InfrastructureManifestFilename),
+		`
+name: Installation Override
+description: Installation override
+backend: tofu
+`,
+	)
+	writeTestFile(t, filepath.Join(infrastructureDir, "resources.yaml"), `
+installation-presets/test:
+  artifact:
+    any:
+      url: file://`+wrongInstallationDir)
+	writeTestFile(t, filepath.Join(installationDir, "resources.yaml"), `
+infrastructure-presets/test:
+  artifact:
+    any:
+      url: file://`+wrongInfrastructureDir)
+	ctx := resourcetest.NewResolverContext(t, resource.ResourceSpec{
+		"infrastructure-presets/test": presetDefinition(infrastructureDir),
+		"installation-presets/test":   presetDefinition(installationDir),
+		"shared-assets":               presetDefinition(t.TempDir()),
+	})
+	deployment := config.NewDeploymentDir(t.TempDir())
+
+	// When
+	err := InitDeployment(ctx, deployment, InitOptions{
+		InfrastructurePreset: PresetRef{Name: "test"},
+		InstallationPreset:   PresetRef{Name: "test"},
+		InfraVars:            map[string]string{},
+		InstallVars:          map[string]string{},
+		CurrentVersion:       "0.0.0",
+	})
+	// Then
+	if err != nil {
+		t.Fatalf("initialize deployment: %v", err)
+	}
+	manifest, err := presets.ReadInstallManifestFromDir(deployment.InstallationDir())
+	if err != nil {
+		t.Fatalf("read extracted installation manifest: %v", err)
+	}
+	if manifest.Name != "Launcher Installation" {
+		t.Fatalf("installation name = %q, want launcher preset", manifest.Name)
+	}
+	infrastructureManifest, err := presets.ReadInfrastructureManifestFromDir(
+		deployment.InfrastructureDir(),
+	)
+	if err != nil {
+		t.Fatalf("read extracted infrastructure manifest: %v", err)
+	}
+	if infrastructureManifest.Name != "Test Infrastructure" {
+		t.Fatalf("infrastructure name = %q, want launcher preset", infrastructureManifest.Name)
+	}
+}
+
+func presetDefinition(dir string) resource.ResourceDefinition {
+	return resource.ResourceDefinition{Artifact: map[string]resource.ArtifactSpec{
+		"any": {URL: "file://" + dir},
+	}}
+}
+
 func TestResolveDefaultInstallationPreset_UsesCompatibleEmbeddedDefault(t *testing.T) {
 	t.Parallel()
 
@@ -94,7 +185,7 @@ func TestResolveDefaultInstallationPreset_UsesCompatibleEmbeddedDefault(t *testi
 
 	// When
 	installationPreset, err := ResolveDefaultInstallationPreset(
-		testManagerContext(t),
+		testResolverContext(t),
 		infrastructurePreset,
 	)
 	// Then

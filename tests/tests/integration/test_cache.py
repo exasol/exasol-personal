@@ -1,7 +1,7 @@
 # Copyright 2026 Exasol AG
 # SPDX-License-Identifier: MIT
 
-"""Runtime-artifact cache CLI: list, clean, unlock, diag, locking, output (offline)."""
+"""Resource cache CLI: list, clean, unlock, diag, locking, output (offline)."""
 
 import json
 from pathlib import Path
@@ -9,7 +9,7 @@ from subprocess import CalledProcessError
 
 import pytest
 
-from tests.testcase_helpers import run_command
+from tests.testcase_helpers import first_infrastructure_preset_id_or_skip, run_command
 
 
 @pytest.mark.launcher_tests
@@ -18,17 +18,38 @@ def test_cache_list_text_output(exasol_path: str) -> None:
     output = run_command([exasol_path, "cache", "list"]).stdout
 
     # Then it reports the cache root
-    assert "Runtime artifact cache:" in output
+    assert "Resource cache:" in output
 
 
 @pytest.mark.launcher_tests
-def test_cache_list_json_is_valid(exasol_path: str) -> None:
+def test_cache_list_json_reports_entry_metadata(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given
+    preset = first_infrastructure_preset_id_or_skip(exasol_path)
+    target = tmp_path / "preset"
+    target.mkdir()
+    run_command(
+        [
+            exasol_path,
+            "presets",
+            "export",
+            preset,
+            "--type",
+            "infrastructure",
+            "--to",
+            str(target),
+        ]
+    )
+
     # When the cache is listed as JSON
     output = run_command([exasol_path, "cache", "list", "--json"]).stdout
 
-    # Then the output parses as JSON
+    # Then
     data = json.loads(output)
-    assert isinstance(data, (list, dict))
+    assert isinstance(data, list)
+    assert data
+    assert {"createdAt", "url", "identity"} <= data[0].keys()
 
 
 @pytest.mark.launcher_tests
@@ -52,7 +73,7 @@ def test_cache_clean_selectors_are_mutually_exclusive(exasol_path: str) -> None:
 
 
 @pytest.mark.launcher_tests
-@pytest.mark.parametrize("mode", ["--partial-downloads", "--all"])
+@pytest.mark.parametrize("mode", ["--incomplete", "--all"])
 def test_cache_clean_reports_mode_summary(exasol_path: str, mode: str) -> None:
     # When a real cleanup mode runs
     output = run_command([exasol_path, "cache", "clean", mode]).stdout
@@ -69,7 +90,7 @@ def test_cache_unlock_reports_cleared(exasol_path: str) -> None:
 
     # Then it confirms the lock was cleared. The confirmation is terminal-notice
     # output on stderr, so stdout stays free for primary output.
-    assert "Runtime artifact cache lock cleared." in result.stderr
+    assert "Resource cache lock cleared." in result.stderr
 
 
 @pytest.mark.launcher_tests

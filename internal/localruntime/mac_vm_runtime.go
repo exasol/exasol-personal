@@ -22,7 +22,7 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
@@ -38,7 +38,7 @@ const (
 	minimumRunnerMajor = 2
 
 	vmNanoDataDir          = "/var/lib/exa"
-	nanoArtifactDirName    = "runtime-artifacts"
+	nanoArtifactDirName    = "resources"
 	nanoArtifactFileName   = "nano.tar"
 	legacyNanoContainer    = "exasol-local-db"
 	forwardDatabaseService = "db"
@@ -86,20 +86,20 @@ type runnerState struct {
 type MacVMRuntime struct {
 	deployment     config.DeploymentDir
 	paths          vmRuntimePaths
-	manager        *runtimeartifacts.Manager
+	resolver       *resource.Resolver
 	endpoint       *RuntimeEndpoint
 	installFactory func(string) (localinstall.LocalInstall, error)
 }
 
-// NewMacVMRuntime creates a VM runtime. manager may be nil when no runner invocation is needed.
+// NewMacVMRuntime: a nil resolver is valid until an operation invokes the runner.
 func NewMacVMRuntime(
 	deployment config.DeploymentDir,
-	manager *runtimeartifacts.Manager,
+	resolver *resource.Resolver,
 ) *MacVMRuntime {
 	return &MacVMRuntime{
 		deployment: deployment,
 		paths:      newVMRuntimePaths(deployment),
-		manager:    manager,
+		resolver:   resolver,
 	}
 }
 
@@ -427,7 +427,7 @@ func (runtime *MacVMRuntime) install(
 		return nil, err
 	}
 	resolveImage := func(ctx context.Context) (localinstall.RuntimePath, error) {
-		sourcePath, err := localinstall.ResolveNanoImage(ctx, runtime.manager)
+		sourcePath, err := localinstall.ResolveNanoImage(ctx, runtime.resolver)
 		if err != nil {
 			return localinstall.RuntimePath{}, err
 		}
@@ -455,7 +455,7 @@ func (runtime *MacVMRuntime) install(
 }
 
 func materializeFileAtomically(sourcePath, targetPath string) error {
-	source, err := os.Open(sourcePath) //nolint:gosec // runtime-artifact path
+	source, err := os.Open(sourcePath) //nolint:gosec // resource path
 	if err != nil {
 		return fmt.Errorf("failed to open source artifact %s: %w", sourcePath, err)
 	}
@@ -478,7 +478,7 @@ func materializeFileAtomically(sourcePath, targetPath string) error {
 
 	directory := filepath.Dir(targetPath)
 	if err := os.MkdirAll(directory, dirMode); err != nil {
-		return fmt.Errorf("failed to create runtime artifact directory %s: %w", directory, err)
+		return fmt.Errorf("failed to create resource directory %s: %w", directory, err)
 	}
 	temporary, err := os.CreateTemp(directory, ".nano-*.tmp")
 	if err != nil {
@@ -574,11 +574,11 @@ func (runtime *MacVMRuntime) resolveRunnerPath(ctx context.Context) (string, err
 	if override := strings.TrimSpace(os.Getenv(runnerOverridePathEnv)); override != "" {
 		return override, nil
 	}
-	if runtime.manager == nil {
-		return "", errors.New("local runner artifact manager is required")
+	if runtime.resolver == nil {
+		return "", errors.New("local runner artifact resolver is required")
 	}
 
-	return runtime.manager.Request(ctx, exasolLocalRunnerResourceID)
+	return runtime.resolver.Resolve(ctx, exasolLocalRunnerResourceID)
 }
 
 func (runtime *MacVMRuntime) initializeVMIfNeeded(

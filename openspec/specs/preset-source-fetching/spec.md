@@ -19,15 +19,22 @@ A resolved git preset source or an archive preset source with a checksum SHALL b
 - **THEN** the system SHALL fetch the preset and store it in the cache before use
 
 ### Requirement: Local file:// preset sources are handled according to their content kind
-A `file://` URI pointing to a directory SHALL be used as-is without copying, extracting, or caching. A `file://` URI pointing to a supported archive file SHALL be extracted into the cache in the same way as a remote archive. A `file://` URI that is neither a directory nor a supported archive SHALL be rejected with an error.
+A `file://` URI pointing to a directory SHALL be used as-is without copying, extracting, or caching, and SHALL occupy no cache entry. A `file://` URI pointing to a supported archive file SHALL be extracted into the cache in the same way as a remote archive, and SHALL be extracted again when the archive changes. A `file://` URI that is neither a directory nor a supported archive SHALL be rejected with an error.
 
 #### Scenario: file:// directory is used directly without caching
 - **WHEN** the user specifies a `file://` URI pointing to a local directory
 - **THEN** the system SHALL use that directory as the preset without any caching or copying
+- **AND** the cache SHALL record no entry for it
 
 #### Scenario: file:// archive is extracted into the cache
 - **WHEN** the user specifies a `file://` URI pointing to a supported local archive file
 - **THEN** the system SHALL extract the archive into the local cache and use the extracted contents as the preset
+
+#### Scenario: Changed file:// archive is extracted again
+- **WHEN** the user specifies a `file://` URI pointing to a local archive that has
+  changed since it was last extracted
+- **THEN** the system SHALL extract the changed archive rather than reusing the
+  previous extraction
 
 ### Requirement: Git repository sources are resolved without an external git tool
 A preset source identified as a git repository SHALL be fetched using a built-in git implementation, with no dependency on an external git binary.
@@ -52,15 +59,30 @@ A cached git preset entry SHALL be identified by the commit hash resolved from t
 - **THEN** the system SHALL fetch and cache the new content
 
 ### Requirement: Remote archive preset sources without a checksum are always re-fetched
-A remote archive preset source that does not specify a checksum cannot be cached reliably. The system SHALL re-download such a source on every invocation and SHALL log a message indicating that the source is being re-fetched because no checksum is available.
+The system SHALL re-download a remote archive preset source it cannot identify
+on every invocation, and SHALL log a message indicating that the source is being
+re-fetched because it could not be identified. A remote archive source that
+specifies no checksum cannot be cached reliably unless its server offers a
+strong validator for it. In that case, the system SHALL identify the source by
+its location and validator and reuse the cached copy while it is unchanged.
 
-#### Scenario: No-checksum archive source is re-downloaded every time
+#### Scenario: Unidentifiable archive source is re-downloaded every time
 - **WHEN** the user specifies a remote archive preset source with no checksum
+- **AND** its server offers no strong validator for it
 - **THEN** the system SHALL download the archive on each invocation and SHALL log a message stating the reason
 
-#### Scenario: No-checksum re-fetch replaces any prior cache entry
-- **WHEN** a no-checksum archive source is re-downloaded
+#### Scenario: Re-fetch of an unidentifiable archive replaces any prior cache entry
+- **WHEN** an unidentifiable archive source is re-downloaded
 - **THEN** the system SHALL replace any existing cache entry for that URL with the newly downloaded content
+
+#### Scenario: Strong validator lets a checksumless archive be reused
+- **WHEN** the user specifies a remote archive preset source with no checksum
+- **AND** its server offers a strong validator matching a cached copy
+- **THEN** the system SHALL use the cached copy without re-downloading it
+
+#### Scenario: Equal validators identify locations separately
+- **WHEN** two remote archive preset locations offer the same strong validator
+- **THEN** the system SHALL resolve and cache each location independently
 
 ### Requirement: Archive sources support tar.gz and zip formats
 An archive preset source, whether a remote URL or a local `file://` path, SHALL be accepted in `.tar.gz`/`.tgz` or `.zip` format. Unrecognised formats SHALL be rejected with an error.
@@ -105,3 +127,51 @@ After fetching a preset from any external source, the system SHALL verify that t
 #### Scenario: Missing manifest file returns an error
 - **WHEN** the fetched content does not contain the expected manifest file for the preset type
 - **THEN** the system SHALL return an error naming the missing manifest and the source
+
+### Requirement: A subpath SHALL be selectable from any source that resolves to a directory
+The system SHALL apply a subpath selection uniformly to any preset source whose resolved content is a directory, whether that directory is a cloned git repository, an extracted archive, or a local directory.
+
+#### Scenario: Subpath selects within a cloned repository
+- **WHEN** a preset source identifies a git repository and selects a subpath
+- **THEN** the system resolves the preset to that subdirectory of the clone
+
+#### Scenario: Subpath selects within an extracted archive
+- **WHEN** a preset source identifies an archive and selects a subpath
+- **THEN** the system resolves the preset to that subdirectory of the extracted
+  content
+
+#### Scenario: Subpath selects within a local directory
+- **WHEN** a preset source identifies a local directory and selects a subpath
+- **THEN** the system resolves the preset to that subdirectory
+
+#### Scenario: Subpath outside the resolved content is rejected
+- **WHEN** a preset source selects a subpath that escapes its resolved content
+- **THEN** the system rejects the source with an error
+
+### Requirement: Sources SHALL retain revision and subpath syntax
+A resource specification SHALL declare a separately selectable revision as
+`ref` and the path within resolved content as `subpath`. A Git preset command
+line argument SHALL accept an `@ref` suffix. Every preset command line argument
+SHALL accept a `#subpath` suffix. Other sources SHALL retain an `@` as part of
+their native location.
+
+#### Scenario: Specification declares ref and subpath as fields
+- **WHEN** a resource specification declares a git source with a `ref` and a
+  `subpath`
+- **THEN** the system fetches that revision and resolves to that subdirectory
+
+#### Scenario: Command-line argument accepts the suffix form
+- **WHEN** a user supplies a Git preset source with an `@ref` suffix, a
+  `#subpath` suffix, or both
+- **THEN** the system resolves it identically to a specification declaring the
+  same revision and subpath
+
+#### Scenario: At sign remains part of an HTTP or file location
+- **WHEN** a user supplies an HTTP or file preset location containing `@`
+- **THEN** the system resolves the complete location without interpreting its
+  suffix as a separate revision
+
+#### Scenario: Container digest remains part of its image reference
+- **WHEN** a resource location identifies a container image by an `@digest`
+- **THEN** the container source receives the complete digest-qualified image
+  reference

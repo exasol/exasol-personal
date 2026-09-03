@@ -5,22 +5,86 @@ package presets
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/exasol/exasol-personal/assets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
 	infrastructurePresetsResource = "infrastructure-presets"
 	installationPresetsResource   = "installation-presets"
+	sharedAssetsResource          = "shared-assets"
+	resourceSpecFilename          = "resources.yaml"
 )
+
+func ResourceContext(
+	ctx context.Context, kind PresetKind, preset PresetRef,
+) (context.Context, string, error) {
+	dir, err := presetDirectory(ctx, kind, preset)
+	if err != nil {
+		return nil, "", err
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, resourceSpecFilename))
+	if errors.Is(err, os.ErrNotExist) {
+		return ctx, dir, nil
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf(
+			"read resource specification for preset %q: %w", presetLabel(preset), err,
+		)
+	}
+
+	spec, err := resource.ParseSpec(raw)
+	if err != nil {
+		return nil, "", fmt.Errorf(
+			"invalid resource specification for preset %q: %w", presetLabel(preset), err,
+		)
+	}
+	spec = normalizePresetResourceSpec(spec, dir, presetLabel(preset))
+
+	return resource.NewContext(ctx, resource.FromContext(ctx).Layer(spec)), dir, nil
+}
+
+func normalizePresetResourceSpec(
+	spec resource.ResourceSpec,
+	dir, preset string,
+) resource.ResourceSpec {
+	for resourceID, definition := range spec {
+		if definition.Embed != resource.EmbedNever {
+			slog.Warn("ignoring preset resource directive", "directive", "embed", "preset", preset)
+			definition.Embed = resource.EmbedNever
+		}
+		if definition.Glob != "" {
+			slog.Warn("ignoring preset resource directive", "directive", "glob", "preset", preset)
+			definition.Glob = ""
+		}
+		for platform, artifact := range definition.Artifact {
+			if (resource.FileSource{}).Handles(artifact.Locator()) {
+				artifact.URL = resolvePresetLocation(dir, artifact.URL)
+				definition.Artifact[platform] = artifact
+			}
+		}
+		spec[resourceID] = definition
+	}
+
+	return spec
+}
+
+func resolvePresetLocation(dir, location string) string {
+	path := strings.TrimPrefix(location, resource.FileURLScheme)
+	if filepath.IsAbs(path) {
+		return location
+	}
+
+	return resource.FileURLScheme + filepath.Join(dir, path)
+}
 
 var (
 	ErrUnknownInfrastructure = errors.New("the specified infrastructure preset does not exist")
@@ -41,33 +105,43 @@ var (
 
 // WriteDir materializes preset into outDir.
 func WriteDir(ctx context.Context, kind PresetKind, preset PresetRef, outDir string) error {
-	manager := runtimeartifacts.FromContext(ctx)
 	if preset.IsPath() {
-		def := runtimeartifacts.ResourceDefinition{
-			Artifact: map[string]runtimeartifacts.ArtifactSpec{"any": {URL: preset.Path}},
-		}
-
-		return manager.GetCopy(ctx, def, kind.resourceGroup, outDir)
+		return resource.Copy(preset.Path, outDir)
 	}
 
-	if err := manager.RequestMemberCopy(ctx, kind.resourceGroup, preset.Name, outDir); err != nil {
-		if errors.Is(err, runtimeartifacts.ErrUnknownMember) {
+	resolver := resource.FromContext(ctx)
+	resourceID := kind.resourceGroup + "/" + preset.Name
+	path, err := resolver.Resolve(ctx, resourceID)
+	if err != nil {
+		if errors.Is(err, resource.ErrUnknownMember) {
 			return fmt.Errorf("%w: %s", kind.unknownErr, preset.Name)
 		}
 
 		return err
 	}
 
-	return nil
+	return resource.Copy(path, outDir)
 }
 
-func WriteSharedDir(outDir string) error {
-	return writeEmbeddedDir(assets.SharedAssets, assets.SharedAssetDir, outDir)
+func WriteSharedDir(ctx context.Context, outDir string) error {
+	path, err := resource.FromContext(ctx).Resolve(ctx, sharedAssetsResource)
+	if err != nil {
+		return err
+	}
+
+	return resource.Copy(path, outDir)
 }
 
 // ListEmbeddedPresets lists every built-in preset name of kind.
 func ListEmbeddedPresets(ctx context.Context, kind PresetKind) []string {
-	return runtimeartifacts.FromContext(ctx).GroupMembers(kind.resourceGroup)
+	prefix := kind.resourceGroup + "/"
+	resourceIDs := resource.FromContext(ctx).List(prefix)
+	presets := make([]string, 0, len(resourceIDs))
+	for _, resourceID := range resourceIDs {
+		presets = append(presets, strings.TrimPrefix(resourceID, prefix))
+	}
+
+	return presets
 }
 
 // ReadInfrastructureFile reads a file from the named embedded infrastructure
@@ -98,9 +172,9 @@ func ReadInfrastructureFile(
 }
 
 func presetDir(ctx context.Context, kind PresetKind, name string) (string, error) {
-	dir, err := runtimeartifacts.FromContext(ctx).RequestMember(ctx, kind.resourceGroup, name)
+	dir, err := resource.FromContext(ctx).Resolve(ctx, kind.resourceGroup+"/"+name)
 	if err != nil {
-		if errors.Is(err, runtimeartifacts.ErrUnknownMember) {
+		if errors.Is(err, resource.ErrUnknownMember) {
 			return "", fmt.Errorf("%w: %s", kind.unknownErr, name)
 		}
 
@@ -110,57 +184,18 @@ func presetDir(ctx context.Context, kind PresetKind, name string) (string, error
 	return dir, nil
 }
 
-// Write an embedded directory to the filesystem.
-func writeEmbeddedDir(filesys embed.FS, embeddedDirPath string, outputDir string) error {
-	slog.Debug("writing directory", "path", embeddedDirPath)
-
-	entries, err := filesys.ReadDir(embeddedDirPath)
-	if err != nil {
-		return err
+func presetDirectory(ctx context.Context, kind PresetKind, preset PresetRef) (string, error) {
+	if preset.IsPath() {
+		return preset.Path, nil
 	}
 
-	const perm = 0o700
+	return presetDir(ctx, kind, preset.Name)
+}
 
-	for _, entry := range entries {
-		// Use path.Join for embedded asset paths ('/'), not OS paths.
-		if entry.IsDir() {
-			embeddedSubDir := embeddedDirPath + "/" + entry.Name()
-			physicalSubDir := filepath.Join(outputDir, entry.Name())
-			if err := writeEmbeddedDir(
-				filesys,
-				embeddedSubDir,
-				physicalSubDir,
-			); err != nil {
-				return err
-			}
-
-			continue
-		}
-
-		/* Use path.Join (not filepath.Join) here because embedded asset
-		paths always use '/' as a separator, regardless of OS. filepath.Join
-		inserts OS separators (e.g., '\' on Windows), which caused issues
-		accessing embedded binaries. path.Join ensures consistent asset paths. */
-		embeddedFilePath := embeddedDirPath + "/" + entry.Name()
-		outputFilePath := filepath.Join(outputDir, entry.Name())
-
-		data, err := filesys.ReadFile(embeddedFilePath)
-		if err != nil {
-			return fmt.Errorf("%w: reading file: %s", err, embeddedFilePath)
-		}
-
-		err = os.MkdirAll(filepath.FromSlash(outputDir), perm) // nolint:gosec
-		if err != nil {
-			return fmt.Errorf("%w: creating directory: %s", err, outputDir)
-		}
-
-		slog.Debug("writing file", "path", outputFilePath)
-
-		err = os.WriteFile(filepath.FromSlash(outputFilePath), data, perm) // nolint:gosec
-		if err != nil {
-			return fmt.Errorf("%w: writing file: %s", err, outputFilePath)
-		}
+func presetLabel(preset PresetRef) string {
+	if preset.IsPath() {
+		return preset.Path
 	}
 
-	return nil
+	return preset.Name
 }

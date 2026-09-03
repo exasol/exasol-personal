@@ -4,90 +4,73 @@
 TBD - created by archiving change embed-presets-via-resource-cache. Update Purpose after archive.
 ## Requirements
 ### Requirement: A resource definition can declare itself a glob template
-The resource specification format SHALL support a resource-level `glob: true` field. For a
-glob template, each declared artifact's `resource_path` SHALL be interpreted as a glob pattern
-to match against the artifact's own resolved content, rather than a single literal subpath. A
-glob template otherwise resolves through the same fetch, extract, and embed pipeline as any
-other resource, as one resource identified by its own resource ID.
+The resource specification format SHALL support a resource-level `glob` field holding a glob pattern. At build time, a resource declaring a pattern SHALL expand into one independently addressable resource per matched entry, named `<group>/<member>`, and the group itself SHALL NOT appear in the generated specification.
+
+#### Scenario: Glob pattern expands into one resource per match
+- **WHEN** a resource definition declares a glob pattern
+- **AND** the pattern matches several entries within the resource's resolved
+  content
+- **THEN** the generated specification contains one resource per matched entry,
+  named for the group and the entry
 
 #### Scenario: Glob template requires a pattern
-- **WHEN** a resource definition sets `glob: true`
-- **AND** one of its declared artifacts has an empty `resource_path`
+- **WHEN** a resource definition declares an empty `glob` pattern
 - **THEN** the specification is rejected as invalid
 
 #### Scenario: Non-glob resource is unaffected
-- **WHEN** a resource definition omits `glob: true`
-- **THEN** its `resource_path`, if any, continues to select a single literal subpath, exactly
-  as before this capability existed
-
-### Requirement: A glob template's member is resolved by matching within its resolved root
-Resolving a named member of a glob template SHALL resolve the template's own artifact through
-the ordinary fetch/extract/embed pipeline, then match the template's `resource_path` pattern
-against the result's own entries (files or directories alike), uniformly whether the resolved
-root is a local directory, a git checkout, or an extracted archive. A member is never
-independently fetched, cached, or embedded — it is only addressed as a subpath of the group.
-
-#### Scenario: Member matches within a local directory
-- **WHEN** a glob template's artifact URL resolves to a local directory
-- **THEN** resolving a member matches the pattern against that directory's own contents,
-  without extraction
-
-#### Scenario: Member matches within a cloned git repository
-- **WHEN** a glob template's artifact URL identifies a git repository
-- **THEN** resolving a member clones the repository and matches the pattern against the
-  clone's contents
-
-#### Scenario: Member matches within an extracted archive
-- **WHEN** a glob template's artifact declares `extract: true` and its URL identifies an
-  archive
-- **THEN** resolving a member extracts the archive and matches the pattern against the
-  extracted contents
-
-#### Scenario: A git glob template rejects extraction
-- **WHEN** a glob template's artifact URL identifies a git repository
-- **AND** the template declares `extract: true`
-- **THEN** the specification is rejected as invalid, since a git checkout is already a
-  directory with nothing to extract
+- **WHEN** a resource definition omits `glob`
+- **THEN** its `subpath`, if any, continues to select a single literal subpath
 
 #### Scenario: File and directory matches are both valid members
-- **WHEN** a glob template's pattern matches an entry inside its resolved root
-- **THEN** that entry is a valid member regardless of whether it is a file or a directory
+- **WHEN** a glob pattern matches an entry inside its resolved content
+- **THEN** that entry becomes a member resource regardless of whether it is a
+  file or a directory
 
-#### Scenario: Requesting an unmatched name fails
-- **WHEN** a caller requests a member name that does not match the template's pattern within
-  its resolved root
+#### Scenario: Nested matches use their entry names
+- **WHEN** a glob pattern matches an entry below a nested directory
+- **THEN** the generated member uses the matched entry's base name as its
+  member name
+- **AND** its selected subpath preserves the full match path within the source
+
+#### Scenario: Repeated entry names report an ambiguity
+- **WHEN** a glob pattern matches entries in different directories with the
+  same base name
+- **THEN** generation reports that the matches share a member name
+
+#### Scenario: Download path selects the generator's extractor
+- **WHEN** a glob template declares a `download_path`
+- **THEN** the generator uses that path to select the extractor before matching
+  the glob pattern
+
+#### Scenario: Repository metadata is not a member
+- **WHEN** a glob pattern is matched against a cloned git repository's own root
+- **THEN** the repository's metadata directory does not become a member
+
+### Requirement: A group's members SHALL be listed from the resource specification
+Listing the members of a group SHALL report every resource in the specification named under that group, without materializing, extracting, or matching anything at runtime.
+
+#### Scenario: Listing members materializes nothing
+- **WHEN** a caller lists the members of a group
+- **THEN** the launcher reports the member names without materializing any of
+  them
+
+#### Scenario: Listing an unknown group reports no members
+- **WHEN** a caller lists the members of a group that the specification does not
+  declare
+- **THEN** the launcher reports no members
+
+### Requirement: A group member SHALL resolve independently of its siblings
+Each member of an expanded group SHALL be a resource in its own right, with its own identity and its own cached artifact. Resolving one member SHALL NOT materialize any other member.
+
+#### Scenario: Resolving one member leaves siblings unmaterialized
+- **WHEN** a caller resolves one member of a group
+- **THEN** no other member of that group is materialized
+
+#### Scenario: Requesting an unknown member fails
+- **WHEN** a caller requests a member name that the specification does not
+  declare under that group
 - **THEN** resolution fails with an error naming the member and the group
 
-### Requirement: A glob template embedded for real always embeds its matched entries as one archive
-For an `embed: true` or `embed: always` glob template, the build-time generator SHALL embed an
-archive containing only the entries its own `resource_path` matched within the resolved root —
-never the root's full, unfiltered content — and SHALL register the matched member names
-alongside the embedded data. A running binary resolving that template from embedded data SHALL
-extract the embedded archive regardless of the template's own declared `extract` value, since
-the embedded form is always an archive even when the live source needs no extraction to read.
-
-#### Scenario: Embedded archive excludes unmatched entries
-- **WHEN** the build-time generator embeds a glob template whose resolved root contains
-  entries that do not match its `resource_path`
-- **THEN** the embedded archive contains only the matched entries
-
-#### Scenario: Embedded glob template is extracted regardless of its declared extract value
-- **WHEN** a glob template declares `extract: false` because its live source is a bare
-  directory
-- **AND** the template is resolved from embedded data
-- **THEN** the running binary extracts the embedded archive before matching a member within it
-
-### Requirement: Build-time-registered member names answer group membership without extraction
-For a glob template embedded for real, the build-time generator SHALL register the matched
-member names it found, so a running binary can list a group's members without extracting the
-embedded archive.
-
-#### Scenario: Listing members does not require extraction
-- **WHEN** a running binary lists the members of an embedded glob template's group
-- **THEN** it returns the build-time-registered member names without extracting the embedded
-  archive
-
-#### Scenario: A group with no registered members reports none
-- **WHEN** a running binary lists the members of a group that was never embedded as a glob
-  template
-- **THEN** it reports no members
+#### Scenario: Members are cleaned independently
+- **WHEN** cache cleanup selects one member of a group
+- **THEN** the other members of that group remain cached

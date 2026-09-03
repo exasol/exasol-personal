@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
@@ -51,14 +51,14 @@ type PodmanInstall struct {
 
 func NewPodmanInstall(
 	deployment config.DeploymentDir,
-	manager *runtimeartifacts.Manager,
+	resolver *resource.Resolver,
 	runtimeExec []string,
 	slcStagingDir string,
 	slcStatusPath string,
 ) *PodmanInstall {
 	directEnvironment := NewDirectExecutionEnvironment(runtimeExec)
 	resolveImage := func(ctx context.Context) (RuntimePath, error) {
-		path, err := ResolveNanoImage(ctx, manager)
+		path, err := ResolveNanoImage(ctx, resolver)
 		if err != nil {
 			return RuntimePath{}, err
 		}
@@ -80,16 +80,16 @@ func NewPodmanInstall(
 // passing it back to PodmanInstall.
 func ResolveNanoImage(
 	ctx context.Context,
-	manager *runtimeartifacts.Manager,
+	resolver *resource.Resolver,
 ) (string, error) {
 	if override := strings.TrimSpace(os.Getenv(nanoImageOverridePathEnv)); override != "" {
 		return override, nil
 	}
-	if manager == nil {
-		return "", errors.New("nano runtime artifact manager is required")
+	if resolver == nil {
+		return "", errors.New("nano resource resolver is required")
 	}
 
-	return manager.Request(ctx, exasolNanoImageResourceID)
+	return resolver.Resolve(ctx, exasolNanoImageResourceID)
 }
 
 func NewPodmanInstallWithEnvironment(
@@ -543,14 +543,14 @@ func (install *PodmanInstall) containerExists(
 
 func (install *PodmanInstall) resolveImagePath(ctx context.Context) (RuntimePath, error) {
 	if install.resolveImage == nil {
-		return RuntimePath{}, errors.New("nano runtime artifact resolver is required")
+		return RuntimePath{}, errors.New("nano resource resolver is required")
 	}
 	path, err := install.resolveImage(ctx)
 	if err != nil {
 		return RuntimePath{}, err
 	}
 	if strings.TrimSpace(path.RuntimePath) == "" {
-		return RuntimePath{}, errors.New("nano runtime artifact path is required")
+		return RuntimePath{}, errors.New("nano resource path is required")
 	}
 
 	return path, nil

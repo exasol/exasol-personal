@@ -9,7 +9,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/connect"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 type Output struct {
@@ -57,9 +57,9 @@ func Connect(ctx context.Context, opts *connect.Opts, deployment config.Deployme
 			}
 
 			if err := connect.Connect(ctx, opts, deployment, connectionInfo); err != nil {
-				manager := runtimeartifacts.FromContext(ctx)
+				resolver := resource.FromContext(ctx)
 
-				selectedRuntime, runtimeErr := newLocalRuntime(deployment, manager)
+				selectedRuntime, runtimeErr := newLocalRuntime(deployment, resolver)
 				if runtimeErr != nil {
 					return err
 				}

@@ -8,51 +8,38 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
+
+var externalPresetSchemes = []string{"file", "http", "https", "git"}
 
 // IsExternalPresetURI reports whether arg looks like an external preset URI
 // that should be resolved via ResolvePreset rather than treated as an embedded
 // preset name or local filesystem path.
 func IsExternalPresetURI(arg string) bool {
-	return strings.HasPrefix(arg, "file://") ||
-		strings.HasPrefix(arg, "http://") ||
-		strings.HasPrefix(arg, "https://") ||
-		strings.HasPrefix(arg, "git://") ||
-		strings.HasPrefix(arg, "git@")
+	if strings.HasPrefix(arg, "git@") {
+		return true
+	}
+
+	return slices.Contains(externalPresetSchemes, resource.ParseURI(arg).Locator.Scheme())
 }
 
 // ResolvePreset resolves an external preset URI to a local directory path and
 // verifies the expected manifest file is present for the given preset type.
 func ResolvePreset(
 	ctx context.Context,
-	manager *runtimeartifacts.Manager,
+	resolver *resource.Resolver,
 	uri string,
 	presetType string,
 ) (string, error) {
-	cleanURI, subpath := parsePresetURI(uri)
+	descriptor := resource.ParseURI(uri)
 
-	repoURL, ref := runtimeartifacts.ParseGitURL(cleanURI)
-	if ref != "" && !runtimeartifacts.IsGitSourceURL(repoURL) {
-		return "", fmt.Errorf(
-			"@ref syntax (%q) is only valid on git source URLs;"+
-				" %q does not appear to be a git repository",
-			ref,
-			repoURL,
-		)
-	}
-
-	def := runtimeartifacts.ResourceDefinition{
-		Extract: needsExtraction(cleanURI),
-		Artifact: map[string]runtimeartifacts.ArtifactSpec{
-			"any": {URL: cleanURI, ResourcePath: subpath},
-		},
-	}
-
-	resolvedPath, err := manager.Get(ctx, def, presetType)
+	descriptor.Extract = needsExtraction(descriptor.Locator.URL)
+	resolvedPath, err := resolver.ResolveDescriptor(ctx, descriptor)
 	if err != nil {
 		return "", fmt.Errorf("resolving preset %q: %w", uri, err)
 	}

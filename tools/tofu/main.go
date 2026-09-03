@@ -10,18 +10,18 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/exasol/exasol-personal/assets/resources"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/assets/resourcedata"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 func main() {
 	flag.Parse()
 
-	manager, err := runtimeartifacts.NewResourceManagerWithSpec(resources.ResourcesYAML)
+	resolver, err := resource.New(resource.Options{Spec: resourcedata.ResourcesYAML})
 	if err != nil {
 		log.Fatal(err)
 	}
-	binaryPath, err := manager.Request(context.Background(), "tofu")
+	binaryPath, err := resolver.Resolve(context.Background(), "tofu")
 	if err != nil {
 		log.Fatal(err)
 	}

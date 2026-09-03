@@ -16,7 +16,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/exasol/exasol-personal/internal/slc"
 )
 
@@ -47,7 +47,7 @@ func startPreparedLocalRuntime(
 		return err
 	}
 
-	return writeLocalRuntimeArtifactsAndWait(
+	return writeLocalResourcesAndWait(
 		ctx, runtime, endpoint, waitTimeoutSeconds, out, outErr,
 	)
 }
@@ -92,9 +92,9 @@ func reconcileLocalVMState(
 		return nil
 	}
 
-	manager := runtimeartifacts.FromContext(ctx)
+	resolver := resource.FromContext(ctx)
 
-	selectedRuntime, err := newLocalRuntime(deployment, manager)
+	selectedRuntime, err := newLocalRuntime(deployment, resolver)
 	if err != nil {
 		slog.Warn("could not select local runtime during reconciliation", "error", err)
 		return nil
@@ -241,7 +241,7 @@ func isJavaSLC(installed config.InstalledSLC) bool {
 	return false
 }
 
-func writeLocalRuntimeArtifactsAndWait(
+func writeLocalResourcesAndWait(
 	ctx context.Context,
 	runtime localruntime.Runtime,
 	endpoint *localruntime.VMRuntimeEndpoint,

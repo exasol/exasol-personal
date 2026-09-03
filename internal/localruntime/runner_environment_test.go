@@ -20,14 +20,14 @@ func TestVMPathMapperMapsOnlySharedPaths(t *testing.T) {
 
 	hostRoot := filepath.Join(t.TempDir(), "vm share")
 	mapper := newVMPathMapper(hostRoot)
-	mapped, err := mapper.Map(filepath.Join(hostRoot, "runtime-artifacts", "nano image.tar"))
+	mapped, err := mapper.Map(filepath.Join(hostRoot, "resources", "nano image.tar"))
 	if err != nil {
 		t.Fatalf("expected shared path to map: %v", err)
 	}
-	if mapped.HostPath != filepath.Join(hostRoot, "runtime-artifacts", "nano image.tar") {
+	if mapped.HostPath != filepath.Join(hostRoot, "resources", "nano image.tar") {
 		t.Fatalf("unexpected host path: %#v", mapped)
 	}
-	if mapped.RuntimePath != "/mnt/host/runtime-artifacts/nano image.tar" {
+	if mapped.RuntimePath != "/mnt/host/resources/nano image.tar" {
 		t.Fatalf("unexpected runtime path: %#v", mapped)
 	}
 
@@ -37,8 +37,8 @@ func TestVMPathMapperMapsOnlySharedPaths(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // the test forks an executable fixture it just wrote.
 func TestRunnerExecutionEnvironmentPreservesCommandIOAndExitStatus(t *testing.T) {
+	t.Parallel()
 	requireRunnerEnvironmentPOSIX(t)
 
 	environment := newTestRunnerExecutionEnvironment(t)
@@ -60,8 +60,8 @@ func TestRunnerExecutionEnvironmentPreservesCommandIOAndExitStatus(t *testing.T)
 	}
 }
 
-//nolint:paralleltest // the test forks an executable fixture it just wrote.
 func TestRunnerExecutionEnvironmentSyncsInsideRuntime(t *testing.T) {
+	t.Parallel()
 	requireRunnerEnvironmentPOSIX(t)
 
 	environment := newTestRunnerExecutionEnvironment(t)
@@ -70,8 +70,8 @@ func TestRunnerExecutionEnvironmentSyncsInsideRuntime(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // the test forks an executable fixture it just wrote.
 func TestRunnerExecutionEnvironmentFilesystemOperations(t *testing.T) {
+	t.Parallel()
 	requireRunnerEnvironmentPOSIX(t)
 
 	ctx := context.Background()
@@ -130,8 +130,23 @@ func TestRunnerExecutionEnvironmentFilesystemOperations(t *testing.T) {
 	if err := environment.RemoveAll(ctx, root); err != nil {
 		t.Fatalf("remove all failed: %v", err)
 	}
-	if exists, err := environment.PathExists(ctx, root); err != nil || exists {
-		t.Fatalf("expected root to be absent, exists=%t err=%v", exists, err)
+	assertRunnerPathAbsent(ctx, t, environment, root)
+}
+
+func assertRunnerPathAbsent(
+	ctx context.Context,
+	t *testing.T,
+	environment *runnerExecutionEnvironment,
+	path string,
+) {
+	t.Helper()
+
+	exists, err := environment.PathExists(ctx, path)
+	if err != nil {
+		t.Fatalf("path existence check failed: %v", err)
+	}
+	if exists {
+		t.Fatalf("expected %q to be absent", path)
 	}
 }
 

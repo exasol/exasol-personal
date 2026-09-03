@@ -13,7 +13,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 // UserConfirmationValidator is a function that takes an user input as a String,
@@ -69,21 +69,29 @@ func looksLikePathPresetArg(arg string) bool {
 		strings.ContainsAny(arg, `/\\`)
 }
 
-// resolvePresetRef resolves a preset argument to a PresetRef.
-// Plain names (no path separators or URI scheme) are returned as embedded preset
-// names. Everything else is resolved as a runtime artifact.
 func resolvePresetRef(
 	ctx context.Context,
 	arg string,
 	presetType string,
 ) (deploy.PresetRef, error) {
 	arg = strings.TrimSpace(arg)
-	if !deploy.IsExternalPresetURI(arg) && !looksLikePathPresetArg(arg) {
+	kind := presets.Infrastructure
+	if presetType == presets.PresetTypeInstallation {
+		kind = presets.Installation
+	}
+	available := presets.ListEmbeddedPresets(ctx, kind)
+	if slices.Contains(available, arg) {
 		return deploy.PresetRef{Name: arg}, nil
 	}
+	if !deploy.IsExternalPresetURI(arg) && !looksLikePathPresetArg(arg) {
+		return deploy.PresetRef{}, fmt.Errorf(
+			"unknown %s preset %q; available presets: %s",
+			presetType, arg, strings.Join(available, ", "),
+		)
+	}
 
-	manager := runtimeartifacts.FromContext(ctx)
-	resolvedPath, err := deploy.ResolvePreset(ctx, manager, arg, presetType)
+	resolver := resource.FromContext(ctx)
+	resolvedPath, err := deploy.ResolvePreset(ctx, resolver, arg, presetType)
 	if err != nil {
 		return deploy.PresetRef{}, err
 	}

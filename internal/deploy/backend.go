@@ -13,7 +13,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 )
 
 const (
@@ -120,13 +120,13 @@ func newDeploymentBackend(
 		return nil, err
 	}
 
-	manager := runtimeartifacts.FromContext(ctx)
+	resolver := resource.FromContext(ctx)
 
 	switch kind {
 	case backendTypeTofu:
-		return newTofuBackend(deployment, manifest, manager), nil
+		return newTofuBackend(deployment, manifest, resolver), nil
 	case backendTypeLocal:
-		localRuntime, err := newLocalRuntime(deployment, manager)
+		localRuntime, err := newLocalRuntime(deployment, resolver)
 		if err != nil {
 			return nil, err
 		}
@@ -168,23 +168,23 @@ func readInfrastructurePresetConfigVariables(
 
 func newLocalRuntime(
 	deployment config.DeploymentDir,
-	manager *runtimeartifacts.Manager,
+	resolver *resource.Resolver,
 ) (localruntime.Runtime, error) {
-	return newLocalRuntimeForPlatform(deployment, manager, runtime.GOOS, runtime.GOARCH)
+	return newLocalRuntimeForPlatform(deployment, resolver, runtime.GOOS, runtime.GOARCH)
 }
 
 func newLocalRuntimeForPlatform(
 	deployment config.DeploymentDir,
-	manager *runtimeartifacts.Manager,
+	resolver *resource.Resolver,
 	goos, goarch string,
 ) (localruntime.Runtime, error) {
 	switch {
 	case goos == localMacOS && goarch == localMacArch:
-		return localruntime.NewMacVMRuntime(deployment, manager), nil
+		return localruntime.NewMacVMRuntime(deployment, resolver), nil
 	case goos == localLinuxOS && (goarch == localLinuxAMD64 || goarch == localLinuxARM64):
-		return localruntime.NewHostLinuxRuntime(deployment, manager), nil
+		return localruntime.NewHostLinuxRuntime(deployment, resolver), nil
 	case goos == localWindowsOS && goarch == localWindowsAMD64:
-		return localruntime.NewHostWindowsRuntime(deployment, manager), nil
+		return localruntime.NewHostWindowsRuntime(deployment, resolver), nil
 	default:
 		return nil, fmt.Errorf(
 			"%w (current platform: %s/%s)", errUnsupportedLocalPlatform, goos, goarch,

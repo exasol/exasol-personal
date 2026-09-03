@@ -6,15 +6,16 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
 
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
 	"github.com/spf13/cobra"
 )
 
 var diagCacheCmd = &cobra.Command{
 	Use:   "cache",
-	Short: "Inspect the runtime artifact cache",
-	Long: `Inspect the runtime artifact cache.
+	Short: "Inspect the resource cache",
+	Long: `Inspect the resource cache.
 
 This command reports cache state without removing artifacts, rewriting metadata,
 or clearing cache locks.
@@ -22,7 +23,7 @@ or clearing cache locks.
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		artifactCache, err := runtimeartifacts.NewDefaultCache()
+		artifactCache, err := resource.NewDefaultCache()
 		if err != nil {
 			return err
 		}
@@ -35,7 +36,7 @@ or clearing cache locks.
 
 func renderCacheDiagnosticsText(
 	writer io.Writer,
-	report runtimeartifacts.DiagnosticReport,
+	report resource.DiagnosticReport,
 ) error {
 	lineCapacity := 10 + len(report.Entries) +
 		len(report.MissingFiles) + len(report.UnexpectedPaths)
@@ -56,12 +57,11 @@ func renderCacheDiagnosticsText(
 		lines = append(
 			lines,
 			fmt.Sprintf(
-				"%s %s integrity=%s stale=%t path=%s",
-				entry.ResourceID,
-				entry.Platform,
+				"%s integrity=%s stale=%t path=%s",
+				strings.Join(entry.ResourceIDs, ","),
 				entry.IntegrityStatus,
 				entry.Stale,
-				formatCachePath(report.CacheRoot, entry.ResolvedPath),
+				formatCachePath(report.CacheRoot, entry.Path),
 			),
 		)
 	}
@@ -75,7 +75,7 @@ func renderCacheDiagnosticsText(
 	return writeLines(writer, lines)
 }
 
-func cacheConfigStatusLine(report runtimeartifacts.DiagnosticReport) string {
+func cacheConfigStatusLine(report resource.DiagnosticReport) string {
 	if report.ConfigError != "" {
 		return "Config status: error: " + report.ConfigError
 	}
@@ -86,7 +86,7 @@ func cacheConfigStatusLine(report runtimeartifacts.DiagnosticReport) string {
 	return fmt.Sprintf("Config status: default (retention_days=%d)", report.RetentionDays)
 }
 
-func cacheIndexStatusLine(report runtimeartifacts.DiagnosticReport) string {
+func cacheIndexStatusLine(report resource.DiagnosticReport) string {
 	if report.IndexError != "" {
 		return "Index status: error: " + report.IndexError
 	}
@@ -97,7 +97,7 @@ func cacheIndexStatusLine(report runtimeartifacts.DiagnosticReport) string {
 	return "Index status: missing"
 }
 
-func cacheLockStatusLine(lock runtimeartifacts.CacheLockStatus) string {
+func cacheLockStatusLine(lock resource.CacheLockStatus) string {
 	if lock.Error != "" {
 		return "Lock status: error: " + lock.Error
 	}

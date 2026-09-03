@@ -12,23 +12,89 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/presets"
-	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/resource"
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-func TestResolvePreset_NonGitURLWithRefReturnsError(t *testing.T) {
+func TestResolvePreset_LocalGitWorktreeWithRef(t *testing.T) {
 	t.Parallel()
 
-	_, err := ResolvePreset(
-		context.Background(),
-		nil,
-		"https://example.com/preset.tar.gz@something",
-		presets.PresetTypeInfrastructure,
-	)
-	if err == nil || !strings.Contains(err.Error(), "@ref syntax") {
-		t.Fatalf("expected @ref error for non-git URL, got %v", err)
+	// Given
+	repoDir := t.TempDir()
+	repo, err := git.PlainInit(repoDir, false)
+	if err != nil {
+		t.Fatalf("initialize repository: %v", err)
 	}
+	worktree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("open worktree: %v", err)
+	}
+	manifestPath := filepath.Join(repoDir, presets.InfrastructureManifestFilename)
+	commit := func(content string) {
+		t.Helper()
+		if err := os.WriteFile(manifestPath, []byte(content), 0o600); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+		if _, err := worktree.Add(presets.InfrastructureManifestFilename); err != nil {
+			t.Fatalf("stage manifest: %v", err)
+		}
+		_, err := worktree.Commit("preset", &git.CommitOptions{Author: &object.Signature{
+			Name: "Test", Email: "test@example.com", When: time.Unix(1, 0),
+		}})
+		if err != nil {
+			t.Fatalf("commit manifest: %v", err)
+		}
+	}
+	commit("name: main\n")
+	if err := worktree.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName("feature"), Create: true,
+	}); err != nil {
+		t.Fatalf("create feature branch: %v", err)
+	}
+	commit("name: feature\n")
+	if err := worktree.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName("master"),
+	}); err != nil {
+		t.Fatalf("restore default branch: %v", err)
+	}
+	resolver := newPresetResolver(t)
+
+	// When
+	path, err := ResolvePreset(
+		context.Background(), resolver, repoDir+"@feature", presets.PresetTypeInfrastructure,
+	)
+	if err != nil {
+		t.Fatalf("resolve preset: %v", err)
+	}
+
+	// Then
+	manifest, err := os.ReadFile(filepath.Join(path, presets.InfrastructureManifestFilename))
+	if err != nil {
+		t.Fatalf("read resolved manifest: %v", err)
+	}
+	if string(manifest) != "name: feature\n" {
+		t.Fatalf("manifest = %q, want feature branch", manifest)
+	}
+}
+
+func newPresetResolver(t *testing.T) *resource.Resolver {
+	t.Helper()
+
+	resolver, err := resource.New(resource.Options{
+		Definitions: resource.ResourceSpec{},
+		CacheRoot:   t.TempDir(),
+		Platform:    resource.Platform{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH},
+	})
+	if err != nil {
+		t.Fatalf("create resolver: %v", err)
+	}
+
+	return resolver
 }
 
 func TestResolvePreset_FileDirectory(t *testing.T) {
@@ -40,15 +106,10 @@ func TestResolvePreset_FileDirectory(t *testing.T) {
 		t.Fatalf("failed to write manifest: %v", err)
 	}
 
-	manager := runtimeartifacts.NewResourceManagerForPlatform(
-		runtimeartifacts.ResourceSpec{},
-		t.TempDir(),
-		runtime.GOOS,
-		runtime.GOARCH,
-	)
+	resolver := newPresetResolver(t)
 	path, err := ResolvePreset(
 		context.Background(),
-		manager,
+		resolver,
 		"file://"+presetDir,
 		presets.PresetTypeInfrastructure,
 	)
@@ -65,15 +126,10 @@ func TestResolvePreset_FileDirectoryMissingManifestReturnsError(t *testing.T) {
 
 	presetDir := t.TempDir()
 
-	manager := runtimeartifacts.NewResourceManagerForPlatform(
-		runtimeartifacts.ResourceSpec{},
-		t.TempDir(),
-		runtime.GOOS,
-		runtime.GOARCH,
-	)
+	resolver := newPresetResolver(t)
 	_, err := ResolvePreset(
 		context.Background(),
-		manager,
+		resolver,
 		"file://"+presetDir,
 		presets.PresetTypeInfrastructure,
 	)
@@ -96,16 +152,11 @@ func TestResolvePreset_FileDirectoryWithFragmentResolvesSubdirectory(t *testing.
 		t.Fatalf("failed to write manifest: %v", err)
 	}
 
-	manager := runtimeartifacts.NewResourceManagerForPlatform(
-		runtimeartifacts.ResourceSpec{},
-		t.TempDir(),
-		runtime.GOOS,
-		runtime.GOARCH,
-	)
+	resolver := newPresetResolver(t)
 	// When
 	path, err := ResolvePreset(
 		context.Background(),
-		manager,
+		resolver,
 		"file://"+presetRoot+"#infra/aws",
 		presets.PresetTypeInfrastructure,
 	)
@@ -129,17 +180,12 @@ func TestResolvePreset_FileArchiveWithFragmentResolvesSubdirectory(t *testing.T)
 		"installation/ubuntu/" + presets.InstallationManifestFilename: "name: ubuntu",
 	})
 
-	manager := runtimeartifacts.NewResourceManagerForPlatform(
-		runtimeartifacts.ResourceSpec{},
-		t.TempDir(),
-		runtime.GOOS,
-		runtime.GOARCH,
-	)
+	resolver := newPresetResolver(t)
 
 	// When — resolve the "aws" preset via a fragment
 	path, err := ResolvePreset(
 		context.Background(),
-		manager,
+		resolver,
 		"file://"+archivePath+"#infra/aws",
 		presets.PresetTypeInfrastructure,
 	)
@@ -164,17 +210,12 @@ func TestResolvePreset_FileArchiveFragmentPointingAtNonPresetSubdirReturnsError(
 		"infra/aws/README.md": "no manifest here",
 	})
 
-	manager := runtimeartifacts.NewResourceManagerForPlatform(
-		runtimeartifacts.ResourceSpec{},
-		t.TempDir(),
-		runtime.GOOS,
-		runtime.GOARCH,
-	)
+	resolver := newPresetResolver(t)
 
 	// When
 	_, err := ResolvePreset(
 		context.Background(),
-		manager,
+		resolver,
 		"file://"+archivePath+"#infra/aws",
 		presets.PresetTypeInfrastructure,
 	)

@@ -1,12 +1,6 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-// Package launcherpaths resolves the launcher's own directory location. It
-// has no dependency on internal/config or internal/presets, so any package
-// that needs this alone (internal/runtimeartifacts, for one) can depend on
-// it directly without pulling in either — and, in particular, without
-// risking an import cycle should internal/presets ever depend on
-// internal/runtimeartifacts.
 package launcherpaths
 
 import (
