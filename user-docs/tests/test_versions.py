@@ -10,38 +10,79 @@ from scripts import versions
 
 
 @pytest.mark.parametrize(
-    ("target", "expected"),
+    "target",
     [
-        ("v1.2.3", "1.2.3"),
-        ("v1.2.3-alpha--1", "1.2.3-alpha--1"),
-        ("v1.2.3--", "1.2.3--"),
-        ("v1.2.3+001.build", "1.2.3+001.build"),
+        "1.2.3",
+        "1.2.3-alpha--1",
+        "1.2.3--",
+        "1.2.3+001.build",
     ],
 )
-def test_validate_accepts_semantic_version_tags(target: str, expected: str) -> None:
+def test_validate_delete_accepts_semantic_versions(target: str) -> None:
     # Given / When
-    actual = versions.validate("publish", target)
+    actual = versions.validate_delete(target)
 
     # Then
-    assert actual == expected
+    assert actual == target
 
 
 @pytest.mark.parametrize(
     "target",
     [
-        "1.2.3",
-        "v01.2.3",
-        "v1.02.3",
-        "v1.2.03",
-        "v1.2.3-01",
-        "v1.2.3-alpha..1",
-        "v1.2.3-alpha_1",
+        "v1.2.3",
+        "01.2.3",
+        "1.02.3",
+        "1.2.03",
+        "1.2.3-01",
+        "1.2.3-alpha..1",
+        "1.2.3-alpha_1",
     ],
 )
-def test_validate_rejects_invalid_publish_targets(target: str) -> None:
+def test_validate_delete_rejects_invalid_versions(target: str) -> None:
     # Given / When / Then
-    with pytest.raises(versions.VersionError, match="publish target"):
-        versions.validate("publish", target)
+    with pytest.raises(versions.VersionError, match="delete target"):
+        versions.validate_delete(target)
+
+
+@pytest.mark.parametrize(
+    ("source_ref", "expected"),
+    [
+        ("v2.3.0", "2.3.0"),
+        ("docs/v2.2.0-rc.1", "2.2.0-rc.1"),
+        ("refs/tags/docs/v2.1.0", "2.1.0"),
+    ],
+)
+def test_validate_publish_derives_version_from_conventional_tags(
+    source_ref: str, expected: str
+) -> None:
+    # Given / When
+    actual = versions.validate_publish(source_ref, None)
+
+    # Then
+    assert actual == expected
+
+
+@pytest.mark.parametrize("source_ref", ["a" * 40, "release-2.2.0"])
+def test_validate_publish_requires_version_when_it_cannot_be_derived(
+    source_ref: str,
+) -> None:
+    # Given / When / Then
+    with pytest.raises(versions.VersionError, match="version is required"):
+        versions.validate_publish(source_ref, None)
+
+
+def test_validate_publish_prefers_explicit_version() -> None:
+    # Given / When
+    actual = versions.validate_publish("v9.9.9", "2.2.0")
+
+    # Then
+    assert actual == "2.2.0"
+
+
+def test_validate_publish_rejects_invalid_explicit_version() -> None:
+    # Given / When / Then
+    with pytest.raises(versions.VersionError, match="semantic-version syntax"):
+        versions.validate_publish("v2.2.0", "release-2.2")
 
 
 def test_publish_stable_version_updates_latest(

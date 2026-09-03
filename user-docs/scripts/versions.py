@@ -16,10 +16,12 @@ SEMANTIC_VERSION = re.compile(
     r"(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?"
     r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
 )
+FULL_COMMIT = re.compile(r"[0-9a-fA-F]{40}")
+VERSION_TAG = re.compile(r"(?:.*/)?v(?P<version>.+)")
 MIKE_BRANCH = "gh-pages"
 MKDOCS_CONFIG = "user-docs/mkdocs.yml"
-PUBLISH_TARGET_ERROR = (
-    "publish target must be a semantic-version tag such as v2.3.0 or v2.3.0-rc1"
+PUBLISH_VERSION_ERROR = (
+    "version is required when source_ref is not a tag ending in v<semver>"
 )
 DELETE_TARGET_ERROR = (
     "delete target must be a published semantic version such as 2.3.0-rc1"
@@ -51,15 +53,27 @@ def mike(
     )
 
 
-def validate(operation: str, target: str) -> str:
-    if operation == "publish":
-        if not target.startswith("v") or not SEMANTIC_VERSION.fullmatch(target[1:]):
-            raise VersionError(PUBLISH_TARGET_ERROR)
-        return target[1:]
-
+def validate_delete(target: str) -> str:
     if not SEMANTIC_VERSION.fullmatch(target):
         raise VersionError(DELETE_TARGET_ERROR)
     return target
+
+
+def validate_publish(source_ref: str, version: str | None) -> str:
+    if version:
+        require_version(version)
+        return version
+
+    selected_tag = source_ref.removeprefix("refs/tags/")
+    match = (
+        None
+        if FULL_COMMIT.fullmatch(source_ref)
+        else VERSION_TAG.fullmatch(selected_tag)
+    )
+    derived = match.group("version") if match else ""
+    if not SEMANTIC_VERSION.fullmatch(derived):
+        raise VersionError(PUBLISH_VERSION_ERROR)
+    return derived
 
 
 def is_stable(version: str) -> bool:
@@ -114,11 +128,16 @@ def parse_args() -> argparse.Namespace:
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
-    validate_parser = commands.add_parser(
-        "validate", help="Validate and normalize a request"
+    validate_delete_parser = commands.add_parser(
+        "validate-delete", help="Validate a deletion request"
     )
-    validate_parser.add_argument("operation", choices=("publish", "delete"))
-    validate_parser.add_argument("target")
+    validate_delete_parser.add_argument("target")
+
+    validate_publish_parser = commands.add_parser(
+        "validate-publish", help="Validate and normalize a publication request"
+    )
+    validate_publish_parser.add_argument("source_ref")
+    validate_publish_parser.add_argument("--version")
 
     publish_parser = commands.add_parser(
         "publish", help="Publish a version to the local catalog"
@@ -136,8 +155,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        if args.command == "validate":
-            sys.stdout.write(f"{validate(args.operation, args.target)}\n")
+        if args.command == "validate-delete":
+            sys.stdout.write(f"{validate_delete(args.target)}\n")
+        elif args.command == "validate-publish":
+            sys.stdout.write(f"{validate_publish(args.source_ref, args.version)}\n")
         elif args.command == "publish":
             publish(args.version)
         else:
