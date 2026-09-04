@@ -1,6 +1,8 @@
 # Build and dependency directories
 /vendor/
 /bin/
+/user-docs/.venv/
+/user-docs/site/
 
 # IDE/editor files
 .vscode/

@@ -1,0 +1,37 @@
+[project]
+name = "exasol-personal-user-docs"
+version = "0.0.0"
+requires-python = ">=3.13"
+dependencies = [
+    "mike>=2,<3",
+    "mkdocs-material>=9,<10",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9,<10",
+    "ruff>=0.16,<0.17",
+]
+
+[tool.uv]
+package = false
+required-version = "==0.11.21"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812", # Conflicts with the formatter.
+    "D100",   # The small script and tests do not need module docstrings.
+    "D101",   # The domain exception name is self-explanatory.
+    "D103",   # Test names already describe their behavior.
+    "D203",   # Conflicts with D211.
+    "D213",   # Conflicts with D212.
+    "S101",   # Pytest assertions are intentional.
+    "S603",   # Commands are executed without a shell.
+]
