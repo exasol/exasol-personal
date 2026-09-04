@@ -2,6 +2,26 @@
 name: Publish documentation
 
 on:
+  workflow_call:
+    inputs:
+      operation:
+        description: "Action to run: publish or delete"
+        required: false
+        default: publish
+        type: string
+      source_ref:
+        description: "Tag, release/ branch, or full 40-character SHA, e.g. v2.2.0 or release/v2.2"
+        required: false
+        type: string
+      version:
+        description: "Release line or full version without v, e.g. 2.2; required for delete"
+        required: false
+        type: string
+      make_latest:
+        description: "Give this version the 'latest' alias and the site root"
+        required: false
+        default: auto
+        type: string
   workflow_dispatch:
     inputs:
       operation:
@@ -120,17 +140,23 @@ jobs:
           MAKE_LATEST: ${{ inputs.make_latest }}
         run: |
           set -euo pipefail
-          if [[ "${OPERATION}" == "publish" ]]; then
-            arguments=("${SOURCE_REF}" --make-latest "${MAKE_LATEST}")
-            if [[ -n "${REQUESTED_VERSION}" ]]; then
-              arguments+=(--version "${REQUESTED_VERSION}")
-            fi
-            version="$(uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py validate-publish "${arguments[@]}")"
-            echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          else
-            version="$(uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py validate-delete "${REQUESTED_VERSION}")"
-            echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          fi
+          case "${OPERATION}" in
+            publish)
+              arguments=("${SOURCE_REF}" --make-latest "${MAKE_LATEST}")
+              if [[ -n "${REQUESTED_VERSION}" ]]; then
+                arguments+=(--version "${REQUESTED_VERSION}")
+              fi
+              version="$(uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py validate-publish "${arguments[@]}")"
+              ;;
+            delete)
+              version="$(uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py validate-delete "${REQUESTED_VERSION}")"
+              ;;
+            *)
+              echo "::error::operation must be 'publish' or 'delete'"
+              exit 1
+              ;;
+          esac
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
       - name: Validate documentation
         if: inputs.operation == 'publish'
