@@ -418,6 +418,10 @@ func runSLCUpdateRust(cmd *cobra.Command) error {
 	)
 }
 
+// installRustSLCFn is swapped in tests so the dispatch and rendering logic below can be
+// exercised without a live deployment or a network call to resolve the latest release.
+var installRustSLCFn = deploy.InstallRustSLC
+
 // runSLCRust installs the Rust SLC and reports the outcome. `rust` is not an official-catalogue
 // alias, so both `slc install rust` and `slc update rust` route here; they differ only in the
 // wording for an unchanged container and for a replaced one.
@@ -428,7 +432,7 @@ func runSLCRust(
 	unchangedMessage string,
 	replacedVerb string,
 ) error {
-	result, err := deploy.InstallRustSLC(
+	result, err := installRustSLCFn(
 		cmd.Context(),
 		commonFlags.Deployment(),
 		deploy.RustSLCInstallOpts{},
@@ -436,6 +440,19 @@ func runSLCRust(
 		restart,
 		customSLCConfirmFunc(cmd, autoApprove),
 	)
+
+	return reportRustSLCResult(result, err, unchangedMessage, replacedVerb)
+}
+
+// reportRustSLCResult renders the outcome of a Rust SLC install/update call. Split from
+// runSLCRust so this branching is unit-testable with a synthetic result, without touching the
+// deploy layer.
+func reportRustSLCResult(
+	result *deploy.CustomSLCInstallResult,
+	err error,
+	unchangedMessage string,
+	replacedVerb string,
+) error {
 	if errors.Is(err, deploy.ErrSLCOperationCancelled) {
 		addTerminalNotice(slcOperationAbortedMessage)
 
