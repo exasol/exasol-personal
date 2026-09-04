@@ -20,6 +20,8 @@ FULL_COMMIT = re.compile(r"[0-9a-fA-F]{40}")
 VERSION_TAG = re.compile(r"(?:.*/)?v(?P<version>.+)")
 MIKE_BRANCH = "gh-pages"
 MKDOCS_CONFIG = "user-docs/mkdocs.yml"
+LATEST_ALIAS = "latest"
+ALIAS_DECISIONS = ("auto", "yes", "no")
 PUBLISH_VERSION_ERROR = (
     "version is required when source_ref is not a tag ending in v<semver>"
 )
@@ -30,6 +32,9 @@ DELETE_LATEST_ERROR = (
     "publish a newer stable version before deleting the version referenced by 'latest'"
 )
 VERSION_ERROR = "version must use semantic-version syntax such as 2.3.0 or 2.3.0-rc1"
+PRERELEASE_LATEST_ERROR = (
+    "only a stable version can be published as the version referenced by 'latest'"
+)
 
 
 class VersionError(Exception):
@@ -59,7 +64,16 @@ def validate_delete(target: str) -> str:
     return target
 
 
-def validate_publish(source_ref: str, version: str | None) -> str:
+def validate_publish(
+    source_ref: str, version: str | None, make_latest: str = "auto"
+) -> str:
+    resolved = resolve_version(source_ref, version)
+    if make_latest == "yes" and not is_stable(resolved):
+        raise VersionError(PRERELEASE_LATEST_ERROR)
+    return resolved
+
+
+def resolve_version(source_ref: str, version: str | None) -> str:
     if version:
         require_version(version)
         return version
@@ -85,41 +99,60 @@ def require_version(version: str) -> None:
         raise VersionError(VERSION_ERROR)
 
 
-def publish(version: str) -> None:
+def catalog() -> list[dict[str, object]]:
+    listed = mike("list", "--branch", MIKE_BRANCH, "--json", capture_output=True)
+    return json.loads(listed.stdout)
+
+
+def precedence(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.partition("+")[0].split("."))
+
+
+def is_highest_stable(version: str) -> bool:
+    published = (str(entry.get("version", "")) for entry in catalog())
+    return all(
+        precedence(other) <= precedence(version)
+        for other in published
+        if SEMANTIC_VERSION.fullmatch(other) and is_stable(other)
+    )
+
+
+def takes_latest(version: str, make_latest: str) -> bool:
+    if make_latest != "auto":
+        return make_latest == "yes"
+    return is_stable(version) and is_highest_stable(version)
+
+
+def publish(version: str, make_latest: str = "auto") -> None:
     require_version(version)
+    if make_latest == "yes" and not is_stable(version):
+        raise VersionError(PRERELEASE_LATEST_ERROR)
     arguments = [
         "--branch",
         MIKE_BRANCH,
         "--alias-type",
         "redirect",
     ]
-    if is_stable(version):
-        mike("deploy", *arguments, "--update-aliases", version, "latest")
-        mike("set-default", "--branch", MIKE_BRANCH, "latest")
+    if takes_latest(version, make_latest):
+        mike("deploy", *arguments, "--update-aliases", version, LATEST_ALIAS)
+        mike("set-default", "--branch", MIKE_BRANCH, LATEST_ALIAS)
     else:
         mike("deploy", *arguments, version)
 
 
 def delete(version: str) -> None:
     require_version(version)
-    listed = mike(
-        "list",
-        "--branch",
-        MIKE_BRANCH,
-        "--json",
-        capture_output=True,
-    )
     metadata = next(
-        (item for item in json.loads(listed.stdout) if item.get("version") == version),
+        (item for item in catalog() if item.get("version") == version),
         None,
     )
     if metadata is None:
         return
-    if "latest" in metadata.get("aliases", []):
+    if LATEST_ALIAS in metadata.get("aliases", []):
         raise VersionError(DELETE_LATEST_ERROR)
 
     mike("delete", "--branch", MIKE_BRANCH, version)
-    mike("set-default", "--branch", MIKE_BRANCH, "latest")
+    mike("set-default", "--branch", MIKE_BRANCH, LATEST_ALIAS)
 
 
 def parse_args() -> argparse.Namespace:
@@ -138,11 +171,17 @@ def parse_args() -> argparse.Namespace:
     )
     validate_publish_parser.add_argument("source_ref")
     validate_publish_parser.add_argument("--version")
+    validate_publish_parser.add_argument(
+        "--make-latest", choices=ALIAS_DECISIONS, default="auto"
+    )
 
     publish_parser = commands.add_parser(
         "publish", help="Publish a version to the local catalog"
     )
     publish_parser.add_argument("version")
+    publish_parser.add_argument(
+        "--make-latest", choices=ALIAS_DECISIONS, default="auto"
+    )
 
     delete_parser = commands.add_parser(
         "delete", help="Delete a version from the local catalog"
@@ -158,9 +197,11 @@ def main() -> int:
         if args.command == "validate-delete":
             sys.stdout.write(f"{validate_delete(args.target)}\n")
         elif args.command == "validate-publish":
-            sys.stdout.write(f"{validate_publish(args.source_ref, args.version)}\n")
+            sys.stdout.write(
+                f"{validate_publish(args.source_ref, args.version, args.make_latest)}\n"
+            )
         elif args.command == "publish":
-            publish(args.version)
+            publish(args.version, args.make_latest)
         else:
             delete(args.version)
     except VersionError as error:

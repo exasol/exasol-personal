@@ -85,53 +85,6 @@ def test_validate_publish_rejects_invalid_explicit_version() -> None:
         versions.validate_publish("v2.2.0", "release-2.2")
 
 
-def test_publish_stable_version_updates_latest(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Given
-    calls: list[tuple[str, ...]] = []
-    monkeypatch.setattr(versions, "mike", lambda *args, **_kwargs: calls.append(args))
-
-    # When
-    versions.publish("2.3.0")
-
-    # Then
-    assert calls == [
-        (
-            "deploy",
-            "--branch",
-            "gh-pages",
-            "--alias-type",
-            "redirect",
-            "--update-aliases",
-            "2.3.0",
-            "latest",
-        ),
-        ("set-default", "--branch", "gh-pages", "latest"),
-    ]
-
-
-def test_publish_prerelease_preserves_latest(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given
-    calls: list[tuple[str, ...]] = []
-    monkeypatch.setattr(versions, "mike", lambda *args, **_kwargs: calls.append(args))
-
-    # When
-    versions.publish("2.3.0-rc.1")
-
-    # Then
-    assert calls == [
-        (
-            "deploy",
-            "--branch",
-            "gh-pages",
-            "--alias-type",
-            "redirect",
-            "2.3.0-rc.1",
-        )
-    ]
-
-
 def mike_with_versions(
     catalog: list[dict[str, object]], calls: list[tuple[str, ...]]
 ) -> Callable[..., subprocess.CompletedProcess[str]]:
@@ -145,6 +98,132 @@ def mike_with_versions(
     return fake_mike
 
 
+def deploy(*arguments: str) -> tuple[str, ...]:
+    return ("deploy", "--branch", "gh-pages", "--alias-type", "redirect", *arguments)
+
+
+LIST = ("list", "--branch", "gh-pages", "--json")
+SET_DEFAULT = ("set-default", "--branch", "gh-pages", "latest")
+
+
+def test_validate_publish_rejects_forcing_latest_onto_a_prerelease() -> None:
+    # Given / When / Then
+    with pytest.raises(versions.VersionError, match="only a stable version"):
+        versions.validate_publish("docs/v2.3.0-rc.1", None, "yes")
+
+
+def test_publish_highest_stable_version_updates_latest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    calls: list[tuple[str, ...]] = []
+    catalog = [{"version": "2.2.0", "aliases": ["latest"]}]
+    monkeypatch.setattr(versions, "mike", mike_with_versions(catalog, calls))
+
+    # When
+    versions.publish("2.3.0")
+
+    # Then
+    assert calls == [
+        LIST,
+        deploy("--update-aliases", "2.3.0", "latest"),
+        SET_DEFAULT,
+    ]
+
+
+def test_publish_republished_highest_version_keeps_latest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    calls: list[tuple[str, ...]] = []
+    catalog = [{"version": "2.3.0", "aliases": ["latest"]}]
+    monkeypatch.setattr(versions, "mike", mike_with_versions(catalog, calls))
+
+    # When
+    versions.publish("2.3.0")
+
+    # Then
+    assert calls == [
+        LIST,
+        deploy("--update-aliases", "2.3.0", "latest"),
+        SET_DEFAULT,
+    ]
+
+
+def test_publish_older_stable_version_preserves_latest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    calls: list[tuple[str, ...]] = []
+    catalog = [
+        {"version": "2.3.0", "aliases": ["latest"]},
+        {"version": "2.2.0", "aliases": []},
+    ]
+    monkeypatch.setattr(versions, "mike", mike_with_versions(catalog, calls))
+
+    # When
+    versions.publish("2.2.1")
+
+    # Then
+    assert calls == [LIST, deploy("2.2.1")]
+
+
+def test_publish_prerelease_preserves_latest(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given
+    calls: list[tuple[str, ...]] = []
+    catalog = [{"version": "2.3.0", "aliases": ["latest"]}]
+    monkeypatch.setattr(versions, "mike", mike_with_versions(catalog, calls))
+
+    # When
+    versions.publish("2.3.0-rc.1")
+
+    # Then
+    assert calls == [deploy("2.3.0-rc.1")]
+
+
+def test_publish_forces_latest_onto_an_older_stable_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    calls: list[tuple[str, ...]] = []
+    catalog = [{"version": "2.3.0", "aliases": ["latest"]}]
+    monkeypatch.setattr(versions, "mike", mike_with_versions(catalog, calls))
+
+    # When
+    versions.publish("2.2.0", "yes")
+
+    # Then
+    assert calls == [deploy("--update-aliases", "2.2.0", "latest"), SET_DEFAULT]
+
+
+def test_publish_withholds_latest_from_the_highest_stable_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    calls: list[tuple[str, ...]] = []
+    catalog = [{"version": "2.2.0", "aliases": ["latest"]}]
+    monkeypatch.setattr(versions, "mike", mike_with_versions(catalog, calls))
+
+    # When
+    versions.publish("2.3.0", "no")
+
+    # Then
+    assert calls == [deploy("2.3.0")]
+
+
+def test_publish_rejects_forcing_latest_onto_a_prerelease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(versions, "mike", mike_with_versions([], calls))
+
+    # When / Then
+    with pytest.raises(versions.VersionError, match="only a stable version"):
+        versions.publish("2.3.0-rc.1", "yes")
+    assert calls == []
+
+
 def test_delete_rejects_version_referenced_by_latest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -156,7 +235,7 @@ def test_delete_rejects_version_referenced_by_latest(
     # When / Then
     with pytest.raises(versions.VersionError, match="newer stable version"):
         versions.delete("2.3.0")
-    assert calls == [("list", "--branch", "gh-pages", "--json")]
+    assert calls == [LIST]
 
 
 def test_delete_removes_only_selected_version(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -173,9 +252,9 @@ def test_delete_removes_only_selected_version(monkeypatch: pytest.MonkeyPatch) -
 
     # Then
     assert calls == [
-        ("list", "--branch", "gh-pages", "--json"),
+        LIST,
         ("delete", "--branch", "gh-pages", "2.4.0-rc.1"),
-        ("set-default", "--branch", "gh-pages", "latest"),
+        SET_DEFAULT,
     ]
 
 
@@ -191,7 +270,7 @@ def test_delete_retry_accepts_an_already_absent_version(
     versions.delete("2.4.0-rc.1")
 
     # Then
-    assert calls == [("list", "--branch", "gh-pages", "--json")]
+    assert calls == [LIST]
 
 
 def test_publish_retry_reapplies_the_same_catalog_update(
@@ -199,19 +278,13 @@ def test_publish_retry_reapplies_the_same_catalog_update(
 ) -> None:
     # Given
     calls: list[tuple[str, ...]] = []
-    monkeypatch.setattr(versions, "mike", lambda *args, **_kwargs: calls.append(args))
-    expected = (
-        "deploy",
-        "--branch",
-        "gh-pages",
-        "--alias-type",
-        "redirect",
-        "2.3.0-rc.1",
-    )
+    catalog = [{"version": "2.3.0", "aliases": ["latest"]}]
+    monkeypatch.setattr(versions, "mike", mike_with_versions(catalog, calls))
+    expected = [LIST, deploy("--update-aliases", "2.3.0", "latest"), SET_DEFAULT]
 
     # When
-    versions.publish("2.3.0-rc.1")
-    versions.publish("2.3.0-rc.1")
+    versions.publish("2.3.0")
+    versions.publish("2.3.0")
 
     # Then
-    assert calls == [expected, expected]
+    assert calls == expected + expected
