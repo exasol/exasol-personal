@@ -16,5 +16,6 @@ extra:
   version:
     provider: mike
     default: latest
+    alias: true
 
 remote_branch: gh-pages
