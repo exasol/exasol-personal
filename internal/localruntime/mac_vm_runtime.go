@@ -130,11 +130,24 @@ func (runtime *MacVMRuntime) Prepare(
 	if err != nil {
 		return err
 	}
-	if err := runtime.reconcileRunnerVersion(ctx, runnerPath); err != nil {
+	reconciliation, err := runtime.reconcileRunnerVersion(ctx, runnerPath)
+	if err != nil {
 		return err
 	}
+	if err := runtime.initializeVM(
+		ctx, runnerPath, reconciliation.GuestStale, out, outErr,
+	); err != nil {
+		return err
+	}
+	if !reconciliation.Recordable {
+		return nil
+	}
 
-	return runtime.initializeVMIfNeeded(ctx, runnerPath, out, outErr)
+	// Recording only now leaves an interrupted replacement visible as a
+	// mismatch, so the next start retries it.
+	return writeRunnerVersionMarker(
+		runtime.paths.RunnerVersionMarkerPath, reconciliation.Version,
+	)
 }
 
 func ensureMacHostDataLink(paths vmRuntimePaths) error {
@@ -186,7 +199,7 @@ func (runtime *MacVMRuntime) Start(
 	if err != nil {
 		return err
 	}
-	if err := runtime.reconcileRunnerVersion(ctx, runnerPath); err != nil {
+	if _, err := runtime.reconcileRunnerVersion(ctx, runnerPath); err != nil {
 		return err
 	}
 
@@ -640,23 +653,66 @@ func (runtime *MacVMRuntime) resolveRunnerPath(ctx context.Context) (string, err
 	return runtime.manager.Request(ctx, exasolLocalRunnerResourceID)
 }
 
-func (runtime *MacVMRuntime) initializeVMIfNeeded(
+func (runtime *MacVMRuntime) initializeVM(
 	ctx context.Context,
 	runnerPath string,
+	guestStale bool,
 	out, outErr io.Writer,
 ) error {
-	if _, err := os.Stat(runtime.paths.VMDir); err == nil {
-		return nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("failed to inspect local VM directory: %w", err)
+	initialized := true
+	if _, err := os.Stat(runtime.paths.VMDir); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to inspect local VM directory: %w", err)
+		}
+		initialized = false
+	}
+	if initialized {
+		if !guestStale {
+			return nil
+		}
+		if err := runtime.stopVMBeforeGuestReplacement(
+			ctx, runnerPath, out, outErr,
+		); err != nil {
+			return err
+		}
+		slog.Info("replacing the local VM guest to match the resolved runner")
 	}
 
 	return runtime.runnerCommand(ctx, runnerPath, []string{"init"}, out, outErr)
 }
 
-// reconcileRunnerVersion enforces the VM-only v2 contract and records the
-// resolved runner version for deployment diagnostics.
-func (runtime *MacVMRuntime) reconcileRunnerVersion(ctx context.Context, runnerPath string) error {
+// stopVMBeforeGuestReplacement guards the guest disk, which the runner rewrites
+// in place while a booted VM still has it open.
+func (runtime *MacVMRuntime) stopVMBeforeGuestReplacement(
+	ctx context.Context,
+	runnerPath string,
+	out, outErr io.Writer,
+) error {
+	vmStatus, err := runnerCommandJSON[RuntimeStatus](ctx, runtime, "status")
+	if err != nil {
+		return err
+	}
+	if !vmStatus.Running {
+		return nil
+	}
+
+	return runtime.stopVM(ctx, runnerPath, out, outErr)
+}
+
+// runnerReconciliation reports what the version check learned, so the guest can
+// be replaced before the resolved version is recorded.
+type runnerReconciliation struct {
+	Version    semver.Version
+	Recordable bool
+	GuestStale bool
+}
+
+// reconcileRunnerVersion enforces the VM-only v2 contract and compares the
+// resolved runner against the one that produced this deployment's guest.
+func (runtime *MacVMRuntime) reconcileRunnerVersion(
+	ctx context.Context,
+	runnerPath string,
+) (runnerReconciliation, error) {
 	resolvedVersion, err := readRunnerVersion(ctx, runnerPath)
 	forceReconciliation := strings.TrimSpace(os.Getenv(forceRunnerReconciliationEnv)) == "1"
 	if err != nil {
@@ -667,22 +723,28 @@ func (runtime *MacVMRuntime) reconcileRunnerVersion(ctx context.Context, runnerP
 				"versionError", err,
 			)
 
-			return nil
+			return runnerReconciliation{}, nil
 		}
 
-		return fmt.Errorf("resolved local runner does not report a valid version: %w", err)
+		return runnerReconciliation{}, fmt.Errorf(
+			"resolved local runner does not report a valid version: %w", err,
+		)
 	}
 	if resolvedVersion.Major < minimumRunnerMajor {
-		return fmt.Errorf(
+		return runnerReconciliation{}, fmt.Errorf(
 			"resolved local runner %s uses the legacy application-owning contract; "+
 				"version 2 or newer is required",
 			resolvedVersion,
 		)
 	}
 
-	markerVersion, err := readRunnerVersionMarker(runtime.paths.RunnerVersionMarkerPath)
-	if err != nil {
-		return writeRunnerVersionMarker(runtime.paths.RunnerVersionMarkerPath, resolvedVersion)
+	reconciliation := runnerReconciliation{Version: resolvedVersion, Recordable: true}
+	markerVersion, recorded := runtime.recordedRunnerVersion()
+	if !recorded {
+		// Unknown provenance is replaced rather than trusted.
+		reconciliation.GuestStale = true
+
+		return reconciliation, nil
 	}
 
 	switch {
@@ -707,8 +769,24 @@ func (runtime *MacVMRuntime) reconcileRunnerVersion(ctx context.Context, runnerP
 	default:
 		// Identical versions require no diagnostic message.
 	}
+	reconciliation.GuestStale = !resolvedVersion.EQ(markerVersion)
 
-	return writeRunnerVersionMarker(runtime.paths.RunnerVersionMarkerPath, resolvedVersion)
+	return reconciliation, nil
+}
+
+// A deployment predating version tracking carries no record, which for deciding
+// whether to trust its guest is the same as a record that cannot be read.
+func (runtime *MacVMRuntime) recordedRunnerVersion() (semver.Version, bool) {
+	version, err := readRunnerVersionMarker(runtime.paths.RunnerVersionMarkerPath)
+	if err != nil {
+		slog.Debug(
+			"no usable local runner version recorded for this deployment", "error", err,
+		)
+
+		return semver.Version{}, false
+	}
+
+	return version, true
 }
 
 func readRunnerVersion(ctx context.Context, runnerPath string) (semver.Version, error) {
