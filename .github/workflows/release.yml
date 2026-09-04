@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag to publish (e.g. v2.1.0 or v2.1.0-rc1). Create and push it first (admins only). A hyphen marks it as a pre-release."
+        description: "Existing release tag to publish (e.g. v2.1.0 or v2.1.0-rc1). Create and push it first (admins only). A pre-release version suffix such as -rc1 marks it as a pre-release."
         required: true
       previous_tag:
         description: "Previous tag for the changelog base (e.g. v2.0.0). Leave blank to auto-detect the last stable release."
@@ -14,7 +14,46 @@ on:
 permissions: {}
 
 jobs:
+  validate-docs:
+    name: Validate release documentation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.request.outputs.version }}
+      stability: ${{ steps.request.outputs.stability }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          ref: refs/tags/${{ inputs.tag }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.21"
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: user-docs/uv.lock
+
+      - name: Validate publication request
+        id: request
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          version="$(uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py validate-publish "refs/tags/${TAG}")"
+          stability="$(uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py stability "${version}")"
+          echo "Documentation version for this release: ${version} (${stability})"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "stability=${stability}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate documentation
+        run: uv run --project user-docs --locked --no-build mkdocs build --strict --config-file user-docs/mkdocs.yml
+
   goreleaser:
+    needs: validate-docs
     runs-on: ubuntu-latest
     environment:
       name: release
@@ -92,3 +131,19 @@ jobs:
           SSLCOM_PASSWORD: ${{ secrets.ESIGN_PASSWORD }}
           SSLCOM_CREDENTIAL_ID: ${{ secrets.ESIGN_CREDENTIAL_ID }}
           SSLCOM_TOTP_SECRET: ${{ secrets.ESIGN_TOTP_SECRET }}
+
+  publish-docs:
+    name: Publish release documentation
+    needs:
+      - validate-docs
+      - goreleaser
+    if: needs.validate-docs.outputs.stability == 'stable'
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml
+    with:
+      operation: publish
+      source_ref: refs/tags/${{ inputs.tag }}
+      make_latest: auto
