@@ -24,9 +24,11 @@ General guidance is in [CI Security Best Practices](ci_security_best_practices.m
 
 ### Trusted Privileged Lane
 
-- Privileged workflows run only on trusted events (`push` or `workflow_dispatch`):
+- Privileged workflows run only on trusted events (`push`, `workflow_dispatch`, or a
+  `workflow_call` from a workflow that itself runs on a trusted event):
   - [`merge.yml`](../.github/workflows/merge.yml)
   - [`release.yml`](../.github/workflows/release.yml)
+  - [`docs.yml`](../.github/workflows/docs.yml)
   - [`tests-deployment.yml`](../.github/workflows/tests-deployment.yml)
 - Privileged workflows do not run on `pull_request`.
 - Workflows declare explicit `permissions` and only request write scopes where required.
@@ -82,10 +84,11 @@ This is the administrative control for release ref governance and merge governan
 ### 3) Protected Environments
 
 - Create protected `release` environment with required reviewers.
-- Restrict `release` environment deployment refs to intended release refs (version tags).
+- Restrict `release` environment deployment refs to the default branch. The release workflow is dispatched from the default branch and takes the released tag as an input, so the tag is not the run's ref; the `v*` tag ruleset is what governs which tags may exist.
+- Create protected `github-pages` environment for documentation publication with `main`-only restrictions, since a release publishes documentation from the same dispatch.
 - Create protected `deployment-tests` environment for manual cloud tests with required reviewers and `main`-only restrictions.
 
-This enforces approval and ref-gating for privileged jobs in [`release.yml`](../.github/workflows/release.yml) and [`tests-deployment.yml`](../.github/workflows/tests-deployment.yml).
+This enforces approval and ref-gating for privileged jobs in [`release.yml`](../.github/workflows/release.yml), [`docs.yml`](../.github/workflows/docs.yml), and [`tests-deployment.yml`](../.github/workflows/tests-deployment.yml).
 
 ### 4) Ownership and Review Governance
 
