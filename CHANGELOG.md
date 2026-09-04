@@ -10,6 +10,12 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 - Enabled Virtual Schema support in local deployments when the required adapter runtime and dependencies are installed.
 
+- Added `rust` as an alias of `exasol slc install` and `exasol slc update`, which installs the Rust script language container required by Rust UDFs. The launcher resolves the latest [language-container-rs](https://github.com/exasol-labs/language-container-rs) release, picks the asset matching this machine's CPU architecture, and installs it under the alias `RUST`. It behaves like every other `slc install <alias>` call, including the restart confirmation, `--auto-approve`, and `--no-restart`. `exasol slc update rust` re-resolves the latest release and does nothing when it has not moved, and `exasol slc remove rust` and `exasol slc list` work as they do for any other container.
+
+  Example: `exasol slc install rust --auto-approve`
+
+  Because "latest" cannot be pinned, this download is protected by TLS and by validating the container's shape — the same as `exasol slc custom install --source <https-url>` — and not by a checksum like the official catalog. To install a specific build instead, use `exasol slc custom install --alias RUST --language rust --source <path-or-url>`.
+
 - Added `exasol slc custom install` and `exasol slc custom update` to manage user-supplied (custom) script language containers in local deployments, for languages the official catalog does not ship — for example a Python container with extra packages. Custom containers are removed with the existing `exasol slc remove <alias>`, which handles both official and custom containers.
 
   The container is given as `--source`, which takes either a local tarball or an `https` URL, together with the `--alias` used in `CREATE <alias> SCALAR SCRIPT` and the `--language` it provides.

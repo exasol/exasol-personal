@@ -40,6 +40,9 @@ const slcAutoApproveFlagDesc = "Do not prompt for confirmation before restarting
 
 const slcNoRestartFlagName = "no-restart"
 
+// slcInstalledVerb opens the message for a first install, as opposed to a replacement.
+const slcInstalledVerb = "Installed"
+
 var slcCustomInstallOpts = struct {
 	AutoApprove bool
 	NoRestart   bool
@@ -82,11 +85,19 @@ var slcInstallCmd = &cobra.Command{
 	Use:   "install <alias>",
 	Short: "Install an official script language container",
 	Long: "Install an official script language container by alias.\n\n" +
-		"For a user-supplied container, use `exasol slc custom install`.",
+		"The alias `rust` is special: it is not part of the official catalogue. It installs\n" +
+		"the latest release of exasol-labs/language-container-rs that matches this machine's\n" +
+		"CPU architecture. To install a specific Rust build instead, use\n" +
+		"`exasol slc custom install --language rust --source <path-or-url>`.\n\n" +
+		"For any other user-supplied container, use `exasol slc custom install`.",
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
 		alias := args[0]
+		if strings.EqualFold(alias, deploy.RustSLCAlias) {
+			return runSLCInstallRust(cmd)
+		}
+
 		result, err := deploy.InstallSLC(
 			cmd.Context(),
 			commonFlags.Deployment(),
@@ -129,11 +140,19 @@ var slcUpdateCmd = &cobra.Command{
 	Use:   "update <alias>",
 	Short: "Update an installed official script language container",
 	Long: "Update an installed official script language container by alias.\n\n" +
-		"For a user-supplied container, use `exasol slc custom update`.",
+		"The alias `rust` is special: it re-resolves the latest release of\n" +
+		"exasol-labs/language-container-rs for this machine's CPU architecture and applies it\n" +
+		"if it differs from the installed container. To pin a specific Rust build, use\n" +
+		"`exasol slc custom install --language rust --source <path-or-url>`.\n\n" +
+		"For any other user-supplied container, use `exasol slc custom update`.",
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
 		alias := args[0]
+		if strings.EqualFold(alias, deploy.RustSLCAlias) {
+			return runSLCUpdateRust(cmd)
+		}
+
 		result, err := deploy.UpdateSLC(
 			cmd.Context(),
 			commonFlags.Deployment(),
@@ -315,7 +334,7 @@ func runSLCCustomInstall(cmd *cobra.Command) error {
 		return nil
 	}
 
-	verb := "Installed"
+	verb := slcInstalledVerb
 	if result.Replaced {
 		verb = "Replaced"
 	}
@@ -370,6 +389,96 @@ func runSLCCustomUpdate(cmd *cobra.Command) error {
 
 	addTerminalOutput(fmt.Sprintf(
 		"Updated custom SLC %q.%s", result.Alias, customSLCOutcomeSuffix(result.Outcome),
+	))
+
+	return nil
+}
+
+// runSLCInstallRust handles `exasol slc install rust`.
+func runSLCInstallRust(cmd *cobra.Command) error {
+	return runSLCRust(
+		cmd,
+		slcInstallOpts.AutoApprove,
+		!slcInstallOpts.NoRestart,
+		"The Rust SLC is already installed with this container. Nothing to do.",
+		"Replaced",
+	)
+}
+
+// runSLCUpdateRust handles `exasol slc update rust`. The Rust SLC always tracks the latest
+// release, so updating it means resolving that release again and installing it; an unchanged
+// container is a no-op, which is why this shares the install path instead of an update function.
+func runSLCUpdateRust(cmd *cobra.Command) error {
+	return runSLCRust(
+		cmd,
+		slcUpdateOpts.AutoApprove,
+		!slcUpdateOpts.NoRestart,
+		"The Rust SLC is already up to date. Nothing to do.",
+		"Updated",
+	)
+}
+
+// installRustSLCFn is swapped in tests so the dispatch and rendering logic below can be
+// exercised without a live deployment or a network call to resolve the latest release.
+var installRustSLCFn = deploy.InstallRustSLC
+
+// runSLCRust installs the Rust SLC and reports the outcome. `rust` is not an official-catalogue
+// alias, so both `slc install rust` and `slc update rust` route here; they differ only in the
+// wording for an unchanged container and for a replaced one.
+func runSLCRust(
+	cmd *cobra.Command,
+	autoApprove bool,
+	restart bool,
+	unchangedMessage string,
+	replacedVerb string,
+) error {
+	result, err := installRustSLCFn(
+		cmd.Context(),
+		commonFlags.Deployment(),
+		deploy.RustSLCInstallOpts{},
+		commonFlags.DeployVerbose,
+		restart,
+		customSLCConfirmFunc(cmd, autoApprove),
+	)
+
+	return reportRustSLCResult(result, err, unchangedMessage, replacedVerb)
+}
+
+// reportRustSLCResult renders the outcome of a Rust SLC install/update call. Split from
+// runSLCRust so this branching is unit-testable with a synthetic result, without touching the
+// deploy layer.
+func reportRustSLCResult(
+	result *deploy.CustomSLCInstallResult,
+	err error,
+	unchangedMessage string,
+	replacedVerb string,
+) error {
+	if errors.Is(err, deploy.ErrSLCOperationCancelled) {
+		addTerminalNotice(slcOperationAbortedMessage)
+
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	if commonFlags.OutputJson {
+		return renderSLCCommandJSON(result)
+	}
+
+	if result.AlreadyInstalled {
+		addTerminalOutput(unchangedMessage)
+
+		return nil
+	}
+
+	verb := slcInstalledVerb
+	if result.Replaced {
+		verb = replacedVerb
+	}
+	addTerminalOutput(fmt.Sprintf(
+		"%s the Rust SLC under alias %q (language: %s).%s",
+		verb, result.Alias, result.Language, customSLCOutcomeSuffix(result.Outcome),
 	))
 
 	return nil
@@ -639,7 +748,7 @@ func writeCustomSLCRows(
 }
 
 func printSLCInstallResult(result *deploy.SLCInstallResult) {
-	verb := "Installed"
+	verb := slcInstalledVerb
 	if result.Replaced {
 		verb = "Updated"
 	}
