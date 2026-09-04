@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/exasol/exasol-personal/internal/approval"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
@@ -60,10 +61,12 @@ func TestSLCCustomInstallAndUpdateCarryRestartFlags(t *testing.T) {
 
 	// When / Then
 	for name, cmd := range commands {
-		for _, flag := range []string{"no-restart", "auto-approve"} {
-			if cmd.Flags().Lookup(flag) == nil {
-				t.Fatalf("slc custom %s is missing --%s", name, flag)
-			}
+		if cmd.Flags().Lookup("no-restart") == nil {
+			t.Fatalf("slc custom %s is missing --no-restart", name)
+		}
+		// Approval is a global flag, so the command must not declare its own.
+		if cmd.Flags().Lookup("auto-approve") != nil {
+			t.Fatalf("slc custom %s declares its own --auto-approve", name)
 		}
 	}
 	if slcInstallCmd.Flags().Lookup("no-restart") == nil {
@@ -291,12 +294,12 @@ func TestSLCConfirmPromptsGoToStderr(t *testing.T) {
 
 	for name, prompt := range map[string]func(*cobra.Command) error{
 		"custom": func(cmd *cobra.Command) error {
-			_, err := customSLCConfirmFunc(cmd, false)("overriding a built-in alias")
+			_, err := customSLCConfirmFunc(cmd, approval.ModePrompt)("overriding a built-in alias")
 
 			return err
 		},
 		"official": func(cmd *cobra.Command) error {
-			_, err := slcConfirmFunc(cmd, false, "Installing")()
+			_, err := slcConfirmFunc(cmd, approval.ModePrompt, "Installing")()
 
 			return err
 		},
@@ -315,6 +318,9 @@ func TestSLCConfirmPromptsGoToStderr(t *testing.T) {
 		// Then
 		if stdout.Len() != 0 {
 			t.Fatalf("%s: prompt must not write to stdout, got %q", name, stdout.String())
+		}
+		if stderr.Len() == 0 {
+			t.Fatalf("%s: expected the prompt on stderr", name)
 		}
 	}
 }
@@ -343,5 +349,33 @@ func TestFormatSLCListTextSeparatesOfficialFromCustom(t *testing.T) {
 	// And: a custom-only listing must not start with a blank line.
 	if got := formatSLCListText(nil, custom); strings.HasPrefix(got, "\n") {
 		t.Fatalf("a custom-only listing must not be preceded by a blank line, got %q", got)
+	}
+}
+
+// Each mode selects a different response: pre-approved skips the callback
+// entirely, and an unreachable user is refused rather than assumed willing.
+func TestSLCConfirmFuncsRespondPerApprovalMode(t *testing.T) {
+	t.Parallel()
+
+	if slcConfirmFunc(&cobra.Command{}, approval.ModeApprove, "Installing") != nil {
+		t.Error("expected no confirmation callback when approval was granted")
+	}
+	if customSLCConfirmFunc(&cobra.Command{}, approval.ModeApprove) != nil {
+		t.Error("expected no custom confirmation callback when approval was granted")
+	}
+
+	approved, err := slcConfirmFunc(&cobra.Command{}, approval.ModeNonInteractive, "Installing")()
+	if err == nil || approved {
+		t.Errorf("expected a refusal without a terminal, got approved=%v err=%v", approved, err)
+	}
+	if !strings.Contains(err.Error(), "--auto-approve") {
+		t.Errorf("expected the error to name --auto-approve, got %v", err)
+	}
+
+	customConfirm := customSLCConfirmFunc(&cobra.Command{}, approval.ModeNonInteractive)
+	approved, err = customConfirm("overriding")
+	if err == nil || approved {
+		t.Errorf("expected a custom refusal without a terminal, got approved=%v err=%v",
+			approved, err)
 	}
 }

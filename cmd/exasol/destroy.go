@@ -4,6 +4,7 @@
 package main
 
 import (
+	"github.com/exasol/exasol-personal/internal/approval"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
@@ -20,16 +21,11 @@ Pass --remove to remove the local deployment directory after deployment resource
 `
 
 var destroyOpts = struct {
-	AutoApprove bool
-	Remove      bool
+	Remove bool
 }{}
 
 func registerDestroyFlags(cmd *cobra.Command) {
 	registerVerboseFlag(cmd, commonFlags)
-	cmd.Flags().BoolVar(&destroyOpts.AutoApprove,
-		"auto-approve",
-		false,
-		"Force destroy without confirmation prompt")
 	// nolint: revive
 	cmd.Flags().BoolVar(&destroyOpts.Remove,
 		"remove",
@@ -48,13 +44,20 @@ var destroyCmd = &cobra.Command{
 
 		deployment := commonFlags.Deployment()
 
-		response := destroyOpts.AutoApprove
-		if !response {
+		response := false
+		switch rootOpts.ApprovalMode() {
+		case approval.ModeApprove:
+			response = true
+		case approval.ModePrompt:
 			removalTarget := ""
 			if destroyOpts.Remove {
 				removalTarget = deployment.Root()
 			}
 			response = askForUserConfirmation(destroyConfirmationPrompt(removalTarget))
+		case approval.ModeNonInteractive:
+			// Nobody can be asked, so the destroy is declined.
+		default:
+			// An unrecognised mode declines rather than assuming consent.
 		}
 		if !response {
 			return nil

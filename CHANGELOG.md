@@ -30,9 +30,9 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol install local --auto-approve`
 
-- Added `--auto-approve` to `exasol deploy`, `exasol install`, and `exasol start` to approve local runtime host preparation without prompting.
+- Added a global `--auto-approve` flag, accepted by every command like `--log-level`, which approves confirmation prompts without asking. It covers local runtime host preparation for `exasol deploy`, `exasol install`, and `exasol start`.
 
-  Example: `exasol start --auto-approve`
+  Example: `exasol --auto-approve install local`
 
 ### Changed
 
