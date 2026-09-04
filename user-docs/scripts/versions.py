@@ -91,11 +91,21 @@ def resolve_version(source_ref: str, version: str | None) -> str:
     derived = match.group("version") if match else ""
     if not DOCUMENTATION_VERSION.fullmatch(derived):
         raise VersionError(PUBLISH_VERSION_ERROR)
-    return derived
+    return release_line(derived) if is_stable(derived) else derived
 
 
 def is_stable(version: str) -> bool:
     return "-" not in version.partition("+")[0]
+
+
+def release_line(version: str) -> str:
+    major, minor, *_ = version.partition("+")[0].split(".")
+    return f"{major}.{minor}"
+
+
+def stability(version: str) -> str:
+    require_version(version)
+    return "stable" if is_stable(version) else "prerelease"
 
 
 def require_version(version: str) -> None:
@@ -193,6 +203,11 @@ def parse_args() -> argparse.Namespace:
     )
     delete_parser.add_argument("version")
 
+    stability_parser = commands.add_parser(
+        "stability", help="Report whether a version is stable or a prerelease"
+    )
+    stability_parser.add_argument("version")
+
     return parser.parse_args()
 
 
@@ -207,6 +222,8 @@ def main() -> int:
             )
         elif args.command == "publish":
             publish(args.version, args.make_latest)
+        elif args.command == "stability":
+            sys.stdout.write(f"{stability(args.version)}\n")
         else:
             delete(args.version)
     except VersionError as error:

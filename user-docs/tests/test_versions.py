@@ -50,15 +50,17 @@ def test_validate_delete_rejects_invalid_versions(target: str) -> None:
 @pytest.mark.parametrize(
     ("source_ref", "expected"),
     [
-        ("v2.3.0", "2.3.0"),
-        ("docs/v2.2.0-rc.1", "2.2.0-rc.1"),
-        ("refs/tags/docs/v2.1.0", "2.1.0"),
+        ("v2.3.0", "2.3"),
+        ("v2.3.1", "2.3"),
+        ("refs/tags/v2.3.1", "2.3"),
+        ("refs/tags/docs/v2.1.0", "2.1"),
         ("release/v2.4", "2.4"),
         ("refs/heads/release/v2.4", "2.4"),
-        ("refs/heads/release/v2.5.0-rc.1", "2.5.0-rc.1"),
+        ("v2.3.0+build.1", "2.3"),
+        ("v2.3+build.1", "2.3"),
     ],
 )
-def test_validate_publish_derives_version_from_conventional_sources(
+def test_validate_publish_derives_the_release_line_of_a_stable_source(
     source_ref: str, expected: str
 ) -> None:
     # Given / When
@@ -66,6 +68,56 @@ def test_validate_publish_derives_version_from_conventional_sources(
 
     # Then
     assert actual == expected
+
+
+@pytest.mark.parametrize(
+    ("source_ref", "expected"),
+    [
+        ("v2.2.0-rc.1", "2.2.0-rc.1"),
+        ("docs/v2.2.0-rc.1", "2.2.0-rc.1"),
+        ("refs/heads/release/v2.5.0-rc.1", "2.5.0-rc.1"),
+    ],
+)
+def test_validate_publish_derives_the_full_version_of_a_prerelease_source(
+    source_ref: str, expected: str
+) -> None:
+    # Given / When
+    actual = versions.validate_publish(source_ref, None)
+
+    # Then
+    assert actual == expected
+
+
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        ("2.3", "stable"),
+        ("2.3.0", "stable"),
+        ("2.3.0+build-1", "stable"),
+        ("2.3.0-rc.1", "prerelease"),
+        ("2.3.0-rc.1+build", "prerelease"),
+    ],
+)
+def test_stability_classifies_a_version(version: str, expected: str) -> None:
+    # Given / When
+    actual = versions.stability(version)
+
+    # Then
+    assert actual == expected
+
+
+def test_stability_rejects_an_invalid_version() -> None:
+    # Given / When / Then
+    with pytest.raises(versions.VersionError, match="must be a release line"):
+        versions.stability("v2.3.0")
+
+
+def test_validate_publish_accepts_an_explicit_full_stable_version() -> None:
+    # Given / When
+    actual = versions.validate_publish("v2.3.0", "2.3.0")
+
+    # Then
+    assert actual == "2.3.0"
 
 
 @pytest.mark.parametrize(
