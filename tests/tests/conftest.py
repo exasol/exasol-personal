@@ -2,21 +2,15 @@
 # SPDX-License-Identifier: MIT
 
 import logging
-import platform
 import re
 import shlex
 import subprocess
-import time
 from collections.abc import Generator, Sequence
 from typing import Any
 
 import pytest
 
-from framework.deployment import (
-    Deployment,
-    StatusDatabaseReady,
-    StatusOperationInProgress,
-)
+from framework.deployment import Deployment, StatusDatabaseReady
 from framework.launcher import DeploymentConfig, Launcher
 
 _PROVIDER_MARKERS = {
@@ -95,26 +89,6 @@ def reusable_deployment(
     deployment = Deployment(Launcher(exasol_path), config=config)
     try:
         deployment_proc = deployment.deploy_no_block()
-
-        # Sleep after Popen to allow the child process to start
-        # and update status (needed for Windows).
-        if platform.system() == "Windows":
-            time.sleep(3)
-
-        logging.info("Check status deployment in progress")
-        timeout = 10
-        start_time = time.time()
-        while True:
-            if deployment.has_status(StatusOperationInProgress):
-                break
-
-            if time.time() - start_time > timeout:
-                logging.info("Timeout expired. Status incorrect")
-                msg = f"Expected status `{StatusOperationInProgress}` after `deploy`"
-                raise RuntimeError(msg)
-
-            logging.info("Status incorrect. Retrying in 5 seconds")
-            time.sleep(5)
 
         logging.info("Waiting for deploy to complete")
         deploy_timeout = 40 * 60

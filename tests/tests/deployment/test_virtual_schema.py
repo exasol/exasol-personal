@@ -153,18 +153,7 @@ def _container_runtime(deployment: Deployment) -> PodmanRunner:
 def _wait_for_postgres(source: PostgresSource) -> None:
     for _ in range(60):
         try:
-            source.podman(
-                [
-                    "exec",
-                    source.container,
-                    "pg_isready",
-                    "--username",
-                    source.user,
-                    "--dbname",
-                    source.database,
-                ],
-                None,
-            )
+            _run_postgres(source, "SELECT 1;", "--file", "-")
         except subprocess.CalledProcessError:
             pass
         else:
