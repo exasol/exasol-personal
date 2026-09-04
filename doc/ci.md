@@ -79,25 +79,29 @@ workflow. GitHub Pages must be enabled with **GitHub Actions** as its source, an
 The workflow accepts four inputs:
 
 - `operation`: `publish` or `delete`.
-- `source_ref`: an existing Git tag, a branch under `docs/`, or a full 40-character commit SHA,
+- `source_ref`: an existing Git tag, a branch under `release/`, or a full 40-character commit SHA,
   required for publication.
-- `version`: the published semantic version. It is required for deletion and optional for
-  publication when `source_ref` is named `v<version>` or ends in `/v<version>`.
+- `version`: the published documentation version, either a release line such as `2.2` or a full
+  version such as `2.2.0-rc1`. It is required for deletion and optional for publication when
+  `source_ref` is named `v<version>` or ends in `/v<version>`.
 - `make_latest`: whether the published version takes the `latest` alias and the site root.
   `auto` grants it when no higher stable version is published, `yes` and `no` decide explicitly.
 
-An explicit version can map historical documentation content to an older release without changing
-an existing release tag. For example, publish a reviewed snapshot based on a current commit as
-`2.2.0`, or map its full commit SHA by supplying `2.2.0` explicitly.
+An explicit version can map historical documentation content to an older release line without
+changing an existing release tag. For example, publish a reviewed snapshot based on a current commit
+as `2.1`, or map its full commit SHA by supplying `2.1` explicitly.
 
-Documentation for a released version is revised on a branch under `docs/`, such as `docs/v2.2.0`.
-Publishing that branch replaces the version from its current tip, so content and styling can change
-after a release without moving the release tag. Branches outside `docs/` are rejected, which keeps
-publication from being requested against development work. Reserve `docs/` for branches: a name
-that exists as both a branch and a tag is rejected until `source_ref` is qualified with
-`refs/heads/` or `refs/tags/`, and documentation tags sharing the version namespace also interfere
-with release version derivation. Protect the `docs/*` branches with a ruleset, as described in
+Documentation is published per release line from that line's release branch, such as `release/v2.2`
+published as version `2.2`. Publishing the branch again replaces the line from its current tip, so
+content and styling can change after a release without moving any release tag, and a patch can be
+reviewed together with the documentation it changes. Branches outside `release/` are rejected, which
+keeps publication from being requested against development work. A name that exists as both a branch
+and a tag is rejected until `source_ref` is qualified with `refs/heads/` or `refs/tags/`. Protect the
+`release/*` branches with a ruleset, as described in
 [CI security best practices](ci_security_best_practices.md).
+
+Documentation for a line that is not released yet is published with `make_latest` set to `no`, and
+takes the alias on a later publication once the release is out.
 
 Publication shallow-checks out the source once and builds its self-contained `user-docs/` directory,
 including its content, configuration, scripts, and locked uv environment, before updating the
