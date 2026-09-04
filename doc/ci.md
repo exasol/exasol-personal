@@ -8,7 +8,8 @@ Security policy for public-repo CI is defined in [Repository Security and Automa
 
 ### CI Pipeline (`ci.yml`)
 
-Runs automatically on every push to `main` and on pull requests targeting `main`:
+Runs automatically on every push to `main` and on pull requests targeting `main` or a release
+line under `release/`:
 
 - **Go Linting** - Runs `golangci-lint` and `tflint`
 - **Python Linting** - Runs `ruff` and `mypy` on test code
@@ -39,16 +40,6 @@ Dependabot version updates use built-in cooldown periods before PR creation:
 The merge delay is separate from Dependabot cooldown: cooldown delays routine PR creation, while the workflow delay defers approval and auto-merge for ungrouped (security) PRs after they exist.
 Auto-merge does not itself rebase Dependabot PRs; branch protection and Dependabot's own update behavior determine whether stale branches are refreshed before merging.
 
-### Release Pipeline (`release.yml`)
-
-Triggered automatically when a version tag is pushed (e.g., `v1.2.3`):
-
-- Builds binaries for all platforms (Linux, macOS, Windows)
-- Runs tests
-- Creates GitHub release with artifacts
-- Uses a protected `release` environment for release/signing approval gates
-- See [Release Process](release.md) for details
-
 ### Merge Workflow (`merge.yml`)
 
 Runs automatically on every push to `main`:
@@ -70,10 +61,34 @@ Splitting by region also keeps a deployment from matching two search targets at 
 
 ## Manual Workflows
 
+### Release Pipeline (`release.yml`)
+
+Maintainers dispatch this workflow with an existing version tag; pushing a tag does not trigger it.
+It checks out the tag it is given and never inspects branches, so releasing from the default branch
+and releasing a patch from a release line work the same way. Dispatch it with the default branch
+selected, so that documentation publication is accepted by the `github-pages` environment.
+
+Three jobs run in order:
+
+- `validate-docs` builds the tag's user documentation with a strict MkDocs build and rejects a tag
+  whose documentation version cannot be derived. Invalid documentation therefore fails the release
+  before anything is published.
+- `goreleaser` builds and signs binaries for Linux, macOS, and Windows and creates the GitHub
+  release with its artifacts. It runs in the protected `release` environment, which gates
+  publishing and signing behind approval.
+- `publish-docs` calls the documentation workflow for the release tag. It runs only for a stable
+  tag, so a pre-release publishes no documentation version. A failure here leaves the release
+  published, and dispatching the documentation workflow for the same tag republishes the same
+  documentation version.
+
+Tests are not part of this workflow; they run in CI before the commit is tagged. See
+[Release Process](release.md) for the maintainer steps.
+
 ### Documentation Publication (`docs.yml`)
 
-Maintainers publish versioned user documentation with the manually dispatched documentation
-workflow. GitHub Pages must be enabled with **GitHub Actions** as its source, and the existing
+Versioned user documentation is published by this workflow, either by the
+[release pipeline](#release-pipeline-releaseyml) for a stable release or by a manual dispatch.
+GitHub Pages must be enabled with **GitHub Actions** as its source, and the existing
 `github-pages` environment must allow deployments only from `main`.
 
 The workflow accepts four inputs:
@@ -83,18 +98,21 @@ The workflow accepts four inputs:
   required for publication.
 - `version`: the published documentation version, either a release line such as `2.2` or a full
   version such as `2.2.0-rc1`. It is required for deletion and optional for publication when
-  `source_ref` is named `v<version>` or ends in `/v<version>`.
+  `source_ref` is named `v<version>` or ends in `/v<version>`. A stable source version derives its
+  release line, so `v2.2.1` publishes `2.2`, and a pre-release derives its full version.
 - `make_latest`: whether the published version takes the `latest` alias and the site root.
   `auto` grants it when no higher stable version is published, `yes` and `no` decide explicitly.
 
 An explicit version can map historical documentation content to an older release line without
 changing an existing release tag. For example, publish a reviewed snapshot based on a current commit
-as `2.1`, or map its full commit SHA by supplying `2.1` explicitly.
+as `2.1`, or map its full commit SHA by supplying `2.1` explicitly. It is also the way to publish a
+full stable version such as `2.2.0`.
 
-Documentation is published per release line from that line's release branch, such as `release/v2.2`
-published as version `2.2`. Publishing the branch again replaces the line from its current tip, so
-content and styling can change after a release without moving any release tag, and a patch can be
-reviewed together with the documentation it changes. Branches outside `release/` are rejected, which
+Documentation is published per release line. Releasing publishes the line from its release tag, and
+a later correction is published from that line's release branch, such as `release/v2.2` published
+as version `2.2`. Publishing the branch replaces the line from its current tip, so content and
+styling can change after a release without moving any release tag, and a patch can be reviewed
+together with the documentation it changes. Branches outside `release/` are rejected, which
 keeps publication from being requested against development work. A name that exists as both a branch
 and a tag is rejected until `source_ref` is qualified with `refs/heads/` or `refs/tags/`. Protect the
 `release/*` branches with a ruleset, as described in
@@ -120,9 +138,10 @@ each published version, so a version published before that configuration existed
 only after it is republished. Readers may see a stale selector for up to ten minutes after a
 publication, because GitHub Pages caches the version catalog it fetches.
 
-All operations are serialized in request order. If Pages deployment fails after the version
-catalog is updated, rerun the same operation to deploy the complete stored catalog. A repeated
-deletion succeeds when the selected version is already absent and redeploys that catalog.
+All operations are serialized in request order, including a publication requested by a release. If
+Pages deployment fails after the version catalog is updated, rerun the same operation to deploy the
+complete stored catalog. A repeated deletion succeeds when the selected version is already absent
+and redeploys that catalog.
 
 ### Deployment Tests (`tests-deployment.yml`)
 
