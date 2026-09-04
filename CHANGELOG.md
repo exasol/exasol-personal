@@ -55,6 +55,9 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- Fixed documentation publication failing during validation because the GitHub Actions runner does
+  not provide the Task command.
+
 - Corrected the local Virtual Schema setup guide to use the active deployment's shared directory on
   macOS instead of obsolete SSH paths, and added the required deployment selection and PostgreSQL
   timezone configuration steps.
