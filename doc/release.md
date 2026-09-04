@@ -20,6 +20,21 @@ Release safety gates:
 
 Tag governance controls (for example restricting who can create `v*` tags and what refs are allowed) are enforced through repository rulesets/settings.
 
+## Release Lines
+
+Each minor version has a release line branch named `release/v<major>.<minor>`, created from that
+line's first stable release tag. The line carries the user documentation published for that
+version, so content and styling can be corrected after the release without moving a release tag,
+and a fix can be reviewed together with the documentation it changes. Publishing documentation
+from a release line is described in the [CI guide](ci.md#documentation-publication-docsyml).
+
+Tagging is unchanged on a release line: the release workflow checks out the tag it is given and
+does not inspect branches, so a patch is tagged on its release branch exactly as a release is
+tagged on the default branch. Protect `release/*` with a ruleset, as described in
+[CI security best practices](ci_security_best_practices.md).
+
+Which changes reach a release line is decided per line and is not automated.
+
 ## Creating a Release
 
 Before tagging a release, ensure deployment directory compatibility constraints are up to date:
@@ -115,5 +130,6 @@ Before creating a stable release:
 - [ ] Changelog is finalized for this version and committed before the tag
 - [ ] Documentation is up to date
 - [ ] Version number follows semantic versioning
-- [ ] All changes merged to main branch
+- [ ] All changes merged to main branch, or to the release line for a patch release
 - [ ] Tag created with proper version format (`v1.2.3`)
+- [ ] Release line branch exists for the version, and its published documentation is current
