@@ -55,6 +55,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- Fixed cloud deployments intermittently failing when a bootstrap asset could not be fetched during early boot. Bootstrap files are now fetched after network setup, validated before launcher startup, and reported with actionable rerun guidance (#298).
+
 - Fixed documentation publication failing during validation because the GitHub Actions runner does
   not provide the Task command.
 

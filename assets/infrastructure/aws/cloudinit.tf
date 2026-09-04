@@ -55,6 +55,27 @@ locals {
     trimsuffix(trimprefix(f.dest_path, "/"), "/") => f
   }
 
+  bootstrap_required_files = join("\n", [
+    for path in keys(local.bootstrap_node_files_by_key) : "  ${jsonencode("/${path}")}"
+  ])
+
+  bootstrap_preflight_script = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -Eeuo pipefail
+
+    required_files=(
+    ${local.bootstrap_required_files}
+    )
+
+    for file in "$${required_files[@]}"; do
+      if [[ ! -f "$file" ]]; then
+        echo "Bootstrap asset missing: $file" >&2
+        echo "S3 bootstrap fetch failed; rerun install." >&2
+        exit 1
+      fi
+    done
+  SCRIPT
+
   # Cluster addressing helpers (also used for JSON payload values).
   node_ips           = [for n in local.nodes : n.ip]
   node_ips_space_sep = join(" ", local.node_ips)
@@ -156,6 +177,11 @@ data "cloudinit_config" "cloud_config" {
       write_files = concat(
         [
           {
+            path        = "/usr/local/sbin/exasol-bootstrap-preflight"
+            permissions = "0755"
+            content     = local.bootstrap_preflight_script
+          },
+          {
             path        = local.infrastructure_json_target_path
             permissions = "0644"
             content     = jsonencode(local.infrastructure_payload)
@@ -170,6 +196,7 @@ data "cloudinit_config" "cloud_config" {
           for f in local.installation_node_files : {
             path        = f.dest_path
             permissions = f.permissions
+            defer       = true
             source = {
               uri = "https://${aws_s3_bucket.bootstrap_assets.bucket_regional_domain_name}/${aws_s3_object.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].key}"
             }
@@ -179,6 +206,7 @@ data "cloudinit_config" "cloud_config" {
           for f in local.infrastructure_node_files : {
             path        = f.dest_path
             permissions = f.permissions
+            defer       = true
             source = {
               uri = "https://${aws_s3_bucket.bootstrap_assets.bucket_regional_domain_name}/${aws_s3_object.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].key}"
             }
@@ -186,5 +214,17 @@ data "cloudinit_config" "cloud_config" {
         ]
       )
     })
+  }
+
+  part {
+    content_type = "text/x-shellscript"
+    filename     = "99-start-launcher.sh"
+    content      = <<-SCRIPT
+      #!/usr/bin/env bash
+      set -Eeuo pipefail
+      /usr/local/sbin/exasol-bootstrap-preflight
+      systemctl daemon-reload
+      systemctl enable --now --no-block exasol_launcher.target
+    SCRIPT
   }
 }
