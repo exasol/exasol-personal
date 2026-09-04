@@ -77,7 +77,7 @@ def test_help_usage_section_is_indented_and_separated(exasol_path: str) -> None:
 def test_version(exasol_path: str) -> None:
     # Given the current version of the program based on the the latest git version tag
     git_describe_command_result = run_command(
-        ["git", "describe", "--tags", "--abbrev=0"],
+        ["git", "describe", "--tags", "--abbrev=0", "--match", "v*"],
     )
     git_tag_version_str = git_describe_command_result.stdout.strip()
 
@@ -87,19 +87,15 @@ def test_version(exasol_path: str) -> None:
     )
     version_command_output: str = version_command_result.stdout.strip()
 
-    # Then I expect that the git tag version starts with a "v"
-    version_expected_first_char = git_tag_version_str[0]
-    assert version_expected_first_char == "v"
-
-    # And I expect the version command output to be the same as the tagged version
-    tag_expected_str = git_tag_version_str[1:]
+    # Then I expect the version command output to be the same as the tagged version
+    tag_expected_str = git_tag_version_str.removeprefix("v")
     assert version_command_output == tag_expected_str
 
 
 def test_version_json(exasol_path: str) -> None:
     # Given the current version of the program based on the the latest git version tag
     git_describe_command_result = run_command(
-        ["git", "describe", "--tags", "--abbrev=0"],
+        ["git", "describe", "--tags", "--abbrev=0", "--match", "v*"],
     )
     git_tag_version_str = git_describe_command_result.stdout.strip()
 
@@ -110,7 +106,7 @@ def test_version_json(exasol_path: str) -> None:
     version_command_output = json.loads(version_command_result.stdout)
 
     # Then the version is returned as structured JSON
-    assert version_command_output == {"version": git_tag_version_str[1:]}
+    assert version_command_output == {"version": git_tag_version_str.removeprefix("v")}
 
 
 def test_info_command_exists(exasol_path: str) -> None:

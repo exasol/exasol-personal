@@ -102,7 +102,7 @@ tasks:
       CGO_ENABLED: "0"
     cmds:
       - |
-        version=$(git describe --tags --abbrev=0) # First character is "v".
+        version=$(git describe --tags --abbrev=0 --match 'v*') # First character is "v".
         go build \
           -tags=containers_image_openpgp \
           -o {{.BUILD_DIR_NAME}}/{{.BINARY_NAME}} \
@@ -128,7 +128,7 @@ tasks:
       CGO_ENABLED: "0"
     cmds:
       - |
-        version=$(git describe --tags --abbrev=0) # First character is "v".
+        version=$(git describe --tags --abbrev=0 --match 'v*') # First character is "v".
         go build -tags=containers_image_openpgp -o {{.BUILD_DIR_NAME}}/{{.OUTPUT_NAME}} \
           {{if eq .DEBUG_BUILD "true"}}-gcflags="all=-N -l"{{else}}-trimpath \
           -gcflags=all=-l{{end}} \
