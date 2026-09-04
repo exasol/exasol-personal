@@ -85,16 +85,11 @@ DEPLOY_DIR=$(exasol info --json --deployment demo | jq -r '.deploymentDir')
 DEPLOY_DIR=$(exasol info --json --deployment-dir /path/to/deployment | jq -r '.deploymentDir')
 ```
 
-On Linux, Nano's `/exa` is the persistent Podman data directory on the host:
+Nano's `/exa` files are available at `local/runtime/exa` in the deployment directory:
 
 ```bash
 EXA_DATA="$DEPLOY_DIR/local/runtime/exa"
 ```
-
-On macOS, the database runs inside a managed VM. The deployment's
-`local/runtime/vm-shared` directory is mounted in the VM as `/mnt/host`. Use
-`exasol shell host` to copy staged files into the database directories; do not rely on VM IP
-addresses, SSH keys, or SSH ports.
 
 ## Worked example: PostgreSQL JDBC adapter
 
@@ -138,8 +133,6 @@ directory because the adapter reads it for metadata and the ETL layer uses it fo
 
 ### 2. Copy the files into the database
 
-On Linux:
-
 ```bash
 mkdir -p "$EXA_DATA/bucketfs/bfsdefault/default/vs"
 cp "$VS_DIR/$ADAPTER_JAR" "$VS_DIR/$DRIVER_JAR" \
@@ -148,28 +141,8 @@ mkdir -p "$EXA_DATA/jdbc/POSTGRESQL"
 cp "$VS_DIR/$DRIVER_JAR" "$VS_DIR/settings.cfg" "$EXA_DATA/jdbc/POSTGRESQL/"
 ```
 
-On macOS:
-
-```bash
-exasol shell host --deployment-dir "$DEPLOY_DIR"
-```
-
-Inside the VM shell, run:
-
-```bash
-mkdir -p /var/lib/exa/bucketfs/bfsdefault/default/vs /var/lib/exa/jdbc/POSTGRESQL && \
-cp /mnt/host/vs/virtual-schema-dist-14.0.2-postgresql-4.0.0.jar \
-   /mnt/host/vs/postgresql-42.7.13.jar \
-   /var/lib/exa/bucketfs/bfsdefault/default/vs/ && \
-cp /mnt/host/vs/postgresql-42.7.13.jar \
-   /mnt/host/vs/settings.cfg \
-   /var/lib/exa/jdbc/POSTGRESQL/ && \
-ls -lh /var/lib/exa/bucketfs/bfsdefault/default/vs /var/lib/exa/jdbc/POSTGRESQL
-```
-
-Then run `exit` to return to the macOS shell. `DRIVERNAME` is the name used in
-`IMPORT ... DRIVER = '...'`. If either example filename changes, use the resulting filenames for
-`JAR` and the `%jar` lines in the adapter script.
+`DRIVERNAME` is the name used in `IMPORT ... DRIVER = '...'`. If either example filename changes,
+use the resulting filenames for `JAR` and the `%jar` lines in the adapter script.
 
 ### 3. Apply the setup
 
@@ -182,8 +155,9 @@ This activates the SLC and makes the JDBC driver configuration available to the 
 
 ### Optional: run PostgreSQL inside the macOS VM
 
-For a self-contained test, PostgreSQL can run inside the managed VM. Put it on a dedicated Podman
-network and attach Nano to that network:
+For a self-contained test, PostgreSQL can run inside the managed VM. The deployment's
+`local/runtime/vm-shared` directory is mounted in the VM as `/mnt/host`. Put PostgreSQL on a
+dedicated Podman network and attach Nano to that network:
 
 ```bash
 exasol shell host --deployment-dir "$DEPLOY_DIR"
@@ -307,3 +281,8 @@ and that the files were copied into the bucket directory.
 
 **Adapter execution or `IMPORT` reports no runtime** — confirm that the adapter's SLC is installed
 with `exasol slc list`. JDBC adapters require the Java SLC.
+
+**`ETL-5402` or `ETL-5: Your security policy has prevented the connection from being
+attempted`** — appears when the source database negotiates TLS, even though the message names
+`java.net.SocketPermission`. Append `?sslmode=disable` to the JDBC URL in `CREATE CONNECTION` to
+transfer data without TLS, which is only appropriate on a trusted network.

@@ -42,10 +42,13 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
-- Documentation publication now selects an immutable Git tag or full commit SHA independently
-  from the published version. Conventional version tags still derive the version automatically,
-  while an explicit version supports publishing reviewed documentation snapshots for older
-  releases without changing their release tags.
+- macOS local deployments now store Nano data in host-visible deployment
+  storage, making persistent `/exa` files available to host tools.
+
+- macOS local deployments now run the VM guest that belongs to the launcher's
+  runner. A deployment created by an earlier launcher rebuilds its guest on the
+  next `exasol start`, which takes longer than usual once and keeps its
+  database contents.
 
 - Custom SLC language identifiers are no longer limited to Python, Java, and R. The launcher now
   accepts any valid client-defined identifier, such as `rust`, for a custom SLC.

@@ -13,6 +13,7 @@ from scripts import versions
     "target",
     [
         "1.2.3",
+        "1.2",
         "1.2.3-alpha--1",
         "1.2.3--",
         "1.2.3+001.build",
@@ -30,6 +31,8 @@ def test_validate_delete_accepts_semantic_versions(target: str) -> None:
     "target",
     [
         "v1.2.3",
+        "1",
+        "1.2.3.4",
         "01.2.3",
         "1.02.3",
         "1.2.03",
@@ -47,15 +50,17 @@ def test_validate_delete_rejects_invalid_versions(target: str) -> None:
 @pytest.mark.parametrize(
     ("source_ref", "expected"),
     [
-        ("v2.3.0", "2.3.0"),
-        ("docs/v2.2.0-rc.1", "2.2.0-rc.1"),
-        ("refs/tags/docs/v2.1.0", "2.1.0"),
-        ("docs/v2.4.0", "2.4.0"),
-        ("refs/heads/docs/v2.4.0", "2.4.0"),
-        ("refs/heads/docs/v2.5.0-rc.1", "2.5.0-rc.1"),
+        ("v2.3.0", "2.3"),
+        ("v2.3.1", "2.3"),
+        ("refs/tags/v2.3.1", "2.3"),
+        ("refs/tags/docs/v2.1.0", "2.1"),
+        ("release/v2.4", "2.4"),
+        ("refs/heads/release/v2.4", "2.4"),
+        ("v2.3.0+build.1", "2.3"),
+        ("v2.3+build.1", "2.3"),
     ],
 )
-def test_validate_publish_derives_version_from_conventional_sources(
+def test_validate_publish_derives_the_release_line_of_a_stable_source(
     source_ref: str, expected: str
 ) -> None:
     # Given / When
@@ -66,7 +71,57 @@ def test_validate_publish_derives_version_from_conventional_sources(
 
 
 @pytest.mark.parametrize(
-    "source_ref", ["a" * 40, "release-2.2.0", "refs/heads/docs/styling"]
+    ("source_ref", "expected"),
+    [
+        ("v2.2.0-rc.1", "2.2.0-rc.1"),
+        ("docs/v2.2.0-rc.1", "2.2.0-rc.1"),
+        ("refs/heads/release/v2.5.0-rc.1", "2.5.0-rc.1"),
+    ],
+)
+def test_validate_publish_derives_the_full_version_of_a_prerelease_source(
+    source_ref: str, expected: str
+) -> None:
+    # Given / When
+    actual = versions.validate_publish(source_ref, None)
+
+    # Then
+    assert actual == expected
+
+
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        ("2.3", "stable"),
+        ("2.3.0", "stable"),
+        ("2.3.0+build-1", "stable"),
+        ("2.3.0-rc.1", "prerelease"),
+        ("2.3.0-rc.1+build", "prerelease"),
+    ],
+)
+def test_stability_classifies_a_version(version: str, expected: str) -> None:
+    # Given / When
+    actual = versions.stability(version)
+
+    # Then
+    assert actual == expected
+
+
+def test_stability_rejects_an_invalid_version() -> None:
+    # Given / When / Then
+    with pytest.raises(versions.VersionError, match="must be a release line"):
+        versions.stability("v2.3.0")
+
+
+def test_validate_publish_accepts_an_explicit_full_stable_version() -> None:
+    # Given / When
+    actual = versions.validate_publish("v2.3.0", "2.3.0")
+
+    # Then
+    assert actual == "2.3.0"
+
+
+@pytest.mark.parametrize(
+    "source_ref", ["a" * 40, "release-2.2.0", "refs/heads/release/styling"]
 )
 def test_validate_publish_requires_version_when_it_cannot_be_derived(
     source_ref: str,
@@ -86,7 +141,7 @@ def test_validate_publish_prefers_explicit_version() -> None:
 
 def test_validate_publish_rejects_invalid_explicit_version() -> None:
     # Given / When / Then
-    with pytest.raises(versions.VersionError, match="semantic-version syntax"):
+    with pytest.raises(versions.VersionError, match="must be a release line"):
         versions.validate_publish("v2.2.0", "release-2.2")
 
 
@@ -115,6 +170,66 @@ def test_validate_publish_rejects_forcing_latest_onto_a_prerelease() -> None:
     # Given / When / Then
     with pytest.raises(versions.VersionError, match="only a stable version"):
         versions.validate_publish("docs/v2.3.0-rc.1", None, "yes")
+
+
+def test_publish_release_line_supersedes_its_full_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    calls: list[tuple[str, ...]] = []
+    catalog = [{"version": "2.2.0", "aliases": ["latest"]}]
+    monkeypatch.setattr(versions, "mike", mike_with_versions(catalog, calls))
+
+    # When
+    versions.publish("2.2")
+
+    # Then
+    assert calls == [LIST, deploy("--update-aliases", "2.2", "latest"), SET_DEFAULT]
+
+
+def test_publish_release_line_preserves_a_higher_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    calls: list[tuple[str, ...]] = []
+    catalog = [{"version": "2.3", "aliases": ["latest"]}]
+    monkeypatch.setattr(versions, "mike", mike_with_versions(catalog, calls))
+
+    # When
+    versions.publish("2.2")
+
+    # Then
+    assert calls == [LIST, deploy("2.2")]
+
+
+def test_publish_higher_release_line_updates_latest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    calls: list[tuple[str, ...]] = []
+    catalog = [{"version": "2.2", "aliases": ["latest"]}]
+    monkeypatch.setattr(versions, "mike", mike_with_versions(catalog, calls))
+
+    # When
+    versions.publish("2.3")
+
+    # Then
+    assert calls == [LIST, deploy("--update-aliases", "2.3", "latest"), SET_DEFAULT]
+
+
+def test_publish_patch_does_not_supersede_its_release_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    calls: list[tuple[str, ...]] = []
+    catalog = [{"version": "2.3", "aliases": ["latest"]}]
+    monkeypatch.setattr(versions, "mike", mike_with_versions(catalog, calls))
+
+    # When
+    versions.publish("2.3.1")
+
+    # Then
+    assert calls == [LIST, deploy("--update-aliases", "2.3.1", "latest"), SET_DEFAULT]
 
 
 def test_publish_highest_stable_version_updates_latest(

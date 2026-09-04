@@ -187,6 +187,7 @@ type vmRuntimePaths struct {
 
 	VMDir                   string
 	SharedDir               string
+	HostNanoDataDir         string
 	StatePath               string
 	RunnerVersionMarkerPath string
 }
@@ -198,6 +199,7 @@ func newVMRuntimePaths(deployment config.DeploymentDir) vmRuntimePaths {
 		runtimePaths:            rtPaths,
 		VMDir:                   filepath.Join(rtPaths.WorkDir, vmDirName),
 		SharedDir:               filepath.Join(rtPaths.WorkDir, sharedDirName),
+		HostNanoDataDir:         filepath.Join(rtPaths.WorkDir, nanoDataDirName),
 		StatePath:               filepath.Join(rtPaths.WorkDir, vmStateFileName),
 		RunnerVersionMarkerPath: filepath.Join(rtPaths.WorkDir, runnerVersionMarkerFileName),
 	}

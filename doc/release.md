@@ -6,19 +6,49 @@ Security requirements for release automation are defined in [Repository Security
 
 ## Overview
 
-Releases are fully automated using [GoReleaser](https://goreleaser.com/) and GitHub Actions. When a version tag is pushed, the release workflow automatically:
-- Builds binaries for all supported platforms
-- Runs the test suite
-- Creates a GitHub release
-- Uploads release artifacts
+A release is built, signed, and published by GitHub Actions, but it is not triggered by a tag push.
+A maintainer pushes a version tag and dispatches the release workflow for that tag. The
+[CI guide](ci.md#release-pipeline-releaseyml) describes the workflow itself.
+
+The maintainer:
+- Finalizes the changelog and commits it.
+- Creates and pushes the version tag.
+- Dispatches the release workflow for that tag.
+- Creates the release line branch after the first stable release of a minor version.
+
+The release workflow:
+- Validates the user documentation at the release tag.
+- Builds, signs, and notarizes binaries for all supported platforms with [GoReleaser](https://goreleaser.com/).
+- Creates the GitHub release with its artifacts, checksums, and generated notes.
+- Publishes the user documentation of a stable release as that release's line version.
+
+Tests are not part of the release workflow. They run in CI on the commit before it is tagged.
 
 Release safety gates:
 - Version tags must follow `v*`.
+- Invalid user documentation at the release tag fails the release before it is published.
 - Publishing and signing run in a protected release environment.
 - Third-party release actions are pinned to immutable commit SHAs.
 - Downloaded signing tooling is version-pinned and checksum-verified in CI.
 
 Tag governance controls (for example restricting who can create `v*` tags and what refs are allowed) are enforced through repository rulesets/settings.
+
+## Release Lines
+
+Each minor version has a release line branch named `release/v<major>.<minor>`, created from that
+line's first stable release tag. A release publishes its documentation from the release tag, so the
+branch is not needed in order to release. It exists to carry later corrections: content and styling
+can be fixed after the release without moving a release tag, and a fix is reviewed together with the
+documentation it changes. Republishing a corrected line is described in the
+[CI guide](ci.md#documentation-publication-docsyml).
+
+Tagging is unchanged on a release line: the release workflow checks out the tag it is given and
+does not inspect branches, so a patch is tagged on its release branch exactly as a release is
+tagged on the default branch. Dispatch the release workflow with the default branch selected, so
+that documentation publication is accepted by the `github-pages` environment. Protect `release/*`
+with a ruleset, as described in [CI security best practices](ci_security_best_practices.md).
+
+Which changes reach a release line is decided per line and is not automated.
 
 ## Creating a Release
 
@@ -49,27 +79,34 @@ git commit -m "docs: finalize changelog for v1.2.3"
 ```bash
 # Create an annotated tag with semantic versioning
 git tag -a v1.2.3 -m "Release v1.2.3"
-
-# Push the tag to trigger the release workflow
 git push origin v1.2.3
 ```
 
-### 3. Automated Build
+### 3. Publish the Release
 
-GitHub Actions will automatically:
-1. Checkout the tagged commit
-2. Run tests to ensure quality
-3. Build binaries for all target platforms
-4. Create checksums and archives
-5. Generate release notes
-6. Publish the release on GitHub
+Dispatch [Create GH release (from existing tag)](https://github.com/exasol/exasol-personal/actions/workflows/release.yml)
+with the default branch selected and the tag as its input. Leave the previous tag blank unless the
+changelog base has to be something other than the last stable release.
 
-### 4. Monitor the Release
+Watch the run to completion. It validates the tag's documentation, waits for the release
+environment's approval, publishes the release, and then publishes the documentation of a stable
+release as version `<major>.<minor>`. A pre-release validates its documentation and publishes no
+documentation version.
 
-Watch the GitHub Actions workflow to ensure it completes successfully:
-- Navigate to the [Actions tab](https://github.com/exasol/exasol-personal/actions)
-- Find the workflow run for your tag
-- Verify all jobs complete successfully
+If documentation publication fails after the release is published, the release stays published.
+Republish the documentation by dispatching the
+[documentation workflow](ci.md#documentation-publication-docsyml) for the same tag, which resolves
+the same version.
+
+### 4. Create the Release Line Branch
+
+After the first stable release of a minor version, create that line's branch so later corrections
+have a home:
+
+```bash
+git branch release/v1.2 v1.2.0
+git push origin release/v1.2
+```
 
 ## Release Configuration
 
@@ -87,7 +124,7 @@ The release process is configured in `.goreleaser.yaml`, which defines:
 Releases are built for:
 - **Linux**: amd64, arm64
 - **macOS**: amd64 (Intel), arm64 (Apple Silicon)
-- **Windows**: amd64, arm64
+- **Windows**: amd64
 
 ## Testing Releases Locally
 
@@ -111,9 +148,14 @@ Follow [Semantic Versioning](https://semver.org/):
 
 Before creating a stable release:
 
-- [ ] All tests pass locally (`task all`)
+- [ ] All changes merged to `main`, or to the release line for a patch release
+- [ ] CI passed on the commit to be tagged
+- [ ] User documentation under `user-docs/` describes this release
 - [ ] Changelog is finalized for this version and committed before the tag
-- [ ] Documentation is up to date
 - [ ] Version number follows semantic versioning
-- [ ] All changes merged to main branch
 - [ ] Tag created with proper version format (`v1.2.3`)
+
+After the release workflow completes:
+
+- [ ] Published documentation shows the released version
+- [ ] Release line branch exists for the version

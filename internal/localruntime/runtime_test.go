@@ -79,11 +79,14 @@ func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
 
 	deployment := config.NewDeploymentDir(t.TempDir())
 	eventsPath := filepath.Join(t.TempDir(), "events")
-	runnerScript := fakeV2RunnerScript(eventsPath, 28563)
+	runnerScript := fakeV2RunnerScript(eventsPath)
 	localRuntime := NewMacVMRuntime(deployment, newTestManagerForRunner(t, []byte(runnerScript)))
 	install := &recordingLocalInstall{eventsPath: eventsPath, running: true}
 	localRuntime.installFactory = func(string) (localinstall.LocalInstall, error) {
 		return install, nil
+	}
+	localRuntime.migrationFactory = func(localinstall.ExecutionEnvironment) macDataMigrator {
+		return &recordingMacDataMigrator{eventsPath: eventsPath}
 	}
 
 	if err := localRuntime.Prepare(context.Background(), nil, nil, PrepareOptions{}); err != nil {
@@ -98,7 +101,7 @@ func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
 		t.Fatalf("start failed: %v", err)
 	}
 	if install.startConfig.ContainerDBPort != nanoDBPort ||
-		install.startConfig.DataDir != vmNanoDataDir {
+		install.startConfig.DataDir != vmSharedNanoDataDir {
 		t.Fatalf("unexpected guest Podman config: %#v", install.startConfig)
 	}
 	if install.startConfig.ContainerDBBindHost != "" {
@@ -124,7 +127,10 @@ func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read lifecycle events: %v", err)
 	}
-	want := []string{"runner-init", "runner-start", "install-start", "install-stop", "runner-stop"}
+	want := []string{
+		"runner-init", "runner-start", "migration-prepare", "install-start",
+		"install-stop", "runner-stop",
+	}
 	for _, event := range want {
 		if !strings.Contains(string(events), event+"\n") {
 			t.Fatalf("missing %q in lifecycle events:\n%s", event, events)
@@ -152,13 +158,16 @@ func TestMacVMRuntimeStartStopsVMWhenInstallFails(t *testing.T) {
 	eventsPath := filepath.Join(t.TempDir(), "events")
 	localRuntime := NewMacVMRuntime(
 		deployment,
-		newTestManagerForRunner(t, []byte(fakeV2RunnerScript(eventsPath, 28563))),
+		newTestManagerForRunner(t, []byte(fakeV2RunnerScript(eventsPath))),
 	)
 	localRuntime.installFactory = func(string) (localinstall.LocalInstall, error) {
 		return &recordingLocalInstall{
 			eventsPath: eventsPath,
 			startErr:   errors.New("podman failed"),
 		}, nil
+	}
+	localRuntime.migrationFactory = func(localinstall.ExecutionEnvironment) macDataMigrator {
+		return &recordingMacDataMigrator{eventsPath: eventsPath}
 	}
 	if err := localRuntime.Prepare(context.Background(), nil, nil, PrepareOptions{}); err != nil {
 		t.Fatalf("prepare failed: %v", err)
@@ -176,6 +185,48 @@ func TestMacVMRuntimeStartStopsVMWhenInstallFails(t *testing.T) {
 	}
 	if !strings.Contains(string(events), "install-start\nrunner-stop\n") {
 		t.Fatalf("expected failed installation to stop VM, got:\n%s", events)
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable files.
+func TestMacVMRuntimeStartStopsVMWhenMigrationFails(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	localRuntime := NewMacVMRuntime(
+		deployment,
+		newTestManagerForRunner(t, []byte(fakeV2RunnerScript(eventsPath))),
+	)
+	install := &recordingLocalInstall{eventsPath: eventsPath}
+	localRuntime.installFactory = func(string) (localinstall.LocalInstall, error) {
+		return install, nil
+	}
+	localRuntime.migrationFactory = func(localinstall.ExecutionEnvironment) macDataMigrator {
+		return &recordingMacDataMigrator{
+			eventsPath: eventsPath,
+			prepareErr: errors.New("migration failed"),
+		}
+	}
+	if err := localRuntime.Prepare(context.Background(), nil, nil, PrepareOptions{}); err != nil {
+		t.Fatalf("prepare failed: %v", err)
+	}
+
+	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
+		CPUCount: 2, MemoryMB: 4096, DataSizeGB: 100,
+	})
+	if err == nil || !strings.Contains(err.Error(), "migration failed") {
+		t.Fatalf("expected migration failure, got %v", err)
+	}
+	events, readErr := os.ReadFile(eventsPath)
+	if readErr != nil {
+		t.Fatalf("failed to read lifecycle events: %v", readErr)
+	}
+	if !strings.Contains(string(events), "migration-prepare\nrunner-stop\n") {
+		t.Fatalf("expected failed migration to stop VM, got:\n%s", events)
+	}
+	if strings.Contains(string(events), "install-start") {
+		t.Fatalf("Nano started after failed migration:\n%s", events)
 	}
 }
 
@@ -353,13 +404,17 @@ func TestMacVMRuntimeOpenHostShellPreservesRunnerFailure(t *testing.T) {
 	}
 }
 
-func fakeV2RunnerScript(eventsPath string, hostDBPort int) string {
+func fakeV2RunnerScript(eventsPath string) string {
+	return fakeV2RunnerScriptWithVersion(eventsPath, "2.0.0-dev")
+}
+
+func fakeV2RunnerScriptWithVersion(eventsPath, version string) string {
 	return fmt.Sprintf(`#!/bin/sh
 set -eu
 events=%q
 case "$1" in
   version)
-    printf 'v2.0.0-dev\n'
+    printf 'v%s\n'
     ;;
   init)
     mkdir -p vm vm-shared
@@ -393,7 +448,7 @@ EOF
     exit 2
     ;;
 esac
-`, eventsPath, hostDBPort)
+`, eventsPath, version, 28563)
 }
 
 type recordingLocalInstall struct {
@@ -401,6 +456,35 @@ type recordingLocalInstall struct {
 	startConfig localinstall.StartConfig
 	startErr    error
 	running     bool
+}
+
+type recordingMacDataMigrator struct {
+	eventsPath    string
+	prepareErr    error
+	finalizeErr   error
+	finalizeCalls int
+}
+
+func (migration *recordingMacDataMigrator) prepare(
+	context.Context,
+	io.Writer,
+	io.Writer,
+	func() error,
+) error {
+	recordTestEvent(migration.eventsPath, "migration-prepare")
+
+	return migration.prepareErr
+}
+
+func (migration *recordingMacDataMigrator) finalize(
+	context.Context,
+	io.Writer,
+	io.Writer,
+) error {
+	migration.finalizeCalls++
+	recordTestEvent(migration.eventsPath, "migration-finalize")
+
+	return migration.finalizeErr
 }
 
 func (install *recordingLocalInstall) Start(
@@ -437,8 +521,12 @@ func (install *recordingLocalInstall) Destroy(ctx context.Context, out, outErr i
 }
 
 func (install *recordingLocalInstall) record(event string) {
+	recordTestEvent(install.eventsPath, event)
+}
+
+func recordTestEvent(eventsPath, event string) {
 	file, err := os.OpenFile(
-		install.eventsPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600,
+		eventsPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600,
 	)
 	if err != nil {
 		return

@@ -693,6 +693,15 @@ def _podman_query(podman_path: Path, *args: str) -> str:
     ).stdout
 
 
+def _run_podman(podman_path: Path, *args: str) -> None:
+    subprocess.run(
+        [str(podman_path), *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
 def _windows_machine_state(podman_path: Path) -> str:
     return (
         _podman_query(
@@ -710,6 +719,48 @@ def _windows_machine_state(podman_path: Path) -> str:
 
 def _windows_container_names(podman_path: Path) -> list[str]:
     return _podman_query(podman_path, "ps", "-a", "--format", "{{.Names}}").splitlines()
+
+
+def _assert_windows_host_data_passthrough(
+    podman_path: Path,
+    container_name: str,
+    host_exa: Path,
+    tmp_path: Path,
+) -> None:
+    mounts = json.loads(
+        _podman_query(
+            podman_path,
+            "inspect",
+            "--format",
+            "{{json .Mounts}}",
+            container_name,
+        )
+    )
+    exa_mounts = [mount for mount in mounts if mount["Destination"] == "/exa"]
+    assert len(exa_mounts) == 1
+    assert exa_mounts[0]["Type"] == "bind"
+    assert host_exa.is_dir()
+
+    host_file = host_exa / "host-visible"
+    host_file.write_text("from-host")
+    host_roundtrip = tmp_path / "host-roundtrip"
+    _run_podman(
+        podman_path,
+        "cp",
+        f"{container_name}:/exa/host-visible",
+        str(host_roundtrip),
+    )
+    assert host_roundtrip.read_text() == "from-host"
+
+    guest_source = tmp_path / "guest-source"
+    guest_source.write_text("from-guest")
+    _run_podman(
+        podman_path,
+        "cp",
+        str(guest_source),
+        f"{container_name}:/exa/guest-visible",
+    )
+    assert (host_exa / "guest-visible").read_text() == "from-guest"
 
 
 # The flags the Windows lifecycle test drives, kept next to it so the two stay
@@ -784,6 +835,12 @@ def test_install_local_windows_lifecycle(exasol_path: str, tmp_path: Path) -> No
 
         deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
         container_name = f"exasol-db-{deployment_data['deploymentId']}"
+        host_exa = deployment_dir / "local" / "runtime" / "exa"
+
+        # Then Nano uses one host bind at /exa with visibility in both directions
+        _assert_windows_host_data_passthrough(
+            podman_path, container_name, host_exa, tmp_path
+        )
 
         # Then the database accepts SQL over the published loopback port
         run_command(
@@ -902,6 +959,7 @@ def test_install_local_windows_lifecycle(exasol_path: str, tmp_path: Path) -> No
         # Then the container and local runtime files are gone
         assert container_name not in _windows_container_names(podman_path)
         assert not (deployment_dir / "local").exists()
+        assert not host_exa.exists()
 
         # Then the shared Podman machine is left running: it is host-wide
         # state the launcher borrows, not deployment state it owns.

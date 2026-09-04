@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import platform
 import re
-import secrets
 import shlex
 import shutil
 import subprocess
@@ -32,6 +30,7 @@ import pytest
 
 from framework.deployment import Deployment
 from framework.launcher import DeploymentConfig, Launcher
+from tests.testcase_helpers import run_in_local_vm
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -104,76 +103,12 @@ def _run_in_local_vm(
     command: str,
     input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a command through the interactive local VM shell with check=True."""
-    import pty  # noqa: PLC0415 - only available on the macOS VM path
-
-    shared = Path(deployment.deployment_dir.name) / "local/runtime/vm-shared"
-    shared.mkdir(parents=True, exist_ok=True)
-    input_file = None
-    if input_text is not None:
-        input_file = shared / ("input-" + secrets.token_hex(16))
-        input_file.write_text(input_text, encoding="utf-8")
-        command += " < " + shlex.quote("/mnt/host/" + input_file.name)
-
-    marker = "__VM_COMMAND_RESULT_" + secrets.token_hex(16) + "__"
-    script = "\n".join(
-        [
-            "stty -echo",
-            f"printf '%s\\n' {shlex.quote(marker)}",
-            command,
-            "status=$?",
-            f"printf '%s:%s\\n' {shlex.quote(marker)} \"$status\"",
-            'exit "$status"',
-        ]
-    )
-    launcher_command = [
+    return run_in_local_vm(
         deployment.launcher.launcher_path,
-        "shell",
-        "host",
-        "--deployment-dir",
         deployment.deployment_dir.name,
-    ]
-    output = bytearray()
-    input_data = (script + "\n").encode()
-    input_sent = False
-
-    def read_input(_fd: int) -> bytes:
-        nonlocal input_sent
-        if input_sent:
-            return b""
-        input_sent = True
-        return input_data
-
-    def read_output(fd: int) -> bytes:
-        try:
-            data = os.read(fd, 4096)
-        except OSError:
-            return b""
-        output.extend(data)
-        return data
-
-    try:
-        pty.spawn(launcher_command, master_read=read_output, stdin_read=read_input)
-    finally:
-        if input_file is not None:
-            input_file.unlink(missing_ok=True)
-
-    decoded = output.decode(errors="replace").replace("\r", "")
-    result_start = decoded.rfind(marker + "\n")
-    result_end = decoded.rfind(marker + ":")
-    if result_start < 0 or result_end < result_start:
-        message = "Local VM command did not return a result marker"
-        raise AssertionError(message)
-    command_output = decoded[result_start + len(marker) + 1 : result_end]
-    returncode = int(decoded[result_end + len(marker) + 1 :].splitlines()[0])
-    result = subprocess.CompletedProcess(
-        launcher_command, returncode, command_output, ""
+        command,
+        input_text,
     )
-    if returncode != 0:
-        raise subprocess.CalledProcessError(
-            returncode, launcher_command, output=command_output
-        )
-    return result
 
 
 def _run_podman(
@@ -437,41 +372,11 @@ JAR={driver.name}
 
 def _stage_artifacts(deployment: Deployment, artifacts: VirtualSchemaArtifacts) -> None:
     deployment_dir = Path(deployment.deployment_dir.name)
-    bucketfs_relative = Path("local/runtime/exa/bucketfs/bfsdefault/default/vs")
-    jdbc_relative = Path("local/runtime/exa/jdbc/POSTGRESQL")
+    runtime_relative = Path("local/runtime/exa")
+    bucketfs = deployment_dir / runtime_relative / "bucketfs/bfsdefault/default/vs"
+    jdbc = deployment_dir / runtime_relative / "jdbc/POSTGRESQL"
     settings_name = "settings.cfg"
 
-    if platform.system() == "Darwin":
-        shared = deployment_dir / "local/runtime/vm-shared/vs"
-        shared.mkdir(parents=True, exist_ok=True)
-        settings = shared / settings_name
-        for artifact in (artifacts.adapter, artifacts.driver):
-            shutil.copy2(artifact, shared / artifact.name)
-        _write_settings(settings, artifacts.driver)
-        remote_bucketfs = "/var/lib/exa/bucketfs/bfsdefault/default/vs"
-        remote_jdbc = "/var/lib/exa/jdbc/POSTGRESQL"
-        shared_path = "/mnt/host/vs"
-        shell_script = "\n".join(
-            [
-                "set -eu",
-                f"mkdir -p {remote_bucketfs} {remote_jdbc}",
-                (
-                    f"cp {shared_path}/{shlex.quote(artifacts.adapter.name)} "
-                    f"{remote_bucketfs}/"
-                ),
-                (
-                    f"cp {shared_path}/{shlex.quote(artifacts.driver.name)} "
-                    f"{remote_bucketfs}/"
-                ),
-                f"cp {shared_path}/{shlex.quote(artifacts.driver.name)} {remote_jdbc}/",
-                f"cp {shared_path}/{settings_name} {remote_jdbc}/",
-            ]
-        )
-        _run_in_local_vm(deployment, shell_script)
-        return
-
-    bucketfs = deployment_dir / bucketfs_relative
-    jdbc = deployment_dir / jdbc_relative
     bucketfs.mkdir(parents=True, exist_ok=True)
     jdbc.mkdir(parents=True, exist_ok=True)
     for artifact in (artifacts.adapter, artifacts.driver):
