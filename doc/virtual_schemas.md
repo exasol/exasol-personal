@@ -307,3 +307,8 @@ and that the files were copied into the bucket directory.
 
 **Adapter execution or `IMPORT` reports no runtime** — confirm that the adapter's SLC is installed
 with `exasol slc list`. JDBC adapters require the Java SLC.
+
+**`ETL-5402` or `ETL-5: Your security policy has prevented the connection from being
+attempted`** — appears when the source database negotiates TLS, even though the message names
+`java.net.SocketPermission`. Append `?sslmode=disable` to the JDBC URL in `CREATE CONNECTION` to
+transfer data without TLS, which is only appropriate on a trusted network.
