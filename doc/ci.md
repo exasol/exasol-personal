@@ -79,16 +79,25 @@ workflow. GitHub Pages must be enabled with **GitHub Actions** as its source, an
 The workflow accepts four inputs:
 
 - `operation`: `publish` or `delete`.
-- `source_ref`: an exact Git tag or full 40-character commit SHA, required for publication.
+- `source_ref`: an existing Git tag, a branch under `docs/`, or a full 40-character commit SHA,
+  required for publication.
 - `version`: the published semantic version. It is required for deletion and optional for
-  publication when `source_ref` is a tag named `v<version>` or ending in `/v<version>`.
+  publication when `source_ref` is named `v<version>` or ends in `/v<version>`.
 - `make_latest`: whether the published version takes the `latest` alias and the site root.
   `auto` grants it when no higher stable version is published, `yes` and `no` decide explicitly.
 
 An explicit version can map historical documentation content to an older release without changing
-an existing release tag. For example, publish a reviewed `docs/v2.2.0` snapshot based on a current
-commit as `2.2.0`, or map its full commit SHA by supplying `2.2.0` explicitly. Branch references
-are not accepted.
+an existing release tag. For example, publish a reviewed snapshot based on a current commit as
+`2.2.0`, or map its full commit SHA by supplying `2.2.0` explicitly.
+
+Documentation for a released version is revised on a branch under `docs/`, such as `docs/v2.2.0`.
+Publishing that branch replaces the version from its current tip, so content and styling can change
+after a release without moving the release tag. Branches outside `docs/` are rejected, which keeps
+publication from being requested against development work. Reserve `docs/` for branches: a name
+that exists as both a branch and a tag is rejected until `source_ref` is qualified with
+`refs/heads/` or `refs/tags/`, and documentation tags sharing the version namespace also interfere
+with release version derivation. Protect the `docs/*` branches with a ruleset, as described in
+[CI security best practices](ci_security_best_practices.md).
 
 Publication shallow-checks out the source once and builds its self-contained `user-docs/` directory,
 including its content, configuration, scripts, and locked uv environment, before updating the
