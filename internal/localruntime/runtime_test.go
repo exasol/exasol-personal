@@ -19,6 +19,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
+	"github.com/exasol/exasol-personal/internal/localports"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
@@ -122,6 +123,18 @@ func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
 	if err := localRuntime.Stop(context.Background(), nil, nil); err != nil {
 		t.Fatalf("stop failed: %v", err)
 	}
+	if err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
+		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
+		CPUCount:      4,
+		MemoryMB:      8192,
+		DataSizeGB:    100,
+	}); err != nil {
+		t.Fatalf("restart failed: %v", err)
+	}
+	restartedEndpoint, err := localRuntime.ReadEndpoints()
+	if err != nil || restartedEndpoint.DBPort != 28563 {
+		t.Fatalf("unexpected restarted endpoint %#v, err=%v", restartedEndpoint, err)
+	}
 
 	events, err := os.ReadFile(eventsPath)
 	if err != nil {
@@ -174,7 +187,10 @@ func TestMacVMRuntimeStartStopsVMWhenInstallFails(t *testing.T) {
 	}
 
 	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
-		CPUCount: 2, MemoryMB: 4096, DataSizeGB: 100,
+		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
+		CPUCount:      2,
+		MemoryMB:      4096,
+		DataSizeGB:    100,
 	})
 	if err == nil || !strings.Contains(err.Error(), "podman failed") {
 		t.Fatalf("expected install failure, got %v", err)
@@ -213,7 +229,10 @@ func TestMacVMRuntimeStartStopsVMWhenMigrationFails(t *testing.T) {
 	}
 
 	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
-		CPUCount: 2, MemoryMB: 4096, DataSizeGB: 100,
+		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
+		CPUCount:      2,
+		MemoryMB:      4096,
+		DataSizeGB:    100,
 	})
 	if err == nil || !strings.Contains(err.Error(), "migration failed") {
 		t.Fatalf("expected migration failure, got %v", err)
@@ -227,6 +246,173 @@ func TestMacVMRuntimeStartStopsVMWhenMigrationFails(t *testing.T) {
 	}
 	if strings.Contains(string(events), "install-start") {
 		t.Fatalf("Nano started after failed migration:\n%s", events)
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable files.
+func TestMacVMRuntimeStartRejectsMismatchedReportedPort(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	localRuntime := NewMacVMRuntime(
+		deployment,
+		newTestManagerForRunner(t, []byte(fakeV2RunnerScriptWithPort(eventsPath, 38563))),
+	)
+	install := &recordingLocalInstall{eventsPath: eventsPath}
+	localRuntime.installFactory = func(string) (localinstall.LocalInstall, error) {
+		return install, nil
+	}
+	if err := localRuntime.Prepare(context.Background(), nil, nil, PrepareOptions{}); err != nil {
+		t.Fatalf("prepare failed: %v", err)
+	}
+
+	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
+		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
+		CPUCount:      2,
+		MemoryMB:      4096,
+		DataSizeGB:    100,
+	})
+
+	if err == nil || !strings.Contains(err.Error(), "expected configured port 28563") {
+		t.Fatalf("expected mismatched endpoint error, got %v", err)
+	}
+	events, readErr := os.ReadFile(eventsPath)
+	if readErr != nil {
+		t.Fatalf("failed to read lifecycle events: %v", readErr)
+	}
+	if strings.Contains(string(events), "install-start") ||
+		!strings.Contains(string(events), "runner-start\nrunner-stop\n") {
+		t.Fatalf("expected mismatched VM to stop before installation, got:\n%s", events)
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable files.
+func TestMacVMRuntimeStartClassifiesBindDiagnostic(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	localRuntime := NewMacVMRuntime(
+		deployment,
+		newTestManagerForRunner(
+			t, []byte(failingV2RunnerScript(eventsPath, "address already in use", false, false)),
+		),
+	)
+	if err := localRuntime.Prepare(
+		context.Background(), nil, nil, PrepareOptions{},
+	); err != nil {
+		t.Fatalf("prepare failed: %v", err)
+	}
+
+	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
+		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
+		CPUCount:      2,
+		MemoryMB:      4096,
+		DataSizeGB:    100,
+	})
+
+	var unavailable *localports.UnavailableError
+	if !errors.As(err, &unavailable) || unavailable.Port != 28563 {
+		t.Fatalf("expected unavailable database port, got %v", err)
+	}
+	if _, ok := errors.AsType[*exec.ExitError](err); !ok {
+		t.Fatalf("expected runner command error in chain, got %v", err)
+	}
+	events, readErr := os.ReadFile(eventsPath)
+	if readErr != nil || !strings.Contains(string(events), "runner-stop\n") {
+		t.Fatalf("expected failed VM cleanup, got %q, %v", events, readErr)
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable files.
+func TestMacVMRuntimeStartKeepsUnrelatedAndPartialFailuresGeneric(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	for _, test := range []struct {
+		name       string
+		diagnostic string
+		partial    bool
+	}{
+		{name: "unrelated", diagnostic: "runner image failure"},
+		{name: "partial endpoint", diagnostic: "address already in use", partial: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			deployment := config.NewDeploymentDir(t.TempDir())
+			eventsPath := filepath.Join(t.TempDir(), "events")
+			localRuntime := NewMacVMRuntime(
+				deployment,
+				newTestManagerForRunner(
+					t,
+					[]byte(failingV2RunnerScript(
+						eventsPath, test.diagnostic, test.partial, false,
+					)),
+				),
+			)
+			if err := localRuntime.Prepare(
+				context.Background(), nil, nil, PrepareOptions{},
+			); err != nil {
+				t.Fatalf("prepare failed: %v", err)
+			}
+
+			err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
+				RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
+				CPUCount:      2,
+				MemoryMB:      4096,
+				DataSizeGB:    100,
+			})
+
+			var unavailable *localports.UnavailableError
+			if err == nil || errors.As(err, &unavailable) {
+				t.Fatalf("expected generic runner failure, got %v", err)
+			}
+			events, readErr := os.ReadFile(eventsPath)
+			if readErr != nil {
+				t.Fatalf("failed to read events: %v", readErr)
+			}
+			if strings.Contains(string(events), "runner-stop\n") {
+				t.Fatalf("generic or partial failure must not trigger bind cleanup: %s", events)
+			}
+		})
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable files.
+func TestMacVMRuntimeStartCleanupFailureIsNotRecoverable(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	localRuntime := NewMacVMRuntime(
+		deployment,
+		newTestManagerForRunner(
+			t, []byte(failingV2RunnerScript(eventsPath, "address already in use", false, true)),
+		),
+	)
+	if err := localRuntime.Prepare(
+		context.Background(), nil, nil, PrepareOptions{},
+	); err != nil {
+		t.Fatalf("prepare failed: %v", err)
+	}
+
+	// When
+	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
+		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
+		CPUCount:      2,
+		MemoryMB:      4096,
+		DataSizeGB:    100,
+	})
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "failed to stop VM after startup failure") {
+		t.Fatalf("expected startup and cleanup failure, got %v", err)
+	}
+	if _, unavailable := localports.AsUnavailable(err); unavailable {
+		t.Fatalf("cleanup failure must not be recoverable as a port conflict: %v", err)
+	}
+	if _, ok := errors.AsType[*exec.ExitError](err); !ok {
+		t.Fatalf("expected runner command error in chain, got %v", err)
 	}
 }
 
@@ -405,10 +591,18 @@ func TestMacVMRuntimeOpenHostShellPreservesRunnerFailure(t *testing.T) {
 }
 
 func fakeV2RunnerScript(eventsPath string) string {
-	return fakeV2RunnerScriptWithVersion(eventsPath, "2.0.0-dev")
+	return fakeV2RunnerScriptWithVersionAndPort(eventsPath, "2.0.0-dev", 28563)
+}
+
+func fakeV2RunnerScriptWithPort(eventsPath string, hostDBPort int) string {
+	return fakeV2RunnerScriptWithVersionAndPort(eventsPath, "2.0.0-dev", hostDBPort)
 }
 
 func fakeV2RunnerScriptWithVersion(eventsPath, version string) string {
+	return fakeV2RunnerScriptWithVersionAndPort(eventsPath, version, 28563)
+}
+
+func fakeV2RunnerScriptWithVersionAndPort(eventsPath, version string, hostDBPort int) string {
 	return fmt.Sprintf(`#!/bin/sh
 set -eu
 events=%q
@@ -448,7 +642,44 @@ EOF
     exit 2
     ;;
 esac
-`, eventsPath, version, 28563)
+`, eventsPath, version, hostDBPort)
+}
+
+func failingV2RunnerScript(
+	eventsPath, diagnostic string,
+	partial, stopFails bool,
+) string {
+	partialState := ""
+	if partial {
+		partialState = `cat > vm-state.json <<'EOF'
+{"forwards":{"db":{"guest_port":8563,"host_port":28563}}}
+EOF`
+	}
+	stopAction := `rm -f vm-state.json; printf 'runner-stop\n' >> "$events"`
+	if stopFails {
+		stopAction = `printf 'runner-stop\n' >> "$events"
+    printf 'cleanup failed\n' >&2
+    exit 43`
+	}
+
+	return fmt.Sprintf(`#!/bin/sh
+set -eu
+events=%q
+case "$1" in
+  version) printf 'v2.0.0-dev\n' ;;
+  init) mkdir -p vm vm-shared; printf 'runner-init\n' >> "$events" ;;
+  start)
+    printf 'runner-start\n' >> "$events"
+    %s
+    printf '%%s\n' %q >&2
+    exit 42
+    ;;
+  stop)
+    %s
+    ;;
+  *) exit 2 ;;
+esac
+`, eventsPath, partialState, diagnostic, stopAction)
 }
 
 type recordingLocalInstall struct {

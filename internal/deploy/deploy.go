@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localports"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/remote"
 	"github.com/exasol/exasol-personal/internal/task_runner"
@@ -179,7 +180,12 @@ func deployLocked(
 	}
 
 	return runDeployBackend(
-		ctx, exasolState, deployment, backend, externalCommandOutput, options,
+		ctx,
+		exasolState,
+		deployment,
+		backend,
+		externalCommandOutput,
+		options,
 	)
 }
 
@@ -225,6 +231,15 @@ func runDeployBackend(
 		options,
 	); err != nil {
 		unregister()
+		_, unavailable := localports.AsUnavailable(err)
+		if unavailable {
+			return restoreStateAfterUnavailableLocalPort(
+				exasolState,
+				deployment,
+				&config.WorkflowStateInitialized{},
+				err,
+			)
+		}
 
 		return recordDeployFailure(exasolState, deployment, err)
 	}

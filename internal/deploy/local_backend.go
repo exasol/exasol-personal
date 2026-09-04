@@ -75,6 +75,7 @@ func newLocalBackendForPlatform(
 		runtime:    localRuntime,
 		goos:       goos,
 		goarch:     goarch,
+		ports:      newLocalPortAllocator(),
 	}
 }
 
@@ -84,6 +85,7 @@ type localBackend struct {
 	runtime    localruntime.Runtime
 	goos       string
 	goarch     string
+	ports      localPortAllocator
 }
 
 type localPlatformCapabilities struct {
@@ -101,6 +103,9 @@ func (b *localBackend) Prepare(
 	if err := b.ValidateEnvironment(); err != nil {
 		return err
 	}
+	if err := b.normalizeAutomaticPorts(ctx); err != nil {
+		return err
+	}
 
 	return b.runtime.Prepare(ctx, out, outErr, options)
 }
@@ -111,6 +116,24 @@ func (b *localBackend) ValidateEnvironment() error {
 
 func (*localBackend) SetupWorkspace(_ context.Context) error {
 	return nil
+}
+
+func localPortsNeedNormalization(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || strings.EqualFold(trimmed, "auto") {
+		return true
+	}
+	mappings, _, err := parseLocalPortMappings(trimmed)
+	if err != nil {
+		return false
+	}
+	for _, service := range localServiceCatalog {
+		if port, configured := mappings[service.name]; !configured || port == 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (b *localBackend) Configure(
@@ -128,6 +151,11 @@ func (b *localBackend) Configure(
 	if err := applyLocalConfigOverrides(local, overrides, capabilities); err != nil {
 		return err
 	}
+	ports, err := b.ports.resolve(ctx, local.Ports, localServiceCatalog)
+	if err != nil {
+		return err
+	}
+	local.Ports = ports
 
 	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
 		b.manifest, detectLocalHostMemoryMB(ctx), b.goos, b.goarch,
@@ -582,6 +610,28 @@ func (b *localBackend) Destroy(
 	out, outErr io.Writer,
 ) error {
 	return destroyLocalRuntime(ctx, b.runtime, out, outErr)
+}
+
+// normalizeAutomaticPorts persists legacy automatic mappings before any local
+// runtime preparation or launch. Configure writes only after allocation succeeds.
+func (b *localBackend) normalizeAutomaticPorts(ctx context.Context) error {
+	if b.manifest == nil {
+		return errors.New("local infrastructure manifest is missing")
+	}
+	rawPorts := ""
+	if b.manifest.Local != nil {
+		rawPorts = b.manifest.Local.Ports
+	}
+	if !localPortsNeedNormalization(rawPorts) {
+		return nil
+	}
+
+	return b.Configure(
+		ctx,
+		map[string]string{localPortsConfigName: rawPorts},
+		DeploymentMetadata{},
+		DeploymentLayout{},
+	)
 }
 
 // deployOrStart resolves runtime config and starts an already-prepared

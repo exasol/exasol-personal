@@ -6,11 +6,13 @@ package deploy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localports"
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
@@ -169,6 +171,46 @@ func markOperationInterrupted(
 	return operationErr
 }
 
+// LocalPortRecoveryError reports an unavailable local service port after the
+// deployment's prior workflow state has been restored successfully.
+type LocalPortRecoveryError struct {
+	Service string
+	Port    int
+	Cause   error
+}
+
+func (err *LocalPortRecoveryError) Error() string { return err.Cause.Error() }
+
+func (err *LocalPortRecoveryError) Unwrap() error { return err.Cause }
+
+type workflowStateWriter interface {
+	SetWorkflowStateAndWrite(state any, deployment config.DeploymentDir) error
+}
+
+func restoreStateAfterUnavailableLocalPort(
+	exasolState workflowStateWriter,
+	deployment config.DeploymentDir,
+	workflowState any,
+	operationErr error,
+) error {
+	unavailable, ok := localports.AsUnavailable(operationErr)
+	if !ok {
+		return operationErr
+	}
+	if err := exasolState.SetWorkflowStateAndWrite(workflowState, deployment); err != nil {
+		return errors.Join(
+			operationErr,
+			fmt.Errorf("failed to restore workflow state after local port conflict: %w", err),
+		)
+	}
+
+	return &LocalPortRecoveryError{
+		Service: unavailable.Service,
+		Port:    unavailable.Port,
+		Cause:   operationErr,
+	}
+}
+
 //nolint:revive
 func Start(
 	ctx context.Context,
@@ -290,6 +332,15 @@ func runStartBackend(
 		waitTimeoutSeconds,
 	); err != nil {
 		unregister()
+		_, unavailable := localports.AsUnavailable(err)
+		if unavailable {
+			return restoreStateAfterUnavailableLocalPort(
+				exasolState,
+				deployment,
+				&config.WorkflowStateStopped{},
+				err,
+			)
+		}
 
 		return markOperationInterrupted(exasolState, deployment, config.StartOperation, err)
 	}

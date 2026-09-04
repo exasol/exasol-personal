@@ -22,6 +22,7 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
+	"github.com/exasol/exasol-personal/internal/localports"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 	"github.com/exasol/exasol-personal/internal/util"
 )
@@ -211,7 +212,25 @@ func (runtime *MacVMRuntime) Start(
 		strconv.Itoa(runtimeConfig.DataSizeGB),
 	}
 	if err := runtime.runnerCommand(ctx, runnerPath, args, out, outErr); err != nil {
-		return err
+		if runnerReportedEndpoint(runtime) {
+			return err
+		}
+		failure := localports.ClassifyBindFailure(
+			forwardDatabaseService,
+			hostDBPort,
+			err,
+			err.Error(),
+		)
+		if _, unavailable := localports.AsUnavailable(failure); unavailable {
+			if stopErr := runtime.stopVM(ctx, runnerPath, out, outErr); stopErr != nil {
+				return errors.Join(
+					err,
+					fmt.Errorf("failed to stop VM after startup failure: %w", stopErr),
+				)
+			}
+		}
+
+		return failure
 	}
 
 	state, err := readRunnerState(runtime.paths.StatePath)
@@ -221,6 +240,19 @@ func (runtime *MacVMRuntime) Start(
 	endpoint, err := runtimeEndpointFromRunnerState(state)
 	if err != nil {
 		return runtime.stopAfterStartFailure(ctx, runnerPath, out, outErr, err)
+	}
+	if endpoint.DBPort != hostDBPort {
+		return runtime.stopAfterStartFailure(
+			ctx,
+			runnerPath,
+			out,
+			outErr,
+			fmt.Errorf(
+				"local VM reported database port %d, expected configured port %d",
+				endpoint.DBPort,
+				hostDBPort,
+			),
+		)
 	}
 	install, err := runtime.install(runnerPath)
 	if err != nil {
@@ -247,6 +279,16 @@ func (runtime *MacVMRuntime) Start(
 	runtime.endpoint = endpoint
 
 	return nil
+}
+
+func runnerReportedEndpoint(runtime *MacVMRuntime) bool {
+	state, err := readRunnerState(runtime.paths.StatePath)
+	if err != nil {
+		return false
+	}
+	_, err = runtimeEndpointFromRunnerState(state)
+
+	return err == nil
 }
 
 func (runtime *MacVMRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
@@ -585,39 +627,7 @@ func materializeFileAtomically(sourcePath, targetPath string) error {
 }
 
 func resolveMacHostDBPort(ports string) (int, error) {
-	ports = strings.TrimSpace(ports)
-	if ports == "" {
-		return nanoDBPort, nil
-	}
-	if ports == "auto" {
-		return 0, nil
-	}
-
-	hostDBPort := nanoDBPort
-	dbPortConfigured := false
-	for rawEntry := range strings.SplitSeq(ports, ",") {
-		entry := strings.TrimSpace(rawEntry)
-		service, rawPort, found := strings.Cut(entry, ":")
-		service = strings.TrimSpace(service)
-		rawPort = strings.TrimSpace(rawPort)
-		if !found || service == "" || rawPort == "" {
-			return 0, fmt.Errorf("invalid local port mapping %q; expected <service>:<port>", entry)
-		}
-		port, err := strconv.Atoi(rawPort)
-		if err != nil || port < 0 || port > maxTCPPort {
-			return 0, fmt.Errorf("invalid local port %q for service %q", rawPort, service)
-		}
-		if service != forwardDatabaseService {
-			continue
-		}
-		if dbPortConfigured {
-			return 0, errors.New("local database port is configured more than once")
-		}
-		hostDBPort = port
-		dbPortConfigured = true
-	}
-
-	return hostDBPort, nil
+	return resolveHostPodmanDBPort(ports)
 }
 
 func runtimeEndpointFromRunnerState(state *runnerState) (*RuntimeEndpoint, error) {

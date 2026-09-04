@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localports"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
@@ -224,12 +225,54 @@ func (install *PodmanInstall) Start(
 		args = append(args, "params="+strings.Join(startConfig.InitParams, " "))
 	}
 	args = append(args, nanoVersionCheckInitArgs(startConfig.VersionCheck)...)
-	if err := install.runPodman(ctx, out, outErr, args...); err != nil {
+	var startDiagnostic bytes.Buffer
+	startErrOutput := io.Writer(&startDiagnostic)
+	if outErr != nil {
+		startErrOutput = io.MultiWriter(outErr, &startDiagnostic)
+	}
+	if err := install.runPodman(ctx, out, startErrOutput, args...); err != nil {
+		failure := fmt.Errorf("failed to start Nano container %s: %w", containerName, err)
+		failure = classifyPodmanStartBindFailure(
+			ctx,
+			install,
+			outErr,
+			containerName,
+			startConfig,
+			failure,
+			startDiagnostic.String(),
+		)
+
 		return install.failureWithDiagnostics(ctx, outErr, containerName,
-			fmt.Errorf("failed to start Nano container %s: %w", containerName, err))
+			failure)
 	}
 
 	return nil
+}
+
+func classifyPodmanStartBindFailure(
+	ctx context.Context,
+	install *PodmanInstall,
+	outErr io.Writer,
+	containerName string,
+	startConfig StartConfig,
+	failure error,
+	diagnostic string,
+) error {
+	if startConfig.ContainerDBBindHost == "" {
+		return failure
+	}
+
+	status, err := install.inspectContainerStatus(ctx, outErr, containerName)
+	if err != nil || status.Running {
+		return failure
+	}
+
+	return localports.ClassifyBindFailure(
+		"db",
+		startConfig.ContainerDBPort,
+		failure,
+		diagnostic,
+	)
 }
 
 func podmanDBPortMapping(startConfig StartConfig) string {

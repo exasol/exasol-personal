@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 import json
+import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -88,6 +90,237 @@ def _set_workflow_state(
     state = json.loads(launcher_state_path.read_text())
     state["currentWorkflowState"] = workflow_state
     launcher_state_path.write_text(json.dumps(state))
+
+
+def _init_stopped_local_deployment(
+    exasol_path: str, deployment_dir: Path, port: int
+) -> None:
+    run_command(
+        [
+            exasol_path,
+            "init",
+            "local",
+            "--ports",
+            f"db:{port}",
+            "--deployment-dir",
+            str(deployment_dir),
+            "--no-launcher-version-check",
+        ]
+    )
+    _set_workflow_state(deployment_dir, {"stopped": {}})
+
+
+def test_stopped_local_configuration_can_be_set_and_reset(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a stopped local deployment with an explicit database port
+    deployment_dir = tmp_path / "deployment"
+    _init_stopped_local_deployment(exasol_path, deployment_dir, 18563)
+
+    # When the port is changed while stopped
+    set_result = run_command(
+        [
+            exasol_path,
+            "config",
+            "set",
+            "--ports",
+            "db:28563",
+            "--deployment-dir",
+            str(deployment_dir),
+        ]
+    )
+
+    # Then the concrete value is persisted and restart guidance is shown
+    assert "ports = db:28563" in set_result.stdout
+    assert "run `exasol start` to apply these changes" in set_result.stderr
+    assert "exasol deploy" not in set_result.stderr
+
+    # When the port is reset
+    reset_result = run_command(
+        [
+            exasol_path,
+            "config",
+            "reset",
+            "ports",
+            "--deployment-dir",
+            str(deployment_dir),
+        ]
+    )
+
+    # Then a concrete automatic value is persisted and state stays stopped
+    infrastructure = _get_active_configuration(exasol_path, deployment_dir)[
+        "infrastructure"
+    ]
+    assert isinstance(infrastructure, dict)
+    options = infrastructure["options"]
+    assert isinstance(options, dict)
+    port_mapping = options["ports"]
+    assert isinstance(port_mapping, str)
+    assert port_mapping.startswith("db:")
+    assert int(port_mapping.removeprefix("db:")) > 0
+    assert "run `exasol start` to apply these changes" in reset_result.stderr
+    info_result = run_command(
+        [exasol_path, "info", "--json", "--deployment-dir", str(deployment_dir)]
+    )
+    assert json.loads(info_result.stdout)["deploymentState"] == "stopped"
+
+
+def test_running_local_configuration_requires_stop(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a local deployment recorded as running
+    deployment_dir = tmp_path / "deployment"
+    _init_stopped_local_deployment(exasol_path, deployment_dir, 18563)
+    _set_workflow_state(deployment_dir, {"running": {}})
+
+    # When configuration is changed
+    result = subprocess.run(
+        [
+            exasol_path,
+            "config",
+            "set",
+            "--ports",
+            "db:28563",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    # Then the command preserves configuration and directs the user to stop
+    assert result.returncode != 0
+    assert "exasol stop" in result.stderr
+    infrastructure = _get_active_configuration(exasol_path, deployment_dir)[
+        "infrastructure"
+    ]
+    assert isinstance(infrastructure, dict)
+    options = infrastructure["options"]
+    assert isinstance(options, dict)
+    assert options["ports"] == "db:18563"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX fake Podman executable")
+def test_start_migrates_legacy_automatic_local_port_before_runtime(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a stopped deployment created by an older launcher with an automatic port
+    deployment_dir = tmp_path / "deployment"
+    _init_stopped_local_deployment(exasol_path, deployment_dir, 18563)
+    manifest_path = deployment_dir / "infrastructure" / "infrastructure.yaml"
+    manifest = manifest_path.read_text()
+    assert "ports: db:18563" in manifest
+    manifest_path.write_text(manifest.replace("ports: db:18563", "ports: auto"))
+
+    # And a visible but failing runtime executable, so start reaches the runtime
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_podman = fake_bin / "podman"
+    fake_podman.write_text("#!/bin/sh\nexit 23\n")
+    fake_podman.chmod(0o700)
+    environment = os.environ.copy()
+    environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
+
+    # When start is attempted
+    result = subprocess.run(
+        [exasol_path, "start", "--deployment-dir", str(deployment_dir)],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=environment,
+    )
+
+    # Then migration is persisted before the unrelated runtime failure
+    assert result.returncode != 0
+    migrated = manifest_path.read_text()
+    match = re.search(r"^\s*ports:\s*db:(\d+)\s*$", migrated, re.MULTILINE)
+    assert match is not None
+    assert int(match.group(1)) > 0
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX fake Podman executable")
+def test_local_bind_conflict_restores_stopped_state_with_recovery_guidance(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a stopped local deployment and a runtime reporting an exact bind conflict
+    deployment_dir = tmp_path / "deployment"
+    test_port = 28563
+    _init_stopped_local_deployment(exasol_path, deployment_dir, test_port)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_podman = fake_bin / "podman"
+    fake_podman.write_text(
+        """#!/bin/sh
+set -eu
+case "$1" in
+  container)
+    if [ "$2" = "exists" ]; then exit 1; fi
+    if [ "$2" = "inspect" ]; then printf 'false\\n'; exit 0; fi
+    ;;
+  load) printf 'Loaded image: docker.io/exasol/nano:test\\n' ;;
+  images|info|ps|logs) ;;
+  run) printf 'bind: address already in use\\n' >&2; exit 125 ;;
+esac
+"""
+    )
+    fake_podman.chmod(0o700)
+    environment = os.environ.copy()
+    environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
+
+    # When start reaches the runtime's authoritative bind attempt
+    result = subprocess.run(
+        [exasol_path, "start", "--deployment-dir", str(deployment_dir)],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=environment,
+    )
+
+    # Then the fixed mapping and stopped state remain, with both recovery choices
+    assert result.returncode != 0
+    assert (
+        f'local service "db" cannot bind configured host port {test_port}'
+        in result.stderr
+    )
+    assert "exasol config set --ports db:<available-port>" in result.stderr
+    assert "exasol config set --ports auto" in result.stderr
+
+    # And JSON output retains the error details without rendered recovery guidance
+    json_result = subprocess.run(
+        [
+            exasol_path,
+            "start",
+            "--json",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=environment,
+    )
+    assert json_result.returncode != 0
+    assert (
+        f'local service "db" cannot bind configured host port {test_port}'
+        in json_result.stderr
+    )
+    assert "exasol config set" not in json_result.stderr
+    infrastructure = _get_active_configuration(exasol_path, deployment_dir)[
+        "infrastructure"
+    ]
+    assert isinstance(infrastructure, dict)
+    options = infrastructure["options"]
+    assert isinstance(options, dict)
+    port_mapping = options["ports"]
+    assert isinstance(port_mapping, str)
+    assert port_mapping.startswith("db:")
+    assert int(port_mapping.removeprefix("db:")) == test_port
+
+    info_result = run_command(
+        [exasol_path, "info", "--json", "--deployment-dir", str(deployment_dir)]
+    )
+    assert json.loads(info_result.stdout)["deploymentState"] == "stopped"
 
 
 def _get_active_configuration(

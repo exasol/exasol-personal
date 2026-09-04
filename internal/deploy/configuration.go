@@ -58,6 +58,7 @@ type DeploymentConfigurationSection struct {
 type DeploymentConfiguration struct {
 	Infrastructure DeploymentConfigurationSection
 	Installation   DeploymentConfigurationSection
+	ApplyCommand   string
 }
 
 const (
@@ -98,13 +99,22 @@ func SetDeploymentConfiguration(
 		return DeploymentConfiguration{}, errors.New("no configuration options were provided")
 	}
 
+	applyCommand := ""
 	err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
 			exasolState, err := config.ReadExasolPersonalState(deployment)
 			if err != nil {
 				return err
 			}
-			if err := WorkflowStatePermitsConfigure(exasolState); err != nil {
+			backendKind, err := deploymentBackendKind(deployment)
+			if err != nil {
+				return err
+			}
+			if err := WorkflowStatePermitsConfigure(exasolState, backendKind); err != nil {
+				return err
+			}
+			applyCommand, err = configurationApplyCommand(exasolState)
+			if err != nil {
 				return err
 			}
 
@@ -120,7 +130,10 @@ func SetDeploymentConfiguration(
 		return DeploymentConfiguration{}, err
 	}
 
-	return GetDeploymentConfiguration(ctx, deployment, nil)
+	configuration, err := GetDeploymentConfiguration(ctx, deployment, nil)
+	configuration.ApplyCommand = applyCommand
+
+	return configuration, err
 }
 
 //nolint:revive // resetAll mirrors the command-level --all flag.
@@ -134,15 +147,24 @@ func ResetDeploymentConfiguration(
 		return DeploymentConfiguration{}, err
 	}
 
+	applyCommand := ""
 	err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			return resetDeploymentConfigurationLocked(ctx, deployment, optionNames, resetAll)
+			var err error
+			applyCommand, err = resetDeploymentConfigurationLocked(
+				ctx, deployment, optionNames, resetAll,
+			)
+
+			return err
 		})
 	if err != nil {
 		return DeploymentConfiguration{}, err
 	}
 
-	return GetDeploymentConfiguration(ctx, deployment, nil)
+	configuration, err := GetDeploymentConfiguration(ctx, deployment, nil)
+	configuration.ApplyCommand = applyCommand
+
+	return configuration, err
 }
 
 // validateResetSelection rejects the two invalid combinations of --all and
@@ -165,30 +187,63 @@ func resetDeploymentConfigurationLocked(
 	deployment config.DeploymentDir,
 	optionNames []string,
 	resetAll bool,
-) error {
+) (string, error) {
 	exasolState, err := config.ReadExasolPersonalState(deployment)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if err := WorkflowStatePermitsConfigure(exasolState); err != nil {
-		return err
+	backendKind, err := deploymentBackendKind(deployment)
+	if err != nil {
+		return "", err
+	}
+	if err := WorkflowStatePermitsConfigure(exasolState, backendKind); err != nil {
+		return "", err
+	}
+	applyCommand, err := configurationApplyCommand(exasolState)
+	if err != nil {
+		return "", err
 	}
 
 	configuration, err := readDeploymentConfiguration(ctx, deployment)
 	if err != nil {
-		return err
+		return "", err
 	}
 	configuration, err = applyConfigurationReset(configuration, optionNames, resetAll)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	return writeDeploymentConfiguration(
+	if err := writeDeploymentConfiguration(
 		ctx,
 		deployment,
 		exasolState,
 		configuration,
-	)
+	); err != nil {
+		return "", err
+	}
+
+	return applyCommand, nil
+}
+
+func deploymentBackendKind(deployment config.DeploymentDir) (string, error) {
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return "", err
+	}
+
+	return resolveBackendKind(manifest)
+}
+
+func configurationApplyCommand(exasolState *config.ExasolPersonalState) (string, error) {
+	workflowState, err := exasolState.GetWorkflowState()
+	if err != nil {
+		return "", err
+	}
+	if _, ok := workflowState.(*config.WorkflowStateStopped); ok {
+		return "start", nil
+	}
+
+	return "deploy", nil
 }
 
 // applyConfigurationReset resets either the explicitly selected options or,

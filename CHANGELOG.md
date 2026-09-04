@@ -51,12 +51,17 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol install local --help` reports "Infrastructure preset `local`" with `Compatible installation presets: local`, and suggests `exasol install local local`.
 
+- Local deployments now select and persist a concrete database port during initialization, keep it stable across restarts, allow port changes while stopped, and provide actionable recovery commands when the configured port is unavailable.
 - Documented named deployments, the `exasol slc` command group, and `exasol diag local` in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers UDFs and script language containers, and the Limitations section no longer states that UDFs are unavailable on local deployments.
 - macOS local deployments now run the same Podman installation used on Linux inside a managed VM. The VM launcher is responsible only for VM lifecycle, port forwarding, shared files, and command execution; deployment state no longer exposes its SSH transport.
 - Local runtime host preparation now runs before a deployment records an operation in progress, so a declined or failed prerequisite leaves the deployment in its previous state and the command can simply be retried.
 - Cloud deployments now provision Ubuntu 24.04 LTS instances instead of Ubuntu 22.04 LTS on all supported cloud providers (AWS, Azure, Exoscale, STACKIT). Ubuntu 22.04 only offers a Podman version that predates the Quadlet systemd generator, which Data Lakehouse Turbo requires.
 
 ### Fixed
+
+- Local port-conflict recovery now uses the actual runtime bind diagnostic instead of a later socket
+  probe, and macOS retains normal failure recovery when a partially started VM cannot be stopped
+  safely.
 
 - Fixed documentation publication failing during validation because the GitHub Actions runner does
   not provide the Task command.

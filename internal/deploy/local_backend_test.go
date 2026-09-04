@@ -6,8 +6,11 @@ package deploy
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -48,6 +51,197 @@ func TestValidateLocalPlatform_AcceptsMacOSAppleSilicon(t *testing.T) {
 	// Then
 	if err != nil {
 		t.Fatalf("expected platform to be accepted, got %v", err)
+	}
+}
+
+func TestLocalBackendPrepareNormalizesAutomaticPortsOnce(t *testing.T) {
+	t.Parallel()
+
+	for _, rawPorts := range []string{"", "auto", "db:0"} {
+		t.Run(fmt.Sprintf("ports_%q", rawPorts), func(t *testing.T) {
+			t.Parallel()
+			deployment := config.NewDeploymentDir(t.TempDir())
+			if err := os.MkdirAll(deployment.InfrastructureDir(), 0o700); err != nil {
+				t.Fatalf("create infrastructure directory failed: %v", err)
+			}
+			writeTestFile(t, deployment.InfrastructureManifestPath(), fmt.Sprintf(`
+name: Local
+description: Local
+backend: local
+local:
+  ports: %q
+`, rawPorts))
+			manifest := &presets.InfrastructureManifest{
+				Backend: backendTypeLocal,
+				Local:   &presets.InfrastructureLocal{Ports: rawPorts},
+			}
+			backend := newLocalBackendForPlatform(
+				deployment,
+				manifest,
+				&endpointRuntimeStub{deployment: deployment},
+				localLinuxOS,
+				localLinuxAMD64,
+			)
+			listenCalls := 0
+			backend.ports = testLocalPortAllocator(
+				t,
+				localMinimumAutomaticPort,
+				localMaximumPort,
+				func(_ string, port int) bool {
+					listenCalls++
+					return port == localDatabasePort
+				},
+			)
+
+			if err := backend.Prepare(
+				context.Background(), io.Discard, io.Discard, localruntime.PrepareOptions{},
+			); err != nil {
+				t.Fatalf("first preparation failed: %v", err)
+			}
+			if err := backend.Prepare(
+				context.Background(), io.Discard, io.Discard, localruntime.PrepareOptions{},
+			); err != nil {
+				t.Fatalf("repeated preparation failed: %v", err)
+			}
+
+			persisted, err := config.ReadInfrastructureManifest(deployment)
+			if err != nil {
+				t.Fatalf("read migrated manifest failed: %v", err)
+			}
+			if persisted.Local == nil || persisted.Local.Ports != "db:8563" ||
+				manifest.Local.Ports != "db:8563" {
+				t.Fatalf("expected persisted concrete port, got %#v", persisted.Local)
+			}
+			if listenCalls != 1 {
+				t.Fatalf("expected allocation only on first migration, got %d probes", listenCalls)
+			}
+			runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
+				manifest, 0, localLinuxOS, localLinuxAMD64,
+			)
+			if err != nil || runtimeConfig.ports != "db:8563" {
+				t.Fatalf("expected migrated runtime input, got %#v, %v", runtimeConfig, err)
+			}
+		})
+	}
+}
+
+func TestLocalBackendPreparePreservesExplicitPortMapping(t *testing.T) {
+	t.Parallel()
+
+	manifest := &presets.InfrastructureManifest{
+		Backend: backendTypeLocal,
+		Local:   &presets.InfrastructureLocal{Ports: "db:28563"},
+	}
+	deployment := config.NewDeploymentDir(t.TempDir())
+	backend := newLocalBackendForPlatform(
+		deployment,
+		manifest,
+		&endpointRuntimeStub{deployment: deployment},
+		localLinuxOS,
+		localLinuxAMD64,
+	)
+	backend.ports = testLocalPortAllocator(t, 2, 5, func(string, int) bool {
+		t.Fatal("explicit mapping must not invoke the allocator")
+		return false
+	})
+
+	if err := backend.Prepare(
+		context.Background(), io.Discard, io.Discard, localruntime.PrepareOptions{},
+	); err != nil {
+		t.Fatalf("preparation with explicit mapping failed: %v", err)
+	}
+	if manifest.Local.Ports != "db:28563" {
+		t.Fatalf("explicit mapping changed to %q", manifest.Local.Ports)
+	}
+}
+
+func TestLocalBackendPrepareAllocationFailurePreservesManifest(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o700); err != nil {
+		t.Fatalf("create infrastructure directory failed: %v", err)
+	}
+	original := `name: Local
+description: Local
+backend: local
+local:
+  ports: auto
+`
+	writeTestFile(t, deployment.InfrastructureManifestPath(), original)
+	manifest := &presets.InfrastructureManifest{
+		Backend: backendTypeLocal,
+		Local:   &presets.InfrastructureLocal{Ports: "auto"},
+	}
+	backend := newLocalBackendForPlatform(
+		deployment,
+		manifest,
+		&endpointRuntimeStub{deployment: deployment},
+		localLinuxOS,
+		localLinuxAMD64,
+	)
+	backend.ports = testLocalPortAllocator(t, 2, 5, func(string, int) bool { return false })
+
+	err := backend.Prepare(
+		context.Background(), io.Discard, io.Discard, localruntime.PrepareOptions{},
+	)
+
+	if err == nil || !strings.Contains(err.Error(), `service "db"`) {
+		t.Fatalf("expected allocation failure, got %v", err)
+	}
+	persisted, readErr := os.ReadFile(filepath.Clean(deployment.InfrastructureManifestPath()))
+	if readErr != nil || string(persisted) != original {
+		t.Fatalf("manifest changed after failed migration: %q, %v", persisted, readErr)
+	}
+}
+
+func TestLocalBackendPrepareAddsMissingDatabaseMapping(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o700); err != nil {
+		t.Fatalf("create infrastructure directory failed: %v", err)
+	}
+	writeTestFile(t, deployment.InfrastructureManifestPath(), `
+name: Local
+description: Local
+backend: local
+local:
+  ports: metrics:1234
+`)
+	manifest := &presets.InfrastructureManifest{
+		Backend: backendTypeLocal,
+		Local:   &presets.InfrastructureLocal{Ports: "metrics:1234"},
+	}
+	backend := newLocalBackendForPlatform(
+		deployment,
+		manifest,
+		&endpointRuntimeStub{deployment: deployment},
+		localLinuxOS,
+		localLinuxAMD64,
+	)
+	backend.ports = testLocalPortAllocator(
+		t,
+		localMinimumAutomaticPort,
+		localMaximumPort,
+		func(_ string, port int) bool { return port == localDatabasePort },
+	)
+
+	// When
+	err := backend.Prepare(
+		context.Background(), io.Discard, io.Discard, localruntime.PrepareOptions{},
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("preparation failed: %v", err)
+	}
+	persisted, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		t.Fatalf("read normalized manifest failed: %v", err)
+	}
+	if persisted.Local == nil || persisted.Local.Ports != "db:8563,metrics:1234" {
+		t.Fatalf("expected missing database mapping to be added, got %#v", persisted.Local)
 	}
 }
 
@@ -450,6 +644,55 @@ func TestLocalBackendConfigure_WritesSizingValuesToManifest(t *testing.T) {
 	if written.Local.CPUCount != 4 ||
 		written.Local.MemoryMB != 8192 ||
 		written.Local.DataSizeGB != 250 {
+		t.Fatalf("unexpected local manifest configuration: %#v", written.Local)
+	}
+}
+
+func TestLocalBackendConfigure_PreservesPresetValuesAndAppliesOverrides(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o750); err != nil {
+		t.Fatalf("failed to create infrastructure dir: %v", err)
+	}
+	manifest := &presets.InfrastructureManifest{
+		Name:        "Local",
+		Description: "Custom local preset",
+		Backend:     backendTypeLocal,
+		Local: &presets.InfrastructureLocal{
+			CPUCount:   4,
+			MemoryMB:   8192,
+			DataSizeGB: 250,
+			Ports:      testLocalDBPortConfig,
+		},
+	}
+	backend := newLocalBackendForPlatform(
+		deployment, manifest, nil, localMacOS, localMacArch,
+	)
+
+	// When
+	err := backend.Configure(
+		context.Background(),
+		map[string]string{localCPUCountConfigName: "8"},
+		DeploymentMetadata{},
+		DeploymentLayout{},
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("expected local configuration to be written, got %v", err)
+	}
+	written, err := presets.ReadInfrastructureManifestFromDir(deployment.InfrastructureDir())
+	if err != nil {
+		t.Fatalf("expected local infrastructure manifest to be readable, got %v", err)
+	}
+	if written.Local == nil {
+		t.Fatal("expected local manifest configuration, got nil")
+	}
+	if written.Local.CPUCount != 8 ||
+		written.Local.MemoryMB != 8192 ||
+		written.Local.DataSizeGB != 250 ||
+		written.Local.Ports != testLocalDBPortConfig {
 		t.Fatalf("unexpected local manifest configuration: %#v", written.Local)
 	}
 }
