@@ -1,4 +1,5 @@
 site_name: Exasol Personal
+site_description: Install, deploy, and use Exasol Personal
 site_url: https://exasol.github.io/exasol-personal/
 repo_url: https://github.com/exasol/exasol-personal
 repo_name: exasol/exasol-personal
@@ -8,6 +9,29 @@ site_dir: site
 
 theme:
   name: material
+
+nav:
+  - Home: index.md
+  - Get started:
+      - Install the launcher: getting-started.md
+      - Run Exasol locally: local-deployment.md
+      - Deploy to the cloud: cloud-deployment.md
+  - Cloud account setup:
+      - Amazon Web Services: cloud/aws.md
+      - Microsoft Azure: cloud/azure.md
+      - Exoscale: cloud/exoscale.md
+      - STACKIT: cloud/stackit.md
+  - Use Exasol Personal:
+      - Manage deployments: manage-deployments.md
+      - Connect to the database: connect.md
+      - Load sample data: load-data.md
+      - UDFs and script languages: udfs.md
+      - Presets: presets.md
+  - Help and reference:
+      - Troubleshooting: troubleshooting.md
+      - System requirements: system-requirements.md
+      - Limitations: limitations.md
+      - Privacy and licensing: privacy-and-licensing.md
 
 plugins:
   - search
