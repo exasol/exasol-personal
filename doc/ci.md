@@ -76,12 +76,14 @@ Maintainers publish versioned user documentation with the manually dispatched do
 workflow. GitHub Pages must be enabled with **GitHub Actions** as its source, and the existing
 `github-pages` environment must allow deployments only from `main`.
 
-The workflow accepts three inputs:
+The workflow accepts four inputs:
 
 - `operation`: `publish` or `delete`.
 - `source_ref`: an exact Git tag or full 40-character commit SHA, required for publication.
 - `version`: the published semantic version. It is required for deletion and optional for
   publication when `source_ref` is a tag named `v<version>` or ending in `/v<version>`.
+- `make_latest`: whether the published version takes the `latest` alias and the site root.
+  `auto` grants it when no higher stable version is published, `yes` and `no` decide explicitly.
 
 An explicit version can map historical documentation content to an older release without changing
 an existing release tag. For example, publish a reviewed `docs/v2.2.0` snapshot based on a current
@@ -90,9 +92,20 @@ are not accepted.
 
 Publication shallow-checks out the source once and builds its self-contained `user-docs/` directory,
 including its content, configuration, scripts, and locked uv environment, before updating the
-version catalog. Stable versions update `latest` and the site root; release candidates remain
-independently selectable. Deletion preserves all other versions and rejects removal of the version
+version catalog. Because the snapshot supplies the publishing script, a source revision predating a
+workflow input rejects the publication request before any published version changes.
+
+The highest published stable version carries `latest` and the site root, so publishing
+documentation for an older release leaves both untouched. Release candidates never take the alias
+and remain independently selectable. Set `make_latest` to `yes` to move the alias onto an older
+version, for example after withdrawing a release, or to `no` to publish a new stable version
+without fronting it yet. Deletion preserves all other versions and rejects removal of the version
 referenced by `latest` until a newer stable version is published.
+
+The version selector marks the version carrying `latest`. It reads the configuration built into
+each published version, so a version published before that configuration existed shows the marker
+only after it is republished. Readers may see a stale selector for up to ten minutes after a
+publication, because GitHub Pages caches the version catalog it fetches.
 
 All operations are serialized in request order. If Pages deployment fails after the version
 catalog is updated, rerun the same operation to deploy the complete stored catalog. A repeated
