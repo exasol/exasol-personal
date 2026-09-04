@@ -19,6 +19,15 @@ on:
         description: "SemVer without v, e.g. 2.2.0; required for delete and optional for v-tags"
         required: false
         type: string
+      make_latest:
+        description: "Give this version the 'latest' alias and the site root"
+        required: false
+        type: choice
+        default: auto
+        options:
+          - auto
+          - "yes"
+          - "no"
 
 permissions: {}
 
@@ -79,10 +88,11 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           SOURCE_REF: ${{ inputs.source_ref }}
           REQUESTED_VERSION: ${{ inputs.version }}
+          MAKE_LATEST: ${{ inputs.make_latest }}
         run: |
           set -euo pipefail
           if [[ "${OPERATION}" == "publish" ]]; then
-            arguments=("${SOURCE_REF}")
+            arguments=("${SOURCE_REF}" --make-latest "${MAKE_LATEST}")
             if [[ -n "${REQUESTED_VERSION}" ]]; then
               arguments+=(--version "${REQUESTED_VERSION}")
             fi
@@ -103,6 +113,7 @@ jobs:
           SOURCE_REF: ${{ inputs.source_ref }}
           COMMIT: ${{ steps.source.outputs.commit }}
           VERSION: ${{ steps.request.outputs.version }}
+          MAKE_LATEST: ${{ inputs.make_latest }}
         run: |
           {
             echo "## Documentation publication"
@@ -112,6 +123,7 @@ jobs:
             if [[ "${OPERATION}" == "publish" ]]; then
               echo "- Source: \`${SOURCE_REF}\`"
               echo "- Commit: \`${COMMIT}\`"
+              echo "- Make latest: \`${MAKE_LATEST}\`"
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -136,9 +148,14 @@ jobs:
         env:
           OPERATION: ${{ inputs.operation }}
           VERSION: ${{ steps.request.outputs.version }}
+          MAKE_LATEST: ${{ inputs.make_latest }}
         run: |
           set -euo pipefail
-          uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py "${OPERATION}" "${VERSION}"
+          arguments=("${OPERATION}" "${VERSION}")
+          if [[ "${OPERATION}" == "publish" ]]; then
+            arguments+=(--make-latest "${MAKE_LATEST}")
+          fi
+          uv run --project user-docs --locked --no-build python user-docs/scripts/versions.py "${arguments[@]}"
           git push origin gh-pages
 
       - name: Export complete published site
