@@ -50,9 +50,12 @@ def test_validate_delete_rejects_invalid_versions(target: str) -> None:
         ("v2.3.0", "2.3.0"),
         ("docs/v2.2.0-rc.1", "2.2.0-rc.1"),
         ("refs/tags/docs/v2.1.0", "2.1.0"),
+        ("docs/v2.4.0", "2.4.0"),
+        ("refs/heads/docs/v2.4.0", "2.4.0"),
+        ("refs/heads/docs/v2.5.0-rc.1", "2.5.0-rc.1"),
     ],
 )
-def test_validate_publish_derives_version_from_conventional_tags(
+def test_validate_publish_derives_version_from_conventional_sources(
     source_ref: str, expected: str
 ) -> None:
     # Given / When
@@ -62,7 +65,9 @@ def test_validate_publish_derives_version_from_conventional_tags(
     assert actual == expected
 
 
-@pytest.mark.parametrize("source_ref", ["a" * 40, "release-2.2.0"])
+@pytest.mark.parametrize(
+    "source_ref", ["a" * 40, "release-2.2.0", "refs/heads/docs/styling"]
+)
 def test_validate_publish_requires_version_when_it_cannot_be_derived(
     source_ref: str,
 ) -> None:

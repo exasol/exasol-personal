@@ -12,7 +12,7 @@ on:
           - publish
           - delete
       source_ref:
-        description: "Exact tag, e.g. docs/v2.2.0 or docs/0.1; full 40-character SHA also accepted"
+        description: "Tag, docs/ branch, or full 40-character SHA, e.g. v2.2.0 or docs/v2.2.0"
         required: false
         type: string
       version:
@@ -58,19 +58,48 @@ jobs:
         run: |
           set -euo pipefail
           fail() {
-            echo "::error::source_ref must be an exact Git tag or full 40-character commit SHA"
+            echo "::error::$1"
             exit 1
           }
           commit="$(git rev-parse HEAD)"
           if [[ "${SOURCE_REF}" =~ ^[0-9a-fA-F]{40}$ ]]; then
-            [[ "${commit,,}" == "${SOURCE_REF,,}" ]] || fail
+            [[ "${commit,,}" == "${SOURCE_REF,,}" ]] || fail "source_ref must name the checked-out commit"
+            echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          name="${SOURCE_REF}"
+          kind="any"
+          case "${SOURCE_REF}" in
+            refs/heads/*) name="${SOURCE_REF#refs/heads/}"; kind="branch" ;;
+            refs/tags/*) name="${SOURCE_REF#refs/tags/}"; kind="tag" ;;
+            refs/*) fail "source_ref must be a tag, a branch under docs/, or a full 40-character commit SHA" ;;
+          esac
+
+          branch_head=""
+          tag_object=""
+          if [[ "${kind}" != "tag" ]]; then
+            branch_head="$(git ls-remote --heads origin "refs/heads/${name}" | cut -f1)"
+          fi
+          if [[ "${kind}" != "branch" ]]; then
+            tag_object="$(git ls-remote --tags origin "refs/tags/${name}" | cut -f1)"
+          fi
+
+          if [[ -n "${branch_head}" && -n "${tag_object}" ]]; then
+            fail "'${name}' is both a branch and a tag; qualify source_ref with refs/heads/ or refs/tags/"
+          fi
+
+          if [[ -n "${branch_head}" ]]; then
+            case "${name}" in
+              docs/*) ;;
+              *) fail "a branch source must be a documentation branch under docs/, for example docs/v2.2.0" ;;
+            esac
+            [[ "${branch_head}" == "${commit}" ]] || fail "branch '${name}' moved during the run; rerun the workflow"
+          elif [[ -n "${tag_object}" ]]; then
+            tag_commit="$(git rev-parse --verify --end-of-options "refs/tags/${name}^{commit}")" || fail "tag '${name}' is not available"
+            [[ "${tag_commit}" == "${commit}" ]] || fail "tag '${name}' does not name the checked-out commit"
           else
-            tag="${SOURCE_REF#refs/tags/}"
-            if [[ "${SOURCE_REF}" == refs/* && "${SOURCE_REF}" != refs/tags/* ]]; then
-              fail
-            fi
-            tag_commit="$(git rev-parse --verify --end-of-options "refs/tags/${tag}^{commit}")" || fail
-            [[ "${tag_commit}" == "${commit}" ]] || fail
+            fail "source_ref must be an existing tag, an existing branch under docs/, or a full 40-character commit SHA"
           fi
           echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
 
