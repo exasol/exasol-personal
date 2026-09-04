@@ -2,8 +2,9 @@
 
 ## Purpose
 
-Define how maintainers safely validate and manually publish, replace, or delete versioned user
-documentation through GitHub Pages.
+Define how versioned user documentation is safely validated and published through GitHub Pages,
+both as part of releasing a version and when a maintainer publishes, replaces, or deletes one
+version.
 ## Requirements
 ### Requirement: Maintainers can manually delete one published version
 
@@ -132,7 +133,8 @@ branch whose name begins with `release/`, or a full 40-character commit SHA as t
 source, and publish it under an independently selected documentation version. A documentation
 version SHALL be a release line such as `2.2` or a full version such as `2.2.0-rc1`. When the
 version is omitted, the workflow SHALL derive it from a source name that is `v<version>` or ends
-in `/v<version>`.
+in `/v<version>`, deriving the release line of a stable version and the full version of a
+pre-release.
 
 #### Scenario: Publish a release line from its release branch
 
@@ -147,11 +149,11 @@ in `/v<version>`.
 - **THEN** that version SHALL be replaced from the new branch tip while every other published
   version and every release tag SHALL remain unchanged
 
-#### Scenario: Publish a full version derived from a tag
+#### Scenario: Publish a release line derived from a stable tag
 
-- **WHEN** a maintainer publishes documentation from a tag such as `v2.3.0` without supplying a
-  version
-- **THEN** version `2.3.0` SHALL be published
+- **WHEN** a maintainer publishes documentation from a stable tag such as `v2.3.1` without
+  supplying a version
+- **THEN** version `2.3` SHALL be published
 
 #### Scenario: Publish a release-candidate version derived from a namespaced tag
 
@@ -164,6 +166,11 @@ in `/v<version>`.
 - **WHEN** a maintainer publishes a source revision and supplies version `2.2`
 - **THEN** the selected source content SHALL be published as version `2.2` regardless of the
   source name
+
+#### Scenario: Publish a full stable version
+
+- **WHEN** a maintainer publishes a stable tag such as `v2.3.0` and supplies version `2.3.0`
+- **THEN** version `2.3.0` SHALL be published
 
 #### Scenario: Require an explicit version for an underivable source
 
@@ -195,4 +202,44 @@ in `/v<version>`.
 - **WHEN** a maintainer publishes a documentation version that already exists
 - **THEN** that version SHALL be replaced from the selected source and every other published
   version SHALL remain unchanged
+
+### Requirement: Releasing a stable version publishes its documentation
+
+Publishing a release SHALL complete documentation validation for the released tag before the
+release is published, and SHALL publish documentation for a stable release from that tag without a
+supplied version.
+
+#### Scenario: Publish a stable release
+
+- **WHEN** a maintainer publishes a stable release from tag `v2.3.1`
+- **THEN** the release SHALL be published and documentation from that tag SHALL be published as
+  version `2.3`
+
+#### Scenario: Invalid documentation blocks the release
+
+- **WHEN** the documentation at the selected release tag fails validation
+- **THEN** publishing SHALL fail before the release is created and before any published
+  documentation version changes
+
+#### Scenario: Publish a pre-release
+
+- **WHEN** a maintainer publishes a release from a pre-release tag
+- **THEN** the documentation at that tag SHALL be validated and the published documentation
+  versions SHALL remain unchanged
+
+#### Scenario: Recover a failed documentation deployment
+
+- **WHEN** GitHub Pages deployment fails after the release is published
+- **THEN** the release SHALL remain published and publishing the same tag through the
+  documentation workflow SHALL produce the same documentation version
+
+### Requirement: Release line changes are validated before publication
+
+Documentation validation SHALL run for a proposed change that targets a release line, so that the
+documentation of a release line is publishable when it changes.
+
+#### Scenario: Validate a release line correction
+
+- **WHEN** a pull request targets a branch under `release/`
+- **THEN** the repository's user documentation validation SHALL run for that pull request
 
