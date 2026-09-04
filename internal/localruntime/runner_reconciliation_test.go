@@ -63,33 +63,61 @@ func writeRunnerScript(t *testing.T, version string) string {
 }
 
 //nolint:paralleltest // tests set process environment and fork executable fixtures.
-func TestReconcileRunnerVersionRecordsCompatibleV2Runner(t *testing.T) {
+func TestReconcileRunnerVersionTreatsUnrecordedGuestAsStale(t *testing.T) {
 	testRuntime := newTestRuntimeForReconciliation(t)
 	runnerPath := writeRunnerScript(t, "2.1.3")
 
-	if err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath); err != nil {
+	reconciliation, err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
+	if err != nil {
 		t.Fatalf("expected v2 runner reconciliation: %v", err)
 	}
-	assertMarkerVersion(t, testRuntime, "2.1.3")
+	if reconciliation.Version.String() != "2.1.3" || !reconciliation.Recordable {
+		t.Fatalf("reconciliation = %+v, want recordable 2.1.3", reconciliation)
+	}
+	if !reconciliation.GuestStale {
+		t.Fatal("expected an unrecorded guest to be replaced")
+	}
+}
+
+//nolint:paralleltest // tests set process environment and fork executable fixtures.
+func TestReconcileRunnerVersionKeepsGuestForRecordedRunner(t *testing.T) {
+	testRuntime := newTestRuntimeForReconciliation(t)
+	seedVersionMarker(t, testRuntime, "2.1.3")
+
+	reconciliation, err := testRuntime.reconcileRunnerVersion(
+		context.Background(), writeRunnerScript(t, "2.1.3"),
+	)
+	if err != nil {
+		t.Fatalf("expected v2 runner reconciliation: %v", err)
+	}
+	if reconciliation.GuestStale {
+		t.Fatal("expected a guest matching the resolved runner to be kept")
+	}
 }
 
 //nolint:paralleltest // tests set process environment and fork executable fixtures.
 func TestReconcileRunnerVersionUpdatesCompatibleUpgradeAndDowngrade(t *testing.T) {
 	testRuntime := newTestRuntimeForReconciliation(t)
 	seedVersionMarker(t, testRuntime, "2.1.0")
-	if err := testRuntime.reconcileRunnerVersion(
+	upgrade, err := testRuntime.reconcileRunnerVersion(
 		context.Background(), writeRunnerScript(t, "2.2.0"),
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("expected compatible upgrade: %v", err)
 	}
-	assertMarkerVersion(t, testRuntime, "2.2.0")
+	if upgrade.Version.String() != "2.2.0" || !upgrade.GuestStale {
+		t.Fatalf("upgrade reconciliation = %+v, want stale 2.2.0", upgrade)
+	}
 
-	if err := testRuntime.reconcileRunnerVersion(
+	downgrade, err := testRuntime.reconcileRunnerVersion(
 		context.Background(), writeRunnerScript(t, "2.1.9"),
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("expected compatible downgrade: %v", err)
 	}
-	assertMarkerVersion(t, testRuntime, "2.1.9")
+	if downgrade.Version.String() != "2.1.9" || !downgrade.GuestStale {
+		t.Fatalf("downgrade reconciliation = %+v, want stale 2.1.9", downgrade)
+	}
 }
 
 //nolint:paralleltest // tests set process environment and fork executable fixtures.
@@ -97,12 +125,15 @@ func TestReconcileRunnerVersionAcceptsNewerContractMajor(t *testing.T) {
 	testRuntime := newTestRuntimeForReconciliation(t)
 	seedVersionMarker(t, testRuntime, "2.1.0")
 
-	if err := testRuntime.reconcileRunnerVersion(
+	reconciliation, err := testRuntime.reconcileRunnerVersion(
 		context.Background(), writeRunnerScript(t, "3.0.0"),
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("expected newer runner contract: %v", err)
 	}
-	assertMarkerVersion(t, testRuntime, "3.0.0")
+	if reconciliation.Version.String() != "3.0.0" || !reconciliation.GuestStale {
+		t.Fatalf("reconciliation = %+v, want stale 3.0.0", reconciliation)
+	}
 }
 
 //nolint:paralleltest // tests set process environment and fork executable fixtures.
@@ -110,7 +141,7 @@ func TestReconcileRunnerVersionRejectsLegacyV1BeforeUpdatingMarker(t *testing.T)
 	testRuntime := newTestRuntimeForReconciliation(t)
 	seedVersionMarker(t, testRuntime, "2.1.0")
 
-	err := testRuntime.reconcileRunnerVersion(
+	_, err := testRuntime.reconcileRunnerVersion(
 		context.Background(), writeRunnerScript(t, "1.9.9"),
 	)
 	if err == nil || !strings.Contains(err.Error(), "legacy application-owning contract") {
@@ -125,7 +156,7 @@ func TestReconcileRunnerVersionRejectsInvalidVersion(t *testing.T) {
 	runnerPath := filepath.Join(t.TempDir(), "launcher")
 	writeExecutableTestFile(t, runnerPath, []byte("#!/bin/sh\nprintf 'invalid-version\\n'\n"))
 
-	err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
+	_, err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
 	if err == nil || !strings.Contains(err.Error(), "does not report a valid version") {
 		t.Fatalf("expected invalid version error, got %v", err)
 	}
@@ -138,8 +169,12 @@ func TestReconcileRunnerVersionForcedBypassAllowsUnversionedDevelopmentRunner(t 
 	runnerPath := filepath.Join(t.TempDir(), "launcher")
 	writeExecutableTestFile(t, runnerPath, []byte("#!/bin/sh\nprintf 'dev\\n'\n"))
 
-	if err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath); err != nil {
+	reconciliation, err := testRuntime.reconcileRunnerVersion(context.Background(), runnerPath)
+	if err != nil {
 		t.Fatalf("expected forced development runner: %v", err)
+	}
+	if reconciliation.Recordable || reconciliation.GuestStale {
+		t.Fatalf("reconciliation = %+v, want an unrecordable version", reconciliation)
 	}
 }
 

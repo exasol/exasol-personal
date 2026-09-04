@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -123,6 +124,132 @@ func TestMacVMRuntimePrepareCreatesAndReusesManagedHostDataLink(t *testing.T) {
 	wantTarget := filepath.Join(sharedDirName, nanoDataDirName)
 	if target != wantTarget {
 		t.Fatalf("host data link target = %q, want %q", target, wantTarget)
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable fixtures.
+func TestMacVMRuntimePrepareReplacesGuestWhenRunnerChanged(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	// Given a deployment whose guest came from a different runner
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	runtime := newPreparedGuestRuntime(t, eventsPath, "2.0.0-dev", "1.1.0")
+
+	// When
+	if err := runtime.Prepare(context.Background(), nil, nil, PrepareOptions{}); err != nil {
+		t.Fatalf("failed to prepare runtime: %v", err)
+	}
+
+	// Then the guest is replaced and the resolved runner recorded
+	assertRunnerEvents(t, eventsPath, "runner-init")
+	assertMarkerVersion(t, runtime, "2.0.0-dev")
+}
+
+//nolint:paralleltest // test runner scripts fork executable fixtures.
+func TestMacVMRuntimePrepareKeepsGuestOfRecordedRunner(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	// Given a deployment whose guest came from the resolved runner
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	runtime := newPreparedGuestRuntime(t, eventsPath, "2.0.0-dev", "2.0.0-dev")
+
+	// When
+	if err := runtime.Prepare(context.Background(), nil, nil, PrepareOptions{}); err != nil {
+		t.Fatalf("failed to prepare runtime: %v", err)
+	}
+
+	// Then the guest is left alone
+	assertRunnerEvents(t, eventsPath)
+}
+
+//nolint:paralleltest // test runner scripts fork executable fixtures.
+func TestMacVMRuntimePrepareStopsRunningVMBeforeReplacingGuest(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	// Given a running VM whose guest came from a different runner
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	runtime := newPreparedGuestRuntime(t, eventsPath, "2.0.0-dev", "1.1.0")
+	if err := os.WriteFile(
+		filepath.Join(runtime.paths.WorkDir, "running"), nil, markerFileMode,
+	); err != nil {
+		t.Fatalf("failed to mark the VM as running: %v", err)
+	}
+
+	// When
+	if err := runtime.Prepare(context.Background(), nil, nil, PrepareOptions{}); err != nil {
+		t.Fatalf("failed to prepare runtime: %v", err)
+	}
+
+	// Then the VM stops before its guest disk is rewritten
+	assertRunnerEvents(t, eventsPath, "runner-stop", "runner-init")
+}
+
+//nolint:paralleltest // test runner scripts fork executable fixtures.
+func TestMacVMRuntimePrepareKeepsRecordedVersionWhenReplacementFails(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	// Given a runner that cannot rebuild the guest
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	script := strings.Replace(
+		fakeV2RunnerScriptWithVersion(eventsPath, "2.0.0-dev"),
+		"    mkdir -p vm vm-shared\n",
+		"    exit 3\n",
+		1,
+	)
+	runtime := NewMacVMRuntime(
+		config.NewDeploymentDir(t.TempDir()), newTestManagerForRunner(t, []byte(script)),
+	)
+	seedPreparedGuest(t, runtime, "1.1.0")
+
+	// When
+	err := runtime.Prepare(context.Background(), nil, nil, PrepareOptions{})
+
+	// Then the recorded version still reports the guest that is actually there
+	if err == nil {
+		t.Fatal("expected guest replacement to fail")
+	}
+	assertMarkerVersion(t, runtime, "1.1.0")
+}
+
+func newPreparedGuestRuntime(
+	t *testing.T,
+	eventsPath, runnerVersion, recordedVersion string,
+) *MacVMRuntime {
+	t.Helper()
+
+	runtime := NewMacVMRuntime(
+		config.NewDeploymentDir(t.TempDir()),
+		newTestManagerForRunner(
+			t, []byte(fakeV2RunnerScriptWithVersion(eventsPath, runnerVersion)),
+		),
+	)
+	seedPreparedGuest(t, runtime, recordedVersion)
+
+	return runtime
+}
+
+func seedPreparedGuest(t *testing.T, runtime *MacVMRuntime, recordedVersion string) {
+	t.Helper()
+
+	if err := os.MkdirAll(runtime.paths.VMDir, dirMode); err != nil {
+		t.Fatalf("failed to seed VM directory: %v", err)
+	}
+	seedVersionMarker(t, runtime, recordedVersion)
+}
+
+func assertRunnerEvents(t *testing.T, eventsPath string, expected ...string) {
+	t.Helper()
+
+	content, err := os.ReadFile(eventsPath)
+	if err != nil {
+		if os.IsNotExist(err) && len(expected) == 0 {
+			return
+		}
+		t.Fatalf("failed to read runner events: %v", err)
+	}
+	actual := strings.Fields(string(content))
+	if !slices.Equal(actual, expected) {
+		t.Fatalf("runner events = %v, want %v", actual, expected)
 	}
 }
 

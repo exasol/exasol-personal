@@ -405,12 +405,16 @@ func TestMacVMRuntimeOpenHostShellPreservesRunnerFailure(t *testing.T) {
 }
 
 func fakeV2RunnerScript(eventsPath string) string {
+	return fakeV2RunnerScriptWithVersion(eventsPath, "2.0.0-dev")
+}
+
+func fakeV2RunnerScriptWithVersion(eventsPath, version string) string {
 	return fmt.Sprintf(`#!/bin/sh
 set -eu
 events=%q
 case "$1" in
   version)
-    printf 'v2.0.0-dev\n'
+    printf 'v%s\n'
     ;;
   init)
     mkdir -p vm vm-shared
@@ -444,7 +448,7 @@ EOF
     exit 2
     ;;
 esac
-`, eventsPath, 28563)
+`, eventsPath, version, 28563)
 }
 
 type recordingLocalInstall struct {
