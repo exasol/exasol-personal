@@ -5,18 +5,18 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Publish from a Git source or delete a published version
+        description: "Action to run: publish or delete"
         required: true
         type: choice
         options:
           - publish
           - delete
       source_ref:
-        description: Exact Git tag or full commit SHA (publish only)
+        description: "Exact tag, e.g. docs/v2.2.0 or docs/0.1; full 40-character SHA also accepted"
         required: false
         type: string
       version:
-        description: Published version (optional for conventional tags; required for delete)
+        description: "SemVer without v, e.g. 2.2.0; required for delete and optional for v-tags"
         required: false
         type: string
 
@@ -95,7 +95,7 @@ jobs:
 
       - name: Validate documentation
         if: inputs.operation == 'publish'
-        run: task docs-build
+        run: uv run --project user-docs --locked --no-build mkdocs build --strict --config-file user-docs/mkdocs.yml
 
       - name: Summarize request
         env:
