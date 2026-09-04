@@ -20,32 +20,40 @@
 
 </div>
 
-## About Exasol Personal
+## 📖 About Exasol Personal
 
 Exasol Personal gives individual users a complete Exasol database for development, exploration,
 analytics, and AI-assisted workflows. The Exasol Launcher is a scriptable command-line application
 that installs and manages the database locally or on supported cloud infrastructure.
 
-The database combines Exasol's in-memory, massively parallel analytics engine with the SQL,
-integration, AI, and extensibility capabilities of Exasol Database. Exasol Personal is free for
+Exasol is an in-memory, massively parallel analytics database with full SQL support, a vast
+ecosystem, extensive AI capabilities, and flexible extensibility. Exasol Personal is free for
 personal use and does not impose an artificial data-size limit.
 
-## Get started
+## 🚀 Get started
 
-The [latest user documentation](https://exasol.github.io/exasol-personal/latest/) contains the
-current system requirements, installation instructions, supported deployment targets, tutorials,
-command guidance, and troubleshooting information. Use its version selector when working with an
-earlier release.
+On macOS, Linux, and Windows (WSL), install the launcher with:
+```bash
+curl https://downloads.exasol.com/exasol-personal/installer.sh | sh
+```
 
-Download the launcher from the
-[Exasol Download Portal](https://downloads.exasol.com/exasol-personal), or follow the
-[installation guide](https://exasol.github.io/exasol-personal/latest/getting-started/).
+For a quick start and a general overview of the available commands, type:
 
-AI coding agents can use the published
-[Exasol agent skills](https://github.com/exasol-labs/exasol-agent-skills) to install Exasol Personal,
+```bash
+exasol help
+```
+
+If you get a `command not found` error, add `~/.local/bin` to your `PATH`.
+
+For next steps, read the [user documentation](https://exasol.github.io/exasol-personal/latest/).
+It also covers the system requirements and supported deployment targets, as well as tutorials,
+command guidance, and troubleshooting information.
+
+AI coding agents can use
+[agent skills](https://github.com/exasol-labs/exasol-agent-skills) to install Exasol Personal,
 connect to it, load data, and write Exasol SQL.
 
-## Development and contributions
+## 🛠️ Development and contributions
 
 This repository contains the Exasol Launcher, its built-in deployment presets, tests, and user
 documentation sources. To build or contribute:
@@ -56,7 +64,7 @@ documentation sources. To build or contribute:
 - Review the high-level [architecture](doc/architecture.md) and
   [project-specific best practices](doc/best_practices.md).
 
-## License
+## ⚖️ License
 
 The Exasol Launcher source code is licensed under the [MIT License](LICENSE). Exasol Database is
 proprietary software provided by Exasol AG and is free for personal use. Installing the database
