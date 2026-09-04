@@ -15,9 +15,9 @@ In the Exoscale portal:
 
 1. Open **IAM** > **Roles** and create a role for Exasol Personal.
 2. Grant the permissions described by the
-   [minimal example policy](https://github.com/exasol/exasol-personal/blob/v2.2.0/assets/infrastructure/exoscale/iam-policy.minimal.json)
+   [minimal example policy](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/exoscale/iam-policy.minimal.json)
    or the
-   [broad example policy](https://github.com/exasol/exasol-personal/blob/v2.2.0/assets/infrastructure/exoscale/iam-policy.broad.json).
+   [broad example policy](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/exoscale/iam-policy.broad.json).
    The minimal policy is recommended. Use the JSON as a reference when entering the permissions in
    the portal; Exoscale does not import the file directly.
 3. Open **IAM** > **API Keys**, create an API key, and assign the new role.
@@ -56,6 +56,6 @@ exasol install exoscale --zone de-fra-1
 exasol install exoscale --zone at-vie-1
 ```
 
-Release 2.2 supports `ch-gva-2`, `de-fra-1`, `de-muc-1`, `at-vie-1`, `at-vie-2`, and `bg-sof-1`.
+The supported zones are `ch-gva-2`, `de-fra-1`, `de-muc-1`, `at-vie-1`, `at-vie-2`, and `bg-sof-1`.
 See the Exoscale guides for [IAM](https://community.exoscale.com/documentation/iam/) and
 [API keys](https://community.exoscale.com/documentation/iam/quick-start/) for more information.

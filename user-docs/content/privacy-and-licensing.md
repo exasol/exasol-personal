@@ -12,7 +12,7 @@ installation flags that disable them.
 ## Launcher license
 
 The Exasol Launcher source code is available under the
-[MIT License](https://github.com/exasol/exasol-personal/blob/v2.2.0/LICENSE). You may use, modify, and
+[MIT License](https://github.com/exasol/exasol-personal/blob/main/LICENSE). You may use, modify, and
 distribute it under those terms.
 
 ## Database license

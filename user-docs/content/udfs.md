@@ -3,8 +3,8 @@
 User-defined functions (UDFs) execute in a script language container (SLC), which supplies a runtime
 such as Python, Java, or R.
 
-Cloud deployments include the standard SLCs. Local deployments in release 2.2 do not install one by
-default. Install the language you need with `exasol slc`:
+Cloud deployments include the standard SLCs. Local deployments do not install one by default.
+Install the language you need with `exasol slc`:
 
 ```bash
 exasol slc list
@@ -28,4 +28,36 @@ connections and aborts running statements. The command asks for confirmation fir
 - Use `--auto-approve` to skip the prompt. This is required for non-interactive use.
 - Use `--no-restart` to record the change and activate it the next time the deployment starts.
 
-The `install`, `update`, and `remove` SLC operations apply only to local deployments.
+Official `install`, `update`, and `remove` operations and custom SLC management apply only to local
+deployments.
+
+Script language containers also provide runtimes for features such as virtual schema adapter
+scripts. Install the language required by the adapter before creating it. See
+[Virtual schemas](virtual-schemas.md) for a JDBC example.
+
+## Install a custom container
+
+Install a custom SLC when the official catalog does not provide the language or packages you need:
+
+```bash
+exasol slc custom install --source ./my-python.tar.gz --alias MYPY3 --language python
+exasol slc custom update --source ./my-python-v2.tar.gz --alias MYPY3
+exasol slc remove MYPY3
+```
+
+`--source` accepts a local tar archive or an HTTPS URL. `--alias` defines the name used in
+`CREATE <alias> ... SCRIPT`. `--language` identifies the custom client language. The launcher trims
+whitespace, converts the identifier to lowercase, and requires it to start with an ASCII letter or
+digit and contain only ASCII letters, digits, dots, hyphens, or underscores. A custom client can use
+another identifier, such as `rust`, when it implements the Exasol UDF protocol.
+
+Custom `install` and `update` restart the database and support `--auto-approve` and `--no-restart`.
+If the container cannot be activated, the database still starts but the command reports that the
+container is recorded as pending.
+
+Removing a custom container takes effect immediately and does not accept the restart options. The
+deployment must be running to remove an active alias through the database. A container recorded but
+never activated can be removed while the deployment is stopped.
+
+`exasol slc list` shows custom containers separately, including their alias, language, status, and
+source. JSON output marks them as custom and includes availability information.

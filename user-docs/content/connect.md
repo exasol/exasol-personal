@@ -58,17 +58,17 @@ For SQL syntax, functions, and data types, see the
 
 ## Use Exasol Admin
 
-Exasol Admin is available for cloud deployments in release 2.2. The installation output and
-`exasol info` show its URL. Its credentials are stored in `secrets.json`.
+Exasol Admin is available for cloud deployments. The installation output and `exasol info` show its
+URL. Its credentials are stored in `secrets.json`.
 
 The browser can display a warning because Exasol Admin uses a self-signed certificate. Verify that
 you are connecting to your deployment before accepting the certificate warning.
 
-Exasol Admin is not available for local deployments in release 2.2.
+Exasol Admin is not available for local deployments.
 
 ## Open a shell
 
-Open a shell on the compute instance or local virtual machine:
+Open a shell on a cloud compute instance or in the managed macOS virtual machine:
 
 ```bash
 exasol shell host
@@ -79,3 +79,5 @@ Open a shell inside the database container:
 ```bash
 exasol shell container
 ```
+
+The runtime-managed shell commands are not available for local deployments on Linux or Windows.
