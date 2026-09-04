@@ -17,14 +17,13 @@ SEMANTIC_VERSION = re.compile(
     r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
 )
 FULL_COMMIT = re.compile(r"[0-9a-fA-F]{40}")
-VERSION_TAG = re.compile(r"(?:.*/)?v(?P<version>.+)")
+VERSION_SOURCE = re.compile(r"(?:.*/)?v(?P<version>.+)")
+SOURCE_PREFIXES = ("refs/heads/", "refs/tags/")
 MIKE_BRANCH = "gh-pages"
 MKDOCS_CONFIG = "user-docs/mkdocs.yml"
 LATEST_ALIAS = "latest"
 ALIAS_DECISIONS = ("auto", "yes", "no")
-PUBLISH_VERSION_ERROR = (
-    "version is required when source_ref is not a tag ending in v<semver>"
-)
+PUBLISH_VERSION_ERROR = "version is required when source_ref does not end in v<semver>"
 DELETE_TARGET_ERROR = (
     "delete target must be a published semantic version such as 2.3.0-rc1"
 )
@@ -78,11 +77,13 @@ def resolve_version(source_ref: str, version: str | None) -> str:
         require_version(version)
         return version
 
-    selected_tag = source_ref.removeprefix("refs/tags/")
+    selected = source_ref
+    for prefix in SOURCE_PREFIXES:
+        selected = selected.removeprefix(prefix)
     match = (
         None
         if FULL_COMMIT.fullmatch(source_ref)
-        else VERSION_TAG.fullmatch(selected_tag)
+        else VERSION_SOURCE.fullmatch(selected)
     )
     derived = match.group("version") if match else ""
     if not SEMANTIC_VERSION.fullmatch(derived):
