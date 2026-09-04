@@ -4,7 +4,6 @@
 package main
 
 import (
-	"github.com/exasol/exasol-personal/internal/approval"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
@@ -44,22 +43,21 @@ var destroyCmd = &cobra.Command{
 
 		deployment := commonFlags.Deployment()
 
-		response := false
-		switch rootOpts.ApprovalMode() {
-		case approval.ModeApprove:
-			response = true
-		case approval.ModePrompt:
-			removalTarget := ""
-			if destroyOpts.Remove {
-				removalTarget = deployment.Root()
-			}
-			response = askForUserConfirmation(destroyConfirmationPrompt(removalTarget))
-		case approval.ModeNonInteractive:
-			// Nobody can be asked, so the destroy is declined.
-		default:
-			// An unrecognised mode declines rather than assuming consent.
+		proceed, err := confirmAction(
+			rootOpts.ApprovalMode(),
+			func() bool {
+				removalTarget := ""
+				if destroyOpts.Remove {
+					removalTarget = deployment.Root()
+				}
+
+				return askForUserConfirmation(destroyConfirmationPrompt(removalTarget))
+			},
+		)
+		if err != nil {
+			return err
 		}
-		if !response {
+		if !proceed {
 			return nil
 		}
 

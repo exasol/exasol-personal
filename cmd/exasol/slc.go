@@ -406,17 +406,14 @@ func runSLCCustomRemove(cmd *cobra.Command, alias string) error {
 	return nil
 }
 
-// Refuses non-interactively so scripts never override an SLC silently.
+// A run with no terminal proceeds without asking rather than blocking on a
+// prompt nobody can answer.
 func customSLCConfirmFunc(cmd *cobra.Command, mode approval.Mode) deploy.CustomSLCConfirm {
-	if mode == approval.ModeApprove {
+	if mode != approval.ModePrompt {
 		return nil
 	}
 
 	return func(prompt string) (bool, error) {
-		if mode == approval.ModeNonInteractive {
-			return false, errors.New(prompt + "; re-run with --auto-approve to proceed")
-		}
-
 		// stderr, so an interactive prompt never lands in the middle of --json output.
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s.\nContinue? [y/N]: ", prompt)
 
@@ -430,22 +427,14 @@ func customSLCConfirmFunc(cmd *cobra.Command, mode approval.Mode) deploy.CustomS
 }
 
 // slcConfirmFunc returns a confirmation callback for a database-restarting SLC operation.
-// It returns nil when approval was already granted. Otherwise it warns and prompts
-// interactively, and refuses when nobody can be asked so scripts never trigger a silent
-// restart.
+// It returns nil when the restart needs no confirmation, either because approval was
+// granted or because there is no terminal to ask. Otherwise it warns and prompts.
 func slcConfirmFunc(cmd *cobra.Command, mode approval.Mode, action string) deploy.ConfirmFunc {
-	if mode == approval.ModeApprove {
+	if mode != approval.ModePrompt {
 		return nil
 	}
 
 	return func() (bool, error) {
-		if mode == approval.ModeNonInteractive {
-			return false, errors.New(
-				"this restarts the database; re-run with --auto-approve to confirm, " +
-					"or --no-restart to apply on the next start",
-			)
-		}
-
 		_, _ = fmt.Fprintf(
 			cmd.ErrOrStderr(),
 			"%s will restart the database. Open connections will be dropped and running "+

@@ -52,7 +52,7 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 - Fixed documentation publication failing during validation because the GitHub Actions runner does
   not provide the Task command.
-
+- `exasol destroy` and `exasol remove` no longer report success without doing anything when no terminal is attached. Such a run now proceeds as though `--auto-approve` had been passed. Detection of an attached terminal was also corrected, so a command redirected from the null device is treated as unattended rather than interactive.
 - Corrected the local Virtual Schema setup guide to use the active deployment's shared directory on
   macOS instead of obsolete SSH paths, and added the required deployment selection and PostgreSQL
   timezone configuration steps.
@@ -68,6 +68,7 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Breaking Changes
 
+- Commands that ask for confirmation now proceed without asking when no terminal is attached, as though `--auto-approve` had been passed. This covers `exasol destroy`, `exasol remove`, and the database-restarting `exasol slc` operations, and it applies however standard input is redirected, so a piped answer no longer declines them. Local runtime host preparation is the exception and still requires an answer or `--auto-approve`. Scripts that relied on a redirected `exasol destroy` declining must stop invoking it.
 - Local runtime host preparation in a non-interactive invocation now fails instead of proceeding without approval. Scripts that relied on the previous behavior must pass `--auto-approve` to `exasol deploy`, `exasol install`, or `exasol start`.
 - Local deployments now publish the database port on `127.0.0.1` instead of on all addresses, so it is no longer reachable from other hosts. The documented connection endpoint is unchanged; use a cloud deployment if the database must be reachable over the network.
 

@@ -89,15 +89,16 @@ func (flags *RootFlags) ApprovalMode() approval.Mode {
 }
 
 // registerAutoApproveFlag makes approval a single cross-cutting choice rather
-// than a per-command one. Commands read rootOpts.AutoApprove instead of
+// than a per-command one. Commands read rootOpts.ApprovalMode() instead of
 // declaring their own flag, which would shadow this one where it matters.
 func registerAutoApproveFlag(root *cobra.Command, state *RootFlags) {
 	root.PersistentFlags().BoolVar(
 		&state.AutoApprove,
 		"auto-approve",
 		false,
-		"Approve confirmation prompts, including host preparation, "+
-			"database restarts, and destructive actions",
+		"Approve confirmation prompts, which a run with no terminal also does "+
+			"automatically except for local runtime host preparation. Input "+
+			"validation and other safety checks still apply",
 	)
 }
 

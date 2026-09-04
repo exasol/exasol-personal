@@ -352,30 +352,32 @@ func TestFormatSLCListTextSeparatesOfficialFromCustom(t *testing.T) {
 	}
 }
 
-// Each mode selects a different response: pre-approved skips the callback
-// entirely, and an unreachable user is refused rather than assumed willing.
+// A restart needs confirming only when someone can answer. Both an approved
+// run and one with no terminal hand over no callback at all, which is how the
+// SLC operations proceed without asking.
 func TestSLCConfirmFuncsRespondPerApprovalMode(t *testing.T) {
 	t.Parallel()
 
-	if slcConfirmFunc(&cobra.Command{}, approval.ModeApprove, "Installing") != nil {
-		t.Error("expected no confirmation callback when approval was granted")
-	}
-	if customSLCConfirmFunc(&cobra.Command{}, approval.ModeApprove) != nil {
-		t.Error("expected no custom confirmation callback when approval was granted")
+	for name, mode := range map[string]approval.Mode{
+		"approved":    approval.ModeApprove,
+		"no terminal": approval.ModeNonInteractive,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if slcConfirmFunc(&cobra.Command{}, mode, "Installing") != nil {
+				t.Errorf("expected no confirmation callback when %s", name)
+			}
+			if customSLCConfirmFunc(&cobra.Command{}, mode) != nil {
+				t.Errorf("expected no custom confirmation callback when %s", name)
+			}
+		})
 	}
 
-	approved, err := slcConfirmFunc(&cobra.Command{}, approval.ModeNonInteractive, "Installing")()
-	if err == nil || approved {
-		t.Errorf("expected a refusal without a terminal, got approved=%v err=%v", approved, err)
+	if slcConfirmFunc(&cobra.Command{}, approval.ModePrompt, "Installing") == nil {
+		t.Error("expected a confirmation callback when a user can be asked")
 	}
-	if !strings.Contains(err.Error(), "--auto-approve") {
-		t.Errorf("expected the error to name --auto-approve, got %v", err)
-	}
-
-	customConfirm := customSLCConfirmFunc(&cobra.Command{}, approval.ModeNonInteractive)
-	approved, err = customConfirm("overriding")
-	if err == nil || approved {
-		t.Errorf("expected a custom refusal without a terminal, got approved=%v err=%v",
-			approved, err)
+	if customSLCConfirmFunc(&cobra.Command{}, approval.ModePrompt) == nil {
+		t.Error("expected a custom confirmation callback when a user can be asked")
 	}
 }

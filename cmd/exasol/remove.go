@@ -4,7 +4,6 @@
 package main
 
 import (
-	"github.com/exasol/exasol-personal/internal/approval"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
@@ -29,19 +28,18 @@ var removeCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 
-		response := false
-		switch rootOpts.ApprovalMode() {
-		case approval.ModeApprove:
-			response = true
-		case approval.ModePrompt:
-			deployment := commonFlags.Deployment()
-			response = askForUserConfirmation(removeConfirmationPrompt(deployment.Root()))
-		case approval.ModeNonInteractive:
-			// Nobody can be asked, so the removal is declined.
-		default:
-			// An unrecognised mode declines rather than assuming consent.
+		proceed, err := confirmAction(
+			rootOpts.ApprovalMode(),
+			func() bool {
+				deployment := commonFlags.Deployment()
+
+				return askForUserConfirmation(removeConfirmationPrompt(deployment.Root()))
+			},
+		)
+		if err != nil {
+			return err
 		}
-		if !response {
+		if !proceed {
 			return nil
 		}
 
