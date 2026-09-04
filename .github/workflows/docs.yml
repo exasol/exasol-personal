@@ -12,11 +12,11 @@ on:
           - publish
           - delete
       source_ref:
-        description: "Tag, docs/ branch, or full 40-character SHA, e.g. v2.2.0 or docs/v2.2.0"
+        description: "Tag, release/ branch, or full 40-character SHA, e.g. v2.2.0 or release/v2.2"
         required: false
         type: string
       version:
-        description: "SemVer without v, e.g. 2.2.0; required for delete and optional for v-tags"
+        description: "Release line or full version without v, e.g. 2.2; required for delete"
         required: false
         type: string
       make_latest:
@@ -73,7 +73,7 @@ jobs:
           case "${SOURCE_REF}" in
             refs/heads/*) name="${SOURCE_REF#refs/heads/}"; kind="branch" ;;
             refs/tags/*) name="${SOURCE_REF#refs/tags/}"; kind="tag" ;;
-            refs/*) fail "source_ref must be a tag, a branch under docs/, or a full 40-character commit SHA" ;;
+            refs/*) fail "source_ref must be a tag, a branch under release/, or a full 40-character commit SHA" ;;
           esac
 
           branch_head=""
@@ -91,15 +91,15 @@ jobs:
 
           if [[ -n "${branch_head}" ]]; then
             case "${name}" in
-              docs/*) ;;
-              *) fail "a branch source must be a documentation branch under docs/, for example docs/v2.2.0" ;;
+              release/*) ;;
+              *) fail "a branch source must be a release branch under release/, for example release/v2.2" ;;
             esac
             [[ "${branch_head}" == "${commit}" ]] || fail "branch '${name}' moved during the run; rerun the workflow"
           elif [[ -n "${tag_object}" ]]; then
             tag_commit="$(git rev-parse --verify --end-of-options "refs/tags/${name}^{commit}")" || fail "tag '${name}' is not available"
             [[ "${tag_commit}" == "${commit}" ]] || fail "tag '${name}' does not name the checked-out commit"
           else
-            fail "source_ref must be an existing tag, an existing branch under docs/, or a full 40-character commit SHA"
+            fail "source_ref must be an existing tag, an existing branch under release/, or a full 40-character commit SHA"
           fi
           echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
 

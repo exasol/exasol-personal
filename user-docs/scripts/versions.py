@@ -8,14 +8,15 @@ import re
 import subprocess
 import sys
 
-SEMANTIC_VERSION = re.compile(
+DOCUMENTATION_VERSION = re.compile(
     r"^(0|[1-9][0-9]*)\."
-    r"(0|[1-9][0-9]*)\."
     r"(0|[1-9][0-9]*)"
+    r"(?:\.(0|[1-9][0-9]*))?"
     r"(?:-((?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
     r"(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?"
     r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
 )
+RELEASE_COMPONENTS = 3
 FULL_COMMIT = re.compile(r"[0-9a-fA-F]{40}")
 VERSION_SOURCE = re.compile(r"(?:.*/)?v(?P<version>.+)")
 SOURCE_PREFIXES = ("refs/heads/", "refs/tags/")
@@ -23,14 +24,16 @@ MIKE_BRANCH = "gh-pages"
 MKDOCS_CONFIG = "user-docs/mkdocs.yml"
 LATEST_ALIAS = "latest"
 ALIAS_DECISIONS = ("auto", "yes", "no")
-PUBLISH_VERSION_ERROR = "version is required when source_ref does not end in v<semver>"
+PUBLISH_VERSION_ERROR = "version is required when source_ref does not end in v<version>"
 DELETE_TARGET_ERROR = (
-    "delete target must be a published semantic version such as 2.3.0-rc1"
+    "delete target must be a published documentation version such as 2.3 or 2.3.0-rc1"
 )
 DELETE_LATEST_ERROR = (
     "publish a newer stable version before deleting the version referenced by 'latest'"
 )
-VERSION_ERROR = "version must use semantic-version syntax such as 2.3.0 or 2.3.0-rc1"
+VERSION_ERROR = (
+    "version must be a release line such as 2.3 or a full version such as 2.3.0-rc1"
+)
 PRERELEASE_LATEST_ERROR = (
     "only a stable version can be published as the version referenced by 'latest'"
 )
@@ -58,7 +61,7 @@ def mike(
 
 
 def validate_delete(target: str) -> str:
-    if not SEMANTIC_VERSION.fullmatch(target):
+    if not DOCUMENTATION_VERSION.fullmatch(target):
         raise VersionError(DELETE_TARGET_ERROR)
     return target
 
@@ -86,7 +89,7 @@ def resolve_version(source_ref: str, version: str | None) -> str:
         else VERSION_SOURCE.fullmatch(selected)
     )
     derived = match.group("version") if match else ""
-    if not SEMANTIC_VERSION.fullmatch(derived):
+    if not DOCUMENTATION_VERSION.fullmatch(derived):
         raise VersionError(PUBLISH_VERSION_ERROR)
     return derived
 
@@ -96,7 +99,7 @@ def is_stable(version: str) -> bool:
 
 
 def require_version(version: str) -> None:
-    if not SEMANTIC_VERSION.fullmatch(version):
+    if not DOCUMENTATION_VERSION.fullmatch(version):
         raise VersionError(VERSION_ERROR)
 
 
@@ -106,7 +109,8 @@ def catalog() -> list[dict[str, object]]:
 
 
 def precedence(version: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in version.partition("+")[0].split("."))
+    release = [int(part) for part in version.partition("+")[0].split(".")]
+    return tuple(release + [0] * (RELEASE_COMPONENTS - len(release)))
 
 
 def is_highest_stable(version: str) -> bool:
@@ -114,7 +118,7 @@ def is_highest_stable(version: str) -> bool:
     return all(
         precedence(other) <= precedence(version)
         for other in published
-        if SEMANTIC_VERSION.fullmatch(other) and is_stable(other)
+        if DOCUMENTATION_VERSION.fullmatch(other) and is_stable(other)
     )
 
 
