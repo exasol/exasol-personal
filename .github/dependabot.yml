@@ -14,8 +14,8 @@ updates:
 
     open-pull-requests-limit: 5
 
-  - package-ecosystem: "pip"
-    directory: "/tests"
+  - package-ecosystem: "uv"
+    directory: "/"
     schedule:
       interval: "weekly"
     allow:
