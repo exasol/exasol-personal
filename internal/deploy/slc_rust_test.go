@@ -180,3 +180,74 @@ func TestInstallRustSLCRequiresTheDeploymentLock(t *testing.T) {
 		t.Fatalf("holding the lock failed: %v", held)
 	}
 }
+
+func TestLatestRustSLCTagFailsOnAnInvalidURL(t *testing.T) {
+	t.Parallel()
+
+	// When
+	_, err := latestRustSLCTag(context.Background(), "://not-a-valid-url")
+	// Then
+	if err == nil {
+		t.Fatal("expected an error for an invalid release URL")
+	}
+}
+
+func TestLatestRustSLCTagFailsWhenTheRequestCannotComplete(t *testing.T) {
+	t.Parallel()
+
+	// Given: a context that is already cancelled, so the round trip fails without any
+	// real network access.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// When
+	_, err := latestRustSLCTag(ctx, "https://example.invalid/releases/latest")
+	// Then
+	if err == nil {
+		t.Fatal("expected an error when the request cannot complete")
+	}
+	if !strings.Contains(err.Error(), "could not reach") {
+		t.Fatalf("expected a %q error, got %v", "could not reach", err)
+	}
+}
+
+func TestLatestRustSLCTagFailsOnMalformedJSON(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not json"))
+	}))
+	defer server.Close()
+
+	// When
+	_, err := latestRustSLCTag(context.Background(), server.URL)
+	// Then
+	if err == nil {
+		t.Fatal("expected an error for a malformed response body")
+	}
+	if !strings.Contains(err.Error(), "could not parse") {
+		t.Fatalf("expected a %q error, got %v", "could not parse", err)
+	}
+}
+
+func TestInstallRustSLCPropagatesSourceResolutionFailure(t *testing.T) {
+	t.Parallel()
+
+	// Given: a cancelled context, so resolving the default (empty) source fails without
+	// requiring real network access, and without ever reaching the deployment or the
+	// custom-SLC pipeline.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	deployment := config.NewDeploymentDir(t.TempDir())
+
+	// When
+	result, err := InstallRustSLC(ctx, deployment, RustSLCInstallOpts{}, false, true, nil)
+	// Then
+	if err == nil {
+		t.Fatal("expected the source-resolution failure to propagate")
+	}
+	if result != nil {
+		t.Fatalf("expected no result on failure, got %+v", result)
+	}
+}
