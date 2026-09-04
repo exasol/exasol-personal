@@ -26,6 +26,7 @@ nav:
       - Connect to the database: connect.md
       - Load sample data: load-data.md
       - UDFs and script languages: udfs.md
+      - Virtual schemas: virtual-schemas.md
       - Presets: presets.md
   - Help and reference:
       - Troubleshooting: troubleshooting.md

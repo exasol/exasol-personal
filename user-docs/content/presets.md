@@ -8,8 +8,8 @@ Each deployment combines:
 - an infrastructure preset, which provisions a cloud or local environment; and
 - an installation preset, which installs and configures Exasol on that environment.
 
-Release 2.2 includes the `aws`, `azure`, `exoscale`, `stackit`, and `local` infrastructure presets.
-The built-in `ubuntu` installation preset is selected by default where applicable.
+The built-in infrastructure presets are `aws`, `azure`, `exoscale`, `stackit`, and `local`. The
+built-in `ubuntu` installation preset is selected by default where applicable.
 
 List the built-in presets with:
 
@@ -42,8 +42,15 @@ caches a Git source by commit and reuses it on later runs.
 Remote `.tar.gz`, `.tgz`, and `.zip` archives can use HTTP or HTTPS. They are downloaded on each run
 because the source does not supply a checksum.
 
+Git repositories and archives accept an optional `#<subpath>` fragment. Use it to select a preset
+from a subdirectory in a repository or multi-preset archive:
+
+```bash
+exasol install https://github.com/org/presets.git@v1#infra/aws
+```
+
 ## Develop a preset
 
 The preset manifest schemas, required output artifacts, caching rules, and reference implementations
 are documented in the
-[2.2 preset development guide](https://github.com/exasol/exasol-personal/blob/v2.2.0/doc/presets.md).
+[preset development guide](https://github.com/exasol/exasol-personal/blob/main/doc/presets.md).

@@ -17,9 +17,9 @@ In the Azure portal:
 2. Give the user who will run Exasol Personal one of these roles at subscription scope:
    - the built-in **Contributor** role;
    - a custom role based on the
-     [broad example](https://github.com/exasol/exasol-personal/blob/v2.2.0/assets/infrastructure/azure/rbac-role.broad.json); or
+     [broad example](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/azure/rbac-role.broad.json); or
    - a custom role based on the
-     [minimal example](https://github.com/exasol/exasol-personal/blob/v2.2.0/assets/infrastructure/azure/rbac-role.minimal.json).
+     [minimal example](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/azure/rbac-role.minimal.json).
 
 Use only one option. The built-in Contributor role is usually the simplest. When creating a custom
 role from an example, replace `<subscription-id>` in the JSON first.

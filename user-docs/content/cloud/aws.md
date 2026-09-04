@@ -14,7 +14,7 @@ In the AWS IAM console:
 
 1. Create a user for Exasol Personal.
 2. Attach the
-   [Exasol Personal AWS policy](https://github.com/exasol/exasol-personal/blob/v2.2.0/assets/infrastructure/aws/iam-policy.broad.json)
+   [Exasol Personal AWS policy](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/aws/iam-policy.broad.json)
    to the user.
 3. Generate an access key for the user and store its ID and secret securely.
 

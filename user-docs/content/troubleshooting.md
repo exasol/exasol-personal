@@ -8,8 +8,8 @@ Run the local diagnostic command whether the deployment is running or stopped:
 exasol diag local
 ```
 
-It returns a JSON snapshot containing platform support, virtual-machine state, port reachability,
-and database readiness.
+It returns a JSON snapshot containing runtime state, bound host ports, reachability, and database
+readiness.
 
 Use `exasol info` to display the current connection details after a successful start. Node addresses
 can change whenever a deployment restarts.

@@ -32,7 +32,7 @@ exasol deployments list
 Example output:
 
 ```text
-default status=running preset=local/local path=/Users/me/.exasol/personal/deployments/default
+default status=database_ready preset=local/ubuntu path=/Users/me/.exasol/personal/deployments/default
 staging status=stopped preset=aws/ubuntu path=/Users/me/.exasol/personal/deployments/staging
 ```
 
@@ -115,5 +115,5 @@ exasol remove
 also does not remove provisioned resources. If the directory is lost before destruction, you must
 remove the remaining resources directly through the target environment.
 
-For local deployments, `exasol destroy` removes the managed virtual-machine data and launcher-managed
-share for the selected deployment.
+For local deployments, `exasol destroy` removes the launcher-managed runtime and database data for
+the selected deployment. On Windows, it leaves Podman's shared default machine running.

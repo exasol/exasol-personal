@@ -9,9 +9,10 @@
 
 **The Analytics Database for Agentic AI — Free for Personal Use**
 
-*Run a full Exasol database locally on macOS, Linux, or Windows, or deploy to your own cloud*
+*Deploy and explore Exasol Database on your own computer or in your cloud account.*
 
-[![Documentation](https://img.shields.io/badge/docs-exasol.com-blue)](https://docs.exasol.com/db/latest/home.htm)
+[![User documentation](https://img.shields.io/badge/user%20docs-latest-blue)](https://exasol.github.io/exasol-personal/latest/)
+[![Exasol documentation](https://img.shields.io/badge/database%20docs-exasol.com-blue)](https://docs.exasol.com/db/latest/home.htm)
 [![Community](https://img.shields.io/badge/community-exasol-green)](https://community.exasol.com)
 [![Downloads](https://img.shields.io/badge/downloads-exasol.com-orange)](https://downloads.exasol.com/exasol-personal)
 
@@ -19,436 +20,48 @@
 
 </div>
 
-## 🔥 Key Features
+## About Exasol Personal
 
-- 💻 **Runs Locally in Seconds** — Spin up a full Exasol database on macOS, Linux, or Windows with one command
-- 🤖 **Built for Agentic AI** — Connect AI agents and LLM tools directly through a scriptable CLI
-- 🧠 **Built-in AI Functions** — Leverage native AI/ML capabilities with GPU acceleration, right where your data lives
-- 🏎️ **In-Memory Performance** — Run complex analytics at in-memory speed with Exasol's industry-leading analytics engine
-- 🏢 **Full Enterprise Features** — Access all enterprise-scale capabilities of the Exasol database, completely free for personal use
-- ♾️ **Unlimited Data** — Store and analyze unlimited amounts of data with no artificial limits
-- 📈 **Scalable Architecture** — Scale up to any number of nodes using Exasol's MPP (Massively Parallel Processing) architecture
-- ☁️ **Or Deploy to Your Cloud** — Provision to AWS, Azure, Exoscale, or STACKIT with just a few commands when you need scale or a shared instance
-- 🖥️ **Cross-Platform CLI** — Install and manage Exasol using the Exasol Launcher on macOS, Linux, or Windows
+Exasol Personal gives individual users a complete Exasol database for development, exploration,
+analytics, and AI-assisted workflows. The Exasol Launcher is a scriptable command-line application
+that installs and manages the database locally or on supported cloud infrastructure.
 
+The database combines Exasol's in-memory, massively parallel analytics engine with the SQL,
+integration, AI, and extensibility capabilities of Exasol Database. Exasol Personal is free for
+personal use and does not impose an artificial data-size limit.
 
-## ✅ Prerequisites
+## Get started
 
-**Local deployment (recommended — fastest):**
+The [latest user documentation](https://exasol.github.io/exasol-personal/latest/) contains the
+current system requirements, installation instructions, supported deployment targets, tutorials,
+command guidance, and troubleshooting information. Use its version selector when working with an
+earlier release.
 
-- **macOS:** Apple Silicon with at least 8 GB RAM. Podman is included in the managed VM; no host Podman installation is required.
-- **Linux:** amd64 or arm64 with Podman installed and available on `PATH`.
-- **Windows:** amd64 with Windows Package Manager (`winget`) and the prerequisites for a Podman machine. If Podman is missing, the launcher offers to install it; that installation may request administrator approval.
+Download the launcher from the
+[Exasol Download Portal](https://downloads.exasol.com/exasol-personal), or follow the
+[installation guide](https://exasol.github.io/exasol-personal/latest/getting-started/).
 
-On Windows the launcher also creates or starts Podman's default machine, and leaves an existing machine's configuration alone. Installing Podman changes state shared beyond the deployment, so the launcher shows the exact command and asks first. Pass `--auto-approve` to `install`, `deploy`, or `start` for unattended setup; without it, commands that cannot prompt refuse the change rather than assuming consent. Windows arm64 is not supported for local deployments.
+AI coding agents can use the published
+[Exasol agent skills](https://github.com/exasol-labs/exasol-agent-skills) to install Exasol Personal,
+connect to it, load data, and write Exasol SQL.
 
-**Cloud deployment:** an account on one of the supported providers, with permission to provision compute instances:
+## Development and contributions
 
-- **AWS** — [Set up an AWS account for Exasol Personal](./HOWTO_SETUP_AWS_ACCOUNT.md)
-- **Azure** — [Set up an Azure account for Exasol Personal](./HOWTO_SETUP_AZURE_ACCOUNT.md)
-- **Exoscale** — [Set up an Exoscale account for Exasol Personal](./HOWTO_SETUP_EXOSCALE_ACCOUNT.md)
-- **STACKIT** — [Set up a STACKIT account for Exasol Personal](./HOWTO_SETUP_STACKIT_ACCOUNT.md)
+This repository contains the Exasol Launcher, its built-in deployment presets, tests, and user
+documentation sources. To build or contribute:
 
+- Read the [contribution guidelines](CONTRIBUTING.md).
+- Set up the project with the [development guide](doc/development.md).
+- Follow the [testing guide](tests/README.md).
+- Review the high-level [architecture](doc/architecture.md) and
+  [project-specific best practices](doc/best_practices.md).
 
-## ⬇️ Install the Launcher
+## License
 
-The **Exasol Launcher** (`exasol`) is the command-line tool that deploys and manages your Exasol database, locally or in the cloud. It runs on macOS, Linux, and Windows.
+The Exasol Launcher source code is licensed under the [MIT License](LICENSE). Exasol Database is
+proprietary software provided by Exasol AG and is free for personal use. Installing the database
+means accepting the
+[Exasol Personal End User License Agreement](https://www.exasol.com/terms-and-conditions/#h-exasol-personal-end-user-license-agreement).
 
-On macOS and Linux, install it with:
-```bash
-curl https://www.exasol.com/install/ | sh
-```
-This places the `exasol` binary in `~/.local/bin`. On most Linux distributions this directory is already in your `PATH`; on macOS, or if the installer reports that `~/.local/bin` is not in your `PATH`, follow the instructions it prints.
-
-On Windows, download the launcher from the [Exasol Download Portal](https://downloads.exasol.com/exasol-personal) and copy the `exasol` binary to a directory in your `PATH`.
-
-Verify the installation with `exasol version`.
-
-
-## 🏎️ Quick Start — Run Exasol Locally
-
-The fastest way to try Exasol: a full database running on your own macOS, Linux, or Windows machine.
-
-With the launcher installed (see **Install the Launcher** above), start a local Exasol database:
-```bash
-exasol install local
-```
-
-In a few seconds you'll have a local Exasol instance running. Run `exasol info` at any time to see how to connect, then head to the **Load Sample Data** section to start querying.
-
-To run UDFs locally, install a script language container — see **UDFs and Script Language Containers** below. To run several local databases side by side, see **Deployments and Named Deployments**.
-
-Prefer to run in your own cloud? See the **Deploy to the Cloud** section below.
-
-
-## 🤖 Install with AI Agent
-
-If you work with an AI coding agent, it can set up and run Exasol Personal for you. Exasol publishes [agent skills](https://github.com/exasol-labs/exasol-agent-skills) that teach agents how to deploy Exasol Personal, connect to it, load data, and write Exasol SQL.
-
-One command is enough — the agent installs the skills itself, then uses them:
-
-```bash
-# Claude Code
-claude "Install skills from https://github.com/exasol-labs/exasol-agent-skills/ and use these skills to set up Exasol Personal"
-
-# Codex
-codex "Install skills from https://github.com/exasol-labs/exasol-agent-skills/ and use these skills to set up Exasol Personal"
-```
-
-The agent takes it from there, including installing the launcher, and asks before it makes changes to your machine or cloud account.
-
-
-## ☁️ Deploy to the Cloud
-
-Deploy Exasol Personal to your own cloud account when you need more scale or a shared instance. Supported providers: AWS, Azure, Exoscale, and STACKIT.
-
-With the launcher installed (see **Install the Launcher** above):
-
-1. Configure authentication for your provider. See the relevant account setup guide in the **Prerequisites** section for the environment variables and credentials required.
-
-2. To install Exasol Personal, run the following command with the preset for your cloud provider:
-   ```bash
-   exasol install aws        # Amazon Web Services
-   exasol install azure      # Microsoft Azure
-   exasol install exoscale   # Exoscale
-   exasol install stackit    # STACKIT
-   ```
-   The `exasol install` command does the following:
-   - Generates backend files in the deployment directory
-   - Provisions the necessary deployment resources
-   - Starts the deployment
-   - Downloads and installs Exasol Personal on that infrastructure
-
-   The whole process normally takes about 10 to 20 minutes to complete.
-
-   When the deployment process has finished, you will see instructions on how to connect to your Exasol database using a client of your choice. You can also find this information at any time by using `exasol info` in the terminal.
-
-
-## 🗂️ Deployments and Named Deployments
-
-Each Exasol Personal deployment — local or cloud — keeps its state in a **deployment directory**. This section applies to both deployment types.
-
-By default, Exasol Personal stores deployment state in `~/.exasol/personal/deployments/default`. If you run a command from an existing deployment directory, Exasol Personal uses that directory instead.
-
-To run more than one deployment side by side, give each one a **name** with `--deployment <name>` (`-d <name>`). Named deployments live under `~/.exasol/personal/deployments/<name>`, so you can address them by name from any working directory:
-
-```bash
-exasol install local -d demo             # a local deployment named "demo"
-exasol install aws -d staging            # a cloud deployment named "staging"
-exasol status -d demo                    # check on it from anywhere
-exasol connect -d demo -c "SELECT 1"
-```
-
-Names are matched case-sensitively, but may collide on case-insensitive filesystems (the default on macOS and Windows).
-
-Named deployments are optional — choosing a deployment directory by path still works. Pass `--deployment-dir <path>` to use a directory of your choice. `--deployment-dir` and `--deployment` cannot be used together.
-
-Use `exasol deployments list` to see every default and named deployment directory together with its status, presets, and path:
-
-```bash
-$ exasol deployments list
-default status=database_ready preset=local/ubuntu path=/Users/me/.exasol/personal/deployments/default
-staging status=stopped preset=aws/ubuntu path=/Users/me/.exasol/personal/deployments/staging
-```
-
-The listing covers launcher-managed deployment directories only; deployments selected with an arbitrary `--deployment-dir` path are not included.
-
-Keep a deployment directory until its deployment resources have been destroyed. Deleting the directory does not remove those resources and can make cleanup harder.
-
-An initialized deployment directory is tied to the selected infrastructure and installation presets. Rerun `exasol install <preset>` with the same presets to retry a failed deployment safely, or use `exasol config get`, `exasol config set`, and `exasol config reset` to inspect or change parameters for the existing presets without deleting local state. To switch presets in the same deployment directory, run `exasol destroy --remove` before initializing again, or run `exasol remove` if the deployment resources are already gone.
-
-Runtime tools such as OpenTofu are downloaded on demand and reused from a per-user runtime artifact cache. Use `exasol cache list` to inspect cached artifacts, `exasol cache clean` to remove stale artifacts, `exasol cache clean --invalid` to remove artifacts that fail integrity checks, `exasol cache clean --partial-downloads` to remove staged partial downloads, `exasol cache clean --all` to wipe cached artifacts, and `exasol diag cache` to inspect cache health without changing it. Add `--dry-run` to a cleanup command to preview what would be removed.
-
-## 📊 Load Sample Data
-
-To get started quickly, Exasol provides a sample dataset hosted on S3 that you can import using SQL.
-
-You can load it directly by executing this command in your deployment directory (e.g. `~/.exasol/personal/deployments/default` for a default deployment), or from anywhere by adding `-d <name>` for a named deployment:
-
-```bash
-exasol connect -f sample.sql
-```
-
-Alternatively, connect with a SQL client of your choice and paste the statements below:
-
-```sql
-CREATE OR REPLACE TABLE PRODUCTS AS (
-    IMPORT FROM PARQUET
-    AT 'https://exasol-easy-data-access.s3.eu-central-1.amazonaws.com/sample-data/'
-    FILE 'online_products.parquet'
-);
-```
-
-```sql
-CREATE OR REPLACE TABLE PRODUCT_REVIEWS AS (
-    IMPORT FROM PARQUET
-    AT 'https://exasol-easy-data-access.s3.eu-central-1.amazonaws.com/sample-data/'
-    FILE 'product_reviews.parquet'
-);
-```
-
-Exasol infers the table schema directly from the Parquet files, so there's no need to define columns up front.
-
-For a Parquet file on your computer, use the bundled SQL client and the `LOCAL` form:
-
-```sql
-CREATE TABLE LOCAL_PRODUCTS AS (
-    IMPORT FROM LOCAL PARQUET FILE '/path/to/products.parquet'
-);
-```
-
-Run this statement with `exasol connect -c` or from a SQL file passed to `exasol connect -f`. The file is read from the client machine and the local import supports one Parquet file per statement. This launcher support does not change engine-side Parquet semantics or add cloud/object-storage import behavior.
-
-| Table | Rows | Size |
-|---|---|---|
-| `PRODUCTS` | 1,000,000 | 27.3 MiB |
-| `PRODUCT_REVIEWS` | 1,822,007 | 154.5 MiB |
-
-## 🐍 UDFs and Script Language Containers
-
-User-defined functions (UDFs) run inside a **script language container** (SLC), which provides the language runtime for a script language such as `PYTHON3`, `JAVA`, or `R`.
-
-**Cloud deployments** come with the standard script language containers, so UDFs work out of the box.
-
-**Local deployments** ship without any SLC installed. Install the one you need with `exasol slc`, and UDFs in that language start working:
-
-```bash
-exasol slc list                 # available containers and which are installed
-exasol slc install python3      # enables PYTHON3 / PYTHON312 UDFs
-exasol slc install java         # enables JAVA / JAVA17 UDFs
-exasol slc install r            # enables R / R44 UDFs
-exasol slc update python3       # update an installed container
-exasol slc remove python3
-```
-
-The argument is a language alias as used in `CREATE ... SCRIPT`, matched case-insensitively. `exasol slc list` shows each container's flavor, its aliases, its version, and whether it is installed.
-
-Script language containers are also used by features that execute script language code, such as virtual schema adapter scripts. Install the SLC required by the adapter language before creating the adapter script. For JDBC-based virtual schemas on local deployments, see [Virtual schemas on local deployments](doc/virtual_schemas.md).
-
-Operations that restart the local database — official `install`, `update`, and `remove`, plus `slc custom install` and `slc custom update` — drop open connections and abort running statements. The command asks for confirmation first; pass `--auto-approve` to skip the prompt (required for non-interactive use), or `--no-restart` to record the change and activate it on the next start.
-
-### Custom containers
-
-When the official catalog does not ship what you need — for example a Python container with extra packages — install your own container with `exasol slc custom`:
-
-```bash
-exasol slc custom install --source ./my-python.tar.gz --alias MYPY3 --language python
-exasol slc custom update  --source ./my-python-v2.tar.gz --alias MYPY3
-exasol slc remove MYPY3
-```
-
-`--source` takes a local tarball path or an `https` URL, `--alias` is the name you then use in `CREATE <alias> SCALAR SCRIPT`, and `--language` is the language identifier passed to the custom SLC client. Leading and trailing whitespace is trimmed and the identifier is normalized to lowercase. It must start with an ASCII letter or digit and contain only ASCII letters, digits, dots, hyphens, or underscores. Custom clients can use identifiers such as `rust` when they implement the Exasol UDF protocol. `custom install` and `custom update` restart the database and accept `--auto-approve` and `--no-restart` just like the official commands. If the container cannot be made available, the database still starts but the command fails, reporting that the container is recorded but not active.
-
-Removing a custom container works differently: it takes effect immediately without a restart, so `--auto-approve` and `--no-restart` do not apply. Because the alias is cleared through the database, the deployment must be running to remove an active container; one that was recorded but never activated can be removed while stopped.
-
-`exasol slc list` lists custom containers in their own table below the official ones, showing each alias, its language, its status (`active` or `pending`), and its source; under `--json` they carry a `custom` type and an `available` field. Use `exasol slc remove <alias>` to remove either kind.
-
-`exasol slc` applies to local deployments only.
-
-## ⏯️ Start and stop Exasol Personal
-
-To save costs, you can temporarily stop Exasol Personal by using the following command:
-```bash
-exasol stop
-```
-This stops the compute instance(s) that Exasol Personal is running on.
-
-Networking and the data volumes where the database data is stored will continue to incur costs when compute instances are stopped.
-
-To start Exasol Personal again, use the following command:
-```bash
-exasol start
-```
-The IP addresses of the nodes will change when you restart Exasol Personal. Check the output of the `start` command to know how to connect to the deployment after a restart.
-
-On macOS, the launcher manages a local VM and runs the same Podman-based database installation used on the other platforms inside it. If you do not configure VM memory explicitly, it defaults to about 50% of detected host memory; configured VM memory must be at least 4096 MB. On Linux and Windows, the database runs directly through host Podman and uses host-managed resources, so VM sizing options do not apply. On Windows those containers run inside Podman's default machine, which is shared host-wide: stopping or destroying a deployment leaves that machine running. The initial local database credentials are `sys` / `exasol`. The `exasol shell host` and `exasol shell container` commands are available for macOS local deployments but are not supported on Linux or Windows.
-
-If a local deployment does not behave as expected, `exasol diag local` prints a JSON snapshot of its runtime state, bound host ports, reachability, and database readiness. It is safe to run whether or not the deployment is currently running.
-
-## 🗑️ Remove Exasol Personal
-
-To completely remove an Exasol Personal deployment, use `exasol destroy`. This command deletes the deployment resources and all associated data.
-
-To learn more about this command, use `exasol destroy --help`.
-
-By default, `exasol destroy` keeps the local deployment files so you can inspect the deployment or recreate the same preset. To also remove the local deployment directory after deployment resources have been destroyed, run:
-```bash
-exasol destroy --remove
-```
-
-If deployment resources were already deleted manually or you no longer have access to destroy them through the launcher, use the local recovery command:
-```bash
-exasol remove
-```
-This removes the local deployment directory. It does not destroy deployment resources.
-
-Deleting the deployment directory and the Exasol Launcher will not remove the resources that were created in the target environment. To completely remove a deployment, you must use the `exasol destroy` command before deleting the deployment directory.
-
-If you have already deleted the deployment directory and the Exasol Launcher, you must remove the resources manually in the target environment.
-
-For local deployments, `exasol destroy` deletes the launcher-managed runtime and database data for that deployment.
-
-## ⚙️ Cloud: Choosing cluster size and compute instance types
-
-By default the launcher deploys a single-node cluster on a memory-optimized instance in the cloud (e.g. `r6i.xlarge` on AWS, `Standard_E4s_v3` on Azure, `standard.extra-large` on Exoscale, `m2i.4` on STACKIT). To change the number of nodes or the instance type, use the `--cluster-size` and `--instance-type` options:
-```bash
-exasol install <preset> --cluster-size <number> --instance-type <string>
-```
-If the deployment process is interrupted, resources that were already created will not be removed automatically and cloud resources may continue to accrue cost. In that case, use `exasol destroy` to clean up the deployment, or remove the resources manually in the target environment.
-
-
-## 🔜 Next steps
-
-Once the deployment process is complete, use `exasol info` for information about how to connect to your Exasol database. The credentials for connecting to the database from a client are stored in the file `secrets.json` in the deployment directory.
-
-You can also use the built-in SQL client in Exasol Launcher to connect directly to the database from the command line:
-```bash
-exasol connect
-```
-
-To run SQL without entering the interactive shell, pass it directly. Both flags accept multiple `;`-separated statements and exit when done, which is convenient for scripting and automation:
-```bash
-exasol connect -c "SELECT 1; SELECT 2"   # run inline statement(s)
-exasol connect -f script.sql             # run statements from a file
-```
-`--command` and `--file` are mutually exclusive. In this non-interactive mode, execution stops at the first failing statement and `connect` exits with a non-zero status so scripts can detect errors. Combine with `--json` for machine-readable output, or use `--csv` for CSV output:
-```bash
-exasol connect --csv -c "SELECT * FROM PRODUCTS" > products.csv
-```
-With `--json`, non-interactive execution writes exactly one JSON document to stdout for the full invocation, including multi-statement runs and SQL errors. Interactive `exasol connect --json` continues to emit one JSON document per executed statement.
-
-In an interactive session, query output is capped at 100 rows by default so a large `SELECT` doesn't flood the terminal; a note is printed when output is truncated. Piped or `--command`/`--file` (non-interactive) execution returns the full result set. Use `--max-rows N` to set the cap explicitly, or `--max-rows 0` for unlimited:
-```bash
-exasol connect --max-rows 0        # return all rows, even interactively
-echo "SELECT * FROM PRODUCTS;" | exasol connect --max-rows 1000
-```
-
-See also...
-- To learn more about how you can connect to your Exasol database and start loading data using the many supported tools and integrations, see [Connect to Exasol](https://docs.exasol.com/db/latest/connect_exasol.htm) and [Load Data](https://docs.exasol.com/db/latest/loading_data.htm).
-- To learn how to use the SQL statements, data types, functions, and other SQL language elements that are supported in Exasol, see [SQL reference](https://docs.exasol.com/db/latest/sql_reference.htm).
-
-## 🧑‍💻 Exasol Admin
-
-Exasol Admin is an easy-to-use web interface that you can use to administer your new Exasol database. Instructions on how to access Exasol Admin are shown in the terminal output at the end of the install process.
-
-- To find the Exasol Admin URL after the installation has completed, use `exasol info`.
-- The credentials for connecting to Exasol Admin are stored in the file `secrets.json` in the deployment directory.
-
-Your browser may show a security warning when connecting to Exasol Admin because of the self-signed certificate. Accept this warning and continue.
-
-Currently, Exasol Admin is only available on cloud deployments.
-
-## 🔒 Shell access
-
-Use the runtime-managed shell commands without needing to know how the deployment is reached:
-
-```bash
-# Connect to the compute instance your database is running on:
-exasol shell host
-```
-
-```bash
-# Connect to the COS container your node is running on:
-exasol shell container
-```
-
-## 📦 Presets
-
-Exasol Personal uses **presets** — self-contained directories of templates and config files — to provision infrastructure and install Exasol. Each deployment combines two presets:
-
-- **Infrastructure preset** — provisions deployment resources for a cloud provider or local system. Built-in: `aws`, `azure`, `exoscale`, `stackit`, `local`.
-- **Installation preset** — installs and configures Exasol on the provisioned nodes. Built-in: `ubuntu` (used by default).
-
-```bash
-exasol install <infra-preset> [install-preset]
-
-exasol install aws                                       # built-in preset by name
-exasol install ./my-preset                               # local preset by path (starts with . / ~ or contains /)
-exasol install https://github.com/org/preset.git         # git repository (HEAD)
-exasol install https://github.com/org/preset.git@v1.0    # git repository at branch or tag
-exasol install https://example.com/preset.tar.gz         # remote archive (re-fetched on every run)
-exasol install file:///path/to/preset-dir                # local directory via URI
-exasol install file:///path/to/preset.tar.gz             # local archive (re-extracted on every run)
-```
-
-List all available built-in presets, including cloud and local targets:
-
-```bash
-exasol presets
-```
-
-### Local presets
-
-You can store your own preset directories anywhere on your filesystem and pass the path directly to `exasol install`. This lets you target additional infrastructure platforms or customize provisioning without modifying the launcher.
-
-### External presets
-
-In addition to built-in names and local paths, `exasol install` accepts external sources:
-
-- **Git repository** — `https://github.com/org/preset.git` or `git@github.com:org/preset.git`. Append `@branch-or-tag` to pin a specific ref. The repository is cloned once per commit and cached; repeated runs at the same commit reuse the cache.
-- **Remote archive** — An `https://` or `http://` URL ending in `.tar.gz`, `.tgz`, or `.zip`. The archive is re-downloaded on every run because no checksum is provided.
-- **Local directory via URI** — `file:///absolute/path`. The directory is used directly without copying.
-- **Local archive via URI** — `file:///absolute/path/to/preset.tar.gz`. The archive is re-extracted on every run.
-
-Git repositories and archives also accept an optional `#<subpath>` fragment (e.g. `repo.git@v1#infra/aws`) to select a preset from a subdirectory of a monorepo or multi-preset archive.
-
-See [doc/presets.md](doc/presets.md) for the full preset contract, caching behavior, and troubleshooting.
-
-### Building your own preset
-
-See [doc/presets.md](doc/presets.md) for the full preset contract: manifest schema, required output artifacts, variable channels, and the reference implementations in `assets/infrastructure`.
-
-## 🖥️ System Requirements
-
-The Exasol Launcher runs on:
-
-- **macOS** — 12 (Monterey) or later.
-- **Linux** — amd64 or arm64.
-- **Windows** — 10 or later, amd64.
-
-Where the database runs depends on the deployment type:
-
-- **Cloud deployments** — the database runs on your provider's infrastructure, so any supported launcher platform above works. The launcher provisions **Ubuntu 24.04 LTS (x86-64)** compute instances on all cloud providers.
-- **Local deployments on macOS** — the database runs with the bundled Podman installation in a managed VM and requires macOS 15 (Sequoia) or later on Apple Silicon, with at least 8 GB RAM.
-- **Local deployments on Linux** — the database runs in Podman on amd64 or arm64 and uses host resources without launcher-managed limits.
-- **Local deployments on Windows** — the database runs through host Podman on amd64, inside Podman's default machine. The launcher can install Podman and prepare that machine, asking before it changes the host.
-
-## 🚧 Limitations
-
-Local deployments are intended for development and exploration and do not yet support every feature of a cloud deployment:
-
-- **UDFs** — supported, but no script language container is installed by default. Install one with `exasol slc install <language>` (see **UDFs and Script Language Containers** above); on cloud deployments UDFs work out of the box.
-- **Virtual schemas** — supported when the required adapter runtime and dependencies are installed. Depending on the adapter, this may require installing an SLC and staging adapter or driver files. See [Virtual schemas on local deployments](doc/virtual_schemas.md).
-- **Admin UI** — the Administration UI is not available yet (coming soon).
-- **Multi-node clusters** — a local deployment runs as a single node by design.
-
-Cloud deployments support all of the above.
-
-## 🔎 Version Check
-
-Exasol Personal periodically checks for newer versions so it can let you know when an update is available. The launcher checks for a newer `exasol` binary, and cloud deployments additionally check for a newer database version. These checks send a small amount of information (such as the current version, operating system, and architecture) to Exasol.
-
-Both checks are opt-out. Pass the flags to `exasol install` to disable them:
-
-```bash
-exasol install <preset> --no-launcher-version-check   # disable the launcher update check
-exasol install <preset> --no-db-version-check         # disable the database version check (cloud deployments)
-```
-
-For details on what data is collected and how it is used, see the [Exasol Privacy Policy](https://www.exasol.com/privacy-policy/).
-
-## ⚖️ Licensing
-
-The Exasol Launcher source code in this repository is open-source software licensed under the [MIT License](./LICENSE). You are free to use, modify, and distribute it. Contributions are made under the same terms.
-
-The launcher installs the **Exasol Database**, which is proprietary software provided by Exasol AG, free for personal use. By deploying it with `exasol install`, you accept the [Exasol Personal End User License Agreement (EULA)](https://www.exasol.com/terms-and-conditions/#h-exasol-personal-end-user-license-agreement).
-
-## 📚 Resources & Documentation
-
-Get the most out of Exasol with these resources:
-
-- [Exasol Documentation](https://docs.exasol.com/db/latest/home.htm) — Complete database documentation
-- [Connect to Exasol](https://docs.exasol.com/db/latest/connect_exasol.htm) — Driver downloads and client setup
-- [Load Data](https://docs.exasol.com/db/latest/loading_data.htm) — Import data into your database
-- [SQL Reference](https://docs.exasol.com/db/latest/sql_reference.htm) — Complete SQL syntax reference
-- [Exasol Community](https://community.exasol.com) — Ask questions and share knowledge (use tag `exasol-personal`)
+For help and discussion, visit the [Exasol Community](https://community.exasol.com) and use the
+`exasol-personal` tag.
