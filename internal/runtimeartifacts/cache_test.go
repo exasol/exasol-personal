@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/directorymutex"
-	"github.com/exasol/exasol-personal/internal/launcherpaths"
 )
 
 type testClock struct {
@@ -25,25 +24,6 @@ type testClock struct {
 
 func (c *testClock) Now() time.Time {
 	return c.now
-}
-
-func TestDefaultCacheRootUsesLauncherRuntimeArtifactsNamespace(t *testing.T) {
-	t.Parallel()
-
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		t.Fatalf("failed to resolve user cache dir: %v", err)
-	}
-
-	root, err := DefaultCacheRoot()
-	if err != nil {
-		t.Fatalf("expected cache root, got error: %v", err)
-	}
-
-	expected := filepath.Join(launcherpaths.DirPath(cacheDir), runtimeArtifactsDirName)
-	if root != expected {
-		t.Fatalf("expected %q, got %q", expected, root)
-	}
 }
 
 func TestEnsureCacheConfigCreatesDefaultAndRejectsInvalidRetention(t *testing.T) {
