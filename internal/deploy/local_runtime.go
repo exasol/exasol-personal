@@ -228,6 +228,10 @@ func reconcileLocalVMState(
 	return exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateStopped{}, deployment)
 }
 
+func LocalDeploymentRunning(ctx context.Context, deployment config.DeploymentDir) bool {
+	return isLocalDeployment(deployment) && isLocalDeploymentRunning(ctx, deployment)
+}
+
 func isLocalDeployment(deployment config.DeploymentDir) bool {
 	manifest, err := config.ReadInfrastructureManifest(deployment)
 	if err != nil {

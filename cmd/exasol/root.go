@@ -210,6 +210,20 @@ func Execute() error {
 	}
 	ctx := runtimeartifacts.NewContext(context.Background(), manager)
 
+	// Flag pre-registration below reads an existing deployment's manifest, so
+	// migration has to finish first or the first run after upgrading resolves
+	// the new, still-empty location and fails before migrating anything. Help
+	// renders without touching launcher-owned paths, and shell completion
+	// discards stderr, which would hide the migration report.
+	if !rawArgsRequestHelp(os.Args[1:]) && !rawArgsRequestShellCompletion(os.Args[1:]) {
+		err := runStartupMigration(ctx, rootCmd.ErrOrStderr())
+		blockCleared := errors.Is(err, errMigrationBlocked) &&
+			commandClearsMigrationBlock(os.Args[1:])
+		if err != nil && !blockCleared {
+			return err
+		}
+	}
+
 	// Register infrastructure variable flags only for commands that need them.
 	// This must happen before Cobra parses arguments.
 	if err := prepareInfrastructureVariableFlags(ctx, os.Args[1:]); err != nil {

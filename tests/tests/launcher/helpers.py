@@ -20,7 +20,8 @@ def launcher_home_overrides(home: Path) -> dict[str, str]:
     The launcher resolves its deployments, configuration, and cache locations
     from platform-specific variables, so overriding the home variables alone
     would leave a command reading and writing the real user's configuration
-    and cache directories.
+    and cache directories. Keep these in sync with run() in
+    user-docs/scripts/cli_reference.py.
     """
     return {
         "HOME": str(home),
