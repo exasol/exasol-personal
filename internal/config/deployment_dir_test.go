@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/exasol/exasol-personal/internal/launcherpaths"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,31 +35,6 @@ func TestDeploymentDir_LayoutPaths(t *testing.T) {
 	)
 }
 
-func TestNamedDeploymentDirPath_SameParentAsDefault(t *testing.T) {
-	t.Parallel()
-
-	defaultPath, err := DefaultDeploymentDirPath()
-	require.NoError(t, err)
-
-	namedPath, err := NamedDeploymentDirPath("staging")
-	require.NoError(t, err)
-
-	require.Equal(t, filepath.Dir(defaultPath), filepath.Dir(namedPath))
-	require.Equal(t, "staging", filepath.Base(namedPath))
-}
-
-func TestNamedDeploymentDirPath_DefaultNameMatchesDefaultPath(t *testing.T) {
-	t.Parallel()
-
-	defaultPath, err := DefaultDeploymentDirPath()
-	require.NoError(t, err)
-
-	namedPath, err := NamedDeploymentDirPath(defaultDeploymentDirName)
-	require.NoError(t, err)
-
-	require.Equal(t, defaultPath, namedPath)
-}
-
 func TestDeploymentDir_Resolve(t *testing.T) {
 	t.Parallel()
 
@@ -76,7 +52,8 @@ func TestDeploymentDir_CLISelectionFollowsTheDirectoryLocation(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	deployments := filepath.Join(LauncherDirPath(home), deploymentsDirName)
+	deployments, err := launcherpaths.DeploymentsRootPath()
+	require.NoError(t, err)
 	outside := filepath.Join(home, "work", "exasol")
 
 	require.Empty(t, NewDeploymentDir(filepath.Join(deployments, "default")).CLISelection())
