@@ -5,11 +5,12 @@ directory. Keep this directory until you have destroyed the deployment resources
 
 ## Select a deployment
 
-The default deployment is stored in `~/.exasol/personal/deployments/default`. When you run a command
-from an existing deployment directory, the launcher selects that deployment automatically.
-When the launcher selects the default directory, it reports the selected path on stderr before the
-command starts, including for interactive sessions. The notice appears once and leaves stdout free
-for command output.
+The default deployment is stored in `default` under the managed deployments
+directory listed in [Launcher files](#launcher-files). When you run a command
+from an existing deployment directory, the launcher selects that deployment
+automatically. When the launcher selects the default directory, it reports the
+selected path on stderr before the command starts, including for interactive
+sessions. The notice appears once and leaves stdout free for command output.
 
 To maintain multiple deployments, give each one a case-sensitive name with `--deployment` or `-d`:
 
@@ -20,8 +21,9 @@ exasol status -d demo
 exasol connect -d demo -c "SELECT 1"
 ```
 
-Named deployments live below `~/.exasol/personal/deployments/<name>`. Names that differ only by case
-may collide on the case-insensitive filesystems commonly used by macOS and Windows.
+Named deployments live in that same managed deployments directory, under `<name>`. Names that
+differ only by case may collide on the case-insensitive filesystems commonly used by macOS and
+Windows.
 
 Alternatively, select an arbitrary path with `--deployment-dir <path>`. You cannot combine
 `--deployment-dir` and `--deployment`.
@@ -35,11 +37,36 @@ exasol deployments list
 Example output:
 
 ```text
-default status=database_ready preset=local/ubuntu path=/Users/me/.exasol/personal/deployments/default
-staging status=stopped preset=aws/ubuntu path=/Users/me/.exasol/personal/deployments/staging
+default status=database_ready preset=local/ubuntu path=/Users/me/Library/Application Support/exasol/launcher/deployments/default
+staging status=stopped preset=aws/ubuntu path=/Users/me/Library/Application Support/exasol/launcher/deployments/staging
 ```
 
 The list does not include deployments selected through an arbitrary `--deployment-dir` path.
+
+## Launcher files
+
+The launcher keeps its own files in these platform-specific locations:
+
+| Purpose | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| Managed deployments | `~/.exasol/launcher/deployments` | `~/Library/Application Support/exasol/launcher/deployments` | `%LOCALAPPDATA%\exasol\launcher\deployments` |
+| SQL history | `~/.exasol/launcher/history/exasol_history` | `~/Library/Application Support/exasol/launcher/history/exasol_history` | `%LOCALAPPDATA%\exasol\launcher\history\exasol_history` |
+| Cache settings | `${XDG_CONFIG_HOME:-~/.config}/exasol/launcher/resources.yaml` | `~/Library/Application Support/exasol/launcher/resources.yaml` | `%APPDATA%\exasol\launcher\resources.yaml` |
+| [Runtime cache](launcher-cache.md) | `${XDG_CACHE_HOME:-~/.cache}/exasol/launcher/resources` | `~/Library/Caches/exasol/launcher/resources` | `%LOCALAPPDATA%\exasol\launcher\resources` |
+
+Earlier launcher versions kept deployments and cache settings below
+`~/.exasol/personal`. The first command after an upgrade moves deployments,
+SQL history, and cache settings to the locations above, reports each move,
+deletes the old runtime cache, and removes the old folders it leaves empty. The
+move waits until no deployment at the old location is in use. Stop a running
+local deployment at its old location first:
+
+```bash
+exasol stop --deployment-dir ~/.exasol/personal/deployments/<name>
+```
+
+When a deployment name exists at both locations, the launcher names both paths
+and stops. Rename or remove one of them, then run the command again.
 
 ## Inspect or change configuration
 

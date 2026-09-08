@@ -4,6 +4,9 @@ The Exasol Launcher downloads tools and other runtime files on demand and reuses
 deployments. It manages these files automatically; installing, using, and managing a database does
 not require manual cache maintenance.
 
+[Launcher files](manage-deployments.md#launcher-files) lists where the cache and
+its retention setting live.
+
 ## Inspect the cache
 
 When troubleshooting a reported download or integrity problem, inspect the cache without changing
