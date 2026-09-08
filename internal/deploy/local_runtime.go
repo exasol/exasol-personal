@@ -235,6 +235,24 @@ func reconcileLocalVMState(
 	return exasolState.SetWorkflowStateAndWrite(&config.WorkflowStateStopped{}, deployment)
 }
 
+// LocalDeploymentRunning returns an error when it cannot tell whether a local
+// deployment runs, unlike isLocalDeploymentRunning, which reports false.
+func LocalDeploymentRunning(ctx context.Context, deployment config.DeploymentDir) (bool, error) {
+	if !isLocalDeployment(deployment) {
+		return false, nil
+	}
+	runtime, err := newLocalRuntime(ctx, deployment, runtimeartifacts.FromContext(ctx))
+	if err != nil {
+		return false, err
+	}
+	status, err := runtime.Status(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return status.Running, nil
+}
+
 func isLocalDeployment(deployment config.DeploymentDir) bool {
 	manifest, err := config.ReadInfrastructureManifest(deployment)
 	if err != nil {

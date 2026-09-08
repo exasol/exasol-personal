@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/launcherpaths"
@@ -26,6 +28,7 @@ type deploymentDirSource int
 const (
 	deploymentDirSourceNone deploymentDirSource = iota
 	deploymentDirSourceExplicit
+	deploymentDirSourceMigrated
 	deploymentDirSourceNamed
 	deploymentDirSourceCurrent
 	deploymentDirSourceDefault
@@ -74,6 +77,8 @@ func addResolvedDeploymentDirNotice(
 	switch source {
 	case deploymentDirSourceNone,
 		deploymentDirSourceExplicit:
+	case deploymentDirSourceMigrated:
+		addTerminalNotice("Using migrated deployment directory: " + deployment.Root())
 	case deploymentDirSourceCurrent:
 		addTerminalNotice("Using deployment in current directory: " + deployment.Root())
 	case deploymentDirSourceDefault:
@@ -90,6 +95,8 @@ func (source deploymentDirSource) String() string {
 	switch source {
 	case deploymentDirSourceExplicit:
 		return "explicit"
+	case deploymentDirSourceMigrated:
+		return "migrated"
 	case deploymentDirSourceNamed:
 		return "named"
 	case deploymentDirSourceCurrent:
@@ -137,6 +144,10 @@ func resolveDeploymentDirFromValues(
 	values deploymentDirFlagValues,
 ) (config.DeploymentDir, deploymentDirSource, error) {
 	if values.deploymentDirChanged {
+		if moved, ok := followMigratedDeployment(values.deploymentDir); ok {
+			return config.NewDeploymentDir(moved), deploymentDirSourceMigrated, nil
+		}
+
 		return config.NewDeploymentDir(values.deploymentDir), deploymentDirSourceExplicit, nil
 	}
 	if values.nameChanged {
@@ -167,6 +178,86 @@ func resolveDeploymentDirFromValues(
 	}
 
 	return config.NewDeploymentDir(defaultDir), deploymentDirSourceDefault, nil
+}
+
+// followMigratedDeployment keeps a legacy managed deployment path working after
+// startup migration moved that deployment, including on later invocations.
+func followMigratedDeployment(path string) (string, bool) {
+	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
+	if err != nil {
+		return "", false
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil || !sameLocation(filepath.Dir(abs), legacyRoot) {
+		return "", false
+	}
+	if exists, err := pathExists(abs); err != nil || exists {
+		return "", false
+	}
+	moved, err := launcherpaths.NamedDeploymentDirPath(filepath.Base(abs))
+	if err != nil {
+		return "", false
+	}
+	if exists, err := pathExists(moved); err != nil || !exists {
+		return "", false
+	}
+
+	return moved, true
+}
+
+// caseInsensitivePaths matches the default file systems of these platforms.
+var caseInsensitivePaths = runtime.GOOS == "windows" || runtime.GOOS == "darwin"
+
+// sameLocation tolerates symbolic links and letter case on case-insensitive
+// file systems. Either path may no longer exist after migration, so only
+// their nearest existing ancestors are compared as files.
+func sameLocation(a, b string) bool {
+	aBase, aRest := splitExisting(a)
+	bBase, bRest := splitExisting(b)
+	if len(aRest) != len(bRest) {
+		return false
+	}
+	for i := range aRest {
+		if aRest[i] != bRest[i] &&
+			(!caseInsensitivePaths || !strings.EqualFold(aRest[i], bRest[i])) {
+			return false
+		}
+	}
+	aInfo, aErr := os.Stat(aBase)
+	bInfo, bErr := os.Stat(bBase)
+
+	return aErr == nil && bErr == nil && os.SameFile(aInfo, bInfo)
+}
+
+// splitExisting returns the nearest existing ancestor of path and the names
+// below it.
+func splitExisting(path string) (string, []string) {
+	var rest []string
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return path, rest
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return path, rest
+		}
+		rest = append([]string{filepath.Base(path)}, rest...)
+		path = parent
+	}
+}
+
+// isWithin reports whether path is dir or lies below it.
+func isWithin(path, dir string) bool {
+	for {
+		if sameLocation(path, dir) {
+			return true
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return false
+		}
+		path = parent
+	}
 }
 
 func deploymentDirFlag(cmd *cobra.Command) *pflag.Flag {
