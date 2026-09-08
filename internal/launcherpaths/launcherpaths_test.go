@@ -12,28 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDirPath_JoinsRootAndPersonalUnderBaseDir(t *testing.T) {
-	t.Parallel()
-
-	got := DirPath("/home/user")
-	want := filepath.Join("/home/user", ".exasol", "personal")
-	if got != want {
-		t.Fatalf("expected %q, got %q", want, got)
-	}
-}
-
-func TestRootDirPath_ResolvesUnderTheCurrentUsersHomeDirectory(t *testing.T) {
-	t.Parallel()
-
-	got, err := RootDirPath()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if filepath.Base(got) != "personal" || filepath.Base(filepath.Dir(got)) != ".exasol" {
-		t.Fatalf("expected a path ending in .exasol/personal, got %q", got)
-	}
-}
-
 func TestPurposePaths_ResolveUnderTheLauncherNamespace(t *testing.T) {
 	t.Parallel()
 
@@ -79,4 +57,29 @@ func TestLegacyPaths_ResolveWhereEarlierVersionsKeptThem(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, want, got)
 	}
+}
+
+func TestNamedDeploymentDirPath_SameParentAsDefault(t *testing.T) {
+	t.Parallel()
+
+	defaultPath, err := DefaultDeploymentDirPath()
+	require.NoError(t, err)
+
+	namedPath, err := NamedDeploymentDirPath("staging")
+	require.NoError(t, err)
+
+	require.Equal(t, filepath.Dir(defaultPath), filepath.Dir(namedPath))
+	require.Equal(t, "staging", filepath.Base(namedPath))
+}
+
+func TestNamedDeploymentDirPath_DefaultNameMatchesDefaultPath(t *testing.T) {
+	t.Parallel()
+
+	defaultPath, err := DefaultDeploymentDirPath()
+	require.NoError(t, err)
+
+	namedPath, err := NamedDeploymentDirPath(defaultDeploymentDirName)
+	require.NoError(t, err)
+
+	require.Equal(t, defaultPath, namedPath)
 }
