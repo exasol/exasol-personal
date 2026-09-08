@@ -136,21 +136,12 @@ func DefaultCacheRoot() (string, error) {
 	return filepath.Join(launcherpaths.DirPath(cacheDir), runtimeArtifactsDirName), nil
 }
 
-func DefaultConfigPath() (string, error) {
-	rootDir, err := launcherpaths.RootDirPath()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(rootDir, cacheConfigFileName), nil
-}
-
 func NewDefaultCache() (*Cache, error) {
 	root, err := DefaultCacheRoot()
 	if err != nil {
 		return nil, err
 	}
-	configPath, err := DefaultConfigPath()
+	configPath, err := launcherpaths.ResourceConfigFilePath()
 	if err != nil {
 		return nil, err
 	}
