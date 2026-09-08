@@ -34,9 +34,9 @@ Getting Started:
 	Deployment lifecycle: install -> status -> connect -> stop -> start
 
 	If you do not pass --deployment-dir and are not already inside a deployment directory,
-	the Exasol Launcher uses <home>/.exasol/personal/deployments/default. Pass --deployment-dir
+	the Exasol Launcher uses <home>/.exasol/launcher/deployments/default. Pass --deployment-dir
 	to override the active deployment directory, or pass --deployment <name> (-d <name>) to use
-	<home>/.exasol/personal/deployments/<name> instead, for running more than one deployment
+	<home>/.exasol/launcher/deployments/<name> instead, for running more than one deployment
 	side by side. --deployment-dir and --deployment cannot be used together.
 
 	Note: Cloud presets require provider credentials in your environment.
@@ -109,7 +109,7 @@ Usage:
 	exasol config get [option-name...] [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
 ```
@@ -124,7 +124,7 @@ Usage:
 
 Flags:
       --all                        Reset all options to defaults
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
 ```
 
@@ -137,7 +137,7 @@ Usage:
 	exasol config set [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
 ```
 
@@ -153,7 +153,7 @@ Usage:
 	exasol deploy [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -v, --verbose                    Enable verbose output for deployment actions
 ```
@@ -169,8 +169,8 @@ Initialize a new deployment directory
 	To switch presets, run exasol destroy --remove first, or exasol remove if the
 	deployment resources are already gone.
 	If --deployment-dir is not provided and the current directory is not a deployment directory,
-	uses <home>/.exasol/personal/deployments/default. Pass --deployment <name> (-d <name>) to use
-	<home>/.exasol/personal/deployments/<name> instead.
+	uses <home>/.exasol/launcher/deployments/default. Pass --deployment <name> (-d <name>) to use
+	<home>/.exasol/launcher/deployments/<name> instead.
 
 	Preset arguments:
 	  - The first argument selects the infrastructure preset (required).
@@ -197,7 +197,7 @@ Usage:
 	exasol init <infra preset name-or-path> [install preset name-or-path] [flags]
 
 Flags:
-  -d, --deployment string           Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string           Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path    Override the deployment directory selected automatically
       --no-launcher-version-check   Disable automatic version checking for new launcher releases
 
@@ -323,8 +323,8 @@ Initialize, apply configuration, and deploy Exasol in one step
 	To switch presets, run exasol destroy --remove first, or exasol remove if the
 	deployment resources are already gone.
 	If --deployment-dir is not provided and the current directory is not a deployment directory,
-	uses <home>/.exasol/personal/deployments/default. Pass --deployment <name> (-d <name>) to use
-	<home>/.exasol/personal/deployments/<name> instead.
+	uses <home>/.exasol/launcher/deployments/default. Pass --deployment <name> (-d <name>) to use
+	<home>/.exasol/launcher/deployments/<name> instead.
 
 	Preset arguments:
 	  - The first argument selects the infrastructure preset (required).
@@ -351,7 +351,7 @@ Usage:
 	exasol install <infra preset name-or-path> [install preset name-or-path] [flags]
 
 Flags:
-  -d, --deployment string           Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string           Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path    Override the deployment directory selected automatically
       --no-launcher-version-check   Disable automatic version checking for new launcher releases
   -v, --verbose                     Enable verbose output for deployment actions
@@ -482,7 +482,7 @@ Usage:
 	exasol destroy [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
       --remove                     Remove the local deployment directory after deployment resources are successfully destroyed
   -v, --verbose                    Enable verbose output for deployment actions
@@ -503,7 +503,7 @@ Usage:
 	exasol remove [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
 ```
 
@@ -522,7 +522,7 @@ Usage:
 	exasol start [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
   -v, --verbose                    Enable verbose output for deployment actions
@@ -540,7 +540,7 @@ Usage:
 	exasol stop [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
   -v, --verbose                    Enable verbose output for deployment actions
@@ -750,7 +750,7 @@ Usage:
 Flags:
   -c, --command string             Execute the given semicolon-separated SQL statement(s) and exit
       --csv                        Output in CSV format
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
       --execute-on-semicolon       Execute SQL only after semicolon terminators are entered (default true)
   -f, --file string                Execute the semicolon-separated SQL statements from the given file and exit
@@ -775,7 +775,7 @@ Examples:
 Manage launcher-managed deployment directories
 
 Deployment directories are the launcher-managed directories under
-<home>/.exasol/personal/deployments: the default deployment directory and any
+<home>/.exasol/launcher/deployments: the default deployment directory and any
 named deployment directory selected via --deployment/-d. This does not include
 deployment directories selected via an arbitrary --deployment-dir path.
 
@@ -838,7 +838,7 @@ Usage:
 	exasol diag info [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
 ```
 
@@ -857,7 +857,7 @@ Usage:
 	exasol diag local [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
 ```
 
@@ -875,7 +875,7 @@ Usage:
 	exasol diag unlock [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
 ```
 
@@ -894,7 +894,7 @@ Usage:
 	exasol info [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
 ```
@@ -931,7 +931,7 @@ Usage:
 	exasol mcp disable [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --remove                     Also delete the saved definition
@@ -946,7 +946,7 @@ Usage:
 	exasol mcp enable [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --no-wait                    Return without waiting for a starting sidecar to serve
@@ -970,7 +970,7 @@ Usage:
 	exasol mcp instructions [client] [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
 ```
@@ -984,7 +984,7 @@ Usage:
 	exasol mcp status [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
 ```
@@ -1066,7 +1066,7 @@ Usage:
 	exasol shell container [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
 ```
 
@@ -1083,7 +1083,7 @@ Usage:
 	exasol shell host [-- command...] [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -n, --node string                Name of the node to connect to. Connects to the first available node if not specified
 ```
@@ -1127,7 +1127,7 @@ Usage:
 	exasol sidecar config get <name> [ports] [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
 ```
@@ -1142,7 +1142,7 @@ Usage:
 
 Flags:
       --all                        Reset all options
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
 ```
@@ -1156,7 +1156,7 @@ Usage:
 	exasol sidecar config set <name> [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --ports string               Host ports to save, as comma-separated <port-name>:<host-port> entries, for example mcp:14896
@@ -1171,7 +1171,7 @@ Usage:
 	exasol sidecar disable <name> [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --remove                     Also delete the saved definition
@@ -1186,7 +1186,7 @@ Usage:
 	exasol sidecar enable <name> [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --no-wait                    Return without waiting for a starting sidecar to serve
@@ -1202,7 +1202,7 @@ Usage:
 	exasol sidecar list [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
 ```
@@ -1216,7 +1216,7 @@ Usage:
 	exasol sidecar status [name] [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
 ```
@@ -1263,7 +1263,7 @@ Usage:
 
 Flags:
       --alias string               Alias for the custom SLC (used in CREATE <alias> SCALAR SCRIPT)
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --language string            Language identifier provided by the custom SLC client (normalized to lowercase)
@@ -1282,7 +1282,7 @@ Usage:
 
 Flags:
       --alias string               Alias of the custom SLC to update
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --language string            Override the custom SLC language identifier (normalized to lowercase)
@@ -1308,7 +1308,7 @@ Usage:
 	exasol slc install <alias-or-flavor> [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --no-restart                 Record the SLC without restarting; it activates on the next start
@@ -1324,7 +1324,7 @@ Usage:
 	exasol slc list [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
 ```
@@ -1340,7 +1340,7 @@ Usage:
 	exasol slc remove <alias> [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --no-restart                 Record the removal without restarting; it applies on the next start
@@ -1364,7 +1364,7 @@ Usage:
 	exasol slc update <alias-or-flavor> [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --no-restart                 Record the update without restarting; it applies on the next start
@@ -1394,7 +1394,7 @@ Usage:
 	exasol status [flags]
 
 Flags:
-  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+  -d, --deployment string          Select <home>/.exasol/launcher/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --timeout int                Maximum number of seconds to wait for the complete status check (default 5)
