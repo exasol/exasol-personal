@@ -6,6 +6,7 @@ package connect
 import (
 	"errors"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -547,4 +548,20 @@ func TestScriptWithoutSlashFlushedWholeAtEOF(t *testing.T) {
 			"class M { double run() { return x * 2.0; } }",
 		processor.inputs[0],
 	)
+}
+
+//nolint:paralleltest // home-directory environment is process-global.
+func TestEnsureHistoryFileDir_CreatesTheDirectoryOnAFreshInstall(t *testing.T) {
+	// Given a home with no history directory, as after a fresh install
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
+
+	// When
+	path, err := ensureHistoryFileDir()
+
+	// Then the file can be created where readline will look for it
+	require.NoError(t, err)
+	require.DirExists(t, filepath.Dir(path))
 }
