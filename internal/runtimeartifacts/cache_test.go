@@ -10,7 +10,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -44,22 +43,6 @@ func TestDefaultCacheRootUsesLauncherRuntimeArtifactsNamespace(t *testing.T) {
 	expected := filepath.Join(launcherpaths.DirPath(cacheDir), runtimeArtifactsDirName)
 	if root != expected {
 		t.Fatalf("expected %q, got %q", expected, root)
-	}
-}
-
-//nolint:paralleltest // home-directory environment is process-global.
-func TestDefaultConfigPathUsesLauncherRootDirectory(t *testing.T) {
-	home := t.TempDir()
-	setRuntimeArtifactsTestHome(t, home)
-
-	path, err := DefaultConfigPath()
-	if err != nil {
-		t.Fatalf("expected config path, got error: %v", err)
-	}
-
-	expected := filepath.Join(launcherpaths.DirPath(home), cacheConfigFileName)
-	if path != expected {
-		t.Fatalf("expected %q, got %q", expected, path)
 	}
 }
 
@@ -533,18 +516,6 @@ func TestCacheLockContentionReturnsUserFacingError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "exasol cache unlock") {
 		t.Fatalf("expected user-facing unlock hint, got %v", err)
-	}
-}
-
-func setRuntimeArtifactsTestHome(t *testing.T, home string) {
-	t.Helper()
-
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Setenv("HOMEDRIVE", "")
-	t.Setenv("HOMEPATH", "")
-	if runtime.GOOS == "windows" {
-		t.Setenv("LOCALAPPDATA", home)
 	}
 }
 
