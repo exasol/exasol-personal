@@ -17,34 +17,19 @@ const (
 	rootDirName     = ".exasol"
 	personalDirName = "personal"
 
-	namespaceDirName       = "exasol"
-	appDirName             = "launcher"
-	deploymentsDirName     = "deployments"
-	historyDirName         = "history"
-	historyFileName        = "exasol_history"
-	resourceConfigFileName = "resources.yaml"
-	resourceCacheDirName   = "resources"
-	migrationMarkerName    = ".migrated"
+	namespaceDirName         = "exasol"
+	appDirName               = "launcher"
+	deploymentsDirName       = "deployments"
+	defaultDeploymentDirName = "default"
+	historyDirName           = "history"
+	historyFileName          = "exasol_history"
+	resourceConfigFileName   = "resources.yaml"
+	resourceCacheDirName     = "resources"
+	migrationMarkerName      = ".migrated"
 
 	legacyResourceConfigFileName = "runtime-artifacts.yaml"
 	legacyResourceCacheDirName   = "runtime-artifacts"
 )
-
-// RootDirPath returns the launcher-owned directory under the current user's
-// home directory.
-func RootDirPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory for launcher root directory: %w", err)
-	}
-
-	return DirPath(home), nil
-}
-
-// DirPath returns the launcher-owned directory below baseDir.
-func DirPath(baseDir string) string {
-	return filepath.Join(baseDir, rootDirName, personalDirName)
-}
 
 func DeploymentsRootPath() (string, error) {
 	root, err := durableRootPath()
@@ -53,6 +38,23 @@ func DeploymentsRootPath() (string, error) {
 	}
 
 	return filepath.Join(root, deploymentsDirName), nil
+}
+
+func DefaultDeploymentDirPath() (string, error) {
+	return NamedDeploymentDirPath(defaultDeploymentDirName)
+}
+
+// NamedDeploymentDirPath returns the launcher-managed deployment directory
+// path for name, in the same parent directory as the default deployment
+// directory. Callers are responsible for validating name is safe to use as a
+// literal directory name (see DeploymentNameVar in cmd/exasol).
+func NamedDeploymentDirPath(name string) (string, error) {
+	root, err := DeploymentsRootPath()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(root, name), nil
 }
 
 func HistoryFilePath() (string, error) {
@@ -106,7 +108,7 @@ func legacyPath(baseDir func() (string, error), name string) (string, error) {
 		return "", fmt.Errorf("resolve base directory for legacy %s: %w", name, err)
 	}
 
-	return filepath.Join(DirPath(base), name), nil
+	return filepath.Join(base, rootDirName, personalDirName, name), nil
 }
 
 func namespacedPath(baseDir func() (string, error), name string) (string, error) {

@@ -6,13 +6,7 @@ package config
 import (
 	"path/filepath"
 
-	"github.com/exasol/exasol-personal/internal/launcherpaths"
 	"github.com/exasol/exasol-personal/internal/presets"
-)
-
-const (
-	deploymentsDirName       = "deployments"
-	defaultDeploymentDirName = "default"
 )
 
 // DeploymentDir represents the root of a deployment directory.
@@ -34,48 +28,6 @@ func NewDeploymentDir(path string) DeploymentDir {
 	}
 
 	return DeploymentDir{root: root}
-}
-
-func DefaultDeploymentDirPath() (string, error) {
-	rootDir, err := LauncherRootDirPath()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(rootDir, deploymentsDirName, defaultDeploymentDirName), nil
-}
-
-// DeploymentsRootPath returns the launcher-managed directory that contains
-// the default deployment directory and every named deployment directory.
-func DeploymentsRootPath() (string, error) {
-	rootDir, err := LauncherRootDirPath()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(rootDir, deploymentsDirName), nil
-}
-
-// NamedDeploymentDirPath returns the launcher-managed deployment directory
-// path for name, in the same parent directory as the default deployment
-// directory. Callers are responsible for validating name is safe to use as a
-// literal directory name (see DeploymentNameVar in cmd/exasol).
-func NamedDeploymentDirPath(name string) (string, error) {
-	rootDir, err := LauncherRootDirPath()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(rootDir, deploymentsDirName, name), nil
-}
-
-func LauncherRootDirPath() (string, error) {
-	return launcherpaths.RootDirPath()
-}
-
-// LauncherDirPath returns the launcher-owned directory below baseDir.
-func LauncherDirPath(baseDir string) string {
-	return launcherpaths.DirPath(baseDir)
 }
 
 func (d DeploymentDir) Root() string {

@@ -15,6 +15,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/exasol/exasol-personal/internal/launcherpaths"
 	"github.com/spf13/cobra"
 )
 
@@ -74,14 +75,14 @@ var deploymentsListCmd = &cobra.Command{
 	},
 }
 
-// listDeploymentDirectories scans config.DeploymentsRootPath for deployment
+// listDeploymentDirectories scans launcherpaths.DeploymentsRootPath for deployment
 // directories. It intentionally does not accept --deployment-dir or
 // --deployment/-d: deploymentsListCmd registers neither flag, so root's
 // PersistentPreRunE never resolves a deployment directory (and never emits
 // the resolved-directory notice) for this command; see
 // registerDeploymentsCommands.
 func listDeploymentDirectories(ctx context.Context) ([]deploymentListEntry, error) {
-	root, err := config.DeploymentsRootPath()
+	root, err := launcherpaths.DeploymentsRootPath()
 	if err != nil {
 		return nil, err
 	}

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/launcherpaths"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -140,7 +141,7 @@ func resolveDeploymentDirFromValues(
 		return config.NewDeploymentDir(values.deploymentDir), deploymentDirSourceExplicit, nil
 	}
 	if values.nameChanged {
-		namedDir, err := config.NamedDeploymentDirPath(values.name)
+		namedDir, err := launcherpaths.NamedDeploymentDirPath(values.name)
 		if err != nil {
 			return config.DeploymentDir{}, deploymentDirSourceNone, err
 		}
@@ -186,7 +187,7 @@ func deploymentNameFlag(cmd *cobra.Command) *pflag.Flag {
 }
 
 func defaultDeploymentDir() (string, error) {
-	return config.DefaultDeploymentDirPath()
+	return launcherpaths.DefaultDeploymentDirPath()
 }
 
 // defaultDeploymentDirDisplayPath and deploymentsRootDisplayPath resolve the
@@ -205,7 +206,7 @@ func defaultDeploymentDirDisplayPath() string {
 }
 
 func deploymentsRootDisplayPath() string {
-	root, err := config.DeploymentsRootPath()
+	root, err := launcherpaths.DeploymentsRootPath()
 	if err != nil {
 		return "the launcher's deployment directories folder in your home directory"
 	}
