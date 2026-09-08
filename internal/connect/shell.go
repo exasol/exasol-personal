@@ -15,8 +15,11 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/connect/readline"
 	"github.com/exasol/exasol-personal/internal/connect/types"
+	"github.com/exasol/exasol-personal/internal/launcherpaths"
 	"github.com/exasol/exasol-personal/internal/util"
 )
+
+const historyDirPerm = 0o700
 
 const exitCommand = "exit"
 
@@ -360,14 +363,10 @@ func isSpaceByte(b byte) bool {
 }
 
 func getHistoryFilePath() (string, error) {
-	const historyFileName = "exasol_history"
-
-	cacheDir, err := os.UserCacheDir()
+	historyFilePath, err := launcherpaths.HistoryFilePath()
 	if err != nil {
 		return "", err
 	}
-
-	historyFilePath := filepath.Join(cacheDir, historyFileName)
 
 	slog.Debug("obtained history file path", "path", historyFilePath)
 
@@ -432,9 +431,9 @@ func RunShellWithOpts(processInput ProcessInputFunc, opts ShellOpts) error {
 }
 
 func newInteractiveLineReader() (types.LineReader, error) {
-	historyFilePath, err := getHistoryFilePath()
+	historyFilePath, err := ensureHistoryFileDir()
 	if err != nil {
-		return nil, fmt.Errorf("couldn't get the history file path: %w", err)
+		return nil, err
 	}
 
 	lineReader, err := readline.New(historyFilePath)
@@ -443,4 +442,21 @@ func newInteractiveLineReader() (types.LineReader, error) {
 	}
 
 	return lineReader, nil
+}
+
+// ensureHistoryFileDir resolves the history file path and creates the
+// directory holding it. readline responds to a history file it cannot open by
+// silently keeping no history at all, so on a fresh install nothing would
+// ever be persisted unless the directory is in place first.
+func ensureHistoryFileDir() (string, error) {
+	historyFilePath, err := getHistoryFilePath()
+	if err != nil {
+		return "", fmt.Errorf("couldn't get the history file path: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(historyFilePath), historyDirPerm); err != nil {
+		return "", fmt.Errorf("couldn't create the history directory: %w", err)
+	}
+
+	return historyFilePath, nil
 }
