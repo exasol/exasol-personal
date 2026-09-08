@@ -1,0 +1,145 @@
+# Copyright 2026 Exasol AG
+# SPDX-License-Identifier: MIT
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from .helpers import deployments_root, env_with_home
+
+
+def _seed_legacy_deployment(home: Path, name: str) -> Path:
+    legacy_dir = home / ".exasol" / "personal" / "deployments" / name
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / "marker.txt").write_text("state")
+    return legacy_dir
+
+
+def _legacy_history_path(home: Path) -> Path:
+    if sys.platform == "win32":
+        return home / "AppData" / "Local" / "exasol_history"
+    if sys.platform == "darwin":
+        return home / "Library" / "Caches" / "exasol_history"
+    return home / ".cache" / "exasol_history"
+
+
+def _run(
+    exasol_path: str, home: Path, *args: str, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [str(Path(exasol_path).resolve()), *args],
+        cwd=cwd,
+        env=env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@pytest.mark.openspec("launcher-path-migration", "deployment-directory-resolution")
+def test_command_runs_against_a_migrated_legacy_deployment(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a named deployment at the legacy location only
+    home = tmp_path / "home"
+    legacy_dir = _seed_legacy_deployment(home, "prod")
+
+    # When a command selects that deployment by name
+    result = _run(exasol_path, home, "status", "--json", "--deployment", "prod")
+
+    # Then it is migrated first and the command resolves the new location
+    assert result.returncode == 0, result.stderr
+    new_dir = deployments_root(home) / "prod"
+    assert f"Migrated managed deployments to {deployments_root(home)}" in result.stderr
+    assert json.loads(result.stdout)["deploymentDir"] == str(new_dir)
+    assert (new_dir / "marker.txt").read_text() == "state"
+    assert not legacy_dir.exists()
+
+
+@pytest.mark.openspec("deployment-directory-resolution")
+def test_explicit_legacy_path_follows_the_migrated_deployment(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a named deployment at the legacy location only
+    home = tmp_path / "home"
+    legacy_dir = _seed_legacy_deployment(home, "prod")
+
+    # When a command selects it by its legacy path
+    result = _run(
+        exasol_path, home, "status", "--json", "--deployment-dir", str(legacy_dir)
+    )
+
+    # Then it is migrated first and the command uses the new location
+    assert result.returncode == 0, result.stderr
+    new_dir = deployments_root(home) / "prod"
+    assert f"Using migrated deployment directory: {new_dir}" in result.stderr
+    assert json.loads(result.stdout)["deploymentDir"] == str(new_dir)
+    assert not legacy_dir.exists()
+
+
+@pytest.mark.openspec("deployment-directory-resolution")
+def test_relative_legacy_path_follows_the_migrated_deployment(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a named deployment at the legacy location only
+    home = tmp_path / "home"
+    legacy_dir = _seed_legacy_deployment(home, "prod")
+
+    # When a command selects it relative to the legacy deployments folder
+    result = _run(
+        exasol_path,
+        home,
+        "status",
+        "--json",
+        "--deployment-dir",
+        "prod",
+        cwd=legacy_dir.parent,
+    )
+
+    # Then it is migrated first and the command uses the new location
+    assert result.returncode == 0, result.stderr
+    new_dir = deployments_root(home) / "prod"
+    assert json.loads(result.stdout)["deploymentDir"] == str(new_dir)
+    assert legacy_dir.parent.is_dir()
+
+
+@pytest.mark.openspec("launcher-path-migration", "deployment-directory-resolution")
+def test_kept_legacy_deployment_warns_and_the_command_runs(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a deployment name present at both the legacy and the new location
+    home = tmp_path / "home"
+    legacy_dir = _seed_legacy_deployment(home, "prod")
+    new_dir = deployments_root(home) / "prod"
+    new_dir.mkdir(parents=True)
+
+    # When a command selects that deployment by name
+    result = _run(exasol_path, home, "status", "--json", "--deployment", "prod")
+
+    # Then it warns naming both paths and runs against the new location
+    assert result.returncode == 0, result.stderr
+    assert f"Warning: kept {legacy_dir}" in result.stderr
+    assert str(new_dir) in result.stderr
+    assert json.loads(result.stdout)["deploymentDir"] == str(new_dir)
+    assert (legacy_dir / "marker.txt").read_text() == "state"
+
+
+@pytest.mark.openspec("sql-history-storage")
+def test_legacy_history_file_is_migrated(exasol_path: str, tmp_path: Path) -> None:
+    # Given a history file at the legacy location only
+    home = tmp_path / "home"
+    legacy_history = _legacy_history_path(home)
+    legacy_history.parent.mkdir(parents=True)
+    legacy_history.write_text("SELECT 1;\n")
+
+    # When any command runs
+    result = _run(exasol_path, home, "deployments", "list", "--json")
+
+    # Then the history file is at the new location with its contents
+    assert result.returncode == 0, result.stderr
+    new_history = deployments_root(home).parent / "history" / "exasol_history"
+    assert new_history.read_text() == "SELECT 1;\n"
+    assert not legacy_history.exists()
