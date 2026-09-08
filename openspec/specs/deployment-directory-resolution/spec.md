@@ -13,7 +13,7 @@ Commands that operate on a deployment directory SHALL resolve exactly one active
 
 #### Scenario: Explicit named deployment directory wins
 - **WHEN** a user invokes a deployment command with `--deployment <name>` and without `--deployment-dir`
-- **THEN** the CLI uses `~/.exasol/personal/deployments/<name>` as the active deployment directory
+- **THEN** the CLI uses `<name>` under the managed-deployments root as the active deployment directory
 - **AND** the CLI does not use the current working directory or the default deployment directory for that command, even if the current working directory is a recognized deployment directory
 
 #### Scenario: Recognized current deployment directory wins when no flag is provided
@@ -24,7 +24,7 @@ Commands that operate on a deployment directory SHALL resolve exactly one active
 #### Scenario: Default deployment directory is used when no stronger source exists
 - **WHEN** a user invokes a deployment command without `--deployment-dir` and without `--deployment`
 - **AND** the current working directory is not recognized as a deployment directory
-- **THEN** the CLI uses `~/.exasol/personal/deployments/default` as the active deployment directory
+- **THEN** the CLI uses the `default` directory under the managed-deployments root as the active deployment directory
 
 ### Requirement: CLI SHALL reject ambiguous or invalid deployment directory selection
 The CLI SHALL reject invocations that cannot resolve to exactly one unambiguous deployment directory selection.
@@ -42,7 +42,7 @@ The CLI SHALL reject invocations that cannot resolve to exactly one unambiguous 
 
 #### Scenario: The literal name "default" is accepted
 - **WHEN** a user invokes a deployment command with `--deployment default`
-- **THEN** the CLI uses `~/.exasol/personal/deployments/default` as the active deployment directory
+- **THEN** the CLI uses the `default` directory under the managed-deployments root as the active deployment directory
 - **AND** the CLI does not treat this as an error or as a distinct directory from the implicit default
 
 ### Requirement: CLI SHALL keep the resolved deployment directory visible
@@ -68,17 +68,17 @@ Commands that initialize a deployment SHALL automatically create the default dep
 
 #### Scenario: Install creates the default deployment directory
 - **WHEN** a user runs `exasol install <preset>` outside a recognized deployment directory without `--deployment-dir` and without `--deployment`
-- **THEN** the CLI creates `~/.exasol/personal/deployments/default`
+- **THEN** the CLI creates the `default` directory under the managed-deployments root
 - **AND** the install proceeds using that directory
 
 #### Scenario: Init creates the default deployment directory
 - **WHEN** a user runs `exasol init <preset>` outside a recognized deployment directory without `--deployment-dir` and without `--deployment`
-- **THEN** the CLI creates `~/.exasol/personal/deployments/default`
+- **THEN** the CLI creates the `default` directory under the managed-deployments root
 - **AND** initialization proceeds using that directory
 
 #### Scenario: Install creates a named deployment directory
-- **WHEN** a user runs `exasol install <preset> --deployment <name>` and `~/.exasol/personal/deployments/<name>` does not already exist
-- **THEN** the CLI creates `~/.exasol/personal/deployments/<name>`
+- **WHEN** a user runs `exasol install <preset> --deployment <name>` and `<name>` does not already exist under the managed-deployments root
+- **THEN** the CLI creates `<name>` under the managed-deployments root
 - **AND** the install proceeds using that directory
 
 ### Requirement: Commands that require initialized state SHALL fail clearly for uninitialized directories
@@ -98,7 +98,7 @@ Deployment commands that require an initialized deployment SHALL fail when the r
 
 #### Scenario: Required initialized command uses named directory but it is uninitialized
 - **WHEN** a user runs a command that requires initialized deployment state with `--deployment <name>`
-- **AND** `~/.exasol/personal/deployments/<name>` is not initialized
+- **AND** `<name>` under the managed-deployments root is not initialized
 - **THEN** the command fails with a message that says the deployment directory is not initialized
 - **AND** the message includes the resolved named deployment directory path
 
@@ -111,7 +111,7 @@ The `status` command SHALL include the active deployment directory path in both 
 
 #### Scenario: Status reports named deployment directory
 - **WHEN** a user runs `exasol status --deployment <name>`
-- **THEN** the status output includes the resolved `~/.exasol/personal/deployments/<name>` path as the active deployment directory
+- **THEN** the status output includes the resolved `<name>` path under the managed-deployments root as the active deployment directory
 
 #### Scenario: Status reports current deployment directory
 - **WHEN** a user runs `exasol status` from a recognized deployment directory
@@ -119,7 +119,7 @@ The `status` command SHALL include the active deployment directory path in both 
 
 #### Scenario: Status reports default deployment directory
 - **WHEN** a user runs `exasol status` outside a recognized deployment directory without `--deployment-dir` and without `--deployment`
-- **THEN** the status output includes `~/.exasol/personal/deployments/default` as the active deployment directory
+- **THEN** the status output includes the `default` path under the managed-deployments root as the active deployment directory
 
 ### Requirement: Status SHALL report uninitialized resolved directories
 The `status` command SHALL report `not_initialized` for an uninitialized resolved deployment directory instead of failing only because initialization has not happened.
@@ -140,7 +140,7 @@ The `status` command SHALL report `not_initialized` for an uninitialized resolve
 
 #### Scenario: Status reports uninitialized named directory
 - **WHEN** a user runs `exasol status --deployment <name>`
-- **AND** `~/.exasol/personal/deployments/<name>` is not initialized
+- **AND** `<name>` under the managed-deployments root is not initialized
 - **THEN** the command succeeds
 - **AND** the status is `not_initialized`
 - **AND** the output includes the resolved named deployment directory path
@@ -151,7 +151,7 @@ User-facing help and documentation SHALL explain the default deployment director
 #### Scenario: Help describes how to override the active deployment directory
 - **WHEN** a user reads command help for a deployment command
 - **THEN** the help explains that `--deployment-dir` overrides automatic deployment directory resolution
-- **AND** the help explains that `--deployment <name>` (or its shorthand `-d <name>`) selects `~/.exasol/personal/deployments/<name>` as an alternative to `--deployment-dir`
+- **AND** the help explains that `--deployment <name>` (or its shorthand `-d <name>`) selects `<name>` under the managed-deployments root as an alternative to `--deployment-dir`
 - **AND** the help explains that `--deployment-dir` and `--deployment` cannot be used together
 
 #### Scenario: Documentation warns about preserving deployment directories for cloud cleanup
@@ -176,7 +176,7 @@ When commands resolve to the default deployment directory or to a named deployme
 
 #### Scenario: Different named directory preset is refused
 - **WHEN** a user runs `exasol install <different-infra-preset> --deployment <name>`
-- **AND** `~/.exasol/personal/deployments/<name>` is initialized with another preset identity
+- **AND** `<name>` under the managed-deployments root is initialized with another preset identity
 - **THEN** the command fails before deployment
 - **AND** the command does not deploy the stale preset from the named deployment directory
 - **AND** the command tells the user to run `exasol destroy --remove` before initializing different presets, or `exasol remove` if the cloud resources are already gone
@@ -189,3 +189,27 @@ Whenever a command resolves a deployment directory from a flag, the current work
 - **THEN** the launcher emits a structured log entry containing the resolved deployment directory path
 - **AND** the log entry contains the resolution source (`explicit`, `named`, `current`, or `default`)
 - **AND** the log entry is emitted regardless of whether the directory was supplied explicitly, selected by name, inferred from the current directory, or defaulted
+
+### Requirement: Managed deployments SHALL resolve under a platform-specific root
+The managed-deployments root SHALL be a platform-conventional, launcher-owned directory distinct from the launcher's configuration and cache locations, rather than one flat path shared across platforms.
+
+#### Scenario: Platform-specific managed-deployments root
+- **WHEN** the CLI resolves the managed-deployments root
+- **THEN** it uses `~/.exasol/launcher/deployments` on Linux, `~/Library/Application Support/exasol/launcher/deployments` on macOS, and `%LOCALAPPDATA%\exasol\launcher\deployments` on Windows
+
+### Requirement: Existing deployments at the legacy location SHALL be migrated
+On CLI startup, before any command records an operation in progress, a deployment directory found only at the legacy managed-deployments root SHALL be moved to the new managed-deployments root.
+
+#### Scenario: Legacy deployment is migrated
+- **WHEN** a deployment directory named `<name>` exists at the legacy managed-deployments root and no directory named `<name>` exists at the new managed-deployments root
+- **THEN** the CLI moves it to `<name>` under the new managed-deployments root before dispatching to any command
+- **AND** the deployment remains fully usable at its new location afterward
+
+### Requirement: A naming collision between legacy and new-location deployments SHALL surface as an explicit error
+When a deployment directory named `<name>` exists at both the legacy and the new managed-deployments root, the CLI SHALL report the collision as an error identifying both paths and leave both directories exactly as found.
+
+#### Scenario: Colliding name is reported with both paths named
+- **WHEN** a deployment directory named `<name>` exists at both the legacy and the new managed-deployments root
+- **THEN** the CLI fails startup migration for `<name>` with an error naming both paths and asking the user to rename or remove one of them
+- **AND** both directories remain exactly as they were
+- **AND** other, non-colliding legacy deployment directories still migrate in the same run
