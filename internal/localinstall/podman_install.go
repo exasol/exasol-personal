@@ -29,8 +29,11 @@ const (
 	nanoInternalDBPort        = 8563
 	nanoShmSize               = "512mb"
 	nanoPIDsLimit             = "-1"
-	nanoSecurityOpt           = "unmask=ALL"
-	nanoRestartPolicy         = "always"
+	// `unmask=ALL` and `label=disable` are required for UDFs to work, which need
+	// nested namespaces (at least user, mount and pid).
+	nanoSecurityOpt        = "unmask=ALL"
+	nanoSELinuxSecurityOpt = "label=disable"
+	nanoRestartPolicy      = "always"
 	// nanoDataMountPath is where Nano expects its persistent data inside the
 	// container; the target adds SELinux relabelling for the bind mount.
 	nanoDataMountPath        = "/exa"
@@ -207,6 +210,7 @@ func (install *PodmanInstall) Start(
 		"--shm-size=" + nanoShmSize,
 		"--pids-limit=" + nanoPIDsLimit,
 		"--security-opt", nanoSecurityOpt,
+		"--security-opt", nanoSELinuxSecurityOpt,
 		"--restart", nanoRestartPolicy,
 		"-p", podmanDBPortMapping(startConfig),
 		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
