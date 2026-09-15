@@ -6,6 +6,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Added a **CLI reference** page to the user documentation, listing every command and option of the
+  launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each
+  preset.
+
 ### Changed
 
 ### Fixed
