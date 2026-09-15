@@ -91,6 +91,18 @@
     
       <div data-md-color-scheme="default" data-md-component="outdated" hidden>
         
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You are viewing the documentation for an older version of Exasol Personal.
+  <a href="../..">
+    <strong>Go to the latest version.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL(".."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
       </div>
     
     
@@ -176,11 +188,18 @@
       </label>
       <nav class="md-search__options" aria-label="Search">
         
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
         <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
           
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
       </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
       
     </form>
     <div class="md-search__output">
@@ -1153,74 +1172,74 @@
   
 
 
-<h1 id="manage-deployments">Manage deployments</h1>
+<h1 id="manage-deployments">Manage deployments<a class="headerlink" href="#manage-deployments" title="Permanent link">&para;</a></h1>
 <p>Each local or cloud deployment keeps its configuration, state, and credentials in a deployment
 directory. Keep this directory until you have destroyed the deployment resources.</p>
-<h2 id="select-a-deployment">Select a deployment</h2>
+<h2 id="select-a-deployment">Select a deployment<a class="headerlink" href="#select-a-deployment" title="Permanent link">&para;</a></h2>
 <p>The default deployment is stored in <code>~/.exasol/personal/deployments/default</code>. When you run a command
 from an existing deployment directory, the launcher selects that deployment automatically.</p>
 <p>To maintain multiple deployments, give each one a case-sensitive name with <code>--deployment</code> or <code>-d</code>:</p>
-<pre><code class="language-bash">exasol install local -d demo
-exasol install aws -d staging
-exasol status -d demo
-exasol connect -d demo -c &quot;SELECT 1&quot;
-</code></pre>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>exasol<span class="w"> </span>install<span class="w"> </span><span class="nb">local</span><span class="w"> </span>-d<span class="w"> </span>demo
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>exasol<span class="w"> </span>install<span class="w"> </span>aws<span class="w"> </span>-d<span class="w"> </span>staging
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>exasol<span class="w"> </span>status<span class="w"> </span>-d<span class="w"> </span>demo
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>exasol<span class="w"> </span>connect<span class="w"> </span>-d<span class="w"> </span>demo<span class="w"> </span>-c<span class="w"> </span><span class="s2">"SELECT 1"</span>
+</span></code></pre></div>
 <p>Named deployments live below <code>~/.exasol/personal/deployments/&lt;name&gt;</code>. Names that differ only by case
 may collide on the case-insensitive filesystems commonly used by macOS and Windows.</p>
 <p>Alternatively, select an arbitrary path with <code>--deployment-dir &lt;path&gt;</code>. You cannot combine
 <code>--deployment-dir</code> and <code>--deployment</code>.</p>
 <p>List the launcher-managed default and named deployments with:</p>
-<pre><code class="language-bash">exasol deployments list
-</code></pre>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>exasol<span class="w"> </span>deployments<span class="w"> </span>list
+</span></code></pre></div>
 <p>Example output:</p>
-<pre><code class="language-text">default status=running preset=local/local path=/Users/me/.exasol/personal/deployments/default
-staging status=stopped preset=aws/ubuntu path=/Users/me/.exasol/personal/deployments/staging
-</code></pre>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>default status=running preset=local/local path=/Users/me/.exasol/personal/deployments/default
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>staging status=stopped preset=aws/ubuntu path=/Users/me/.exasol/personal/deployments/staging
+</span></code></pre></div>
 <p>The list does not include deployments selected through an arbitrary <code>--deployment-dir</code> path.</p>
-<h2 id="inspect-or-change-configuration">Inspect or change configuration</h2>
+<h2 id="inspect-or-change-configuration">Inspect or change configuration<a class="headerlink" href="#inspect-or-change-configuration" title="Permanent link">&para;</a></h2>
 <p>An initialized deployment directory is tied to its infrastructure and installation presets. Retry a
 failed installation with the same presets, or use these commands to inspect and change their
 parameters:</p>
-<pre><code class="language-bash">exasol config get
-exasol config set
-exasol config reset
-</code></pre>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>exasol<span class="w"> </span>config<span class="w"> </span>get
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>exasol<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>exasol<span class="w"> </span>config<span class="w"> </span>reset
+</span></code></pre></div>
 <p>To select different presets in the same directory, first run <code>exasol destroy --remove</code>. If the
 deployment resources have already been removed outside the launcher, run <code>exasol remove</code> instead.</p>
-<h2 id="inspect-or-clean-the-runtime-cache">Inspect or clean the runtime cache</h2>
+<h2 id="inspect-or-clean-the-runtime-cache">Inspect or clean the runtime cache<a class="headerlink" href="#inspect-or-clean-the-runtime-cache" title="Permanent link">&para;</a></h2>
 <p>The launcher downloads runtime tools such as OpenTofu on demand and reuses them from a per-user
 cache. Use:</p>
-<pre><code class="language-bash">exasol cache list
-exasol cache clean
-exasol cache clean --invalid
-exasol cache clean --partial-downloads
-exasol cache clean --all
-exasol diag cache
-</code></pre>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>exasol<span class="w"> </span>cache<span class="w"> </span>list
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>exasol<span class="w"> </span>cache<span class="w"> </span>clean
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>exasol<span class="w"> </span>cache<span class="w"> </span>clean<span class="w"> </span>--invalid
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>exasol<span class="w"> </span>cache<span class="w"> </span>clean<span class="w"> </span>--partial-downloads
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>exasol<span class="w"> </span>cache<span class="w"> </span>clean<span class="w"> </span>--all
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>exasol<span class="w"> </span>diag<span class="w"> </span>cache
+</span></code></pre></div>
 <p>Add <code>--dry-run</code> to a cleanup command to preview the files it would remove.</p>
-<h2 id="stop-and-start">Stop and start</h2>
+<h2 id="stop-and-start">Stop and start<a class="headerlink" href="#stop-and-start" title="Permanent link">&para;</a></h2>
 <p>Stop a deployment when you do not need its compute resources:</p>
-<pre><code class="language-bash">exasol stop
-</code></pre>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>exasol<span class="w"> </span>stop
+</span></code></pre></div>
 <p>For cloud deployments, networking and data volumes can continue to incur costs while compute
 instances are stopped.</p>
 <p>Restart the deployment with:</p>
-<pre><code class="language-bash">exasol start
-</code></pre>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>exasol<span class="w"> </span>start
+</span></code></pre></div>
 <p>Node IP addresses can change after a restart. Check the command output or run <code>exasol info</code> before
 connecting again.</p>
-<h2 id="destroy-a-deployment">Destroy a deployment</h2>
+<h2 id="destroy-a-deployment">Destroy a deployment<a class="headerlink" href="#destroy-a-deployment" title="Permanent link">&para;</a></h2>
 <p>Destroying removes the deployment resources and their data:</p>
-<pre><code class="language-bash">exasol destroy
-</code></pre>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>exasol<span class="w"> </span>destroy
+</span></code></pre></div>
 <p>By default, the launcher retains the deployment directory for inspection or recreation. Remove it
 after successful destruction with:</p>
-<pre><code class="language-bash">exasol destroy --remove
-</code></pre>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>exasol<span class="w"> </span>destroy<span class="w"> </span>--remove
+</span></code></pre></div>
 <p>If the resources were already deleted manually or are no longer accessible, remove only the local
 deployment directory with:</p>
-<pre><code class="language-bash">exasol remove
-</code></pre>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>exasol<span class="w"> </span>remove
+</span></code></pre></div>
 <p><code>exasol remove</code> does not destroy resources. Deleting a deployment directory or the launcher itself
 also does not remove provisioned resources. If the directory is lost before destruction, you must
 remove the remaining resources directly through the target environment.</p>
@@ -1246,9 +1265,55 @@ share for the selected deployment.</p>
 <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
         
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
       </main>
       
         <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../cloud/stackit/" class="md-footer__link md-footer__link--prev" aria-label="Previous: STACKIT">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                STACKIT
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../connect/" class="md-footer__link md-footer__link--next" aria-label="Next: Connect to the database">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Connect to the database
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
   
   <div class="md-footer-meta md-typeset">
     <div class="md-footer-meta__inner md-grid">
@@ -1271,11 +1336,13 @@ share for the selected deployment.</p>
       <div class="md-dialog__inner md-typeset"></div>
     </div>
     
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
     
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["announce.dismiss", "content.code.annotate", "content.code.copy", "content.code.select", "content.tooltips", "navigation.footer", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
     
     
       <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>

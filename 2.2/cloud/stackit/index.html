@@ -91,6 +91,18 @@
     
       <div data-md-color-scheme="default" data-md-component="outdated" hidden>
         
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You are viewing the documentation for an older version of Exasol Personal.
+  <a href="../../..">
+    <strong>Go to the latest version.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../.."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
       </div>
     
     
@@ -176,11 +188,18 @@
       </label>
       <nav class="md-search__options" aria-label="Search">
         
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
         <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
           
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
       </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
       
     </form>
     <div class="md-search__output">
@@ -1109,12 +1128,12 @@
   
 
 
-<h1 id="set-up-stackit">Set up STACKIT</h1>
+<h1 id="set-up-stackit">Set up STACKIT<a class="headerlink" href="#set-up-stackit" title="Permanent link">&para;</a></h1>
 <p>Prepare a STACKIT project and service account before deploying Exasol Personal.</p>
-<h2 id="prerequisites">Prerequisites</h2>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <p>You need an active STACKIT organization with billing configured and permission to create projects.
 See the <a href="https://docs.stackit.cloud/">STACKIT documentation</a> for background information.</p>
-<h2 id="configure-a-service-account">Configure a service account</h2>
+<h2 id="configure-a-service-account">Configure a service account<a class="headerlink" href="#configure-a-service-account" title="Permanent link">&para;</a></h2>
 <p>In the STACKIT Portal:</p>
 <ol>
 <li>Open <strong>Resource manager</strong>, create a project, and enter it.</li>
@@ -1126,21 +1145,21 @@ See the <a href="https://docs.stackit.cloud/">STACKIT documentation</a> for back
    section.</li>
 <li>Copy the project UUID from the Resource manager or the project URL.</li>
 </ol>
-<h2 id="configure-your-computer">Configure your computer</h2>
+<h2 id="configure-your-computer">Configure your computer<a class="headerlink" href="#configure-your-computer" title="Permanent link">&para;</a></h2>
 <p>Set <code>STACKIT_SERVICE_ACCOUNT_KEY_PATH</code> to the downloaded credentials file.</p>
 <p>On Linux or macOS:</p>
-<pre><code class="language-bash">export STACKIT_SERVICE_ACCOUNT_KEY_PATH=/path/to/credentials.json
-</code></pre>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">STACKIT_SERVICE_ACCOUNT_KEY_PATH</span><span class="o">=</span>/path/to/credentials.json
+</span></code></pre></div>
 <p>In Windows PowerShell:</p>
-<pre><code class="language-powershell">$env:STACKIT_SERVICE_ACCOUNT_KEY_PATH = &quot;C:\path\to\credentials.json&quot;
-</code></pre>
+<div class="language-powershell highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">$env:STACKIT_SERVICE_ACCOUNT_KEY_PATH</span> <span class="p">=</span> <span class="s2">"C:\path\to\credentials.json"</span>
+</span></code></pre></div>
 <p>In Windows Command Prompt:</p>
-<pre><code class="language-batch">set STACKIT_SERVICE_ACCOUNT_KEY_PATH=C:\path\to\credentials.json
-</code></pre>
+<div class="language-batch highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">set</span> <span class="nv">STACKIT_SERVICE_ACCOUNT_KEY_PATH</span><span class="p">=</span>C:\path\to\credentials.json
+</span></code></pre></div>
 <p>Install with the project UUID. The default region is <code>eu01</code>; use <code>--region</code> to select another:</p>
-<pre><code class="language-bash">exasol install stackit --project-id &quot;&lt;your-project-uuid&gt;&quot;
-exasol install stackit --region eu02 --project-id &quot;&lt;your-project-uuid&gt;&quot;
-</code></pre>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>exasol<span class="w"> </span>install<span class="w"> </span>stackit<span class="w"> </span>--project-id<span class="w"> </span><span class="s2">"&lt;your-project-uuid&gt;"</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>exasol<span class="w"> </span>install<span class="w"> </span>stackit<span class="w"> </span>--region<span class="w"> </span>eu02<span class="w"> </span>--project-id<span class="w"> </span><span class="s2">"&lt;your-project-uuid&gt;"</span>
+</span></code></pre></div>
 
 
 
@@ -1161,9 +1180,55 @@ exasol install stackit --region eu02 --project-id &quot;&lt;your-project-uuid&gt
 <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
         
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
       </main>
       
         <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../exoscale/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Exoscale">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Exoscale
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../../manage-deployments/" class="md-footer__link md-footer__link--next" aria-label="Next: Manage deployments">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Manage deployments
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
   
   <div class="md-footer-meta md-typeset">
     <div class="md-footer-meta__inner md-grid">
@@ -1186,11 +1251,13 @@ exasol install stackit --region eu02 --project-id &quot;&lt;your-project-uuid&gt
       <div class="md-dialog__inner md-typeset"></div>
     </div>
     
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
     
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["announce.dismiss", "content.code.annotate", "content.code.copy", "content.code.select", "content.tooltips", "navigation.footer", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
     
     
       <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
