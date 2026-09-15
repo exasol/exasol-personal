@@ -34,8 +34,10 @@ jobs:
         run: task lint-ruff
       - name: Lint mypy
         run: task lint-mypy
-      - name: Check user documentation tooling
-        run: task docs-check
+      # the CLI reference is checked in the build job, against the launcher that
+      # job already produces, so this one needs no Go toolchain
+      - name: Check user documentation
+        run: task docs-check-standalone
 
   build:
     runs-on: ${{ matrix.os }}
@@ -53,6 +55,13 @@ jobs:
           # this is need because we use "git describe" to get the latest version from git
           fetch-depth: 0
       - uses: ./.github/actions/build
+      # Checking the CLI reference here reuses the launcher this job just built,
+      # instead of setting up Go and building it again in the lint job
+      - uses: ./.github/actions/setup-python
+        if: startsWith(matrix.os, 'ubuntu')
+      - name: Check the CLI reference
+        if: startsWith(matrix.os, 'ubuntu')
+        run: task docs-cli-verify
       # Upload the correct file depending on OS with a unique name
       - name: Upload file (Windows)
         if: startsWith(matrix.os, 'windows')
