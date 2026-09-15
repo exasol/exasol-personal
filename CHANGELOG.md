@@ -42,6 +42,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
+- Template-based custom SLC archives may omit `language_definitions.json`; the alias supplied with
+  `--alias` is still registered automatically. Additional package aliases require manual
+  registration with `ALTER SYSTEM` or `ALTER SESSION SCRIPT_LANGUAGES`.
+
 - macOS local deployments now store Nano data in host-visible deployment
   storage, making persistent `/exa` files available to host tools.
 

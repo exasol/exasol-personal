@@ -76,7 +76,7 @@ func TestReadAliasesReturnsAllNormalizedAliases(t *testing.T) {
 	}
 }
 
-func TestReadAliasesRejectsMalformedOrMissingMetadata(t *testing.T) {
+func TestReadAliasesRejectsMalformedOrEmptyMetadata(t *testing.T) {
 	t.Parallel()
 
 	for _, body := range []string{"not json", `{"language_definitions":[]}`} {
@@ -87,6 +87,25 @@ func TestReadAliasesRejectsMalformedOrMissingMetadata(t *testing.T) {
 		if _, err := ReadAliases(bytes.NewReader(archive)); err == nil {
 			t.Fatalf("expected metadata %q to be rejected", body)
 		}
+	}
+}
+
+func TestReadAliasesAcceptsMissingMetadata(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	archive := gzipBytes(t, buildTar(t, []archiveEntry{
+		{name: "exaudf/exaudfclient", body: "#!/bin/sh\n", mode: 0o755},
+	}))
+
+	// When
+	aliases, err := ReadAliases(bytes.NewReader(archive))
+	// Then
+	if err != nil {
+		t.Fatalf("expected metadata-less template SLC to pass, got %v", err)
+	}
+	if len(aliases) != 0 {
+		t.Fatalf("expected no package aliases, got %v", aliases)
 	}
 }
 

@@ -612,7 +612,7 @@ func resolveOfficialSLCForChange(
 		return slc.Entry{}, nil, err
 	}
 	if err := checkOfficialAliasNotHeldByCustom(
-		state.InstalledCustomSLCs, entry.Aliases,
+		deployment, state.InstalledCustomSLCs, entry.Aliases, entry.Flavor,
 	); err != nil {
 		return slc.Entry{}, nil, err
 	}
@@ -687,19 +687,22 @@ func findInstalledByImage(installed []config.InstalledSLC, image string) int {
 // The official builtin scan does not overwrite SCRIPT_LANGUAGES, so without this the alias
 // would keep resolving to the custom SLC.
 func checkOfficialAliasNotHeldByCustom(
+	deployment config.DeploymentDir,
 	customs []config.InstalledCustomSLC,
 	officialAliases []string,
+	officialName string,
 ) error {
-	for _, custom := range customs {
-		for _, official := range officialAliases {
-			if strings.EqualFold(custom.Alias, official) {
-				return fmt.Errorf(
-					"alias %q is currently provided by a custom SLC; remove it with "+
-						"`exasol slc remove %s` before installing this official SLC",
-					strings.ToUpper(official), custom.Alias,
-				)
-			}
-		}
+	providers, err := customSLCProviders(deployment, customs, -1)
+	if err != nil {
+		return err
+	}
+
+	if conflict, ok := findSLCAliasConflict(officialAliases, providers); ok {
+		return fmt.Errorf(
+			"alias %q is currently provided by a custom SLC; remove it with "+
+				"`exasol slc remove %s` before installing official SLC %q",
+			conflict.Alias, conflict.Provider, officialName,
+		)
 	}
 
 	return nil
