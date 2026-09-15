@@ -4,7 +4,9 @@
 package deploy
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -132,25 +134,43 @@ func TestCheckOfficialAliasNotHeldByCustom(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	customs := []config.InstalledCustomSLC{{Alias: "PYTHON3", Language: "python"}}
+	deployment := config.NewDeploymentDir(t.TempDir())
+	customs := []config.InstalledCustomSLC{
+		{Alias: "PY3", Language: "python", PackageAliases: []string{"PYTHON3"}},
+	}
 
 	// When
-	err := checkOfficialAliasNotHeldByCustom(customs, []string{"PYTHON3", "PYTHON312"})
+	err := checkOfficialAliasNotHeldByCustom(
+		deployment, customs, []string{"PYTHON3", "PYTHON312"}, "python-3.12",
+	)
 
 	// Then
 	if err == nil {
 		t.Fatal("expected a collision error when a custom SLC owns the alias")
 	}
-	if !strings.Contains(err.Error(), "exasol slc remove PYTHON3") {
-		t.Fatalf("expected the error to guide removal, got %v", err)
+	if !strings.Contains(err.Error(), `alias "PYTHON3"`) {
+		t.Fatalf("expected the error to identify the conflicting alias, got %v", err)
 	}
 
-	if err := checkOfficialAliasNotHeldByCustom(customs, []string{"JAVA"}); err != nil {
+	customs[0].PackageAliases = nil
+	err = checkOfficialAliasNotHeldByCustom(
+		deployment, customs, []string{"PY3"}, "python-3.12",
+	)
+	if err == nil {
+		t.Fatal("expected a collision with the custom launcher alias")
+	}
+	if !strings.Contains(err.Error(), "exasol slc remove PY3") {
+		t.Fatalf("expected the error to guide removal of the launcher alias, got %v", err)
+	}
+
+	if err := checkOfficialAliasNotHeldByCustom(
+		deployment, customs, []string{"JAVA"}, "java",
+	); err != nil {
 		t.Fatalf("expected no collision for a disjoint alias, got %v", err)
 	}
 }
 
-func TestCheckCustomSLCInternalAliasConflicts(t *testing.T) {
+func TestCheckCustomSLCAliasConflicts(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -161,26 +181,24 @@ func TestCheckCustomSLCInternalAliasConflicts(t *testing.T) {
 			{Alias: "OTHER", PackageAliases: []string{"RUST"}},
 		},
 	}
-	deployment := config.NewDeploymentDir(t.TempDir())
-
 	// When / Then
-	err := checkCustomSLCInternalAliasConflicts(
-		deployment, state, []string{"rust"}, -1, "install", "NEW",
+	err := checkCustomSLCAliasConflicts(
+		config.NewDeploymentDir(t.TempDir()), state, []string{"rust"}, -1, "install", "NEW",
 	)
 	if err == nil {
 		t.Fatal("expected conflict with another custom SLC")
 	}
-	want := `cannot install custom SLC "NEW": an alias defined in this package, "RUST"`
+	want := `cannot install custom SLC "NEW": alias "RUST" is already provided by SLC "OTHER"`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("unexpected conflict message %q", err)
 	}
-	if err := checkCustomSLCInternalAliasConflicts(
-		deployment, state, []string{"rust"}, 1, "update", "OTHER",
+	if err := checkCustomSLCAliasConflicts(
+		config.NewDeploymentDir(t.TempDir()), state, []string{"rust"}, 1, "update", "OTHER",
 	); err != nil {
 		t.Fatalf("expected update to retain its own alias, got %v", err)
 	}
-	err = checkCustomSLCInternalAliasConflicts(
-		deployment, state, []string{"rust"}, 0, "update", "FIRST",
+	err = checkCustomSLCAliasConflicts(
+		config.NewDeploymentDir(t.TempDir()), state, []string{"rust"}, 0, "update", "FIRST",
 	)
 	if err == nil {
 		t.Fatal("expected update conflict with another custom SLC")
@@ -188,16 +206,92 @@ func TestCheckCustomSLCInternalAliasConflicts(t *testing.T) {
 	if want := `cannot update custom SLC "FIRST"`; !strings.Contains(err.Error(), want) {
 		t.Fatalf("unexpected update conflict message %q", err)
 	}
-	if err := checkCustomSLCInternalAliasConflicts(
-		deployment, state, []string{"rust"}, 1, "install", "OTHER",
+	if err := checkCustomSLCAliasConflicts(
+		config.NewDeploymentDir(t.TempDir()), state, []string{"rust"}, 1, "install", "OTHER",
 	); err != nil {
 		t.Fatalf("expected install replacement to retain its own alias, got %v", err)
 	}
-	if err := checkCustomSLCInternalAliasConflicts(
-		deployment, state, []string{"unique"}, -1, "install", "NEW",
+	if err := checkCustomSLCAliasConflicts(
+		config.NewDeploymentDir(t.TempDir()), state, []string{"unique"}, -1, "install", "NEW",
 	); err != nil {
 		t.Fatalf("expected unique alias to pass, got %v", err)
 	}
+	err = checkCustomSLCAliasConflicts(
+		config.NewDeploymentDir(t.TempDir()), state, []string{"python3"}, -1, "install", "NEW",
+	)
+	if err == nil || !strings.Contains(err.Error(), `alias "PYTHON3"`) {
+		t.Fatalf("expected conflict with the installed official SLC, got %v", err)
+	}
+}
+
+func TestCheckCustomSLCAliasConflictsReadsLegacyPackageAliases(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := os.MkdirAll(customSLCStagingDir(deployment), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	archive := legacyCustomSLCArchive(t, "PYTHON3")
+	if err := os.WriteFile(
+		filepath.Join(customSLCStagingDir(deployment), "legacy.tar.gz"), archive, 0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	state := &config.ExasolPersonalState{
+		InstalledCustomSLCs: []config.InstalledCustomSLC{
+			{Alias: "LEGACY", Package: "legacy.tar.gz"},
+		},
+	}
+
+	// When
+	err := checkCustomSLCAliasConflicts(
+		deployment, state, []string{"PYTHON3"}, -1, "install", "NEW",
+	)
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), `alias "PYTHON3"`) {
+		t.Fatalf("expected the legacy package alias to conflict, got %v", err)
+	}
+}
+
+func legacyCustomSLCArchive(t *testing.T, alias string) []byte {
+	t.Helper()
+	var tarBuffer bytes.Buffer
+	tarWriter := tar.NewWriter(&tarBuffer)
+	metadata := fmt.Sprintf(`{"language_definitions":[{"aliases":["%s"]}]}`, alias)
+	for _, entry := range []struct {
+		name string
+		body string
+		mode int64
+	}{
+		{name: "exaudf/exaudfclient", body: "#!/bin/sh\n", mode: 0o755},
+		{name: "build_info/language_definitions.json", body: metadata, mode: 0o644},
+	} {
+		header := &tar.Header{
+			Name: entry.name, Mode: entry.mode, Typeflag: tar.TypeReg, Size: int64(len(entry.body)),
+		}
+		if err := tarWriter.WriteHeader(header); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tarWriter.Write([]byte(entry.body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var gzipBuffer bytes.Buffer
+	gzipWriter := gzip.NewWriter(&gzipBuffer)
+	if _, err := gzipWriter.Write(tarBuffer.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	return gzipBuffer.Bytes()
 }
 
 func TestCustomSLCNamesAreDerivedFromAliasAndDigest(t *testing.T) {

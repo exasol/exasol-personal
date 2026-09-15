@@ -103,7 +103,8 @@ func ReadAliases(reader io.Reader) ([]string, error) {
 			clientRelPath,
 		)
 	}
-	if !metadataFound || len(aliases) == 0 {
+	// Template-based custom SLCs may omit the manifest and register aliases manually.
+	if metadataFound && len(aliases) == 0 {
 		return nil, errors.New("build_info/language_definitions.json contains no language aliases")
 	}
 

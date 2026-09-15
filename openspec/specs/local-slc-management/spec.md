@@ -100,10 +100,10 @@ aliases, guiding the user to remove the custom SLC first.
 
 ### Requirement: Custom SLC internal aliases are unique
 
-Before applying a custom SLC install or update, the launcher SHALL read the aliases declared by
-the package and reject any alias that is already declared by another installed custom SLC. The
-check SHALL be independent of the launcher-supplied external alias and package SHA. Existing
-official/custom launcher-alias validation remains unchanged.
+Before applying a custom SLC install or update, the launcher SHALL compare the launcher alias and,
+when present, aliases declared by the package with aliases provided by installed official and custom
+SLCs. The check SHALL be independent of the package SHA. A package without
+`language_definitions.json` SHALL still be checked using its launcher alias.
 
 #### Scenario: Custom install with a conflicting internal alias is rejected
 
@@ -444,18 +444,26 @@ container recreation.
 
 ### Requirement: Custom and official aliases are mutually exclusive
 
-An alias SHALL have a single owner across custom and official SLCs. When installing a custom
-SLC whose alias is owned by an installed official SLC, the command SHALL be blocked and
-guide the user to remove the official SLC or choose another alias. When the alias is a
-built-in/official name that is not currently installed, the command SHALL require
-confirmation before overriding it. When installing a custom SLC whose alias already belongs
-to another installed custom SLC, the command SHALL require confirmation before replacing it.
+An effective alias SHALL have a single owner across custom and official SLCs. A custom SLC's
+effective aliases are its launcher alias and any aliases declared by its package. When installing
+a custom SLC whose effective alias is owned by an installed official SLC, the command SHALL be
+blocked and guide the user to remove the official SLC or choose another alias. When the launcher
+alias is a built-in/official name that is not currently installed, the command SHALL require
+confirmation before overriding it. When installing a custom SLC whose launcher alias already
+belongs to another installed custom SLC, the command SHALL require confirmation before replacing it.
 
 #### Scenario: Blocked when an official SLC owns the alias
 
 - **WHEN** an official SLC providing `PYTHON3` is installed
 - **AND** the user installs a custom SLC with `--alias PYTHON3`
 - **THEN** the command is blocked, naming the official SLC to remove or asking for a different alias
+
+#### Scenario: Blocked when an official SLC owns a package alias
+
+- **WHEN** an official SLC providing `PYTHON3` is installed
+- **AND** the custom SLC package declares `PYTHON3` in its language definitions
+- **AND** the user installs the custom SLC under a different launcher alias
+- **THEN** the install is blocked, naming the conflicting alias
 
 #### Scenario: Overriding a built-in alias is confirmed
 
