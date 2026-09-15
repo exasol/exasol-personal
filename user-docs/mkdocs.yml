@@ -67,6 +67,7 @@ nav:
       - Virtual schemas: virtual-schemas.md
       - Presets: presets.md
   - Help and reference:
+      - CLI reference: cli-reference.md
       - Troubleshooting: troubleshooting.md
       - System requirements: system-requirements.md
       - Limitations: limitations.md
