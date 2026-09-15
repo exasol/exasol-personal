@@ -26,18 +26,18 @@ or another authentication method.
 1. Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).
 2. Configure a named profile called `exasol`:
 
-   ```bash
-   aws configure --profile exasol
-   ```
+    ```bash
+    aws configure --profile exasol
+    ```
 
 3. Enter the access key ID, secret access key, region, and optional output format when prompted:
 
-   ```text
-   AWS Access Key ID [None]: <your-key-id>
-   AWS Secret Access Key [None]: <your-secret-key>
-   Default region name [None]: eu-west-1
-   Default output format [None]: json
-   ```
+    ```text
+    AWS Access Key ID [None]: <your-key-id>
+    AWS Secret Access Key [None]: <your-secret-key>
+    Default region name [None]: eu-west-1
+    Default output format [None]: json
+    ```
 
 For details, see [Named profiles for the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html).
 
