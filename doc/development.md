@@ -70,8 +70,13 @@ task docs-build
 ```
 
 The generated site is written to `user-docs/site/`. Warnings fail the build, including unresolved
-internal documentation links. Run `task docs-check` to lint and test the publishing tooling before
-performing the strict build.
+internal documentation links. Run `task docs-check` to lint and test the publishing tooling and
+verify the generated CLI reference before performing the strict build; it builds the launcher, so it
+also needs the Go toolchain.
+
+The CLI reference page is generated from the launcher's own help output. After changing a command, a
+flag, or any help text, run `task docs-cli-reference` and commit the regenerated page, otherwise
+`task docs-check` and CI fail.
 
 Publication-request validation and version-catalog operations are implemented by
 `user-docs/scripts/versions.py`. The script updates only a local `gh-pages` branch and never pushes;
