@@ -33,30 +33,30 @@ multi-factor authentication, or organizational approval flows may require additi
 1. Install the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli).
 2. Sign in:
 
-   ```bash
-   az login
-   ```
+    ```bash
+    az login
+    ```
 
 3. If you can access multiple subscriptions, select the one to use:
 
-   ```bash
-   az account set --subscription "<subscription-id-or-name>"
-   ```
+    ```bash
+    az account set --subscription "<subscription-id-or-name>"
+    ```
 
 4. Verify the selection:
 
-   ```bash
-   az account show
-   ```
+    ```bash
+    az account show
+    ```
 
 5. For a new subscription, register these resource providers if Azure reports registration errors:
 
-   ```bash
-   az provider register --namespace Microsoft.Compute
-   az provider register --namespace Microsoft.Network
-   az provider register --namespace Microsoft.Storage
-   az provider register --namespace Microsoft.Resources
-   ```
+    ```bash
+    az provider register --namespace Microsoft.Compute
+    az provider register --namespace Microsoft.Network
+    az provider register --namespace Microsoft.Storage
+    az provider register --namespace Microsoft.Resources
+    ```
 
 Azure requires an explicit deployment location:
 
