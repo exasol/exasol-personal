@@ -7,6 +7,8 @@ runs:
       uses: ./.github/actions/setup-python
     - name: Setup Go
       uses: ./.github/actions/setup-go
+      with:
+        cache-key-prefix: test-integration
     - name: Run Integration Tests
       shell: bash
       run: task tests-integration COVERAGE=true

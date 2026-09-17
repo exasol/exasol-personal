@@ -5,6 +5,8 @@ runs:
   steps:
     - name: Setup Go and Task
       uses: ./.github/actions/setup-go
+      with:
+        cache-key-prefix: build
     - name: Build
       shell: bash
       env:

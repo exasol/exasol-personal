@@ -5,6 +5,8 @@ runs:
   steps:
     - name: Setup Go and Task
       uses: ./.github/actions/setup-go
+      with:
+        cache-key-prefix: test-unit
     - name: Run Unit Tests
       shell: bash
       run: task tests-unit COVERAGE=true
