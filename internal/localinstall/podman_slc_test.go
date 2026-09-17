@@ -57,9 +57,9 @@ func TestPodmanInstallStart_MaterializesAndMountsAvailableSLCs(t *testing.T) {
 	}
 	runCommand := commands[len(commands)-1]
 	for _, expectedMount := range []string{
-		"<--mount><type=image,source=" + existingImage + ",destination=/exa/slc/existing>",
-		"<--mount><type=image,source=" + pulledImage + ",destination=/exa/slc/pulled>",
-		"<--mount><type=image,source=" + importedImage + ",destination=/exa/slc/imported>",
+		"<--mount><type=image,source=" + existingImage + ",destination=/exa/slc/existing,rw=true>",
+		"<--mount><type=image,source=" + pulledImage + ",destination=/exa/slc/pulled,rw=true>",
+		"<--mount><type=image,source=" + importedImage + ",destination=/exa/slc/imported,rw=true>",
 	} {
 		if !strings.Contains(runCommand, expectedMount) {
 			t.Fatalf("expected mount %q in %q", expectedMount, runCommand)

@@ -71,6 +71,11 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 - Local UDFs and Virtual Schemas now work on Linux hosts with SELinux enforcing.
 
+- Custom script language containers that ship only their payload, without the standard root
+  directory skeleton, now run UDFs in local deployments instead of failing every call with
+  `VM error: Internal error: VM crashed`. Containers are still expected to ship those
+  directories; the launcher now tolerates ones that do not.
+
 - Custom SLC installation now rejects duplicate aliases declared by another installed custom SLC
   before the database is restarted. Updating an existing custom SLC alias remains supported,
   including replacing it with a different package.

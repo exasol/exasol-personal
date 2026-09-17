@@ -216,9 +216,15 @@ func (install *PodmanInstall) Start(
 		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
 	}
 	for _, slc := range availableSLCs {
+		// `rw=true` works around containers that ship no directory skeleton: the UDF
+		// sandbox launcher creates the mount points it binds into the container root
+		// (/proc, /dev, /buckets, /var/tmp and siblings) only where that root is
+		// writable, and a missing one fails every UDF as an opaque `VM crashed`.
+		// Podman keeps the writes in an ephemeral per-container overlay, so the image
+		// is never modified and the UDF-visible root stays read-only.
 		args = append(args,
 			"--mount",
-			fmt.Sprintf("type=image,source=%s,destination=%s", slc.Image, slc.Target),
+			fmt.Sprintf("type=image,source=%s,destination=%s,rw=true", slc.Image, slc.Target),
 		)
 	}
 	if startConfig.VersionCheck.Enabled {
