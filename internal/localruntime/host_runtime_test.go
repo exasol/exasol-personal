@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -478,5 +479,91 @@ func TestLinuxEnsureQueryable_InvokesNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(logPath); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("Linux must not invoke podman to become queryable (err=%v)", err)
+	}
+}
+
+// stubContainerHostPreparer answers the container-host question directly, so
+// Status can be exercised against a stopped container host on a platform that
+// has none.
+type stubContainerHostPreparer struct {
+	running bool
+	err     error
+}
+
+func (stubContainerHostPreparer) Platform() HostPlatform { return HostPlatformLinux }
+
+func (stubContainerHostPreparer) EnsureReady(_ context.Context, _ PrepareOptions) error {
+	return nil
+}
+
+func (stubContainerHostPreparer) EnsureStartable(_ context.Context, _, _ io.Writer) error {
+	return nil
+}
+
+func (preparer stubContainerHostPreparer) ContainerHostRunning(
+	_ context.Context,
+) (bool, error) {
+	return preparer.running, preparer.err
+}
+
+func (stubContainerHostPreparer) NewExecutionEnvironment(
+	runtimeExec []string,
+) localinstall.ExecutionEnvironment {
+	return localinstall.NewDirectExecutionEnvironment(runtimeExec)
+}
+
+// Regression: on Windows a stopped Podman machine makes the container probe
+// fail rather than answer, and `exasol status` fell through to the database
+// probe and reported an unreachable database instead of a stopped deployment.
+func TestHostStatus_ResolvesUnreachableContainerProbeAgainstTheContainerHost(t *testing.T) {
+	t.Parallel()
+	if os.PathSeparator == '\\' {
+		t.Skip("fake Podman executable is a POSIX shell script")
+	}
+
+	tests := []struct {
+		name        string
+		preparer    stubContainerHostPreparer
+		wantStopped bool
+	}{
+		{name: "container host is stopped", wantStopped: true},
+		{
+			name:     "container host is running",
+			preparer: stubContainerHostPreparer{running: true},
+		},
+		{
+			name:     "container host state is unreadable",
+			preparer: stubContainerHostPreparer{err: errors.New("host state unavailable")},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given a container probe that fails the way an unreachable
+			// container host makes it fail
+			deployment := newLinuxRuntimeStatusDeployment(t)
+			scriptPath := filepath.Join(t.TempDir(), "unreachable-podman.sh")
+			writeLinuxRuntimeTestFile(t, scriptPath, "#!/bin/sh\nexit 125\n")
+			localRuntime := newHostRuntime(deployment, nil, test.preparer)
+			localRuntime.runtimeExec = []string{"/bin/sh", scriptPath}
+
+			// When
+			status, err := localRuntime.Status(context.Background())
+			// Then only a stopped host turns the failure into an answer
+			if !test.wantStopped {
+				if err == nil {
+					t.Fatalf("expected the probe failure to surface, got %#v", status)
+				}
+
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected a stopped container host to answer, got %v", err)
+			}
+			if status.Running {
+				t.Fatalf("expected running=false, got %#v", status)
+			}
+		})
 	}
 }

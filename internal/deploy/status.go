@@ -31,6 +31,10 @@ const notInitializedMessage = "No Exasol Personal deployment exists in this " +
 	"Run `exasol install <infra preset>` to create and start one, or pass " +
 	"`--deployment-dir <path>` to inspect an existing deployment."
 
+const databaseUnreachableMessage = "The deployment is running but the database is not " +
+	"accepting connections. It may still be starting up, so run `status` again in a moment. " +
+	"If it stays unreachable, run `stop` and then `start` to restart the deployment."
+
 type StatusOutput struct {
 	DeploymentDir string `json:"deploymentDir"`
 	Status        string `json:"status"`
@@ -202,8 +206,9 @@ func GetStatus(
 
 				//nolint:nilerr
 				return &StatusOutput{
-					Status: StatusDatabaseConnectionFailed,
-					Error:  err.Error(),
+					Status:  StatusDatabaseConnectionFailed,
+					Message: databaseUnreachableMessage,
+					Error:   err.Error(),
 				}, nil
 			}
 

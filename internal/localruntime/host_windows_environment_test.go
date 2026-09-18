@@ -373,3 +373,61 @@ func TestWindowsRuntime_ReportsWindowsPlatform(t *testing.T) {
 		t.Errorf("expected the Windows platform, got %q", hostRuntime.Platform())
 	}
 }
+
+// The Podman machine hosts every local container on Windows, so `exasol status`
+// has to read its state - and must not start it, being a read-only command
+// bounded by a short timeout.
+//
+//nolint:paralleltest // The test replaces process-wide PATH with fake binary shims.
+func TestWindowsContainerHostRunning_ReadsMachineStateWithoutStartingIt(t *testing.T) {
+	tests := []struct {
+		name         string
+		machineList  string
+		machineState string
+		wantRunning  bool
+	}{
+		{
+			name:         "running machine",
+			machineList:  "podman-machine-default",
+			machineState: "Running",
+			wantRunning:  true,
+		},
+		{
+			name:         "stopped machine",
+			machineList:  "podman-machine-default",
+			machineState: "stopped",
+		},
+		{
+			name: "machine not created yet",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Given
+			dir := newIsolatedShimDir(t)
+			shim := `if [ "$1 $2" = "machine list" ]; then ` +
+				`printf '` + test.machineList + `\n'; exit 0; fi
+if [ "$1 $2" = "machine inspect" ]; then printf '` + test.machineState + `\n'; exit 0; fi
+exit 1`
+			logPath := dropShim(t, dir, "podman", shim)
+
+			// When
+			running, err := windowsHostEnvironmentPreparer{}.
+				ContainerHostRunning(context.Background())
+				// Then
+			if err != nil {
+				t.Fatalf("ContainerHostRunning() unexpected error: %v", err)
+			}
+			if running != test.wantRunning {
+				t.Errorf("expected running=%t, got %t", test.wantRunning, running)
+			}
+			logged, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatalf("read podman log: %v", err)
+			}
+			if strings.Contains(string(logged), "machine start") {
+				t.Errorf("status must not start the machine, got %q", string(logged))
+			}
+		})
+	}
+}

@@ -71,6 +71,21 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 - Fixed `exasol slc install rust` and `exasol slc custom install` failing on Windows with "The process cannot access the file because it is being used by another process." The container is now moved into the deployment without the launcher holding the downloaded file open.
 
+- `exasol status` now reports a stopped local deployment on Windows instead of
+  `database_connection_failed`. After a reboot the Podman machine hosting the deployment is no
+  longer running, and the launcher could not tell that apart from a database it could not reach.
+  The status now names the state and how to recover from it:
+
+  ```
+  Status: stopped
+  Message: Deployment stopped. Run `start` to restart or `destroy` to delete resources.
+  ```
+
+  Reading the status never starts the Podman machine.
+
+- `exasol status` now explains what to do when it reports `database_connection_failed`, which
+  previously printed no message at all.
+
 - Local UDFs and Virtual Schemas now work on Linux hosts with SELinux enforcing.
 
 - Custom script language containers that ship only their payload, without the standard root
