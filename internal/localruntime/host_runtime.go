@@ -38,12 +38,15 @@ var nanoInitParams = []string{"maxConnectionsLicenseLimit=20"}
 //     that mutates the host.
 //   - EnsureStartable: re-check the cheap, approval-free prerequisites that
 //     can lapse between Prepare and Start.
+//   - ContainerHostRunning: report whether whatever hosts the containers is
+//     running, reading state only and never starting anything.
 //   - NewExecutionEnvironment: build the environment PodmanInstall runs
 //     through, which is where a platform redirects individual commands.
 type hostRuntimeEnvironmentPreparer interface {
 	Platform() HostPlatform
 	EnsureReady(ctx context.Context, options PrepareOptions) error
 	EnsureStartable(ctx context.Context, out, outErr io.Writer) error
+	ContainerHostRunning(ctx context.Context) (bool, error)
 	NewExecutionEnvironment(runtimeExec []string) localinstall.ExecutionEnvironment
 }
 
@@ -66,6 +69,13 @@ func (linuxHostEnvironmentPreparer) EnsureStartable(
 	_ context.Context, _, _ io.Writer,
 ) error {
 	return nil
+}
+
+// ContainerHostRunning is always true on Linux: the containers run on this
+// host's kernel, so there is nothing between them and the caller that can be
+// stopped on its own.
+func (linuxHostEnvironmentPreparer) ContainerHostRunning(_ context.Context) (bool, error) {
+	return true, nil
 }
 
 func (linuxHostEnvironmentPreparer) NewExecutionEnvironment(
@@ -168,9 +178,19 @@ func (runtime *HostRuntime) Stop(ctx context.Context, out, outErr io.Writer) err
 	return runtime.install().Stop(ctx, out, outErr)
 }
 
+// Status answers without starting anything, so observing a deployment causes no
+// side effects on the host - `exasol status` above all, which is bounded by a
+// short timeout a container host would not start within.
 func (runtime *HostRuntime) Status(ctx context.Context) (*RuntimeStatus, error) {
 	status, err := runtime.install().Status(ctx, nil, nil)
 	if err != nil {
+		// A probe that could not reach the container host answers nothing about
+		// the container, but a stopped host settles it: nothing runs inside one.
+		hostRunning, hostErr := runtime.preparer.ContainerHostRunning(ctx)
+		if hostErr == nil && !hostRunning {
+			return &RuntimeStatus{Running: false}, nil
+		}
+
 		return nil, err
 	}
 

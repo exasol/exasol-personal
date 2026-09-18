@@ -31,6 +31,22 @@ exasol cache clean --partial-downloads --dry-run
 exasol cache clean --partial-downloads
 ```
 
+## Restart a local deployment on Windows after a reboot
+
+On Windows the deployment runs inside Podman's machine, which does not start again by itself when
+the host reboots. `exasol status` then reports:
+
+```
+Status: stopped
+Message: Deployment stopped. Run `start` to restart or `destroy` to delete resources.
+```
+
+Start the deployment again, which also starts the Podman machine:
+
+```bash
+exasol start
+```
+
 ## Recover from an interrupted installation
 
 Cloud resources created before an interruption are not removed automatically and can continue to
