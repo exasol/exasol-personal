@@ -415,18 +415,6 @@ func recordCustomSLC(
 	tarball acquiredTarball,
 	aliases []string,
 ) (config.InstalledCustomSLC, error) {
-	file, err := os.Open(
-		tarball.path,
-	) //nolint:gosec // path is launcher-owned (download temp or user file)
-	if err != nil {
-		return config.InstalledCustomSLC{}, err
-	}
-	defer file.Close()
-
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return config.InstalledCustomSLC{}, err
-	}
-
 	entry := config.InstalledCustomSLC{
 		Alias:          request.alias,
 		PackageAliases: aliases,
@@ -439,7 +427,7 @@ func recordCustomSLC(
 		DisplacedURI:   carriedDisplacedURI(state.InstalledCustomSLCs, request.alias),
 	}
 
-	if err := placeCustomSLCPackage(deployment, entry.Package, tarball, file); err != nil {
+	if err := promoteCustomSLCPackage(deployment, tarball.path, entry.Package); err != nil {
 		return config.InstalledCustomSLC{}, err
 	}
 
@@ -1143,7 +1131,6 @@ func withLocalDatabase(
 type acquiredTarball struct {
 	path    string
 	sha256  string
-	staged  bool
 	cleanup func()
 }
 
@@ -1196,7 +1183,6 @@ func acquireCustomTarball(
 	return acquiredTarball{
 		path:    tempPath,
 		sha256:  hex.EncodeToString(hasher.Sum(nil)),
-		staged:  true,
 		cleanup: remove,
 	}, nil
 }
@@ -1252,7 +1238,6 @@ func downloadCustomTarball(
 	return acquiredTarball{
 		path:    tmp.Name(),
 		sha256:  hex.EncodeToString(hasher.Sum(nil)),
-		staged:  true,
 		cleanup: remove,
 	}, nil
 }
@@ -1424,20 +1409,4 @@ func sortedKeys(set map[string]bool) []string {
 	slices.Sort(keys)
 
 	return keys
-}
-
-// A downloaded container already sits in the staging directory.
-func placeCustomSLCPackage(
-	deployment config.DeploymentDir,
-	name string,
-	tarball acquiredTarball,
-	content io.Reader,
-) error {
-	if tarball.staged {
-		return promoteCustomSLCPackage(deployment, tarball.path, name)
-	}
-
-	slog.Info("staging the custom script language container (this may take a few minutes)")
-
-	return stageCustomSLCPackage(deployment, name, content)
 }

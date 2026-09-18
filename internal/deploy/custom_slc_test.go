@@ -675,6 +675,75 @@ func TestAcquireCustomTarballURLFailsOnNon200(t *testing.T) {
 	}
 }
 
+// Renaming a file the process still holds open fails on Windows, so this must
+// promote the acquired tarball without keeping a handle on it.
+func TestRecordCustomSLCPromotesTheAcquiredTarball(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	source := filepath.Join(t.TempDir(), "my-python.tar.gz")
+	if err := os.WriteFile(source, []byte("container-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tarball, err := acquireCustomTarball(context.Background(), deployment, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tarball.cleanup()
+
+	state := &config.ExasolPersonalState{}
+	request := customSLCRequest{
+		alias:    "MYPY3",
+		language: customslc.Language("python"),
+		source:   source,
+	}
+
+	// When
+	entry, err := recordCustomSLC(deployment, state, request, tarball, []string{"MYPY3"})
+	// Then
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, err := os.ReadFile( //nolint:gosec // test-owned path
+		filepath.Join(customSLCStagingDir(deployment), entry.Package),
+	)
+	if err != nil {
+		t.Fatalf("expected the package staged as %s: %v", entry.Package, err)
+	}
+	if !bytes.Equal(got, []byte("container-bytes")) {
+		t.Fatalf("staged content mismatch: %q", got)
+	}
+	if _, err := os.Stat(tarball.path); !os.IsNotExist(err) {
+		t.Fatalf("expected the acquired tarball moved away, got %v", err)
+	}
+}
+
+func TestAcquireCustomTarballLeavesNothingOnFailure(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+
+	// When
+	_, err := acquireCustomTarball(
+		context.Background(), deployment, filepath.Join(t.TempDir(), "absent.tar.gz"),
+	)
+	// Then
+	if err == nil {
+		t.Fatal("expected an error for an unreadable source")
+	}
+
+	entries, readErr := os.ReadDir(customSLCStagingDir(deployment))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected no staged files, got %d", len(entries))
+	}
+}
+
 func TestAcquireCustomTarballFromFileSnapshotsAndCleansUp(t *testing.T) {
 	t.Parallel()
 
@@ -782,9 +851,6 @@ func TestAcquireCustomTarballDownloadsIntoTheStagingDirectory(t *testing.T) {
 	// Then
 	if err != nil {
 		t.Fatal(err)
-	}
-	if !tarball.staged {
-		t.Fatal("a downloaded container must be reported as already staged")
 	}
 	if dir := filepath.Dir(tarball.path); dir != customSLCStagingDir(deployment) {
 		t.Fatalf("downloaded to %s, want the staging directory", dir)

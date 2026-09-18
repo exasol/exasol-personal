@@ -7,21 +7,21 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
 )
 
-func TestStageCustomSLCPackageWritesTheContainer(t *testing.T) {
+func TestPromoteCustomSLCPackageMovesTheContainerIntoPlace(t *testing.T) {
 	t.Parallel()
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	content := []byte("container-bytes")
+	tempPath := writeStagingFile(t, deployment, content)
 
 	// When
-	err := stageCustomSLCPackage(deployment, "custom-mypy3-abc.tar.gz", bytes.NewReader(content))
+	err := promoteCustomSLCPackage(deployment, tempPath, "custom-mypy3-abc.tar.gz")
 	// Then
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -35,20 +35,27 @@ func TestStageCustomSLCPackageWritesTheContainer(t *testing.T) {
 	if !bytes.Equal(got, content) {
 		t.Fatalf("staged content mismatch: %q", got)
 	}
+	if _, err := os.Stat(tempPath); !os.IsNotExist(err) {
+		t.Fatalf("expected the temporary file moved away, got %v", err)
+	}
 }
 
-func TestStageCustomSLCPackageIsIdempotent(t *testing.T) {
+func TestPromoteCustomSLCPackageReplacesAnExistingPackage(t *testing.T) {
 	t.Parallel()
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	const name = "custom-mypy3-abc.tar.gz"
-	if err := stageCustomSLCPackage(deployment, name, strings.NewReader("first")); err != nil {
+	if err := promoteCustomSLCPackage(
+		deployment, writeStagingFile(t, deployment, []byte("first")), name,
+	); err != nil {
 		t.Fatal(err)
 	}
 
 	// When
-	err := stageCustomSLCPackage(deployment, name, strings.NewReader("second"))
+	err := promoteCustomSLCPackage(
+		deployment, writeStagingFile(t, deployment, []byte("second")), name,
+	)
 	// Then
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -62,28 +69,6 @@ func TestStageCustomSLCPackageIsIdempotent(t *testing.T) {
 	}
 	if string(got) != "second" {
 		t.Fatalf("expected the package replaced, got %q", got)
-	}
-}
-
-func TestStageCustomSLCPackageLeavesNothingOnFailure(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	deployment := config.NewDeploymentDir(t.TempDir())
-
-	// When
-	err := stageCustomSLCPackage(deployment, "custom-mypy3-abc.tar.gz", failingReader{})
-	// Then
-	if err == nil {
-		t.Fatal("expected a staging error")
-	}
-
-	entries, readErr := os.ReadDir(customSLCStagingDir(deployment))
-	if readErr != nil {
-		t.Fatal(readErr)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("expected no staged files, got %d", len(entries))
 	}
 }
 
@@ -174,12 +159,6 @@ func writeSLCStatusReport(t *testing.T, deployment config.DeploymentDir, content
 	}
 }
 
-type failingReader struct{}
-
-func (failingReader) Read([]byte) (int, error) {
-	return 0, os.ErrInvalid
-}
-
 func TestStagingDiscardsStalePartialDownloads(t *testing.T) {
 	t.Parallel()
 
@@ -194,17 +173,35 @@ func TestStagingDiscardsStalePartialDownloads(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// When: staging anything at all.
-	err := stageCustomSLCPackage(deployment, "custom-x-abc.tar.gz", strings.NewReader("x"))
+	// When: opening a staging file for a new container.
+	temp, err := newCustomSLCStagingFile(deployment)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer temp.Close()
 
-	// Then: the leftover is gone and the real package is in place.
+	// Then: the leftover is gone and the fresh staging file is in its place.
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
 		t.Fatalf("expected the stale partial download removed, got %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "custom-x-abc.tar.gz")); err != nil {
-		t.Fatalf("expected the staged package, got %v", err)
+	if _, err := os.Stat(temp.Name()); err != nil {
+		t.Fatalf("expected the fresh staging file, got %v", err)
 	}
+}
+
+func writeStagingFile(t *testing.T, deployment config.DeploymentDir, content []byte) string {
+	t.Helper()
+
+	temp, err := newCustomSLCStagingFile(deployment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := temp.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := temp.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	return temp.Name()
 }
