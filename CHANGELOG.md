@@ -42,10 +42,6 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
-- Template-based custom SLC archives may omit `language_definitions.json`; the alias supplied with
-  `--alias` is still registered automatically. Additional package aliases require manual
-  registration with `ALTER SYSTEM` or `ALTER SESSION SCRIPT_LANGUAGES`.
-
 - macOS local deployments now store Nano data in host-visible deployment
   storage, making persistent `/exa` files available to host tools.
 
@@ -54,9 +50,6 @@ Notable user-facing changes to Exasol Personal are documented here.
   next `exasol start`, which takes longer than usual once and keeps its
   database contents.
 
-- Custom SLC language identifiers are no longer limited to Python, Java, and R. The launcher now
-  accepts any valid client-defined identifier, such as `rust`, for a custom SLC.
-
 - `exasol install <preset> --help` and `exasol init <preset> --help` now describe the selected preset instead of every built-in preset. The help shows the preset's description, the installation presets compatible with it, and usage and examples for that preset; selecting an installation preset as well describes both. Without a preset argument, `exasol install --help` and `exasol init --help` keep the full preset overview and compatibility matrix.
 
   Example: `exasol install local --help` reports "Infrastructure preset `local`" with `Compatible installation presets: local`, and suggests `exasol install local local`.
@@ -64,38 +57,12 @@ Notable user-facing changes to Exasol Personal are documented here.
 - Local deployments now select and persist a concrete database port during initialization, keep it stable across restarts, allow port changes while stopped, and provide actionable recovery commands when the configured port is unavailable.
 - Documented named deployments, the `exasol slc` command group, and `exasol diag local` in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers UDFs and script language containers, and the Limitations section no longer states that UDFs are unavailable on local deployments.
 - macOS local deployments now run the same Podman installation used on Linux inside a managed VM. The VM launcher is responsible only for VM lifecycle, port forwarding, shared files, and command execution; deployment state no longer exposes its SSH transport.
-- Local runtime host preparation now runs before a deployment records an operation in progress, so a declined or failed prerequisite leaves the deployment in its previous state and the command can simply be retried.
 - Cloud deployments now provision Ubuntu 24.04 LTS instances instead of Ubuntu 22.04 LTS on all supported cloud providers (AWS, Azure, Exoscale, STACKIT). Ubuntu 22.04 only offers a Podman version that predates the Quadlet systemd generator, which Data Lakehouse Turbo requires.
 
 ### Fixed
 
-- Fixed `exasol slc install rust` and `exasol slc custom install` failing on Windows with "The process cannot access the file because it is being used by another process." The container is now moved into the deployment without the launcher holding the downloaded file open.
-
-- `exasol status` now reports a stopped local deployment on Windows instead of
-  `database_connection_failed`. After a reboot the Podman machine hosting the deployment is no
-  longer running, and the launcher could not tell that apart from a database it could not reach.
-  The status now names the state and how to recover from it:
-
-  ```
-  Status: stopped
-  Message: Deployment stopped. Run `start` to restart or `destroy` to delete resources.
-  ```
-
-  Reading the status never starts the Podman machine.
-
 - `exasol status` now explains what to do when it reports `database_connection_failed`, which
   previously printed no message at all.
-
-- Local UDFs and Virtual Schemas now work on Linux hosts with SELinux enforcing.
-
-- Custom script language containers that ship only their payload, without the standard root
-  directory skeleton, now run UDFs in local deployments instead of failing every call with
-  `VM error: Internal error: VM crashed`. Containers are still expected to ship those
-  directories; the launcher now tolerates ones that do not.
-
-- Custom SLC installation now rejects duplicate aliases declared by another installed custom SLC
-  before the database is restarted. Updating an existing custom SLC alias remains supported,
-  including replacing it with a different package.
 
 - `exasol slc install` and `exasol slc update` now accept the flavors shown by
   `exasol slc list`, in addition to aliases. The list displays aliases first and recommends them
@@ -109,26 +76,17 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol config set --ports auto` followed by `exasol start`
 
-- Fixed documentation publication failing during validation because the GitHub Actions runner does
-  not provide the Task command.
 - `exasol destroy` and `exasol remove` no longer report success without doing anything when no terminal is attached. Such a run now proceeds as though `--auto-approve` had been passed. Detection of an attached terminal was also corrected, so a command redirected from the null device is treated as unattended rather than interactive.
-- Corrected the local Virtual Schema setup guide to use the active deployment's shared directory on
-  macOS instead of obsolete SSH paths, and added the required deployment selection and PostgreSQL
-  timezone configuration steps.
-- Fixed Windows local deployments blaming the host-to-VM network path for a database that failed to start. When the forwarded port refused the connection, `exasol start` and `exasol deploy` reported that the network path appeared blocked, listing Windows Firewall and port conflict causes, instead of reporting the underlying failure. `exasol diag local` reported such a port as `blocked` rather than `refused`.
 - `exasol deployments list` now reports the same live status as `exasol status` instead of treating persisted workflow state as current state. Deployment checks run concurrently under one five-second bound.
 - `exasol status` now stops waiting after five seconds by default instead of hanging indefinitely on an unresponsive deployment. Use `--timeout <seconds>` to select another positive limit, for example `exasol status --timeout 10`.
-- Fixed infrastructure and installation presets being unavailable. `exasol presets list` reported no presets, and commands that resolve one, such as `exasol install local` and `exasol presets export`, could not find it. Embedded preset archives are now extracted completely.
 - Fixed `exasol connect` omitting its shell exit hint when standard input was piped and emitting it for interactive `--json` sessions. The hint now follows the CLI output contract: it is written to stderr for text shell sessions and suppressed under `--json`.
 - Fixed Data Lakehouse Turbo activation failing on cloud deployments. Activating the feature in the AdminUI hung on a spinner and reported `Activation status for database Exasol could not be retrieved`. Podman is now installed during cloud-init on all supported cloud providers (AWS, Azure, Exoscale, STACKIT), and the provisioned hosts now ship a Podman release that includes the Quadlet systemd generator the feature depends on. Deployments created before this change must be recreated to pick it up.
-- Local runtime host preparation no longer proceeds without approval when a command cannot prompt. Previously a non-interactive invocation was treated as consent, so a scripted run could install Podman unattended. Such runs now fail and explain how to proceed; pass `--auto-approve` for unattended setup.
 - Cloud deployments now fail with a clear error when a node's SSH host key cannot be retrieved, instead of stalling the installation with no diagnostic.
 - Cluster synchronization during cloud deployments now gives up with a clear error when a node cannot be reached, instead of retrying indefinitely.
 
 ### Breaking Changes
 
 - Commands that ask for confirmation now proceed without asking when no terminal is attached, as though `--auto-approve` had been passed. This covers `exasol destroy`, `exasol remove`, and the database-restarting `exasol slc` operations, and it applies however standard input is redirected, so a piped answer no longer declines them. Local runtime host preparation is the exception and still requires an answer or `--auto-approve`. Scripts that relied on a redirected `exasol destroy` declining must stop invoking it.
-- Local runtime host preparation in a non-interactive invocation now fails instead of proceeding without approval. Scripts that relied on the previous behavior must pass `--auto-approve` to `exasol deploy`, `exasol install`, or `exasol start`.
 - Local deployments now publish the database port on `127.0.0.1` instead of on all addresses, so it is no longer reachable from other hosts. The documented connection endpoint is unchanged; use a cloud deployment if the database must be reachable over the network.
 
 ## 2.2.0 - 2026-08-06
