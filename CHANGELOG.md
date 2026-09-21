@@ -6,6 +6,18 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Breaking Changes
+
+- None.
+
+## 2.3.0 - 2026-09-21
+
+### Added
+
 - Added an **Install with AI Agent** section to the README, showing the single `claude`/`codex` command that has an AI coding agent install the [Exasol agent skills](https://github.com/exasol-labs/exasol-agent-skills) and set up Exasol Personal.
 
 - Enabled Virtual Schema support in local deployments when the required adapter runtime and dependencies are installed.
