@@ -14,12 +14,13 @@ The maintainer:
 - Finalizes the changelog and commits it.
 - Creates and pushes the version tag.
 - Dispatches the release workflow for that tag.
+- Replaces the generated GitHub release notes with the released version's changelog section.
 - Creates the release line branch after the first stable release of a minor version.
 
 The release workflow:
 - Validates the user documentation at the release tag.
 - Builds, signs, and notarizes binaries for all supported platforms with [GoReleaser](https://goreleaser.com/).
-- Creates the GitHub release with its artifacts, checksums, and generated notes.
+- Creates the GitHub release with its artifacts, checksums, and preliminary generated notes.
 - Publishes the user documentation of a stable release as that release's line version.
 
 Tests are not part of the release workflow. They run in CI on the commit before it is tagged.
@@ -93,6 +94,21 @@ environment's approval, publishes the release, and then publishes the documentat
 release as version `<major>.<minor>`. A pre-release validates its documentation and publishes no
 documentation version.
 
+For a stable release, replace the preliminary commit list in the GitHub release with the matching
+version section from `CHANGELOG.md`. The section starts at the release's `##` heading and ends
+before the next `##` heading. For example:
+
+```bash
+version=1.2.3
+awk -v version="${version}" '
+  $0 ~ "^## " version " - " { release_section = 1 }
+  release_section && /^## / && $0 !~ "^## " version " - " { exit }
+  release_section { print }
+' CHANGELOG.md | gh release edit "v${version}" --notes-file -
+```
+
+Verify the published release body against the changelog before announcing the release.
+
 If documentation publication fails after the release is published, the release stays published.
 Republish the documentation by dispatching the
 [documentation workflow](ci.md#documentation-publication-docsyml) for the same tag, which resolves
@@ -117,7 +133,8 @@ The release process is configured in `.goreleaser.yaml`, which defines:
 - **Binary size policy**: Raw binary optimization flags documented in [Binary Size Optimization](binary_size.md)
 - **Archives**: Packaging format (tar.gz, zip)
 - **Checksums**: SHA256 checksums for verification
-- **Release notes**: Automatically generated from commits
+- **Release notes**: A preliminary commit list that the maintainer replaces with the curated
+  version section from `CHANGELOG.md`
 
 ## Supported Platforms
 
@@ -158,4 +175,5 @@ Before creating a stable release:
 After the release workflow completes:
 
 - [ ] Published documentation shows the released version
+- [ ] GitHub release body matches the released version section in `CHANGELOG.md`
 - [ ] Release line branch exists for the version
