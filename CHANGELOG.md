@@ -10,6 +10,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- `exasol init --help` and `exasol install --help` now list `--no-launcher-version-check`, the flag
+  that disables the automatic check for new launcher releases. The flag was always accepted, but
+  did not appear in the help output.
+
 ### Breaking Changes
 
 - None.
