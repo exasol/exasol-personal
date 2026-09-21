@@ -100,7 +100,7 @@ func registerOutputFlags(cmd *cobra.Command, state *CommonFlags) {
 }
 
 func registerInitFlags(cmd *cobra.Command, state *CommonFlags) {
-	cmd.PersistentFlags().BoolVar(
+	cmd.Flags().BoolVar(
 		&state.NoLauncherVersionCheck,
 		"no-launcher-version-check",
 		false,
