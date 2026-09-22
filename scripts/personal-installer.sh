@@ -79,12 +79,14 @@ case ":$PATH:" in
 esac
 echo
 
-if [ "$OS" = "macos" ]; then
 cat <<EOF
 Getting started:
 
-  Run Exasol locally on your Mac — ready in seconds:
+  Run Exasol locally on a supported macOS or Linux system:
       exasol install local
+
+  Local deployments are also supported on Windows. See the documentation for
+  Windows installation and prerequisites.
 
   Or deploy to your own cloud (AWS, Azure, Exoscale, STACKIT), e.g.:
       exasol install aws
@@ -96,20 +98,3 @@ Getting started:
 Full documentation and all options:
   https://github.com/exasol/exasol-personal
 EOF
-else
-cat <<EOF
-Getting started:
-
-  Deploy Exasol to your own cloud (AWS, Azure, Exoscale, STACKIT), e.g.:
-      exasol install aws
-
-  Then see how to connect, and open a SQL shell:
-      exasol info
-      exasol connect
-
-  (Local deployment is currently macOS only; Windows and Linux support is coming soon.)
-
-Full documentation and all options:
-  https://github.com/exasol/exasol-personal
-EOF
-fi
