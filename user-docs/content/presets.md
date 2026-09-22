@@ -37,7 +37,7 @@ A local path starts with `.`, `/`, or `~`, or otherwise contains a path separato
 URIs are used directly. Local archives are extracted again on each run.
 
 Git sources support HTTPS and SSH URLs. Append `@<branch-or-tag>` to select a ref. The launcher
-caches a Git source by commit and reuses it on later runs.
+resolves the ref to a commit so that it can reuse the same content on later runs.
 
 Remote `.tar.gz`, `.tgz`, and `.zip` archives can use HTTP or HTTPS. They are downloaded on each run
 because the source does not supply a checksum.
@@ -48,9 +48,3 @@ from a subdirectory in a repository or multi-preset archive:
 ```bash
 exasol install https://github.com/org/presets.git@v1#infra/aws
 ```
-
-## Develop a preset
-
-The preset manifest schemas, required output artifacts, caching rules, and reference implementations
-are documented in the
-[preset development guide](https://github.com/exasol/exasol-personal/blob/main/doc/presets.md).

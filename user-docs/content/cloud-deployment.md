@@ -13,6 +13,8 @@ Follow the setup guide for your provider before starting the installation:
 - [STACKIT](cloud/stackit.md)
 
 Cloud resources incur charges in your account until you destroy them.
+See [Cloud resources and costs](cloud-resources.md) for the resources created by each preset and
+which categories can remain billable after stopping a deployment.
 
 ## Install the database
 
