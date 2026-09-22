@@ -41,6 +41,9 @@ Use `--json` for machine-readable output. A non-interactive invocation writes on
 all statements, including SQL errors. An interactive `exasol connect --json` session writes one JSON
 document per statement.
 
+For scripts, including the structured error and process exit-status contract, see
+[Scripting the launcher](scripting.md#execute-sql-non-interactively).
+
 ## Limit query output
 
 Interactive query output is limited to 100 rows by default. Piped input and `--command` or `--file`
@@ -65,19 +68,3 @@ The browser can display a warning because Exasol Admin uses a self-signed certif
 you are connecting to your deployment before accepting the certificate warning.
 
 Exasol Admin is not available for local deployments.
-
-## Open a shell
-
-Open a shell on a cloud compute instance or in the managed macOS virtual machine:
-
-```bash
-exasol shell host
-```
-
-Open a shell inside the database container:
-
-```bash
-exasol shell container
-```
-
-The runtime-managed shell commands are not available for local deployments on Linux or Windows.

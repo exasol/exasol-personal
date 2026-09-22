@@ -53,22 +53,6 @@ exasol config reset
 To select different presets in the same directory, first run `exasol destroy --remove`. If the
 deployment resources have already been removed outside the launcher, run `exasol remove` instead.
 
-## Inspect or clean the runtime cache
-
-The launcher downloads runtime tools such as OpenTofu on demand and reuses them from a per-user
-cache. Use:
-
-```bash
-exasol cache list
-exasol cache clean
-exasol cache clean --invalid
-exasol cache clean --partial-downloads
-exasol cache clean --all
-exasol diag cache
-```
-
-Add `--dry-run` to a cleanup command to preview the files it would remove.
-
 ## Stop and start
 
 Stop a deployment when you do not need its compute resources:
@@ -78,7 +62,8 @@ exasol stop
 ```
 
 For cloud deployments, networking and data volumes can continue to incur costs while compute
-instances are stopped.
+instances are stopped. See [Cloud resources and costs](cloud-resources.md#stop-or-destroy-a-deployment)
+for provider-specific details.
 
 Restart the deployment with:
 
@@ -99,7 +84,9 @@ exasol destroy
 
 The launcher asks for confirmation first. Pass `--auto-approve` to skip the prompt; a command with
 no terminal attached proceeds without asking, so a script that reaches `exasol destroy` or
-`exasol remove` destroys the deployment.
+`exasol remove` destroys the deployment. See
+[Unattended approvals](scripting.md#unattended-approvals-version-23-and-later) before automating
+destructive commands.
 
 By default, the launcher retains the deployment directory for inspection or recreation. Remove it
 after successful destruction with:

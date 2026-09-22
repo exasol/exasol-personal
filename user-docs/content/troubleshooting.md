@@ -14,23 +14,6 @@ readiness.
 Use `exasol info` to display the current connection details after a successful start. Node addresses
 can change whenever a deployment restarts.
 
-## Inspect the runtime cache
-
-The launcher downloads runtime tools on demand. Inspect their cached state without changing it:
-
-```bash
-exasol diag cache
-```
-
-Remove artifacts with invalid checksums or partial downloads:
-
-```bash
-exasol cache clean --invalid --dry-run
-exasol cache clean --invalid
-exasol cache clean --partial-downloads --dry-run
-exasol cache clean --partial-downloads
-```
-
 ## Restart a local deployment on Windows after a reboot
 
 On Windows the deployment runs inside Podman's machine, which does not start again by itself when
@@ -73,17 +56,11 @@ exasol remove
 This command does not destroy resources. If you deleted the deployment directory before destroying
 the resources, remove the remaining resources through the cloud provider or local environment.
 
-## Check for newer versions
+## Recover from a runtime download problem
 
-Exasol Personal periodically checks for a newer launcher version. Cloud deployments also check for a
-newer database version. Disable these checks during installation when required:
-
-```bash
-exasol install <preset> --no-launcher-version-check
-exasol install <preset> --no-db-version-check
-```
-
-The database-version option applies to cloud deployments.
+If the launcher reports an invalid or interrupted runtime-tool download, follow the targeted cleanup
+steps under [Runtime cache](launcher-cache.md#clean-a-failed-download). The cache normally requires
+no user maintenance.
 
 For help with an individual command, run `exasol <command> --help`. For further assistance, ask in
 the [Exasol Community](https://community.exasol.com) using the `exasol-personal` tag.
