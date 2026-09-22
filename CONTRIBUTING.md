@@ -21,6 +21,7 @@ Thank you for your interest in contributing! We welcome contributions from the c
 - **Use positive, observable requirements** - specify what users can verify at a stable boundary, never negative requirements, internal mechanisms, or what must remain unchanged.
 - **Keep requirements and scenarios precise** - state the relevant condition and its observable outcome, using measurable limits where needed.
 - **Avoid overlap** - give each behavior one canonical specification; unchanged behavior is implied by its existing, unmodified specification.
+- **Identify test evidence during review** - product-facing scenarios should identify relevant launcher or live tests with `openspec("capability-id")`; internal constraints may use focused implementation-level verification. Capability-level evidence does not require one-to-one scenario identifiers.
 
 ## Commit Guidelines
 

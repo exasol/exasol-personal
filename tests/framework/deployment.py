@@ -6,6 +6,7 @@ import logging
 import secrets
 import tempfile
 import time
+from dataclasses import replace
 from pathlib import Path
 from subprocess import CalledProcessError, CompletedProcess, Popen, TimeoutExpired
 from typing import Final, Unpack
@@ -81,7 +82,8 @@ class Deployment:
 
         This will destroy all cloud resources if they exist and remove the
         deployment directory. Safe to call even if resources were already
-        destroyed or were never deployed.
+        destroyed or were never deployed. Raises RuntimeError when destruction
+        cannot be verified so callers cannot silently leave billable resources.
         """
         logging.info(
             "Destroying deployment and cleaning up directory: %s",
@@ -99,7 +101,11 @@ class Deployment:
                 cleanup_error,
                 self.deployment_log_tail(),
             )
-            return
+            message = (
+                f"Failed to clean up deployment {self.deployment_dir.name}: "
+                f"{cleanup_error}"
+            )
+            raise RuntimeError(message)
 
         self.deployment_dir.cleanup()
 
@@ -180,16 +186,23 @@ class Deployment:
 
         return [*args, self.UNATTENDED_FLAG]
 
-    def deploy(self, *args: str) -> CompletedProcess[str]:
+    def deploy(
+        self,
+        *args: str,
+        **kwargs: Unpack[SubprocessRunKwargs],
+    ) -> CompletedProcess[str]:
+        timeout = kwargs.get("timeout", self.DEPLOY_TIMEOUT_SECONDS)
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = timeout
         try:
             return self.launcher.deploy(
                 self.deployment_dir.name,
                 *self._unattended(args),
-                timeout=self.DEPLOY_TIMEOUT_SECONDS,
+                **kwargs,
             )
         except TimeoutExpired as exc:
             msg = (
-                f"Deploy command timed out after {self.DEPLOY_TIMEOUT_SECONDS}s\n"
+                f"Deploy command timed out after {timeout}s\n"
                 f"deployment.log tail:\n{self.deployment_log_tail()}"
             )
             raise TimeoutError(msg) from exc
@@ -370,3 +383,181 @@ class Deployment:
             lines = f.readlines()
 
         return "".join(lines[-max_lines:]).strip()
+
+
+class DeploymentManager:
+    """Own controlled, shared, reusable, isolated, and local deployments."""
+
+    DEPLOY_TIMEOUT_SECONDS: Final = 40 * 60
+
+    def __init__(self, launcher: Launcher, config: DeploymentConfig) -> None:
+        self.launcher = launcher
+        self.config = config
+        self._shared: Deployment | None = None
+        self._reusable: Deployment | None = None
+        self._quarantined_reusable: Deployment | None = None
+        self._owned: list[Deployment] = []
+        self._live: list[Deployment] = []
+        self.created_count = 0
+
+    def controlled(
+        self,
+        *args: str,
+        config: DeploymentConfig | None = None,
+    ) -> Deployment:
+        return self._create(config or self.config, *args)
+
+    def shared_live(self) -> Deployment:
+        if self._shared is None:
+            self._shared = self._create_live(self.config)
+        return self._shared
+
+    def reusable_live(self) -> Deployment:
+        if self._quarantined_reusable is not None:
+            message = "Reusable live deployment is quarantined after cleanup failure"
+            raise RuntimeError(message)
+        if self._reusable is None:
+            self._reusable = self._create_live(self.config)
+        return self._reusable
+
+    def restore_reusable_ready(self, deployment: Deployment) -> None:
+        if deployment is not self._reusable:
+            message = "Deployment is not managed as reusable live"
+            raise ValueError(message)
+
+        def restore() -> None:
+            if not deployment.has_status(StatusDatabaseReady):
+                deployment.start()
+            if (
+                not deployment.has_status(StatusDatabaseReady)
+                or not deployment.db_connectable()
+            ):
+                message = (
+                    "Reusable live deployment could not be restored database-ready"
+                )
+                raise RuntimeError(message)
+
+        try:
+            restore()
+        except Exception as error:
+            log_tail = deployment.deployment_log_tail()
+            self._quarantined_reusable = deployment
+            try:
+                self.release(deployment)
+            except (OSError, RuntimeError) as cleanup_error:
+                message = (
+                    "Reusable live deployment restoration and cleanup failed\n"
+                    f"restoration error: {error}\ncleanup error: {cleanup_error}\n"
+                    f"deployment.log tail:\n{log_tail}"
+                )
+                raise RuntimeError(message) from error
+            message = (
+                "Reusable live deployment restoration failed; "
+                "deployment was destroyed\n"
+                f"restoration error: {error}\n"
+                f"deployment.log tail:\n{log_tail}"
+            )
+            raise RuntimeError(message) from error
+
+    def isolated_live(
+        self,
+        *args: str,
+        config: DeploymentConfig | None = None,
+        deploy: bool = True,
+    ) -> Deployment:
+        return self._create_live(config or self.config, *args, deploy=deploy)
+
+    def verify_shared_ready(self, deployment: Deployment) -> None:
+        if deployment is not self._shared:
+            message = "Deployment is not managed as shared live"
+            raise ValueError(message)
+        if not deployment.has_status(StatusDatabaseReady):
+            message = (
+                "Shared live deployment was not left database-ready\n"
+                f"deployment.log tail:\n{deployment.deployment_log_tail()}"
+            )
+            raise RuntimeError(message)
+
+    def local(
+        self,
+        *args: str,
+        config: DeploymentConfig | None = None,
+        deploy: bool = True,
+    ) -> Deployment:
+        config = replace(
+            config or self.config,
+            infra="local",
+            cluster_size=1,
+            stackit_project_id=None,
+        )
+        return self._create_live(config, *args, deploy=deploy)
+
+    def release(self, deployment: Deployment) -> None:
+        if deployment not in self._owned:
+            return
+        if deployment is self._shared:
+            self._shared = None
+        if deployment is self._reusable:
+            self._reusable = None
+        if deployment in self._live:
+            deployment.cleanup()
+            self._live.remove(deployment)
+        else:
+            deployment.deployment_dir.cleanup()
+        self._owned.remove(deployment)
+        if deployment is self._quarantined_reusable:
+            self._quarantined_reusable = None
+
+    def close(self) -> None:
+        errors: list[str] = []
+        for deployment in self._owned.copy():
+            try:
+                self.release(deployment)
+            except (OSError, RuntimeError) as error:
+                errors.append(str(error))
+        if errors:
+            message = "Deployment cleanup failed:\n" + "\n".join(errors)
+            raise RuntimeError(message)
+
+    def _create(self, config: DeploymentConfig, *args: str) -> Deployment:
+        deployment = Deployment(
+            self.launcher,
+            "--no-launcher-version-check",
+            *args,
+            config=config,
+        )
+        self.created_count += 1
+        self._owned.append(deployment)
+        return deployment
+
+    def _create_live(
+        self,
+        config: DeploymentConfig,
+        *args: str,
+        deploy: bool = True,
+    ) -> Deployment:
+        deployment = self._create(config, *args)
+        self._live.append(deployment)
+        if not deploy:
+            return deployment
+        try:
+            deployment.deploy(timeout=self.DEPLOY_TIMEOUT_SECONDS)
+            is_ready = deployment.has_status(StatusDatabaseReady)
+        except (TimeoutError, TimeoutExpired) as error:
+            message = (
+                f"Deploy command timed out after {self.DEPLOY_TIMEOUT_SECONDS}s\n"
+                f"deployment.log tail:\n{deployment.deployment_log_tail()}"
+            )
+            self.release(deployment)
+            raise RuntimeError(message) from error
+        except BaseException:
+            self.release(deployment)
+            raise
+        if not is_ready:
+            message = (
+                f"Expected status `{StatusDatabaseReady}` after `deploy`\n"
+                f"deployment.log tail:\n{deployment.deployment_log_tail()}"
+            )
+            self.release(deployment)
+            raise RuntimeError(message)
+        return deployment

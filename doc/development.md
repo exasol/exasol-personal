@@ -226,8 +226,8 @@ task --list
    # Go unit tests
    task tests-unit
    
-   # Python integration tests (requires test setup)
-   task tests-integration
+   # Cloud-free launcher tests (requires test setup)
+   task tests-launcher
    ```
 
 6. **Build**:
@@ -257,8 +257,8 @@ The project uses a combination of Go unit tests and Python integration/deploymen
 # Go unit tests
 task tests-unit
 
-# Python integration tests (no cloud resources)
-task tests-integration
+# Cloud-free launcher tests
+task tests-launcher
 
 # Full deployment tests (requires AWS credentials, incurs costs)
 task tests-deployment
