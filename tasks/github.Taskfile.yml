@@ -10,9 +10,9 @@ tasks:
     cmds:
       - .github/scripts/run-deployment-tests.sh "{{.OS}}" "{{.SUITE}}"
 
-  trigger-integration-tests:
-    desc: Trigger the integration tests workflow on the current pushed commit (`task github:trigger-integration-tests OS=ubuntu-latest`)
+  trigger-launcher-tests:
+    desc: Trigger the launcher tests workflow on the current pushed commit (`task github:trigger-launcher-tests OS=ubuntu-latest`)
     vars:
       OS: '{{default "all" .OS}}'
     cmds:
-      - .github/scripts/run-integration-tests.sh "{{.OS}}"
+      - .github/scripts/run-launcher-tests.sh "{{.OS}}"

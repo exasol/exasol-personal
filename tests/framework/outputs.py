@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Final
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 OUTPUTS_FILE: Final = "deployment.json"
 
@@ -32,9 +32,15 @@ class Node(BaseModel):
     ssh: SSH
 
 
+class Connection(BaseModel):
+    host: str
+    dbPort: int  # noqa: N815
+
+
 class Outputs(BaseModel):
     deploymentId: str  # noqa: N815
-    nodes: dict[str, Node]
+    nodes: dict[str, Node] = Field(default_factory=dict)
+    connection: Connection
 
 
 def _read_outputs(deployment_dir: str) -> str:
