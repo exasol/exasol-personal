@@ -6,8 +6,14 @@ Exasol Personal periodically checks whether newer launcher and database versions
 request includes limited information such as the installed version, operating system, and
 architecture. See the [Exasol Privacy Policy](https://www.exasol.com/privacy-policy/) for details.
 
-Both checks are optional. See [Troubleshooting](troubleshooting.md#check-for-newer-versions) for the
-installation flags that disable them.
+Both checks are optional. Disable them during installation when required:
+
+```bash
+exasol install <preset> --no-launcher-version-check
+exasol install <preset> --no-db-version-check
+```
+
+The database-version option applies to cloud deployments.
 
 ## Launcher license
 
