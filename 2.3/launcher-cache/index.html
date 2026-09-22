@@ -10,31 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://exasol.github.io/exasol-personal/2.3/cloud/azure/">
+        <link rel="canonical" href="https://exasol.github.io/exasol-personal/2.3/launcher-cache/">
       
       
-        <link rel="prev" href="../aws/">
+        <link rel="prev" href="../presets/">
       
       
-        <link rel="next" href="../exoscale/">
+        <link rel="next" href="../cli-reference/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/favicon.svg">
+      <link rel="icon" href="../assets/favicon.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Azure account setup - Exasol Personal</title>
+        <title>Runtime cache - Exasol Personal</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../../stylesheets/exasol.css">
+      <link rel="stylesheet" href="../stylesheets/exasol.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#set-up-microsoft-azure" class="md-skip">
+        <a href="#runtime-cache" class="md-skip">
           Skip to content
         </a>
       
@@ -95,12 +95,12 @@
             <div class="md-banner__inner md-grid md-typeset">
               
   You are viewing the documentation for an older version of Exasol Personal.
-  <a href="../../..">
+  <a href="../..">
     <strong>Go to the latest version.</strong>
   </a>
 
             </div>
-            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../.."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL(".."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
           </aside>
         
       </div>
@@ -112,9 +112,9 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Exasol Personal" class="md-header__button md-logo" aria-label="Exasol Personal" data-md-component="logo">
+    <a href=".." title="Exasol Personal" class="md-header__button md-logo" aria-label="Exasol Personal" data-md-component="logo">
       
-  <img src="../../assets/exasol-logo.svg" alt="logo">
+  <img src="../assets/exasol-logo.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -131,7 +131,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Azure account setup
+              Runtime cache
             
           </span>
         </div>
@@ -254,9 +254,9 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Exasol Personal" class="md-nav__button md-logo" aria-label="Exasol Personal" data-md-component="logo">
+    <a href=".." title="Exasol Personal" class="md-nav__button md-logo" aria-label="Exasol Personal" data-md-component="logo">
       
-  <img src="../../assets/exasol-logo.svg" alt="logo">
+  <img src="../assets/exasol-logo.svg" alt="logo">
 
     </a>
     Exasol Personal
@@ -283,7 +283,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -357,7 +357,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../system-requirements/" class="md-nav__link">
+      <a href="../system-requirements/" class="md-nav__link">
         
   
   
@@ -385,7 +385,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/" class="md-nav__link">
+      <a href="../getting-started/" class="md-nav__link">
         
   
   
@@ -413,7 +413,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../local-deployment/" class="md-nav__link">
+      <a href="../local-deployment/" class="md-nav__link">
         
   
   
@@ -441,7 +441,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cloud-deployment/" class="md-nav__link">
+      <a href="../cloud-deployment/" class="md-nav__link">
         
   
   
@@ -473,20 +473,18 @@
       
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -507,7 +505,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -525,7 +523,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cloud-resources/" class="md-nav__link">
+      <a href="../cloud-resources/" class="md-nav__link">
         
   
   
@@ -553,7 +551,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../aws/" class="md-nav__link">
+      <a href="../cloud/aws/" class="md-nav__link">
         
   
   
@@ -578,37 +576,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Azure account setup
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../cloud/azure/" class="md-nav__link">
         
   
   
@@ -624,59 +595,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Prerequisites
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configure-subscription-access" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configure subscription access
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configure-your-computer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configure your computer
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -689,7 +607,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../exoscale/" class="md-nav__link">
+      <a href="../cloud/exoscale/" class="md-nav__link">
         
   
   
@@ -717,7 +635,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../stackit/" class="md-nav__link">
+      <a href="../cloud/stackit/" class="md-nav__link">
         
   
   
@@ -752,7 +670,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../manage-deployments/" class="md-nav__link">
+      <a href="../manage-deployments/" class="md-nav__link">
         
   
   
@@ -826,7 +744,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../connect/" class="md-nav__link">
+      <a href="../connect/" class="md-nav__link">
         
   
   
@@ -854,7 +772,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../load-data/" class="md-nav__link">
+      <a href="../load-data/" class="md-nav__link">
         
   
   
@@ -882,7 +800,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../udfs/" class="md-nav__link">
+      <a href="../udfs/" class="md-nav__link">
         
   
   
@@ -910,7 +828,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../virtual-schemas/" class="md-nav__link">
+      <a href="../virtual-schemas/" class="md-nav__link">
         
   
   
@@ -942,18 +860,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
         
           
           <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
@@ -974,7 +894,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -992,7 +912,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../scripting/" class="md-nav__link">
+      <a href="../scripting/" class="md-nav__link">
         
   
   
@@ -1020,7 +940,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../presets/" class="md-nav__link">
+      <a href="../presets/" class="md-nav__link">
         
   
   
@@ -1045,10 +965,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../launcher-cache/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime cache
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1064,6 +1011,48 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#inspect-the-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspect the cache
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#clean-a-failed-download" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clean a failed download
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1076,7 +1065,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli-reference/" class="md-nav__link">
+      <a href="../cli-reference/" class="md-nav__link">
         
   
   
@@ -1158,7 +1147,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../troubleshooting/" class="md-nav__link">
+      <a href="../troubleshooting/" class="md-nav__link">
         
   
   
@@ -1186,7 +1175,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../limitations/" class="md-nav__link">
+      <a href="../limitations/" class="md-nav__link">
         
   
   
@@ -1268,7 +1257,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../glossary/" class="md-nav__link">
+      <a href="../glossary/" class="md-nav__link">
         
   
   
@@ -1296,7 +1285,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../release-notes/" class="md-nav__link">
+      <a href="../release-notes/" class="md-nav__link">
         
   
   
@@ -1378,7 +1367,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../privacy-and-licensing/" class="md-nav__link">
+      <a href="../privacy-and-licensing/" class="md-nav__link">
         
   
   
@@ -1433,10 +1422,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
+  <a href="#inspect-the-cache" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Prerequisites
+        Inspect the cache
       
     </span>
   </a>
@@ -1444,21 +1433,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#configure-subscription-access" class="md-nav__link">
+  <a href="#clean-a-failed-download" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configure subscription access
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configure-your-computer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configure your computer
+        Clean a failed download
       
     </span>
   </a>
@@ -1485,62 +1463,28 @@
   
 
 
-<h1 id="set-up-microsoft-azure">Set up Microsoft Azure<a class="headerlink" href="#set-up-microsoft-azure" title="Permanent link">&para;</a></h1>
-<p>Prepare an Azure subscription and authenticate the Azure CLI before deploying Exasol Personal.</p>
-<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
-<p>You need an Azure subscription with sufficient permissions and quota for virtual machines,
-networking, managed disks, and storage accounts in the target region. This procedure assumes basic
-familiarity with Microsoft Entra ID and Azure role-based access control (RBAC). See the
-<a href="https://learn.microsoft.com/azure/">Azure documentation</a> for background information.</p>
-<h2 id="configure-subscription-access">Configure subscription access<a class="headerlink" href="#configure-subscription-access" title="Permanent link">&para;</a></h2>
-<p>In the Azure portal:</p>
-<ol>
-<li>Open the target subscription and its <strong>Access control (IAM)</strong> page.</li>
-<li>Give the user who will run Exasol Personal one of these roles at subscription scope:</li>
-<li>the built-in <strong>Contributor</strong> role;</li>
-<li>a custom role based on the
-     <a href="https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/azure/rbac-role.broad.json">broad example</a>; or</li>
-<li>a custom role based on the
-     <a href="https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/azure/rbac-role.minimal.json">minimal example</a>.</li>
-</ol>
-<p>Use only one option. The built-in Contributor role is usually the simplest. When creating a custom
-role from an example, replace <code>&lt;subscription-id&gt;</code> in the JSON first.</p>
-<p>The role must allow the launcher to create and delete resource groups, networks, virtual machines,
-managed disks, and storage accounts, and to read storage account keys. Conditional access,
-multi-factor authentication, or organizational approval flows may require additional steps.</p>
-<h2 id="configure-your-computer">Configure your computer<a class="headerlink" href="#configure-your-computer" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Install the <a href="https://learn.microsoft.com/cli/azure/install-azure-cli">Azure CLI</a>.</li>
-<li>
-<p>Sign in:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>az<span class="w"> </span>login
+<h1 id="runtime-cache">Runtime cache<a class="headerlink" href="#runtime-cache" title="Permanent link">&para;</a></h1>
+<p>The Exasol Launcher downloads tools and other runtime files on demand and reuses them across
+deployments. It manages these files automatically; installing, using, and managing a database does
+not require manual cache maintenance.</p>
+<h2 id="inspect-the-cache">Inspect the cache<a class="headerlink" href="#inspect-the-cache" title="Permanent link">&para;</a></h2>
+<p>When troubleshooting a reported download or integrity problem, inspect the cache without changing
+it:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>exasol<span class="w"> </span>diag<span class="w"> </span>cache
 </span></code></pre></div>
-</li>
-<li>
-<p>If you can access multiple subscriptions, select the one to use:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>az<span class="w"> </span>account<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--subscription<span class="w"> </span><span class="s2">"&lt;subscription-id-or-name&gt;"</span>
+<p>List the downloaded runtime artifacts with <code>exasol cache list</code>. See the
+<a href="../cli-reference/#exasol-cache">CLI reference</a> for the complete cache command surface.</p>
+<h2 id="clean-a-failed-download">Clean a failed download<a class="headerlink" href="#clean-a-failed-download" title="Permanent link">&para;</a></h2>
+<p>Preview and remove only artifacts that failed integrity checks:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>exasol<span class="w"> </span>cache<span class="w"> </span>clean<span class="w"> </span>--invalid<span class="w"> </span>--dry-run
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>exasol<span class="w"> </span>cache<span class="w"> </span>clean<span class="w"> </span>--invalid
 </span></code></pre></div>
-</li>
-<li>
-<p>Verify the selection:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>az<span class="w"> </span>account<span class="w"> </span>show
+<p>For a download that was interrupted before completion, use:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>exasol<span class="w"> </span>cache<span class="w"> </span>clean<span class="w"> </span>--partial-downloads<span class="w"> </span>--dry-run
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>exasol<span class="w"> </span>cache<span class="w"> </span>clean<span class="w"> </span>--partial-downloads
 </span></code></pre></div>
-</li>
-<li>
-<p>For a new subscription, register these resource providers if Azure reports registration errors:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>az<span class="w"> </span>provider<span class="w"> </span>register<span class="w"> </span>--namespace<span class="w"> </span>Microsoft.Compute
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>az<span class="w"> </span>provider<span class="w"> </span>register<span class="w"> </span>--namespace<span class="w"> </span>Microsoft.Network
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>az<span class="w"> </span>provider<span class="w"> </span>register<span class="w"> </span>--namespace<span class="w"> </span>Microsoft.Storage
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>az<span class="w"> </span>provider<span class="w"> </span>register<span class="w"> </span>--namespace<span class="w"> </span>Microsoft.Resources
-</span></code></pre></div>
-</li>
-</ol>
-<p>Azure requires an explicit deployment location:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>exasol<span class="w"> </span>install<span class="w"> </span>azure<span class="w"> </span>--location<span class="w"> </span>westeurope
-</span></code></pre></div>
-<p>For more details, see the Azure CLI guides for
-<a href="https://learn.microsoft.com/cli/azure/authenticate-azure-cli">authentication</a> and
-<a href="https://learn.microsoft.com/cli/azure/manage-azure-subscriptions-azure-cli">subscription selection</a>.</p>
+<p>The launcher downloads a removed artifact again when it is next required. Do not clear cache locks
+while another launcher process might be running.</p>
 
 
 
@@ -1576,7 +1520,7 @@ multi-factor authentication, or organizational approval flows may require additi
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../aws/" class="md-footer__link md-footer__link--prev" aria-label="Previous: AWS account setup">
+          <a href="../presets/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Presets">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1586,20 +1530,20 @@ multi-factor authentication, or organizational approval flows may require additi
                 Previous
               </span>
               <div class="md-ellipsis">
-                AWS account setup
+                Presets
               </div>
             </div>
           </a>
         
         
           
-          <a href="../exoscale/" class="md-footer__link md-footer__link--next" aria-label="Next: Exoscale account setup">
+          <a href="../cli-reference/" class="md-footer__link md-footer__link--next" aria-label="Next: CLI reference">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Exoscale account setup
+                CLI reference
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -1638,10 +1582,10 @@ multi-factor authentication, or organizational approval flows may require additi
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["announce.dismiss", "content.code.annotate", "content.code.copy", "content.code.select", "content.tooltips", "navigation.footer", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["announce.dismiss", "content.code.annotate", "content.code.copy", "content.code.select", "content.tooltips", "navigation.footer", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

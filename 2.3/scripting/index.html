@@ -10,31 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://exasol.github.io/exasol-personal/2.3/cloud/azure/">
+        <link rel="canonical" href="https://exasol.github.io/exasol-personal/2.3/scripting/">
       
       
-        <link rel="prev" href="../aws/">
+        <link rel="prev" href="../virtual-schemas/">
       
       
-        <link rel="next" href="../exoscale/">
+        <link rel="next" href="../presets/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/favicon.svg">
+      <link rel="icon" href="../assets/favicon.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Azure account setup - Exasol Personal</title>
+        <title>Script the launcher - Exasol Personal</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../../stylesheets/exasol.css">
+      <link rel="stylesheet" href="../stylesheets/exasol.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#set-up-microsoft-azure" class="md-skip">
+        <a href="#scripting-the-launcher" class="md-skip">
           Skip to content
         </a>
       
@@ -95,12 +95,12 @@
             <div class="md-banner__inner md-grid md-typeset">
               
   You are viewing the documentation for an older version of Exasol Personal.
-  <a href="../../..">
+  <a href="../..">
     <strong>Go to the latest version.</strong>
   </a>
 
             </div>
-            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../.."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL(".."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
           </aside>
         
       </div>
@@ -112,9 +112,9 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Exasol Personal" class="md-header__button md-logo" aria-label="Exasol Personal" data-md-component="logo">
+    <a href=".." title="Exasol Personal" class="md-header__button md-logo" aria-label="Exasol Personal" data-md-component="logo">
       
-  <img src="../../assets/exasol-logo.svg" alt="logo">
+  <img src="../assets/exasol-logo.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -131,7 +131,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Azure account setup
+              Script the launcher
             
           </span>
         </div>
@@ -254,9 +254,9 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Exasol Personal" class="md-nav__button md-logo" aria-label="Exasol Personal" data-md-component="logo">
+    <a href=".." title="Exasol Personal" class="md-nav__button md-logo" aria-label="Exasol Personal" data-md-component="logo">
       
-  <img src="../../assets/exasol-logo.svg" alt="logo">
+  <img src="../assets/exasol-logo.svg" alt="logo">
 
     </a>
     Exasol Personal
@@ -283,7 +283,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -357,7 +357,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../system-requirements/" class="md-nav__link">
+      <a href="../system-requirements/" class="md-nav__link">
         
   
   
@@ -385,7 +385,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/" class="md-nav__link">
+      <a href="../getting-started/" class="md-nav__link">
         
   
   
@@ -413,7 +413,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../local-deployment/" class="md-nav__link">
+      <a href="../local-deployment/" class="md-nav__link">
         
   
   
@@ -441,7 +441,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cloud-deployment/" class="md-nav__link">
+      <a href="../cloud-deployment/" class="md-nav__link">
         
   
   
@@ -473,20 +473,18 @@
       
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -507,7 +505,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -525,7 +523,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cloud-resources/" class="md-nav__link">
+      <a href="../cloud-resources/" class="md-nav__link">
         
   
   
@@ -553,7 +551,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../aws/" class="md-nav__link">
+      <a href="../cloud/aws/" class="md-nav__link">
         
   
   
@@ -578,37 +576,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Azure account setup
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../cloud/azure/" class="md-nav__link">
         
   
   
@@ -624,59 +595,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Prerequisites
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configure-subscription-access" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configure subscription access
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configure-your-computer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configure your computer
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -689,7 +607,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../exoscale/" class="md-nav__link">
+      <a href="../cloud/exoscale/" class="md-nav__link">
         
   
   
@@ -717,7 +635,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../stackit/" class="md-nav__link">
+      <a href="../cloud/stackit/" class="md-nav__link">
         
   
   
@@ -752,7 +670,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../manage-deployments/" class="md-nav__link">
+      <a href="../manage-deployments/" class="md-nav__link">
         
   
   
@@ -826,7 +744,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../connect/" class="md-nav__link">
+      <a href="../connect/" class="md-nav__link">
         
   
   
@@ -854,7 +772,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../load-data/" class="md-nav__link">
+      <a href="../load-data/" class="md-nav__link">
         
   
   
@@ -882,7 +800,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../udfs/" class="md-nav__link">
+      <a href="../udfs/" class="md-nav__link">
         
   
   
@@ -910,7 +828,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../virtual-schemas/" class="md-nav__link">
+      <a href="../virtual-schemas/" class="md-nav__link">
         
   
   
@@ -942,18 +860,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
         
           
           <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
@@ -974,7 +894,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -989,10 +909,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../scripting/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Script the launcher
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1008,6 +955,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#handle-output-and-exit-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Handle output and exit status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interpret-deployment-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interpret deployment status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#execute-sql-non-interactively" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Execute SQL non-interactively
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#unattended-approvals-version-23-and-later" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unattended approvals (version 2.3 and later)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#use-agent-skills" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use agent skills
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1020,7 +1042,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../presets/" class="md-nav__link">
+      <a href="../presets/" class="md-nav__link">
         
   
   
@@ -1048,7 +1070,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../launcher-cache/" class="md-nav__link">
+      <a href="../launcher-cache/" class="md-nav__link">
         
   
   
@@ -1076,7 +1098,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli-reference/" class="md-nav__link">
+      <a href="../cli-reference/" class="md-nav__link">
         
   
   
@@ -1158,7 +1180,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../troubleshooting/" class="md-nav__link">
+      <a href="../troubleshooting/" class="md-nav__link">
         
   
   
@@ -1186,7 +1208,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../limitations/" class="md-nav__link">
+      <a href="../limitations/" class="md-nav__link">
         
   
   
@@ -1268,7 +1290,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../glossary/" class="md-nav__link">
+      <a href="../glossary/" class="md-nav__link">
         
   
   
@@ -1296,7 +1318,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../release-notes/" class="md-nav__link">
+      <a href="../release-notes/" class="md-nav__link">
         
   
   
@@ -1378,7 +1400,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../privacy-and-licensing/" class="md-nav__link">
+      <a href="../privacy-and-licensing/" class="md-nav__link">
         
   
   
@@ -1433,10 +1455,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
+  <a href="#handle-output-and-exit-status" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Prerequisites
+        Handle output and exit status
       
     </span>
   </a>
@@ -1444,10 +1466,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#configure-subscription-access" class="md-nav__link">
+  <a href="#interpret-deployment-status" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configure subscription access
+        Interpret deployment status
       
     </span>
   </a>
@@ -1455,10 +1477,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#configure-your-computer" class="md-nav__link">
+  <a href="#execute-sql-non-interactively" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configure your computer
+        Execute SQL non-interactively
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#unattended-approvals-version-23-and-later" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unattended approvals (version 2.3 and later)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#use-agent-skills" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use agent skills
       
     </span>
   </a>
@@ -1485,62 +1529,104 @@
   
 
 
-<h1 id="set-up-microsoft-azure">Set up Microsoft Azure<a class="headerlink" href="#set-up-microsoft-azure" title="Permanent link">&para;</a></h1>
-<p>Prepare an Azure subscription and authenticate the Azure CLI before deploying Exasol Personal.</p>
-<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
-<p>You need an Azure subscription with sufficient permissions and quota for virtual machines,
-networking, managed disks, and storage accounts in the target region. This procedure assumes basic
-familiarity with Microsoft Entra ID and Azure role-based access control (RBAC). See the
-<a href="https://learn.microsoft.com/azure/">Azure documentation</a> for background information.</p>
-<h2 id="configure-subscription-access">Configure subscription access<a class="headerlink" href="#configure-subscription-access" title="Permanent link">&para;</a></h2>
-<p>In the Azure portal:</p>
-<ol>
-<li>Open the target subscription and its <strong>Access control (IAM)</strong> page.</li>
-<li>Give the user who will run Exasol Personal one of these roles at subscription scope:</li>
-<li>the built-in <strong>Contributor</strong> role;</li>
-<li>a custom role based on the
-     <a href="https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/azure/rbac-role.broad.json">broad example</a>; or</li>
-<li>a custom role based on the
-     <a href="https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/azure/rbac-role.minimal.json">minimal example</a>.</li>
-</ol>
-<p>Use only one option. The built-in Contributor role is usually the simplest. When creating a custom
-role from an example, replace <code>&lt;subscription-id&gt;</code> in the JSON first.</p>
-<p>The role must allow the launcher to create and delete resource groups, networks, virtual machines,
-managed disks, and storage accounts, and to read storage account keys. Conditional access,
-multi-factor authentication, or organizational approval flows may require additional steps.</p>
-<h2 id="configure-your-computer">Configure your computer<a class="headerlink" href="#configure-your-computer" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Install the <a href="https://learn.microsoft.com/cli/azure/install-azure-cli">Azure CLI</a>.</li>
-<li>
-<p>Sign in:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>az<span class="w"> </span>login
+<h1 id="scripting-the-launcher">Scripting the launcher<a class="headerlink" href="#scripting-the-launcher" title="Permanent link">&para;</a></h1>
+<p>Exasol Launcher commands are designed to be usable from scripts and agents. Select the deployment
+explicitly with <code>--deployment</code> or <code>--deployment-dir</code> when a script must not depend on its working
+directory. See <a href="../manage-deployments/">Manage deployments</a> for selection rules.</p>
+<h2 id="handle-output-and-exit-status">Handle output and exit status<a class="headerlink" href="#handle-output-and-exit-status" title="Permanent link">&para;</a></h2>
+<p>Successful primary output is written to standard output. Progress, operational notices, prompts,
+and text guidance are written to standard error, so redirect or parse the streams separately.</p>
+<p>A non-interactive invocation of a command that supports <code>--json</code> writes exactly one parseable JSON
+value to standard output when it succeeds. Operational notices can still appear on standard error.
+Check each command's help to see whether JSON output is available.</p>
+<p>Expected failures, including invalid input and unsupported operations, are reported on standard
+error and exit with status <code>1</code>; successful commands exit with status <code>0</code>. A status reported inside a
+successful JSON result is data, not the process exit status. <code>exasol connect --json</code> is a special
+case: a SQL failure produces one structured JSON result on standard output and also exits with
+status <code>1</code>.</p>
+<p>For example, keep the JSON stream clean while preserving diagnostics:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">if</span><span class="w"> </span><span class="nv">status_json</span><span class="o">=</span><span class="k">$(</span>exasol<span class="w"> </span>status<span class="w"> </span>--deployment<span class="w"> </span>staging<span class="w"> </span>--json<span class="k">)</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nb">printf</span><span class="w"> </span><span class="s1">'%s\n'</span><span class="w"> </span><span class="s2">"</span><span class="nv">$status_json</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.status'</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">else</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nb">printf</span><span class="w"> </span><span class="s1">'Could not inspect staging\n'</span><span class="w"> </span>&gt;<span class="p">&amp;</span><span class="m">2</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">fi</span>
 </span></code></pre></div>
-</li>
-<li>
-<p>If you can access multiple subscriptions, select the one to use:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>az<span class="w"> </span>account<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--subscription<span class="w"> </span><span class="s2">"&lt;subscription-id-or-name&gt;"</span>
+<h2 id="interpret-deployment-status">Interpret deployment status<a class="headerlink" href="#interpret-deployment-status" title="Permanent link">&para;</a></h2>
+<p><code>exasol status --json</code> reports one of these values in its <code>status</code> field:</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>not_initialized</code></td>
+<td>The selected deployment directory has not been initialized.</td>
+</tr>
+<tr>
+<td><code>initialized</code></td>
+<td>Configuration exists and is ready to deploy.</td>
+</tr>
+<tr>
+<td><code>operation_in_progress</code></td>
+<td>Another deployment operation holds the deployment lock.</td>
+</tr>
+<tr>
+<td><code>interrupted</code></td>
+<td>A deployment operation was interrupted before completion.</td>
+</tr>
+<tr>
+<td><code>stopped</code></td>
+<td>The deployment exists but its database is stopped.</td>
+</tr>
+<tr>
+<td><code>running</code></td>
+<td>The deployment infrastructure is running; database readiness was not established.</td>
+</tr>
+<tr>
+<td><code>deployment_failed</code></td>
+<td>Provisioning or installation failed.</td>
+</tr>
+<tr>
+<td><code>database_connection_failed</code></td>
+<td>The deployment is running, but the database did not accept the status check.</td>
+</tr>
+<tr>
+<td><code>database_ready</code></td>
+<td>The database is running and accepts connections.</td>
+</tr>
+</tbody>
+</table>
+<p>Treat the value as an explicit state instead of relying on its order in this table. The JSON result
+can also contain <code>message</code> and <code>error</code> fields with recovery context.</p>
+<h2 id="execute-sql-non-interactively">Execute SQL non-interactively<a class="headerlink" href="#execute-sql-non-interactively" title="Permanent link">&para;</a></h2>
+<p>Pass SQL directly, read it from a file, or pipe it through standard input:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>exasol<span class="w"> </span>connect<span class="w"> </span>--json<span class="w"> </span>--command<span class="w"> </span><span class="s2">"SELECT 1; SELECT 2"</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>exasol<span class="w"> </span>connect<span class="w"> </span>--json<span class="w"> </span>--file<span class="w"> </span>report.sql
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nb">printf</span><span class="w"> </span><span class="s1">'SELECT 1;\nSELECT 2;\n'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>exasol<span class="w"> </span>connect<span class="w"> </span>--json
 </span></code></pre></div>
-</li>
-<li>
-<p>Verify the selection:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>az<span class="w"> </span>account<span class="w"> </span>show
-</span></code></pre></div>
-</li>
-<li>
-<p>For a new subscription, register these resource providers if Azure reports registration errors:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>az<span class="w"> </span>provider<span class="w"> </span>register<span class="w"> </span>--namespace<span class="w"> </span>Microsoft.Compute
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>az<span class="w"> </span>provider<span class="w"> </span>register<span class="w"> </span>--namespace<span class="w"> </span>Microsoft.Network
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>az<span class="w"> </span>provider<span class="w"> </span>register<span class="w"> </span>--namespace<span class="w"> </span>Microsoft.Storage
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>az<span class="w"> </span>provider<span class="w"> </span>register<span class="w"> </span>--namespace<span class="w"> </span>Microsoft.Resources
-</span></code></pre></div>
-</li>
-</ol>
-<p>Azure requires an explicit deployment location:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>exasol<span class="w"> </span>install<span class="w"> </span>azure<span class="w"> </span>--location<span class="w"> </span>westeurope
-</span></code></pre></div>
-<p>For more details, see the Azure CLI guides for
-<a href="https://learn.microsoft.com/cli/azure/authenticate-azure-cli">authentication</a> and
-<a href="https://learn.microsoft.com/cli/azure/manage-azure-subscriptions-azure-cli">subscription selection</a>.</p>
+<p><code>--command</code> and <code>--file</code> are mutually exclusive. These non-interactive JSON invocations execute
+statements in order, stop at the first failed statement, and emit one JSON document for the whole
+invocation. That document retains earlier successful statement records and adds a structured error
+to the failed record. See <a href="../connect/">Connect to the database</a> for result formats, row limits, and
+interactive use.</p>
+<h2 id="unattended-approvals-version-23-and-later">Unattended approvals (version 2.3 and later)<a class="headerlink" href="#unattended-approvals-version-23-and-later" title="Permanent link">&para;</a></h2>
+<p>Use the global <code>--auto-approve</code> option when a script intentionally permits actions that normally
+ask for confirmation.</p>
+<p>Without an attached terminal, confirmation-based deployment and script-language-container actions
+proceed automatically instead of waiting for input. This includes destructive actions such as
+<code>destroy</code> and <code>remove</code>, so do not invoke them as a way to test whether approval is available.
+Input validation and other safety checks still apply.</p>
+<p>Host runtime preparation is the exception because it can change shared host state, for example by
+installing Podman. An unattended command that needs such a change fails unless <code>--auto-approve</code> is
+present; the error explains how to approve the change or perform it manually. See
+<a href="../local-deployment/#windows-host-preparation">Run Exasol locally</a> for the host preparation flow.</p>
+<h2 id="use-agent-skills">Use agent skills<a class="headerlink" href="#use-agent-skills" title="Permanent link">&para;</a></h2>
+<p>Exasol publishes agent skills for compatible coding agents. Follow
+<a href="../getting-started/#install-with-an-ai-agent">Install with an AI agent</a> to install the skills and let
+an agent guide the setup workflow.</p>
 
 
 
@@ -1576,7 +1662,7 @@ multi-factor authentication, or organizational approval flows may require additi
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../aws/" class="md-footer__link md-footer__link--prev" aria-label="Previous: AWS account setup">
+          <a href="../virtual-schemas/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Virtual schemas">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1586,20 +1672,20 @@ multi-factor authentication, or organizational approval flows may require additi
                 Previous
               </span>
               <div class="md-ellipsis">
-                AWS account setup
+                Virtual schemas
               </div>
             </div>
           </a>
         
         
           
-          <a href="../exoscale/" class="md-footer__link md-footer__link--next" aria-label="Next: Exoscale account setup">
+          <a href="../presets/" class="md-footer__link md-footer__link--next" aria-label="Next: Presets">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Exoscale account setup
+                Presets
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -1638,10 +1724,10 @@ multi-factor authentication, or organizational approval flows may require additi
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["announce.dismiss", "content.code.annotate", "content.code.copy", "content.code.select", "content.tooltips", "navigation.footer", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["announce.dismiss", "content.code.annotate", "content.code.copy", "content.code.select", "content.tooltips", "navigation.footer", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>
