@@ -1,10 +1,10 @@
 # Version checking
 
-This document describes the **update-checking** features in Exasol Personal.
+This document describes the **update-checking** features of the Exasol Launcher and the deployments it creates.
 
 There are three related mechanisms:
 
-- **Launcher version check:** the Exasol Personal launcher checks whether a newer launcher release is available.
+- **Launcher version check:** the Exasol Launcher checks whether a newer launcher release is available.
 - **Database version check:** during installation, the launcher can enable the Exasol database’s own daily version check.
 - **Host-side launcher version check:** a temporary fallback on the deployed host system can periodically check for newer launcher releases without requiring CLI usage.
 
@@ -72,7 +72,7 @@ Implicit update hints that can appear while running other commands are metadata,
 
 Some Exasol database releases include an internal, non-disruptive **daily version check** (performed by the database/cluster services).
 
-When that capability is available, Exasol Personal configures it during installation so new deployments gain update awareness “out of the box”, while still allowing operators to opt out.
+When that capability is available, the launcher configures it during installation so new deployments gain update awareness “out of the box”, while still allowing operators to opt out.
 
 ### Default behavior and CLI opt-out
 

@@ -10,10 +10,18 @@ Notable user-facing changes to Exasol Personal are documented here.
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each
   preset.
 
-- Added published guidance for scripting the launcher, cloud resource costs, release notes, and
-  product terminology.
+- Added published guidance for scripting the launcher, cloud resource costs, release notes,
+  product terminology, and troubleshooting. The glossary defines the terms used across the
+  documentation, and abbreviations such as SLC and UDF show their meaning on hover. The
+  troubleshooting page is organized by symptom and covers launcher `PATH`, local container-runtime,
+  port-conflict, deployment-lock, and cloud authentication problems.
 
 ### Changed
+
+- `exasol --help` now names the Exasol Launcher, rather than Exasol Personal, as what selects the
+  default deployment directory. The documentation follows the same distinction: Exasol Launcher is
+  the command-line tool, and Exasol Personal is the product and the license the database is
+  provided under.
 
 ### Fixed
 

@@ -75,13 +75,19 @@ nav:
   - Help:
       - Troubleshooting: troubleshooting.md
       - Limitations: limitations.md
-  - Reference:
       - Glossary: glossary.md
-      - Release notes: release-notes.md
   - Project information:
+      - Release notes: release-notes.md
       - Privacy and licensing: privacy-and-licensing.md
 
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
 markdown_extensions:
+  - abbr
   - admonition
   - attr_list
   - md_in_html
@@ -99,6 +105,9 @@ markdown_extensions:
   - pymdownx.snippets:
       base_path:
         - !relative $config_dir/../CHANGELOG.md
+        - !relative $config_dir
+      auto_append:
+        - includes/abbreviations.md
       check_paths: true
   - pymdownx.superfences
   - pymdownx.tabbed:

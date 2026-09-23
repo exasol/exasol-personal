@@ -1,6 +1,6 @@
 # Presets
 
-Exasol Personal uses presets to provision infrastructure and install the database. A preset is a
+The Exasol Launcher uses presets to provision infrastructure and install the database. A preset is a
 self-contained directory of templates and configuration files.
 
 Each deployment combines:

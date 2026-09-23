@@ -2,7 +2,7 @@
 
 ## Version checks
 
-Exasol Personal periodically checks whether newer launcher and database versions are available. The
+The Exasol Launcher periodically checks for newer launcher and database versions. The
 request includes limited information such as the installed version, operating system, and
 architecture. See the [Exasol Privacy Policy](https://www.exasol.com/privacy-policy/) for details.
 
@@ -24,7 +24,7 @@ distribute it under those terms.
 ## Database license
 
 Exasol Database is proprietary software provided by Exasol AG and is free for personal use. By
-deploying it with `exasol install`, you accept the
+deploying it with the Exasol Launcher, you accept the
 [Exasol Personal End User License Agreement](https://www.exasol.com/terms-and-conditions/#h-exasol-personal-end-user-license-agreement).
 
 ## More resources
