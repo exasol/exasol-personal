@@ -52,7 +52,7 @@ This repository has two documentation trees. `user-docs/` holds the published us
 
 **[doc/architecture.md](doc/architecture.md)** - Design philosophy, technical decisions, high-level workflows
 
-**[doc/glossary.md](doc/glossary.md)** - Term definitions (link to architecture for depth)
+**[doc/glossary.md](doc/glossary.md)** - Contributor term definitions (user-facing terms are defined in the user glossary)
 
 **[doc/best_practices.md](doc/best_practices.md)** - Project-specific coding conventions and guidelines
 
