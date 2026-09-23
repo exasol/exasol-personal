@@ -10,8 +10,10 @@ Notable user-facing changes to Exasol Personal are documented here.
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each
   preset.
 
-- Added published guidance for scripting the launcher, cloud resource costs, release notes, and
-  product terminology.
+- Added published guidance for scripting the launcher, cloud resource costs, release notes,
+  product terminology, and troubleshooting. The troubleshooting page is organized by symptom and
+  covers launcher `PATH`, local container-runtime, port-conflict, deployment-lock, and cloud
+  authentication problems.
 
 ### Changed
 

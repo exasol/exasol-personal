@@ -46,4 +46,6 @@ exasol install <provider> --cluster-size <number> --instance-type <type>
 ```
 
 If an installation is interrupted, resources already created are not removed automatically. Follow
-the cleanup guidance in [Troubleshooting](troubleshooting.md) to avoid ongoing charges.
+the cleanup guidance in
+[The installation was interrupted](troubleshooting.md#the-installation-was-interrupted) to avoid
+ongoing charges.
