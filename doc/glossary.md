@@ -1,15 +1,12 @@
 # Glossary
 
-This document defines key terms and concepts for consistent terminology usage across documentation, code, and discussions about Exasol Personal.
+This document defines the internal terms contributors use across code, contributor documentation, and design discussions. For architectural context and detailed explanations, see [Architecture](architecture.md).
 
-For architectural context and detailed explanations, see [Architecture](architecture.md).
+## Shared Terms
 
-## Core Concepts
+Terms that users and contributors share have a single definition in the [user glossary](../user-docs/content/glossary.md): [Exasol Personal](../user-docs/content/glossary.md#exasol-personal), [Exasol Launcher](../user-docs/content/glossary.md#exasol-launcher), [deployment](../user-docs/content/glossary.md#deployment), [deployment directory](../user-docs/content/glossary.md#deployment-directory), [node](../user-docs/content/glossary.md#node), [preset](../user-docs/content/glossary.md#preset), [infrastructure preset](../user-docs/content/glossary.md#infrastructure-preset), and [installation preset](../user-docs/content/glossary.md#installation-preset). Use those definitions in contributor material too, rather than restating them here. For how the launcher uses the deployment directory internally, see [Architecture: State and Configuration Management](architecture.md#state-and-configuration-management).
 
-### Deployment Directory
-A self-contained directory with all configuration, state, and credentials for managing a specific Exasol deployment. Contains infrastructure-as-code files, state, and secrets. Must be preserved until destruction. Should not be version controlled.
-
-See [Architecture: State and Configuration Management](architecture.md#state-and-configuration-management).
+## Deployment Internals
 
 ### Deployment Version
 The launcher version that was persisted when a deployment directory was created. It is an immutable marker that defines the deployment’s compatibility contract.
@@ -21,40 +18,30 @@ A mandatory validation performed before executing any command that operates on a
 
 See [Deployment directory compatibility](deployment_compatibility.md).
 
-### Infrastructure Preset
-The infrastructure template selected for deployment. It defines the infrastructure layout and provisioning approach. Infrastructure presets can target cloud or non-cloud environments.
+### Workflow State
+The lifecycle state a deployment directory records between command invocations, and what `status` reports.
 
-### Installation Preset
-The installation template that defines how software is installed on provisioned infrastructure. It should ideally be independent of the infrastructure preset and work with any.
-
-### Active Deployment
-A successfully provisioned and running Exasol deployment, including deployment resources, database process, and valid state.
-
-### Running Database
-An initialized and operational Exasol database ready to accept SQL connections and queries.
-
-## Infrastructure Components
-
-### Node
-A single compute instance (virtual machine) running Exasol database software. Has a public IP address, SSH access, and may be part of a multi-node cluster.
-
-### Database Instance
-The complete Exasol database system, including one or more nodes, storage volumes, network configuration, and security rules.
-
-See [Architecture: Cloud Infrastructure Architecture](architecture.md#cloud-infrastructure-architecture).
-
-## State Management
+See [Deployment state & locking](launcher_state.md).
 
 ### State Files
-Files tracking deployment state, including infrastructure state, SSH keys, credentials, and resource identifiers.
+The files through which the launcher carries deployment state across invocations: the persistent workflow state, the temporary deployment lock, and the plain-text deployment version marker.
+
+See [Deployment state & locking](launcher_state.md).
 
 ### Post-Deployment Scripts
-Scripts executed after infrastructure provisioning to initialize the database and perform setup tasks.
+Scripts an installation preset executes on provisioned infrastructure to initialize the database and perform setup tasks. They may run node-local (unattended) or be driven by the launcher.
+
+See [Preset development](presets.md#installation-preset).
+
+### Database Instance
+The complete Exasol database system of one deployment: its nodes together with their storage, network configuration, and access rules.
+
+See [Architecture: Cloud Infrastructure Architecture](architecture.md#cloud-infrastructure-architecture).
 
 ## Connection Types
 
 ### Shell Connection
-Secure SSH connection to a node for system-level access and infrastructure management using deployment-specific SSH keys.
+Interactive system-level access to a deployment’s node, over SSH with deployment-specific keys on cloud deployments.
 
 ### SQL Connection
 Database connection using the database protocol and credentials for query execution and data management.
