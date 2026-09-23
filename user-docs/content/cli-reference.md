@@ -153,7 +153,6 @@ Usage:
 Flags:
   -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
-      --tofu-update-lockfile       Allow OpenTofu to update .terraform.lock.hcl during init
   -v, --verbose                    Enable verbose output for deployment actions
 ```
 
@@ -330,7 +329,6 @@ Flags:
   -d, --deployment string           Select <home>/.exasol/personal/deployments/<name> as the deployment directory
       --deployment-dir file-path    Override the deployment directory selected automatically
       --no-launcher-version-check   Disable automatic version checking for new launcher releases
-      --tofu-update-lockfile        Allow OpenTofu to update .terraform.lock.hcl during init
   -v, --verbose                     Enable verbose output for deployment actions
 
 Examples:
