@@ -46,6 +46,7 @@ full syntax.
 - [Connect to the database](connect.md) and [load the sample data](load-data.md).
 - Learn how to [manage one or more deployments](manage-deployments.md).
 - Check the [system requirements](system-requirements.md) and [product limitations](limitations.md).
+- Look up a term in the [glossary](glossary.md).
 
 ## Key capabilities
 
