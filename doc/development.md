@@ -1,6 +1,6 @@
 # Development Guide
 
-This guide provides detailed instructions for developers working on the Exasol Personal project.
+This guide provides detailed instructions for developers working on the Exasol Launcher and the rest of this repository.
 
 ## Prerequisites
 

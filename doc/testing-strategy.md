@@ -1,6 +1,6 @@
 # Testing Strategy
 
-This document defines the testing goals and boundaries for Exasol Personal. Test structure, tooling, and CI behavior should follow from these goals.
+This document defines the testing goals and boundaries for the Exasol Launcher. Test structure, tooling, and CI behavior should follow from these goals.
 
 ## Goals
 
@@ -10,32 +10,32 @@ The test strategy optimizes for the following outcomes, in this order:
 2. **Keep the project agile while internals evolve.** Internal refactoring should not require broad rewrites of product-level tests when user-visible behavior is unchanged.
 3. **Give developers fast feedback.** Normal pull requests should receive useful test feedback within roughly 15 minutes and should not require cloud provisioning.
 4. **Provide confidence in real deployments.** Supported deployment targets must be validated with live end-to-end tests where simulation is not sufficient.
-5. **Keep contributors autonomous.** External contributors should be able to implement and test Exasol Personal itself without access to proprietary Exasol Database sources or Exasol-managed credentials.
+5. **Keep contributors autonomous.** External contributors should be able to implement and test the launcher itself without access to proprietary Exasol Database sources or Exasol-managed credentials.
 
 Source-code coverage is a supporting signal only. Coverage of product requirements and scenarios matters more than line coverage.
 
 ## Testing Boundary
 
-The test responsibility of this repository follows the implementation responsibility of Exasol Personal.
+The test responsibility of this repository follows the implementation responsibility of the launcher.
 
-Everything implemented by Exasol Personal should be tested here. This includes, for example:
+Everything implemented by the launcher should be tested here. This includes, for example:
 
 - CLI behavior and output contracts;
 - deployment orchestration and lifecycle management;
 - configuration and presets;
 - provider integrations;
 - local deployment behavior;
-- Exasol Personal features for enabling or managing capabilities such as SLCs or AdminUI.
+- launcher features for enabling or managing capabilities such as SLCs or AdminUI.
 
 The deployed Exasol Database environment is part of the overall user experience, but its full correctness is outside the scope of this repository.
 
-Exasol Personal tests should perform enough smoke validation to prove that Exasol Personal completed its job successfully. Examples include verifying that the deployed database and expected adjunct services are reachable and basically operational, or that a capability enabled by Exasol Personal can perform a minimal smoke operation.
+Tests should perform enough smoke validation to prove that the launcher completed its job successfully. Examples include verifying that the deployed database and expected adjunct services are reachable and basically operational, or that a capability enabled by the launcher can perform a minimal smoke operation.
 
 They should not attempt comprehensive validation of Exasol Database, SQL semantics, UDF behavior, C4, COS, AdminUI, or other deployed components. Such testing belongs to a separate, deployment-agnostic system test suite that can be pointed at an existing deployment regardless of how that deployment was created.
 
 A useful rule is:
 
-> If the behavior is implemented by Exasol Personal, its primary regression test belongs here. If the behavior establishes the correctness of a component merely deployed by Exasol Personal, only the integration smoke check belongs here.
+> If the behavior is implemented by the launcher, its primary regression test belongs here. If the behavior establishes the correctness of a component merely deployed by the launcher, only the integration smoke check belongs here.
 
 ## Product Specifications and Test Evidence
 
@@ -79,7 +79,7 @@ Expected command failures such as invalid input remain part of normal functional
 
 The test suite should be easy to navigate from the product model and CLI structure, but it should not force commands to be tested in isolation.
 
-Exasol Personal is stateful orchestration software. Many meaningful behaviors can only be observed after establishing a particular deployment state. It is therefore valid for one scenario to execute several commands to create its preconditions and verify its result.
+The launcher is stateful orchestration software. Many meaningful behaviors can only be observed after establishing a particular deployment state. It is therefore valid for one scenario to execute several commands to create its preconditions and verify its result.
 
 Two complementary forms are useful:
 
