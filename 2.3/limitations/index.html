@@ -1115,6 +1115,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limitations
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1132,6 +1150,75 @@
 
       </a>
       
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#available-after-a-setup-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available after a setup step
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#not-available" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Not available
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1169,7 +1256,7 @@
   <span class="md-ellipsis">
     
   
-    Reference
+    Project information
   
 
     
@@ -1185,39 +1272,11 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Reference
+    Project information
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../glossary/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Glossary
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
             
               
                 
@@ -1246,60 +1305,6 @@
   
 
               
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
-        
-          
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Project information
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Project information
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
             
               
                 
@@ -1356,6 +1361,36 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#available-after-a-setup-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available after a setup step
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#not-available" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Not available
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1375,20 +1410,26 @@
 
 
 <h1 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h1>
-<p>Local deployments are intended for development and exploration. They have these differences from
-cloud deployments:</p>
+<p>Local deployments are intended for development and exploration. Cloud deployments support <abbr title="User-defined functions">UDFs</abbr>,
+virtual schemas, Exasol Admin, and multiple database nodes; the differences below apply to local
+deployments only.</p>
+<h2 id="available-after-a-setup-step">Available after a setup step<a class="headerlink" href="#available-after-a-setup-step" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Script languages:</strong> UDFs are supported, but no script language container is installed by
-  default. Install one with <code>exasol slc install &lt;language&gt;</code>. Cloud deployments include the standard
-  containers.</li>
-<li><strong>Virtual schemas:</strong> Virtual schemas require an adapter runtime and dependencies. JDBC adapters
-  need a Java SLC and staged adapter and driver files. See <a href="../virtual-schemas/">Virtual schemas</a>.</li>
-<li><strong>Administration UI:</strong> Exasol Admin is not available on local deployments.</li>
-<li><strong>Cluster size:</strong> A local deployment always runs as a single node.</li>
-<li><strong>Shell access:</strong> The runtime-managed <code>shell</code> commands for local deployments are available only on
-  macOS.</li>
+<li><strong>Script languages:</strong> <abbr title="User-defined functions">UDFs</abbr> are supported, but no script language container is installed by
+  default. Install the one you need with <code>exasol slc install &lt;language&gt;</code>. Cloud deployments include
+  the standard containers. See <a href="../udfs/"><abbr title="User-defined functions">UDFs</abbr> and script language containers</a>.</li>
+<li><strong>Virtual schemas:</strong> Supported once the adapter runtime and the adapter's dependencies are in
+  place. <abbr title="Java Database Connectivity">JDBC</abbr> adapters need a Java <abbr title="Script language container">SLC</abbr> and staged adapter and driver files. See
+  <a href="../virtual-schemas/">Virtual schemas</a>.</li>
 </ul>
-<p>Cloud deployments support UDFs, virtual schemas, Exasol Admin, and multiple database nodes.</p>
+<h2 id="not-available">Not available<a class="headerlink" href="#not-available" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Administration UI:</strong> Exasol Admin is available on cloud deployments only. See
+  <a href="../connect/#use-exasol-admin">Use Exasol Admin</a>.</li>
+<li><strong>Multiple nodes:</strong> A local deployment always runs as a single node.</li>
+<li><strong>Shell access:</strong> <code>exasol shell host</code> and <code>exasol shell container</code> work for local deployments only
+  on macOS.</li>
+</ul>
 
 
 

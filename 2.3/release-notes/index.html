@@ -1125,6 +1125,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1159,7 +1187,7 @@
   <span class="md-ellipsis">
     
   
-    Reference
+    Project information
   
 
     
@@ -1175,39 +1203,11 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Reference
+    Project information
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../glossary/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Glossary
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
             
               
                 
@@ -1588,60 +1588,6 @@
   
 
               
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
-        
-          
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Project information
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Project information
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
             
               
                 
@@ -2035,13 +1981,16 @@
 <h3 id="added">Added<a class="headerlink" href="#added" title="Permanent link">&para;</a></h3>
 <ul>
 <li>
-<p>Added a <strong>CLI reference</strong> page to the user documentation, listing every command and option of the
+<p>Added a <strong><abbr title="Command-line interface">CLI</abbr> reference</strong> page to the user documentation, listing every command and option of the
   launcher, including the preset-specific flags that <code>exasol install</code> and <code>exasol init</code> add for each
   preset.</p>
 </li>
 <li>
-<p>Added published guidance for scripting the launcher, cloud resource costs, release notes, and
-  product terminology.</p>
+<p>Added published guidance for scripting the launcher, cloud resource costs, release notes,
+  product terminology, and troubleshooting. The glossary defines the terms used across the
+  documentation, and abbreviations such as <abbr title="Script language container">SLC</abbr> and <abbr title="User-defined function">UDF</abbr> show their meaning on hover. The
+  troubleshooting page is organized by symptom and covers launcher <code>PATH</code>, local container-runtime,
+  port-conflict, deployment-lock, and cloud authentication problems.</p>
 </li>
 </ul>
 <h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
@@ -2065,7 +2014,7 @@
 <p>Enabled Virtual Schema support in local deployments when the required adapter runtime and dependencies are installed.</p>
 </li>
 <li>
-<p>Added <code>rust</code> as an alias of <code>exasol slc install</code> and <code>exasol slc update</code>, which installs the Rust script language container required by Rust UDFs. The launcher resolves the latest <a href="https://github.com/exasol-labs/language-container-rs">language-container-rs</a> release, picks the asset matching this machine's CPU architecture, and installs it under the alias <code>RUST</code>. It behaves like every other <code>slc install &lt;alias&gt;</code> call, including the restart confirmation, <code>--auto-approve</code>, and <code>--no-restart</code>. <code>exasol slc update rust</code> re-resolves the latest release and does nothing when it has not moved, and <code>exasol slc remove rust</code> and <code>exasol slc list</code> work as they do for any other container.</p>
+<p>Added <code>rust</code> as an alias of <code>exasol slc install</code> and <code>exasol slc update</code>, which installs the Rust script language container required by Rust <abbr title="User-defined functions">UDFs</abbr>. The launcher resolves the latest <a href="https://github.com/exasol-labs/language-container-rs">language-container-rs</a> release, picks the asset matching this machine's CPU architecture, and installs it under the alias <code>RUST</code>. It behaves like every other <code>slc install &lt;alias&gt;</code> call, including the restart confirmation, <code>--auto-approve</code>, and <code>--no-restart</code>. <code>exasol slc update rust</code> re-resolves the latest release and does nothing when it has not moved, and <code>exasol slc remove rust</code> and <code>exasol slc list</code> work as they do for any other container.</p>
 </li>
 </ul>
 <p>Example: <code>exasol slc install rust --auto-approve</code></p>
@@ -2115,7 +2064,7 @@
 <p>Example: <code>exasol install local --help</code> reports "Infrastructure preset <code>local</code>" with <code>Compatible installation presets: local</code>, and suggests <code>exasol install local local</code>.</p>
 <ul>
 <li>Local deployments now select and persist a concrete database port during initialization, keep it stable across restarts, allow port changes while stopped, and provide actionable recovery commands when the configured port is unavailable.</li>
-<li>Documented named deployments, the <code>exasol slc</code> command group, and <code>exasol diag local</code> in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers UDFs and script language containers, and the Limitations section no longer states that UDFs are unavailable on local deployments.</li>
+<li>Documented named deployments, the <code>exasol slc</code> command group, and <code>exasol diag local</code> in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers <abbr title="User-defined functions">UDFs</abbr> and script language containers, and the Limitations section no longer states that <abbr title="User-defined functions">UDFs</abbr> are unavailable on local deployments.</li>
 <li>macOS local deployments now run the same Podman installation used on Linux inside a managed VM. The VM launcher is responsible only for VM lifecycle, port forwarding, shared files, and command execution; deployment state no longer exposes its SSH transport.</li>
 <li>Cloud deployments now provision Ubuntu 24.04 LTS instances instead of Ubuntu 22.04 LTS on all supported cloud providers (AWS, Azure, Exoscale, STACKIT). Ubuntu 22.04 only offers a Podman version that predates the Quadlet systemd generator, which Data Lakehouse Turbo requires.</li>
 </ul>
@@ -2143,7 +2092,7 @@
 <li><code>exasol destroy</code> and <code>exasol remove</code> no longer report success without doing anything when no terminal is attached. Such a run now proceeds as though <code>--auto-approve</code> had been passed. Detection of an attached terminal was also corrected, so a command redirected from the null device is treated as unattended rather than interactive.</li>
 <li><code>exasol deployments list</code> now reports the same live status as <code>exasol status</code> instead of treating persisted workflow state as current state. Deployment checks run concurrently under one five-second bound.</li>
 <li><code>exasol status</code> now stops waiting after five seconds by default instead of hanging indefinitely on an unresponsive deployment. Use <code>--timeout &lt;seconds&gt;</code> to select another positive limit, for example <code>exasol status --timeout 10</code>.</li>
-<li>Fixed <code>exasol connect</code> omitting its shell exit hint when standard input was piped and emitting it for interactive <code>--json</code> sessions. The hint now follows the CLI output contract: it is written to stderr for text shell sessions and suppressed under <code>--json</code>.</li>
+<li>Fixed <code>exasol connect</code> omitting its shell exit hint when standard input was piped and emitting it for interactive <code>--json</code> sessions. The hint now follows the <abbr title="Command-line interface">CLI</abbr> output contract: it is written to stderr for text shell sessions and suppressed under <code>--json</code>.</li>
 <li>Fixed Data Lakehouse Turbo activation failing on cloud deployments. Activating the feature in the AdminUI hung on a spinner and reported <code>Activation status for database Exasol could not be retrieved</code>. Podman is now installed during cloud-init on all supported cloud providers (AWS, Azure, Exoscale, STACKIT), and the provisioned hosts now ship a Podman release that includes the Quadlet systemd generator the feature depends on. Deployments created before this change must be recreated to pick it up.</li>
 <li>Cloud deployments now fail with a clear error when a node's SSH host key cannot be retrieved, instead of stalling the installation with no diagnostic.</li>
 <li>Cluster synchronization during cloud deployments now gives up with a clear error when a node cannot be reached, instead of retrying indefinitely.</li>
@@ -2164,9 +2113,9 @@
 </ul>
 <p>The list helps users distinguish the default deployment from named deployments and see at a glance which ones are deployed and running.</p>
 <ul>
-<li>Added the <code>exasol slc</code> command group (<code>install</code>, <code>list</code>, <code>update</code>, <code>remove</code>) to manage official script language containers (SLCs) in local deployments. Local deployments ship without any SLC, so UDFs in a given language only run once its container is installed.</li>
+<li>Added the <code>exasol slc</code> command group (<code>install</code>, <code>list</code>, <code>update</code>, <code>remove</code>) to manage official script language containers (<abbr title="Script language containers">SLCs</abbr>) in local deployments. Local deployments ship without any <abbr title="Script language container">SLC</abbr>, so <abbr title="User-defined functions">UDFs</abbr> in a given language only run once its container is installed.</li>
 </ul>
-<p>Example: <code>exasol slc install python3</code> installs the official Python 3 SLC so <code>PYTHON3</code> UDFs work; <code>exasol slc list</code> shows what is installed.</p>
+<p>Example: <code>exasol slc install python3</code> installs the official Python 3 <abbr title="Script language container">SLC</abbr> so <code>PYTHON3</code> <abbr title="User-defined functions">UDFs</abbr> work; <code>exasol slc list</code> shows what is installed.</p>
 <ul>
 <li>Added <code>exasol diag local</code> to report local deployment runtime and reachability state — VM status, guest IP, bound host ports, per-port reachability, database readiness, and platform support — as JSON. It is safe to run whether or not the deployment is currently running.</li>
 </ul>
@@ -2176,7 +2125,7 @@
 </ul>
 <h3 id="changed_2">Changed<a class="headerlink" href="#changed_2" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Established a consistent CLI output contract. Successful primary output stays on stdout (and is the only content on stdout under <code>--json</code>), while operational notices, prompts, and next-step guidance go to stderr. Next-step guidance (call-to-action) — such as the available-update hint and <code>info</code>'s "Next steps" — is shown on stderr for text output whether or not the session is interactive, so agents and scripts driving the CLI still receive it; it is suppressed under <code>--json</code>, where consumers branch on structured state instead of prose.</li>
+<li>Established a consistent <abbr title="Command-line interface">CLI</abbr> output contract. Successful primary output stays on stdout (and is the only content on stdout under <code>--json</code>), while operational notices, prompts, and next-step guidance go to stderr. Next-step guidance (call-to-action) — such as the available-update hint and <code>info</code>'s "Next steps" — is shown on stderr for text output whether or not the session is interactive, so agents and scripts driving the <abbr title="Command-line interface">CLI</abbr> still receive it; it is suppressed under <code>--json</code>, where consumers branch on structured state instead of prose.</li>
 </ul>
 <p>As part of this, <code>exasol config set</code> and <code>exasol config reset</code> now print the effective configuration to stdout (previously stderr), and <code>exasol cache unlock</code> reports its confirmation on stderr.</p>
 <ul>
@@ -2202,7 +2151,7 @@
 <p>Fixed the personal installer script so it remains compatible with POSIX shell environments.</p>
 </li>
 <li>
-<p>Fixed <code>exasol connect</code> so <code>CREATE SCRIPT</code> / <code>CREATE FUNCTION</code> definitions terminate on a line containing only <code>/</code> (the EXAplus rule) instead of the first <code>;</code>. UDF bodies that contain semicolons (for example Java and R) now parse and run correctly through <code>-c</code>, <code>-f</code>, and interactive input.</p>
+<p>Fixed <code>exasol connect</code> so <code>CREATE SCRIPT</code> / <code>CREATE FUNCTION</code> definitions terminate on a line containing only <code>/</code> (the EXAplus rule) instead of the first <code>;</code>. <abbr title="User-defined function">UDF</abbr> bodies that contain semicolons (for example Java and R) now parse and run correctly through <code>-c</code>, <code>-f</code>, and interactive input.</p>
 </li>
 </ul>
 <p>Example: <code>exasol connect -f create_udf.sql</code> no longer fails with <code>syntax error, unexpected '}'</code> when the script body contains semicolons.</p>
@@ -2326,7 +2275,7 @@
 <p>Fixed launcher update checks to compare versions semantically.</p>
 </li>
 <li>
-<p>Fixed help output for preset-specific CLI arguments.</p>
+<p>Fixed help output for preset-specific <abbr title="Command-line interface">CLI</abbr> arguments.</p>
 </li>
 <li>
 <p>Fixed Azure bootstrap blob upload from the deploying client and improved cleanup reliability for Exoscale and STACKIT resources.</p>

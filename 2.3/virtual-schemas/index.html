@@ -1268,6 +1268,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1300,7 +1328,7 @@
   <span class="md-ellipsis">
     
   
-    Reference
+    Project information
   
 
     
@@ -1316,39 +1344,11 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Reference
+    Project information
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../glossary/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Glossary
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
             
               
                 
@@ -1377,60 +1377,6 @@
   
 
               
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
-        
-          
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Project information
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Project information
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
             
               
                 
@@ -1624,7 +1570,7 @@ macOS, and Windows. Stage adapter files by writing them there from your computer
 </span></code></pre></div>
 <p>This command requires <code>jq</code>. Pass the same <code>--deployment</code> or <code>--deployment-dir</code> selector to <code>info</code>
 when working with a named or explicitly selected deployment.</p>
-<p>Two locations below <code>EXA_DATA</code> matter for a JDBC virtual schema:</p>
+<p>Two locations below <code>EXA_DATA</code> matter for a <abbr title="Java Database Connectivity">JDBC</abbr> virtual schema:</p>
 <table>
 <thead>
 <tr>
@@ -1642,7 +1588,7 @@ when working with a named or explicitly selected deployment.</p>
 <tr>
 <td>Driver JAR and <code>settings.cfg</code></td>
 <td><code>$EXA_DATA/jdbc/&lt;DRIVERNAME&gt;/</code></td>
-<td>the ETL layer, for <code>IMPORT</code> and <code>EXPORT</code></td>
+<td>the <abbr title="Extract, transform, load">ETL</abbr> layer, for <code>IMPORT</code> and <code>EXPORT</code></td>
 </tr>
 </tbody>
 </table>
@@ -1651,28 +1597,28 @@ when working with a named or explicitly selected deployment.</p>
 directory below it creates the matching bucket, and SQL addresses its contents under <code>/buckets</code>. A
 JAR written to <code>$EXA_DATA/bucketfs/bfsdefault/default/vs/example.jar</code> is therefore referenced by an
 adapter script as <code>/buckets/bfsdefault/default/vs/example.jar</code>.</p>
-<p>The driver JAR belongs in both locations because the adapter reads it for metadata while the ETL
+<p>The driver JAR belongs in both locations because the adapter reads it for metadata while the <abbr title="Extract, transform, load">ETL</abbr>
 layer uses the registered copy to transfer data. Exasol's
-<a href="https://docs.exasol.com/db/latest/administration/on-premise/manage_drivers/add_jdbc_driver.htm">Add JDBC Driver</a>
+<a href="https://docs.exasol.com/db/latest/administration/on-premise/manage_drivers/add_jdbc_driver.htm">Add <abbr title="Java Database Connectivity">JDBC</abbr> Driver</a>
 guide keeps the driver and <code>settings.cfg</code> in BucketFS; local deployments use
 <code>$EXA_DATA/jdbc/&lt;DRIVERNAME&gt;/</code> instead, with the same <code>settings.cfg</code> keys and meanings.</p>
 <h2 id="install-the-adapter-runtime">Install the adapter runtime<a class="headerlink" href="#install-the-adapter-runtime" title="Permanent link">&para;</a></h2>
-<p>JDBC adapters run as Java UDFs, and JDBC data transfer needs a Java runtime. Install the Java SLC
+<p><abbr title="Java Database Connectivity">JDBC</abbr> adapters run as Java <abbr title="User-defined functions">UDFs</abbr>, and <abbr title="Java Database Connectivity">JDBC</abbr> data transfer needs a Java runtime. Install the Java <abbr title="Script language container">SLC</abbr>
 without restarting yet:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>exasol<span class="w"> </span>slc<span class="w"> </span>install<span class="w"> </span>java<span class="w"> </span>--no-restart<span class="w"> </span>--deployment-dir<span class="w"> </span><span class="s2">"</span><span class="nv">$DEPLOY_DIR</span><span class="s2">"</span>
 </span></code></pre></div>
 <p><code>--no-restart</code> records the container and applies it on the next start. Stage the adapter files
-before that start so the whole setup needs only one restart. Skip this step if the required SLC is
+before that start so the whole setup needs only one restart. Skip this step if the required <abbr title="Script language container">SLC</abbr> is
 already installed, and use the matching language for an adapter implemented in another one. A
-<a href="../udfs/#install-a-custom-container">custom SLC</a> can supply packages missing from the official
+<a href="../udfs/#install-a-custom-container">custom <abbr title="Script language container">SLC</abbr></a> can supply packages missing from the official
 container.</p>
 <h2 id="postgresql-example">PostgreSQL example<a class="headerlink" href="#postgresql-example" title="Permanent link">&para;</a></h2>
 <p>Check the <a href="https://github.com/exasol/postgresql-virtual-schema">PostgreSQL virtual schema releases</a>
-and <a href="https://jdbc.postgresql.org/download/">PostgreSQL JDBC downloads</a> for current versions. The
+and <a href="https://jdbc.postgresql.org/download/">PostgreSQL <abbr title="Java Database Connectivity">JDBC</abbr> downloads</a> for current versions. The
 versions below are examples; update them together when using newer compatible artifacts, and
 substitute the resulting filenames throughout.</p>
 <h3 id="stage-the-adapter-and-driver">Stage the adapter and driver<a class="headerlink" href="#stage-the-adapter-and-driver" title="Permanent link">&para;</a></h3>
-<p>Write both JARs into BucketFS and register the driver for the ETL layer:</p>
+<p>Write both JARs into BucketFS and register the driver for the <abbr title="Extract, transform, load">ETL</abbr> layer:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">ADAPTER_VERSION</span><span class="o">=</span><span class="m">4</span>.0.2
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">ADAPTER_JAR</span><span class="o">=</span>virtual-schema-dist-14.0.5-postgresql-4.0.2.jar
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nv">DRIVER_JAR</span><span class="o">=</span>postgresql-42.7.13.jar
@@ -1732,8 +1678,8 @@ verify connectivity before creating the virtual schema.</p>
 <div class="language-sql highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">ALTER</span><span class="w"> </span><span class="n">VIRTUAL</span><span class="w"> </span><span class="k">SCHEMA</span><span class="w"> </span><span class="n">VS_POSTGRES</span><span class="w"> </span><span class="n">REFRESH</span><span class="p">;</span>
 </span></code></pre></div>
 <h2 id="other-adapters">Other adapters<a class="headerlink" href="#other-adapters" title="Permanent link">&para;</a></h2>
-<p>For another JDBC dialect, substitute the adapter JAR, driver JAR, and the <code>DRIVERNAME</code>, <code>PREFIX</code>,
-<code>DRIVERMAIN</code>, and <code>JAR</code> settings. For a non-JDBC adapter, install its required SLC and follow the
+<p>For another <abbr title="Java Database Connectivity">JDBC</abbr> dialect, substitute the adapter JAR, driver JAR, and the <code>DRIVERNAME</code>, <code>PREFIX</code>,
+<code>DRIVERMAIN</code>, and <code>JAR</code> settings. For a non-<abbr title="Java Database Connectivity">JDBC</abbr> adapter, install its required <abbr title="Script language container">SLC</abbr> and follow the
 adapter's dependency and script-definition instructions. The
 <a href="https://docs.exasol.com/db/latest/database_concepts/virtual_schemas.htm">Exasol virtual schema documentation</a>
 lists available adapters and their properties.</p>
@@ -1744,7 +1690,7 @@ deployment.</p>
 <p><strong>The adapter script cannot find its class</strong>: Check that every <code>%jar</code> path resolves below <code>/buckets</code>
 and that the files exist in the corresponding BucketFS directory.</p>
 <p><strong>Adapter execution or <code>IMPORT</code> reports no runtime</strong>: Run <code>exasol slc list</code> and confirm that the
-adapter's SLC is installed. JDBC adapters require the Java SLC.</p>
+adapter's <abbr title="Script language container">SLC</abbr> is installed. <abbr title="Java Database Connectivity">JDBC</abbr> adapters require the Java <abbr title="Script language container">SLC</abbr>.</p>
 
 
 

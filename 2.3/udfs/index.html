@@ -1185,6 +1185,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1217,7 +1245,7 @@
   <span class="md-ellipsis">
     
   
-    Reference
+    Project information
   
 
     
@@ -1233,39 +1261,11 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Reference
+    Project information
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../glossary/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Glossary
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
             
               
                 
@@ -1294,60 +1294,6 @@
   
 
               
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
-        
-          
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Project information
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Project information
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
             
               
                 
@@ -1441,10 +1387,10 @@
   
 
 
-<h1 id="udfs-and-script-language-containers">UDFs and script language containers<a class="headerlink" href="#udfs-and-script-language-containers" title="Permanent link">&para;</a></h1>
-<p>User-defined functions (UDFs) execute in a script language container (SLC), which supplies a runtime
+<h1 id="udfs-and-script-language-containers"><abbr title="User-defined functions">UDFs</abbr> and script language containers<a class="headerlink" href="#udfs-and-script-language-containers" title="Permanent link">&para;</a></h1>
+<p>User-defined functions (<abbr title="User-defined functions">UDFs</abbr>) execute in a script language container (<abbr title="Script language container">SLC</abbr>), which supplies a runtime
 such as Python, Java, or R.</p>
-<p>Cloud deployments include the standard SLCs. Local deployments do not install one by default.
+<p>Cloud deployments include the standard <abbr title="Script language containers">SLCs</abbr>. Local deployments do not install one by default.
 Install the language you need with <code>exasol slc</code>:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>exasol<span class="w"> </span>slc<span class="w"> </span>list
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>exasol<span class="w"> </span>slc<span class="w"> </span>install<span class="w"> </span>python3
@@ -1454,7 +1400,7 @@ Install the language you need with <code>exasol slc</code>:</p>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>exasol<span class="w"> </span>slc<span class="w"> </span>update<span class="w"> </span>python3
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>exasol<span class="w"> </span>slc<span class="w"> </span>remove<span class="w"> </span>python3
 </span></code></pre></div>
-<p>Official SLCs can be installed, updated, or removed using either an alias or the flavor shown by
+<p>Official <abbr title="Script language containers">SLCs</abbr> can be installed, updated, or removed using either an alias or the flavor shown by
 <code>exasol slc list</code>. Matching is case-insensitive. Prefer aliases because they remain stable when the
 catalog flavor changes. For example, the Python container enables the <code>PYTHON3</code> and <code>PYTHON312</code>
 aliases, the Java container enables <code>JAVA</code> and <code>JAVA17</code>, and the R container enables <code>R</code> and <code>R44</code>.</p>
@@ -1467,20 +1413,20 @@ release and applies it if it has changed. To install a specific Rust container i
 &lt;path-or-url&gt;</code>.</p>
 <p><code>exasol slc list</code> displays aliases first, followed by each container's flavor, version, and
 installation state.</p>
-<p>Installing, updating, or removing an SLC normally restarts the local database. This drops open
+<p>Installing, updating, or removing an <abbr title="Script language container">SLC</abbr> normally restarts the local database. This drops open
 connections and aborts running statements. The command asks for confirmation first:</p>
 <ul>
 <li>Use <code>--auto-approve</code> to skip the prompt. A command with no terminal attached also skips it and
   restarts without asking.</li>
 <li>Use <code>--no-restart</code> to record the change and activate it the next time the deployment starts.</li>
 </ul>
-<p>Official <code>install</code>, <code>update</code>, and <code>remove</code> operations and custom SLC management apply only to local
+<p>Official <code>install</code>, <code>update</code>, and <code>remove</code> operations and custom <abbr title="Script language container">SLC</abbr> management apply only to local
 deployments.</p>
 <p>Script language containers also provide runtimes for features such as virtual schema adapter
 scripts. Install the language required by the adapter before creating it. See
-<a href="../virtual-schemas/">Virtual schemas</a> for a JDBC example.</p>
+<a href="../virtual-schemas/">Virtual schemas</a> for a <abbr title="Java Database Connectivity">JDBC</abbr> example.</p>
 <h2 id="install-a-custom-container">Install a custom container<a class="headerlink" href="#install-a-custom-container" title="Permanent link">&para;</a></h2>
-<p>Install a custom SLC when the official catalog does not provide the language or packages you need:</p>
+<p>Install a custom <abbr title="Script language container">SLC</abbr> when the official catalog does not provide the language or packages you need:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>exasol<span class="w"> </span>slc<span class="w"> </span>custom<span class="w"> </span>install<span class="w"> </span>--source<span class="w"> </span>./my-python.tar.gz<span class="w"> </span>--alias<span class="w"> </span>MYPY3<span class="w"> </span>--language<span class="w"> </span>python
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>exasol<span class="w"> </span>slc<span class="w"> </span>custom<span class="w"> </span>update<span class="w"> </span>--source<span class="w"> </span>./my-python-v2.tar.gz<span class="w"> </span>--alias<span class="w"> </span>MYPY3
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>exasol<span class="w"> </span>slc<span class="w"> </span>remove<span class="w"> </span>MYPY3
@@ -1489,14 +1435,14 @@ scripts. Install the language required by the adapter before creating it. See
 <code>CREATE &lt;alias&gt; ... SCRIPT</code>. <code>--language</code> identifies the custom client language. The launcher trims
 whitespace, converts the identifier to lowercase, and requires it to start with an ASCII letter or
 digit and contain only ASCII letters, digits, dots, hyphens, or underscores. A custom client can use
-another identifier, such as <code>rust</code>, when it implements the Exasol UDF protocol.</p>
+another identifier, such as <code>rust</code>, when it implements the Exasol <abbr title="User-defined function">UDF</abbr> protocol.</p>
 <p>Custom <code>install</code> and <code>update</code> restart the database and support <code>--auto-approve</code> and <code>--no-restart</code>.
 If the container cannot be activated, the database still starts but the command reports that the
 container is recorded as pending.</p>
 <p>A custom package can define one or more database aliases. The launcher checks both those package
-aliases and the launcher alias against aliases provided by installed official and custom SLCs.
-Updating an existing custom SLC replaces that SLC, so its own aliases may remain unchanged.</p>
-<p>Template-based custom SLC archives may omit <code>language_definitions.json</code>; the alias supplied with
+aliases and the launcher alias against aliases provided by installed official and custom <abbr title="Script language containers">SLCs</abbr>.
+Updating an existing custom <abbr title="Script language container">SLC</abbr> replaces that <abbr title="Script language container">SLC</abbr>, so its own aliases may remain unchanged.</p>
+<p>Template-based custom <abbr title="Script language container">SLC</abbr> archives may omit <code>language_definitions.json</code>; the alias supplied with
 <code>--alias</code> is still registered automatically. If the package provides additional aliases, register
 those manually with <code>ALTER SYSTEM</code> or <code>ALTER SESSION SCRIPT_LANGUAGES</code>. When the file is present, it
 must contain valid language definitions.</p>

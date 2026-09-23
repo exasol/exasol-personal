@@ -1207,6 +1207,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1239,7 +1267,7 @@
   <span class="md-ellipsis">
     
   
-    Reference
+    Project information
   
 
     
@@ -1255,39 +1283,11 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Reference
+    Project information
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../glossary/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Glossary
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
             
               
                 
@@ -1316,60 +1316,6 @@
   
 
               
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
-        
-          
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Project information
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Project information
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
             
               
                 
@@ -1486,7 +1432,7 @@
 
 
 <h1 id="deploy-to-the-cloud">Deploy to the cloud<a class="headerlink" href="#deploy-to-the-cloud" title="Permanent link">&para;</a></h1>
-<p>Exasol Personal can provision a database in your own AWS, Azure, Exoscale, or STACKIT account.
+<p>The Exasol Launcher can provision a database in your own AWS, Azure, Exoscale, or STACKIT account.
 Cloud deployments are useful when you need more capacity, multiple nodes, or a shared database.</p>
 <h2 id="prepare-your-account">Prepare your account<a class="headerlink" href="#prepare-your-account" title="Permanent link">&para;</a></h2>
 <p>Follow the setup guide for your provider before starting the installation:</p>
@@ -1518,7 +1464,9 @@ STACKIT.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>exasol<span class="w"> </span>install<span class="w"> </span>&lt;provider&gt;<span class="w"> </span>--cluster-size<span class="w"> </span>&lt;number&gt;<span class="w"> </span>--instance-type<span class="w"> </span>&lt;type&gt;
 </span></code></pre></div>
 <p>If an installation is interrupted, resources already created are not removed automatically. Follow
-the cleanup guidance in <a href="../troubleshooting/">Troubleshooting</a> to avoid ongoing charges.</p>
+the cleanup guidance in
+<a href="../troubleshooting/#the-installation-was-interrupted">The installation was interrupted</a> to avoid
+ongoing charges.</p>
 
 
 

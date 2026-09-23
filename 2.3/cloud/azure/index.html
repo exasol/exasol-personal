@@ -1207,6 +1207,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1239,7 +1267,7 @@
   <span class="md-ellipsis">
     
   
-    Reference
+    Project information
   
 
     
@@ -1255,39 +1283,11 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Reference
+    Project information
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../glossary/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Glossary
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
             
               
                 
@@ -1316,60 +1316,6 @@
   
 
               
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
-        
-          
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Project information
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Project information
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
             
               
                 
@@ -1486,7 +1432,7 @@
 
 
 <h1 id="set-up-microsoft-azure">Set up Microsoft Azure<a class="headerlink" href="#set-up-microsoft-azure" title="Permanent link">&para;</a></h1>
-<p>Prepare an Azure subscription and authenticate the Azure CLI before deploying Exasol Personal.</p>
+<p>Prepare an Azure subscription and authenticate the Azure <abbr title="Command-line interface">CLI</abbr> before deploying Exasol Personal.</p>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <p>You need an Azure subscription with sufficient permissions and quota for virtual machines,
 networking, managed disks, and storage accounts in the target region. This procedure assumes basic
@@ -1495,8 +1441,8 @@ familiarity with Microsoft Entra ID and Azure role-based access control (RBAC). 
 <h2 id="configure-subscription-access">Configure subscription access<a class="headerlink" href="#configure-subscription-access" title="Permanent link">&para;</a></h2>
 <p>In the Azure portal:</p>
 <ol>
-<li>Open the target subscription and its <strong>Access control (IAM)</strong> page.</li>
-<li>Give the user who will run Exasol Personal one of these roles at subscription scope:</li>
+<li>Open the target subscription and its <strong>Access control (<abbr title="Identity and access management">IAM</abbr>)</strong> page.</li>
+<li>Give the user who will run the Exasol Launcher one of these roles at subscription scope:</li>
 <li>the built-in <strong>Contributor</strong> role;</li>
 <li>a custom role based on the
      <a href="https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/azure/rbac-role.broad.json">broad example</a>; or</li>
@@ -1510,7 +1456,7 @@ managed disks, and storage accounts, and to read storage account keys. Condition
 multi-factor authentication, or organizational approval flows may require additional steps.</p>
 <h2 id="configure-your-computer">Configure your computer<a class="headerlink" href="#configure-your-computer" title="Permanent link">&para;</a></h2>
 <ol>
-<li>Install the <a href="https://learn.microsoft.com/cli/azure/install-azure-cli">Azure CLI</a>.</li>
+<li>Install the <a href="https://learn.microsoft.com/cli/azure/install-azure-cli">Azure <abbr title="Command-line interface">CLI</abbr></a>.</li>
 <li>
 <p>Sign in:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>az<span class="w"> </span>login
@@ -1538,7 +1484,7 @@ multi-factor authentication, or organizational approval flows may require additi
 <p>Azure requires an explicit deployment location:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>exasol<span class="w"> </span>install<span class="w"> </span>azure<span class="w"> </span>--location<span class="w"> </span>westeurope
 </span></code></pre></div>
-<p>For more details, see the Azure CLI guides for
+<p>For more details, see the Azure <abbr title="Command-line interface">CLI</abbr> guides for
 <a href="https://learn.microsoft.com/cli/azure/authenticate-azure-cli">authentication</a> and
 <a href="https://learn.microsoft.com/cli/azure/manage-azure-subscriptions-azure-cli">subscription selection</a>.</p>
 

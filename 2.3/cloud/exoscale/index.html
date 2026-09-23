@@ -1207,6 +1207,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1239,7 +1267,7 @@
   <span class="md-ellipsis">
     
   
-    Reference
+    Project information
   
 
     
@@ -1255,39 +1283,11 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Reference
+    Project information
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../glossary/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Glossary
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
             
               
                 
@@ -1316,60 +1316,6 @@
   
 
               
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
-        
-          
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Project information
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Project information
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
             
               
                 
@@ -1490,19 +1436,19 @@
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <p>You need an active Exoscale organization with billing configured and sufficient quota for compute
 instances, block storage volumes, and private networks in the target zone. This procedure assumes
-basic familiarity with Exoscale IAM. See the
+basic familiarity with Exoscale <abbr title="Identity and access management">IAM</abbr>. See the
 <a href="https://community.exoscale.com/documentation/">Exoscale documentation</a> for background information.</p>
-<h2 id="configure-iam-access">Configure IAM access<a class="headerlink" href="#configure-iam-access" title="Permanent link">&para;</a></h2>
+<h2 id="configure-iam-access">Configure <abbr title="Identity and access management">IAM</abbr> access<a class="headerlink" href="#configure-iam-access" title="Permanent link">&para;</a></h2>
 <p>In the Exoscale portal:</p>
 <ol>
-<li>Open <strong>IAM</strong> &gt; <strong>Roles</strong> and create a role for Exasol Personal.</li>
+<li>Open <strong><abbr title="Identity and access management">IAM</abbr></strong> &gt; <strong>Roles</strong> and create a role for the Exasol Launcher.</li>
 <li>Grant the permissions described by the
    <a href="https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/exoscale/iam-policy.minimal.json">minimal example policy</a>
    or the
    <a href="https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/exoscale/iam-policy.broad.json">broad example policy</a>.
    The minimal policy is recommended. Use the JSON as a reference when entering the permissions in
    the portal; Exoscale does not import the file directly.</li>
-<li>Open <strong>IAM</strong> &gt; <strong>API Keys</strong>, create an API key, and assign the new role.</li>
+<li>Open <strong><abbr title="Identity and access management">IAM</abbr></strong> &gt; <strong>API Keys</strong>, create an API key, and assign the new role.</li>
 <li>Copy the key and secret. The secret is displayed only once.</li>
 </ol>
 <h2 id="configure-your-computer">Configure your computer<a class="headerlink" href="#configure-your-computer" title="Permanent link">&para;</a></h2>
@@ -1525,7 +1471,7 @@ basic familiarity with Exoscale IAM. See the
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>exasol<span class="w"> </span>install<span class="w"> </span>exoscale<span class="w"> </span>--zone<span class="w"> </span>at-vie-1
 </span></code></pre></div>
 <p>The supported zones are <code>ch-gva-2</code>, <code>de-fra-1</code>, <code>de-muc-1</code>, <code>at-vie-1</code>, <code>at-vie-2</code>, and <code>bg-sof-1</code>.
-See the Exoscale guides for <a href="https://community.exoscale.com/documentation/iam/">IAM</a> and
+See the Exoscale guides for <a href="https://community.exoscale.com/documentation/iam/"><abbr title="Identity and access management">IAM</abbr></a> and
 <a href="https://community.exoscale.com/documentation/iam/quick-start/">API keys</a> for more information.</p>
 
 

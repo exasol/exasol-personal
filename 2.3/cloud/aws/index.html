@@ -1207,6 +1207,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1239,7 +1267,7 @@
   <span class="md-ellipsis">
     
   
-    Reference
+    Project information
   
 
     
@@ -1255,39 +1283,11 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Reference
+    Project information
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../glossary/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Glossary
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
             
               
                 
@@ -1316,60 +1316,6 @@
   
 
               
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
-        
-          
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Project information
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Project information
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
             
               
                 
@@ -1486,15 +1432,15 @@
 
 
 <h1 id="set-up-amazon-web-services">Set up Amazon Web Services<a class="headerlink" href="#set-up-amazon-web-services" title="Permanent link">&para;</a></h1>
-<p>Prepare an AWS account and a named AWS CLI profile before deploying Exasol Personal.</p>
+<p>Prepare an AWS account and a named AWS <abbr title="Command-line interface">CLI</abbr> profile before deploying Exasol Personal.</p>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <p>You need an AWS account with the permissions and service quotas required to launch large compute
-instances. This procedure assumes basic familiarity with AWS Identity and Access Management (IAM).
+instances. This procedure assumes basic familiarity with AWS Identity and Access Management (<abbr title="Identity and access management">IAM</abbr>).
 See the <a href="https://docs.aws.amazon.com/">AWS documentation</a> for background information.</p>
-<h2 id="configure-iam-access">Configure IAM access<a class="headerlink" href="#configure-iam-access" title="Permanent link">&para;</a></h2>
-<p>In the AWS IAM console:</p>
+<h2 id="configure-iam-access">Configure <abbr title="Identity and access management">IAM</abbr> access<a class="headerlink" href="#configure-iam-access" title="Permanent link">&para;</a></h2>
+<p>In the AWS <abbr title="Identity and access management">IAM</abbr> console:</p>
 <ol>
-<li>Create a user for Exasol Personal.</li>
+<li>Create a user for the Exasol Launcher.</li>
 <li>Attach the
    <a href="https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/aws/iam-policy.broad.json">Exasol Personal AWS policy</a>
    to the user.</li>
@@ -1504,7 +1450,7 @@ See the <a href="https://docs.aws.amazon.com/">AWS documentation</a> for backgro
 or another authentication method.</p>
 <h2 id="configure-your-computer">Configure your computer<a class="headerlink" href="#configure-your-computer" title="Permanent link">&para;</a></h2>
 <ol>
-<li>Install the <a href="https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html">AWS CLI</a>.</li>
+<li>Install the <a href="https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html">AWS <abbr title="Command-line interface">CLI</abbr></a>.</li>
 <li>
 <p>Configure a named profile called <code>exasol</code>:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aws<span class="w"> </span>configure<span class="w"> </span>--profile<span class="w"> </span>exasol
@@ -1519,7 +1465,7 @@ or another authentication method.</p>
 </span></code></pre></div>
 </li>
 </ol>
-<p>For details, see <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html">Named profiles for the AWS CLI</a>.</p>
+<p>For details, see <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html">Named profiles for the AWS <abbr title="Command-line interface">CLI</abbr></a>.</p>
 <p>You can now <a href="../../cloud-deployment/">deploy Exasol Personal to AWS</a>.</p>
 
 
