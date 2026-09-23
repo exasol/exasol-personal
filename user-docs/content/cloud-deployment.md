@@ -1,6 +1,6 @@
 # Deploy to the cloud
 
-Exasol Personal can provision a database in your own AWS, Azure, Exoscale, or STACKIT account.
+The Exasol Launcher can provision a database in your own AWS, Azure, Exoscale, or STACKIT account.
 Cloud deployments are useful when you need more capacity, multiple nodes, or a shared database.
 
 ## Prepare your account
