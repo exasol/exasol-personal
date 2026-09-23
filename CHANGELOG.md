@@ -11,9 +11,10 @@ Notable user-facing changes to Exasol Personal are documented here.
   preset.
 
 - Added published guidance for scripting the launcher, cloud resource costs, release notes,
-  product terminology, and troubleshooting. The troubleshooting page is organized by symptom and
-  covers launcher `PATH`, local container-runtime, port-conflict, deployment-lock, and cloud
-  authentication problems.
+  product terminology, and troubleshooting. The glossary defines the terms used across the
+  documentation, and abbreviations such as SLC and UDF show their meaning on hover. The
+  troubleshooting page is organized by symptom and covers launcher `PATH`, local container-runtime,
+  port-conflict, deployment-lock, and cloud authentication problems.
 
 ### Changed
 
