@@ -34,7 +34,7 @@ Getting Started:
 	Deployment lifecycle: install -> status -> connect -> stop -> start
 
 	If you do not pass --deployment-dir and are not already inside a deployment directory,
-	Exasol Personal uses <home>/.exasol/personal/deployments/default. Pass --deployment-dir
+	the Exasol Launcher uses <home>/.exasol/personal/deployments/default. Pass --deployment-dir
 	to override the active deployment directory, or pass --deployment <name> (-d <name>) to use
 	<home>/.exasol/personal/deployments/<name> instead, for running more than one deployment
 	side by side. --deployment-dir and --deployment cannot be used together.

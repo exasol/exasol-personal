@@ -18,6 +18,11 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
+- `exasol --help` now names the Exasol Launcher, rather than Exasol Personal, as what selects the
+  default deployment directory. The documentation follows the same distinction: Exasol Launcher is
+  the command-line tool, and Exasol Personal is the product and the license the database is
+  provided under.
+
 ### Fixed
 
 - `exasol init --help` and `exasol install --help` now list `--no-launcher-version-check`, the flag
