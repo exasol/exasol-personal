@@ -14,7 +14,7 @@ familiarity with Microsoft Entra ID and Azure role-based access control (RBAC). 
 In the Azure portal:
 
 1. Open the target subscription and its **Access control (IAM)** page.
-2. Give the user who will run Exasol Personal one of these roles at subscription scope:
+2. Give the user who will run the Exasol Launcher one of these roles at subscription scope:
    - the built-in **Contributor** role;
    - a custom role based on the
      [broad example](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/azure/rbac-role.broad.json); or

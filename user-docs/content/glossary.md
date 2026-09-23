@@ -1,8 +1,9 @@
 # Glossary
 
-The Exasol Launcher creates and manages deployments. One deployment is one Exasol database together
-with the local or cloud resources that run it, built from a pair of presets and tracked in a
-deployment directory on your computer. The terms below are listed alphabetically.
+Exasol Personal is the product; the Exasol Launcher is the command-line tool you use to run it. The
+launcher creates and manages deployments. One deployment is one Exasol database together with the
+local or cloud resources that run it, built from a pair of presets and tracked in a deployment
+directory on your computer. The terms below are listed alphabetically.
 
 ## Adapter
 
@@ -42,13 +43,15 @@ The browser-based administration interface for a deployment, available on cloud 
 
 ## Exasol Launcher
 
-The `exasol` command-line tool that installs and manages Exasol Personal. See
+The `exasol` command-line tool that provisions infrastructure, installs Exasol Personal, and manages
+deployments. Its source code is under the MIT License. See
 [Install the launcher](getting-started.md).
 
 ## Exasol Personal
 
-A full Exasol database for personal use, deployed locally or into your own cloud account and managed
-with the Exasol Launcher.
+A full Exasol database for personal use, deployed locally or into your own cloud account with the
+Exasol Launcher. It is also the name of the license the database is provided under. See
+[Privacy and licensing](privacy-and-licensing.md).
 
 ## Infrastructure preset
 

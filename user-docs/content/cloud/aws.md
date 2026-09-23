@@ -12,7 +12,7 @@ See the [AWS documentation](https://docs.aws.amazon.com/) for background informa
 
 In the AWS IAM console:
 
-1. Create a user for Exasol Personal.
+1. Create a user for the Exasol Launcher.
 2. Attach the
    [Exasol Personal AWS policy](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/aws/iam-policy.broad.json)
    to the user.
