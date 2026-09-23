@@ -86,6 +86,8 @@ Notable user-facing changes to Exasol Personal are documented here.
   Example: `exasol install local --help` reports "Infrastructure preset `local`" with `Compatible installation presets: local`, and suggests `exasol install local local`.
 
 - `--tofu-update-lockfile` is now offered only by deployments whose infrastructure preset uses the OpenTofu backend. It stays available for OpenTofu-backed `exasol install` and `exasol deploy`, where help lists it under its own heading, is no longer listed in the help of a local preset or deployment, and is rejected with an error naming the preset when passed to one. On `exasol install` it must follow the preset argument, which is what selects the backend.
+- 
+
 - `--tofu-update-lockfile` is now offered only by deployments whose infrastructure preset uses the OpenTofu backend. It stays available for OpenTofu-backed `exasol install` and `exasol deploy`, is no longer listed in the help of a local preset or deployment, and is rejected with an error naming the preset when passed to one.
 
   Example: `exasol install local --tofu-update-lockfile` reports `unsupported deployment option: infrastructure preset "local" does not support --tofu-update-lockfile`.
