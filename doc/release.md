@@ -1,6 +1,6 @@
 # Release Process
 
-This document describes how to create and publish releases of Exasol Personal.
+This document describes how to create and publish releases of the Exasol Launcher.
 
 Security requirements for release automation are defined in [Repository Security and Automation Governance](repository_security_spec.md).
 

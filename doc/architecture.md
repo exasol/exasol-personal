@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes the high-level architecture, design philosophy, and technical decisions behind the Exasol Personal deployment tool. For implementation details, see the [Development Guide](development.md).
+This document describes the high-level architecture, design philosophy, and technical decisions behind the Exasol Launcher. For implementation details, see the [Development Guide](development.md).
 
 ## Overview
 
-The Exasol Personal tool (`exasol`) is a command-line application that automates the deployment and management of Exasol Database on supported cloud and local infrastructure. It handles infrastructure provisioning, software installation, and provides database connectivity.
+The Exasol Launcher (`exasol`) is a command-line application that automates the deployment and management of Exasol Database on supported cloud and local infrastructure. It handles infrastructure provisioning, software installation, and provides database connectivity.
 
 **What you'll find here:**
 - Design philosophy and requirements
@@ -70,7 +70,7 @@ The Exasol Personal tool (`exasol`) is a command-line application that automates
 ## Requirements and Constraints
 
 ### Platform Support
-- **Deployment platforms:** Users can run the tool on Linux, macOS, or Windows
+- **Deployment platforms:** Users can run the launcher on Linux, macOS, or Windows
 - **Deployment targets:** Cloud presets and local deployment backends
 - **Distribution:** Single statically-compiled binary per platform
 
@@ -135,7 +135,7 @@ Local deployments share one Podman installation policy that owns database images
 
 On Linux and Windows, the policy executes directly against host Podman through one shared host runtime. Each platform contributes its own prerequisites, its start-time re-checks, and the environment installation commands run through, so the container lifecycle carries no platform branching. On macOS, a runtime starts a managed VM, establishes labeled service forwarding, stages artifacts through a shared directory, and executes the same policy inside the VM. Effective host endpoints are returned to the deployment workflow after the runtime starts.
 
-The macOS VM launcher owns only the VM lifecycle, forwarding, shared directory, and guest command execution. It does not own application containers or expose its command transport through deployment state.
+The Exasol Local runner that manages that VM is a separate component from the Exasol Launcher. It owns only the VM lifecycle, forwarding, shared directory, and guest command execution, and does not own application containers or expose its command transport through deployment state.
 
 A runtime that needs to change the host declares the change and the exact commands it intends to run; the command layer decides whether to apply them. This keeps approval policy and terminal detection out of the runtimes, and lets a runtime request a change without knowing how it will be presented. Preparation runs before the workflow records an operation in progress, so a declined or failed prerequisite leaves the deployment retryable.
 
@@ -260,7 +260,7 @@ Users can inspect and maintain the cache with `exasol cache list`, `exasol cache
 
 **Storage:**
 - All secrets stored in deployment directory
-- No secrets stored in the tool itself
+- No secrets stored in the launcher itself
 - Cloud credentials read from environment variables
 
 **Usage:**
@@ -346,4 +346,4 @@ Users and developers can customize:
 - Don't commit deployment directories to version control
 - Restrict `allowed_cidr` in production deployments
 - Destroy deployments when not in use
-- Secure the machine running the tool
+- Secure the machine running the launcher
