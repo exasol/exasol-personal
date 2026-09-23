@@ -82,6 +82,7 @@ nav:
       - Privacy and licensing: privacy-and-licensing.md
 
 markdown_extensions:
+  - abbr
   - admonition
   - attr_list
   - md_in_html
@@ -99,6 +100,9 @@ markdown_extensions:
   - pymdownx.snippets:
       base_path:
         - !relative $config_dir/../CHANGELOG.md
+        - !relative $config_dir
+      auto_append:
+        - includes/abbreviations.md
       check_paths: true
   - pymdownx.superfences
   - pymdownx.tabbed:
