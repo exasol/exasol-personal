@@ -113,3 +113,50 @@ func TestStatus_ReportsStaleDestroyOperationWithRecoveryGuidance(t *testing.T) {
 		t.Fatalf("expected remove guidance, got %q", status.Message)
 	}
 }
+
+// The guidance is what makes a stopped deployment recoverable: without it the
+// user is told only that something is wrong, not that `start` fixes it.
+//
+//nolint:paralleltest // The fake Podman executable requires a process-wide PATH override.
+func TestStatus_ReportsStoppedLocalDeploymentWithRecoveryGuidance(t *testing.T) {
+	requireLinuxLocalPlatform(t)
+
+	// Given: a local deployment recorded as running whose container is not
+	deployment, _ := newLinuxLocalWorkflowTestDeployment(t)
+	installFakePodmanStatus(t, fakePodmanContainerMissing)
+
+	// When
+	status, err := Status(testManagerContext(t), deployment)
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if status.Status != StatusStopped {
+		t.Fatalf("expected status %q, got %q", StatusStopped, status.Status)
+	}
+	if !strings.Contains(status.Message, "`start`") {
+		t.Fatalf("expected guidance to run start, got %q", status.Message)
+	}
+}
+
+//nolint:paralleltest // The fake Podman executable requires a process-wide PATH override.
+func TestStatus_ReportsUnreachableDatabaseWithRecoveryGuidance(t *testing.T) {
+	requireLinuxLocalPlatform(t)
+
+	// Given: a running local deployment whose database does not accept connections
+	deployment, _ := newLinuxLocalWorkflowTestDeployment(t)
+	installFakePodmanStatus(t, fakePodmanContainerRunning)
+
+	// When
+	status, err := Status(testManagerContext(t), deployment)
+	// Then
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if status.Status != StatusDatabaseConnectionFailed {
+		t.Fatalf("expected status %q, got %q", StatusDatabaseConnectionFailed, status.Status)
+	}
+	if status.Message == "" {
+		t.Fatal("expected recovery guidance, got empty message")
+	}
+}

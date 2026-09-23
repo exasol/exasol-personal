@@ -24,6 +24,8 @@ func TestStatusCommandRegistersDefaultTimeout(t *testing.T) {
 	// Then
 	if flag == nil {
 		t.Fatal("expected status command to register --timeout")
+
+		return
 	}
 	if flag.DefValue != strconv.FormatInt(defaultStatusTimeoutSeconds, 10) {
 		t.Fatalf("expected default timeout %d, got %q", defaultStatusTimeoutSeconds, flag.DefValue)

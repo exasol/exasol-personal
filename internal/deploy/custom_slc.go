@@ -28,6 +28,62 @@ import (
 	"github.com/exasol/exasol-personal/internal/slc"
 )
 
+type slcAliasProvider struct {
+	Name    string
+	Aliases []string
+}
+
+type slcAliasConflict struct {
+	Alias    string
+	Provider string
+}
+
+func checkSLCAliasConflicts(
+	candidate []string,
+	providers []slcAliasProvider,
+	operation string,
+	target string,
+) error {
+	if conflict, ok := findSLCAliasConflict(candidate, providers); ok {
+		return fmt.Errorf(
+			"cannot %s SLC %q: alias %q is already provided by SLC %q",
+			operation, target, conflict.Alias, conflict.Provider,
+		)
+	}
+
+	return nil
+}
+
+func findSLCAliasConflict(
+	candidate []string,
+	providers []slcAliasProvider,
+) (slcAliasConflict, bool) {
+	for _, alias := range candidate {
+		for _, provider := range providers {
+			for _, declared := range provider.Aliases {
+				if customslc.NormalizeAlias(alias) == customslc.NormalizeAlias(declared) {
+					return slcAliasConflict{
+						Alias: customslc.NormalizeAlias(alias), Provider: provider.Name,
+					}, true
+				}
+			}
+		}
+	}
+
+	return slcAliasConflict{}, false
+}
+
+func officialSLCAliasProviders(official []config.InstalledSLC) []slcAliasProvider {
+	providers := make([]slcAliasProvider, 0, len(official))
+	for _, installed := range official {
+		providers = append(providers, slcAliasProvider{
+			Name: installed.Flavor, Aliases: installed.Aliases,
+		})
+	}
+
+	return providers
+}
+
 const (
 	customSLCDirPrefix = "custom-"
 
@@ -182,8 +238,13 @@ func stageCustomSLCInstall(
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid custom SLC container: %w", err)
 	}
-	if err := checkCustomSLCInternalAliasConflicts(
-		deployment, state, aliases, idx, "install", request.alias,
+	if err := checkCustomSLCAliasConflicts(
+		deployment,
+		state,
+		append([]string{request.alias}, aliases...),
+		idx,
+		"install",
+		request.alias,
 	); err != nil {
 		return nil, nil, err
 	}
@@ -316,8 +377,8 @@ func stageCustomSLCUpdate(
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid custom SLC container: %w", err)
 	}
-	if err := checkCustomSLCInternalAliasConflicts(
-		deployment, state, aliases, idx, "update", alias,
+	if err := checkCustomSLCAliasConflicts(
+		deployment, state, append([]string{alias}, aliases...), idx, "update", alias,
 	); err != nil {
 		return nil, nil, err
 	}
@@ -354,18 +415,6 @@ func recordCustomSLC(
 	tarball acquiredTarball,
 	aliases []string,
 ) (config.InstalledCustomSLC, error) {
-	file, err := os.Open(
-		tarball.path,
-	) //nolint:gosec // path is launcher-owned (download temp or user file)
-	if err != nil {
-		return config.InstalledCustomSLC{}, err
-	}
-	defer file.Close()
-
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return config.InstalledCustomSLC{}, err
-	}
-
 	entry := config.InstalledCustomSLC{
 		Alias:          request.alias,
 		PackageAliases: aliases,
@@ -378,7 +427,7 @@ func recordCustomSLC(
 		DisplacedURI:   carriedDisplacedURI(state.InstalledCustomSLCs, request.alias),
 	}
 
-	if err := placeCustomSLCPackage(deployment, entry.Package, tarball, file); err != nil {
+	if err := promoteCustomSLCPackage(deployment, tarball.path, entry.Package); err != nil {
 		return config.InstalledCustomSLC{}, err
 	}
 
@@ -410,7 +459,7 @@ func readCustomSLCAliases(packagePath string) ([]string, error) {
 	return customslc.ReadAliases(file)
 }
 
-func checkCustomSLCInternalAliasConflicts(
+func checkCustomSLCAliasConflicts(
 	deployment config.DeploymentDir,
 	state *config.ExasolPersonalState,
 	candidate []string,
@@ -418,42 +467,48 @@ func checkCustomSLCInternalAliasConflicts(
 	operation string,
 	targetAlias string,
 ) error {
-	for _, alias := range candidate {
-		for idx, installed := range state.InstalledCustomSLCs {
-			if idx == excludeCustomIndex {
-				continue
-			}
-			aliases, err := installedCustomSLCAliases(deployment, installed)
-			if err != nil {
-				return fmt.Errorf(
-					"cannot inspect installed custom SLC %q: %w", installed.Alias, err,
-				)
-			}
-			for _, declared := range aliases {
-				if customslc.NormalizeAlias(alias) == customslc.NormalizeAlias(declared) {
-					return fmt.Errorf(
-						"cannot %s custom SLC %q: an alias defined in this package, %q, is "+
-							"already provided by installed custom SLC %q; remove %q before "+
-							"proceeding, or use a package with different aliases",
-						operation,
-						targetAlias,
-						customslc.NormalizeAlias(alias),
-						installed.Alias,
-						installed.Alias,
-					)
-				}
-			}
+	providers := officialSLCAliasProviders(state.InstalledSLCs)
+	customProviders, err := customSLCProviders(
+		deployment, state.InstalledCustomSLCs, excludeCustomIndex,
+	)
+	if err != nil {
+		return err
+	}
+	providers = append(providers, customProviders...)
+
+	return checkSLCAliasConflicts(candidate, providers, operation+" custom", targetAlias)
+}
+
+func customSLCProviders(
+	deployment config.DeploymentDir,
+	customs []config.InstalledCustomSLC,
+	excludeIndex int,
+) ([]slcAliasProvider, error) {
+	providers := make([]slcAliasProvider, 0, len(customs))
+	for idx, installed := range customs {
+		if idx == excludeIndex {
+			continue
 		}
+		aliases, err := installedCustomSLCAliases(deployment, installed)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"cannot inspect installed custom SLC %q: %w", installed.Alias, err,
+			)
+		}
+		providers = append(providers, slcAliasProvider{
+			Name:    installed.Alias,
+			Aliases: append([]string{installed.Alias}, aliases...),
+		})
 	}
 
-	return nil
+	return providers, nil
 }
 
 func installedCustomSLCAliases(
 	deployment config.DeploymentDir,
 	installed config.InstalledCustomSLC,
 ) ([]string, error) {
-	if len(installed.PackageAliases) > 0 {
+	if len(installed.PackageAliases) > 0 || installed.Package == "" {
 		return installed.PackageAliases, nil
 	}
 
@@ -1076,7 +1131,6 @@ func withLocalDatabase(
 type acquiredTarball struct {
 	path    string
 	sha256  string
-	staged  bool
 	cleanup func()
 }
 
@@ -1129,7 +1183,6 @@ func acquireCustomTarball(
 	return acquiredTarball{
 		path:    tempPath,
 		sha256:  hex.EncodeToString(hasher.Sum(nil)),
-		staged:  true,
 		cleanup: remove,
 	}, nil
 }
@@ -1185,7 +1238,6 @@ func downloadCustomTarball(
 	return acquiredTarball{
 		path:    tmp.Name(),
 		sha256:  hex.EncodeToString(hasher.Sum(nil)),
-		staged:  true,
 		cleanup: remove,
 	}, nil
 }
@@ -1357,20 +1409,4 @@ func sortedKeys(set map[string]bool) []string {
 	slices.Sort(keys)
 
 	return keys
-}
-
-// A downloaded container already sits in the staging directory.
-func placeCustomSLCPackage(
-	deployment config.DeploymentDir,
-	name string,
-	tarball acquiredTarball,
-	content io.Reader,
-) error {
-	if tarball.staged {
-		return promoteCustomSLCPackage(deployment, tarball.path, name)
-	}
-
-	slog.Info("staging the custom script language container (this may take a few minutes)")
-
-	return stageCustomSLCPackage(deployment, name, content)
 }

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -89,26 +88,6 @@ func promoteCustomSLCPackage(deployment config.DeploymentDir, tempPath, name str
 	}
 
 	return nil
-}
-
-func stageCustomSLCPackage(deployment config.DeploymentDir, name string, tarball io.Reader) error {
-	temp, err := newCustomSLCStagingFile(deployment)
-	if err != nil {
-		return err
-	}
-	tempPath := temp.Name()
-	defer func() { _ = os.Remove(tempPath) }()
-
-	if _, err := io.Copy(temp, tarball); err != nil {
-		_ = temp.Close()
-
-		return fmt.Errorf("failed to stage the custom SLC container: %w", err)
-	}
-	if err := temp.Close(); err != nil {
-		return fmt.Errorf("failed to stage the custom SLC container: %w", err)
-	}
-
-	return promoteCustomSLCPackage(deployment, tempPath, name)
 }
 
 func removeCustomSLCPackage(deployment config.DeploymentDir, name string) error {

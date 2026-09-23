@@ -2,9 +2,7 @@
 
 ## Purpose
 TBD - created by archiving change add-exasol-local-backend. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Exasol Local deployment preset
 
 The system SHALL provide the standard local deployment option through a VM-backed Podman installation on macOS Apple Silicon and host Podman on Linux AMD64 and ARM64.
@@ -262,7 +260,6 @@ persisted VM sizing and use host-managed resources.
 - **THEN** the data-size setting describes VM runtime-disk capacity for Podman
   images and runtime state
 
-
 ### Requirement: Linux local status and health reflect the published database endpoint
 The system SHALL derive Linux runtime status from the exact Podman deployment container, recover missing in-memory endpoints from deployment information, and probe the published database port for health.
 
@@ -459,3 +456,27 @@ Before every permitted local deploy or start attempt that can launch the runtime
 - **WHEN** a permitted local deploy or start attempt reads a valid port mapping that omits the database service
 - **THEN** the launcher selects and persists a concrete database port before launching the runtime
 - **AND** existing positive mappings for other services remain unchanged
+
+### Requirement: Local status reports a stopped runtime environment
+The system SHALL report a local deployment as stopped when the environment hosting its
+container is not running, and SHALL resolve that status without starting the environment.
+
+#### Scenario: Windows Podman machine is not running
+
+- **WHEN** a local deployment's recorded state is running, the Podman machine is not running,
+  and the user runs `exasol status`
+- **THEN** the command reports status `stopped` with guidance to run `start` to restart or
+  `destroy` to delete resources
+- **AND** the Podman machine remains stopped
+
+#### Scenario: Stopped environment is reported within the status timeout
+
+- **WHEN** `exasol status` resolves a local deployment whose environment is not running under
+  the default timeout
+- **THEN** the command completes within that timeout
+
+#### Scenario: Stopped environment is reported in machine-readable output
+
+- **WHEN** a user runs `exasol status --json` for a local deployment whose environment is not
+  running
+- **THEN** the output reports the same status value and message as the text output

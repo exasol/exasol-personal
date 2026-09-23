@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
@@ -63,6 +64,26 @@ func (windowsHostEnvironmentPreparer) EnsureStartable(
 	}
 
 	return podmanmachine.EnsureMachineRunning(ctx, out, outErr)
+}
+
+// ContainerHostRunning reads the Podman machine's state without starting it.
+// The machine is host-wide state that a reboot, a WSL shutdown, or the user
+// can stop at any time, and every container of every deployment stops with
+// it. A machine that does not exist yet hosts nothing either.
+func (windowsHostEnvironmentPreparer) ContainerHostRunning(ctx context.Context) (bool, error) {
+	if err := ensurePodmanResolvable(ctx); err != nil {
+		return false, err
+	}
+	exists, err := podmanmachine.MachineExists(ctx)
+	if err != nil || !exists {
+		return false, err
+	}
+	state, err := podmanmachine.MachineState(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return strings.EqualFold(state, podmanmachine.RunningState), nil
 }
 
 func (windowsHostEnvironmentPreparer) NewExecutionEnvironment(

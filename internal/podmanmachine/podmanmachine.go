@@ -35,6 +35,10 @@ const DefaultMachineName = "podman-machine-default"
 // integration runs.
 const DefaultDiskSizeGB = 40
 
+// RunningState is the lifecycle state podman reports for a machine that
+// is up. Compare against it case-insensitively.
+const RunningState = "running"
+
 // binary is the podman executable name. Overridable so tests can stage
 // a shim under a stable name on an isolated PATH.
 var binary = "podman"
@@ -175,7 +179,7 @@ func EnsureMachineRunning(ctx context.Context, out, outErr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if !strings.EqualFold(state, "running") {
+	if !strings.EqualFold(state, RunningState) {
 		_, _ = fmt.Fprintf(out, "Podman machine is %s; starting it...\n", state)
 		if err := StartMachine(ctx, out, outErr); err != nil {
 			return err

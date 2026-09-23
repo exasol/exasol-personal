@@ -48,22 +48,6 @@ change unless the option is present, unlike other confirmations, which an unatte
 automatically. Stopping or destroying an Exasol deployment leaves the shared Podman machine
 running.
 
-## Open a shell
-
-On macOS, open a shell in the managed virtual machine:
-
-```bash
-exasol shell host
-```
-
-Open a shell inside the database container:
-
-```bash
-exasol shell container
-```
-
-These shell commands are not available for local deployments on Linux or Windows.
-
 ## Next steps
 
 - [Connect to the database](connect.md).
