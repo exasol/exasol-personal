@@ -13,7 +13,7 @@ basic familiarity with Exoscale IAM. See the
 
 In the Exoscale portal:
 
-1. Open **IAM** > **Roles** and create a role for Exasol Personal.
+1. Open **IAM** > **Roles** and create a role for the Exasol Launcher.
 2. Grant the permissions described by the
    [minimal example policy](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/exoscale/iam-policy.minimal.json)
    or the
