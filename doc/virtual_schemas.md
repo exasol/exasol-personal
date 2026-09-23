@@ -25,7 +25,7 @@ explicitly selected deployment.
 
 Use the corresponding language alias for adapters implemented in another supported language. If
 the adapter needs packages that are not in an official SLC, install a custom SLC as described in
-[UDFs and Script Language Containers](../README.md#-udfs-and-script-language-containers).
+[Install a custom container](../user-docs/content/udfs.md#install-a-custom-container).
 
 The `--no-restart` option records the SLC and applies it on the next start. The steps below stage
 the adapter and driver files before that start, so the complete setup requires one restart. Skip
