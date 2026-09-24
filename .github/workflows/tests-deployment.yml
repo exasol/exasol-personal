@@ -11,6 +11,8 @@ on:
         options:
           - all
           - cloud
+          - smoke
+          - chaos
           - local
       os:
         description: Operating system selector
@@ -53,17 +55,17 @@ jobs:
             selected_suite="all"
           fi
 
-          # Declarative cloud test plan. Toggle rows via "enabled" and route by "task".
+          # CI owns target selection; test metadata remains on the tests themselves.
           cloud_plan_json='[
             {"enabled": true,   "infra": "aws",      "os": "ubuntu-latest",  "task": "tests-deployment"},
             {"enabled": false,  "infra": "aws",      "os": "windows-latest", "task": "tests-deployment"},
             {"enabled": false,  "infra": "aws",      "os": "macos-latest",   "task": "tests-deployment"},
-            {"enabled": false,  "infra": "azure",    "os": "ubuntu-latest",  "task": "tests-deployment-infrastructure"},
-            {"enabled": true,   "infra": "azure",    "os": "windows-latest", "task": "tests-deployment-infrastructure"},
-            {"enabled": false,  "infra": "azure",    "os": "macos-latest",   "task": "tests-deployment-infrastructure"},
-            {"enabled": false,  "infra": "exoscale", "os": "ubuntu-latest",  "task": "tests-deployment-infrastructure"},
-            {"enabled": false,  "infra": "exoscale", "os": "windows-latest", "task": "tests-deployment-infrastructure"},
-            {"enabled": true,   "infra": "exoscale", "os": "macos-latest",   "task": "tests-deployment-infrastructure"}
+            {"enabled": false,  "infra": "azure",    "os": "ubuntu-latest",  "task": "tests-deployment-smoke"},
+            {"enabled": true,   "infra": "azure",    "os": "windows-latest", "task": "tests-deployment-smoke"},
+            {"enabled": false,  "infra": "azure",    "os": "macos-latest",   "task": "tests-deployment-smoke"},
+            {"enabled": false,  "infra": "exoscale", "os": "ubuntu-latest",  "task": "tests-deployment-smoke"},
+            {"enabled": false,  "infra": "exoscale", "os": "windows-latest", "task": "tests-deployment-smoke"},
+            {"enabled": true,   "infra": "exoscale", "os": "macos-latest",   "task": "tests-deployment-smoke"}
           ]'
 
           # Runner values are arrays so hosted and multi-label self-hosted runners
@@ -99,11 +101,14 @@ jobs:
               map(select(.enabled == true))
               | if $os == "all" then . else map(select(.os == $os)) end
               | map(del(.enabled))
+              | if $suite == "smoke" then map(.task = "tests-deployment-smoke")
+                elif $suite == "chaos" then map(select(.infra == "aws") | .task = "tests-deployment-chaos")
+                else . end
             end
           ' <<< "${cloud_plan_json}")"
 
           local_matrix="$(jq -c --arg os "${selected_os}" --arg suite "${selected_suite}" '
-            if $suite == "cloud" then
+            if ($suite == "cloud" or $suite == "smoke" or $suite == "chaos") then
               []
             elif $os == "all" then
               .
@@ -115,7 +120,23 @@ jobs:
           cloud_count="$(jq 'length' <<< "${cloud_matrix}")"
           local_count="$(jq 'length' <<< "${local_matrix}")"
 
-          if [ "${selected_suite}" = "cloud" ] && [ "${cloud_count}" -eq 0 ]; then
+          selected_cloud="$(jq -r '[.[].infra] | unique | if length == 0 then "none" else join(", ") end' <<< "${cloud_matrix}")"
+          omitted_cloud="$(jq -nr --argjson selected "${cloud_matrix}" '["aws", "azure", "exoscale"] - [$selected[].infra] | unique | if length == 0 then "none" else join(", ") end')"
+          selected_local="$(jq -r '[.[].platform] | unique | if length == 0 then "none" else join(", ") end' <<< "${local_matrix}")"
+          omitted_local="$(jq -nr --argjson selected "${local_matrix}" '["linux-amd64", "macos-arm64"] - [$selected[].platform] | unique | if length == 0 then "none" else join(", ") end')"
+
+          {
+            echo "### Deployment test evidence plan"
+            echo
+            echo "- Requested suite: ${selected_suite}"
+            echo "- Cloud providers selected: ${selected_cloud}"
+            echo "- Cloud providers omitted: ${omitted_cloud}"
+            echo "- Local platforms selected: ${selected_local}"
+            echo "- Local platforms omitted: ${omitted_local}"
+            echo "- STACKIT omitted: its deployment path is not currently working correctly"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if { [ "${selected_suite}" = "cloud" ] || [ "${selected_suite}" = "smoke" ] || [ "${selected_suite}" = "chaos" ]; } && [ "${cloud_count}" -eq 0 ]; then
             echo "No enabled cloud deployment test row matches os=${selected_os}." >&2
             exit 1
           fi
@@ -259,6 +280,7 @@ jobs:
         with:
           infra: local
           task: tests-deployment-local
+          platform: ${{ matrix.platform }}
           system-python: ${{ matrix.system_python }}
 
       - uses: ./.github/actions/status-set

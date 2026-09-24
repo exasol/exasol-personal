@@ -14,9 +14,9 @@ line under `release/`:
 - **Go Linting** - Runs `golangci-lint` and `tflint`
 - **Python Linting** - Runs `ruff` and `mypy` on integration tests and documentation tooling
 - **Unit Tests** - Runs Go unit tests with coverage
-- **Integration Tests** - Runs Python integration tests on Linux and Windows
+- **Launcher Tests** - Runs cloud-free Python launcher tests on Linux and Windows
 
-Build and integration tests run on both `ubuntu-latest` and `windows-latest`, so Windows-only behavior — including Windows local deployments — is covered on every pull request. Unit tests and linting run on Linux only.
+Build and launcher tests run on both `ubuntu-latest` and `windows-latest`, so Windows-only behavior — including Windows local deployments — is covered on every pull request. Unit tests and linting run on Linux only.
 
 This is the only workflow that runs contributor code in pull request context. It is intentionally non-privileged and does not use deployment/release credentials.
 All CI jobs declare explicit minimal permissions.
@@ -156,13 +156,13 @@ Security guards:
 - Should be protected by an environment approval gate and ref restrictions in repository settings
 
 Workflow input:
-- `suite`: test-suite selector (`all`, `cloud`, `local`; default `all`)
+- `suite`: evidence selector (`all`, `cloud`, `smoke`, `chaos`, `local`; default `all`)
 - `os`: OS selector for both cloud and local matrices (`all`, `ubuntu-latest`, `windows-latest`, `macos-latest`; default `all`)
 - The workflow filters declarative cloud and local test plans before matrix expansion, so non-selected jobs are not created.
 - Current enabled cloud rows:
-  - AWS runs `tests-deployment` (installation + infrastructure lanes)
-  - Azure runs `tests-deployment-infrastructure`
-  - Exoscale runs `tests-deployment-infrastructure`
+  - AWS runs broad live evidence
+  - Azure runs the smoke path
+  - Exoscale runs the smoke path
 - Current enabled local rows:
   - Linux AMD64 runs `tests-deployment-local` on `ubuntu-latest`
   - Windows AMD64 runs `tests-deployment-local` on `windows-latest`
@@ -170,6 +170,7 @@ Workflow input:
   - Linux ARM64 coverage is deferred.
   - The Windows row runs most of the local suite. Two pseudo-terminal cases remain POSIX-only, and the VM sizing cases remain macOS-only, so Windows covers 22 of the 27 selected tests.
 - After pushing a branch, dispatch one local row with `task github:trigger-deployment-tests SUITE=local OS=ubuntu-latest` (or `OS=windows-latest`, `OS=macos-latest`), then verify deployment, tests, cleanup, and the final commit status.
+- The plan and pytest job summaries identify selected and omitted boundaries, providers, platforms, and specialized suites. STACKIT is reported as omitted until its deployment path works correctly.
 - Credential bootstrap:
   - AWS via OIDC role assumption
   - Azure via OIDC (`azure/login`)
@@ -178,13 +179,13 @@ Workflow input:
 
 **Warning:** Cloud rows create real infrastructure and incur costs; local rows create a real database deployment on the selected runner.
 
-### Integration Tests (`tests-integration.yml`)
+### Launcher Tests (`tests-launcher.yml`)
 
-The same integration suite the CI pipeline runs, dispatchable on its own when a targeted run is wanted without pushing a new commit or opening a pull request.
+The same launcher suite the CI pipeline runs, dispatchable on its own when a targeted run is wanted without pushing a new commit or opening a pull request.
 
 **Trigger manually via:**
-- GitHub Actions UI: [tests-integration.yml](https://github.com/exasol/exasol-personal/actions/workflows/tests-integration.yml) → "Run workflow"
-- After pushing a branch: `task github:trigger-integration-tests OS=windows-latest`
+- GitHub Actions UI: [tests-launcher.yml](https://github.com/exasol/exasol-personal/actions/workflows/tests-launcher.yml) → "Run workflow"
+- After pushing a branch: `task github:trigger-launcher-tests OS=windows-latest`
 
 Workflow input:
 - `os`: OS selector (`all`, `ubuntu-latest`, `windows-latest`; default `all`)
