@@ -12,6 +12,9 @@ deployments only.
 - **Virtual schemas:** Supported once the adapter runtime and the adapter's dependencies are in
   place. JDBC adapters need a Java SLC and staged adapter and driver files. See
   [Virtual schemas](virtual-schemas.md).
+- **BucketFS HTTP service:** The local deployment does not publish the BucketFS HTTP service. The
+  filesystem-backed BucketFS remains available under the deployment's `local/runtime/exa` path;
+  see [Virtual schemas](virtual-schemas.md#where-local-deployments-keep-database-files).
 
 ## Not available
 

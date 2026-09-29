@@ -36,6 +36,9 @@ explicitly configured memory value must be at least 4096 MB. Linux and Windows u
 resources, so the virtual-machine sizing options do not apply. The initial local database credentials
 are `sys` / `exasol`.
 
+BucketFS HTTP access is not available for local deployments. BucketFS storage remains available
+through the deployment directory, as described in [Virtual schemas](virtual-schemas.md).
+
 ## Windows host preparation
 
 If Podman is missing, the launcher can offer to install it. It also creates or starts Podman's
