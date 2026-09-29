@@ -342,6 +342,7 @@ func (runtime *MacVMRuntime) HealthCheck(ctx context.Context) (*HealthCheckResul
 
 func (runtime *MacVMRuntime) OpenHostShell(
 	ctx context.Context,
+	command []string,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
 ) error {
@@ -350,9 +351,13 @@ func (runtime *MacVMRuntime) OpenHostShell(
 		return err
 	}
 
-	return runtime.runInteractiveRunnerCommand(
-		ctx, runnerPath, []string{"run"}, stdin, stdout, stderr,
-	)
+	args := []string{"run"}
+	if len(command) > 0 {
+		args = append(args, "--")
+		args = append(args, command...)
+	}
+
+	return runtime.runInteractiveRunnerCommand(ctx, runnerPath, args, stdin, stdout, stderr)
 }
 
 func (runtime *MacVMRuntime) OpenContainerShell(

@@ -498,8 +498,9 @@ func ensureLocalManifestConfig(
 func (b *localBackend) OpenHostShell(
 	ctx context.Context,
 	_ string,
+	command []string,
 ) error {
-	return b.runtime.OpenHostShell(ctx, os.Stdin, os.Stdout, os.Stderr)
+	return b.runtime.OpenHostShell(ctx, command, os.Stdin, os.Stdout, os.Stderr)
 }
 
 func (b *localBackend) OpenCOSShell(ctx context.Context) error {

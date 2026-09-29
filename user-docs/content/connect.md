@@ -59,6 +59,17 @@ Use `--max-rows 0` for unlimited interactive output.
 For SQL syntax, functions, and data types, see the
 [Exasol SQL reference](https://docs.exasol.com/db/latest/sql_reference.htm).
 
+## Access the deployment host
+
+Open an interactive host shell, or pass a command after `--` to run it directly:
+
+```bash
+exasol shell host
+exasol shell host -- ip route
+```
+
+Host shell access is available for cloud deployments and macOS local deployments.
+
 ## Use Exasol Admin
 
 Exasol Admin is available for cloud deployments. The installation output and `exasol info` show its

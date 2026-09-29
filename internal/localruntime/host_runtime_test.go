@@ -128,7 +128,7 @@ func TestLinuxHostShellErrorsPreserveUnsupportedIdentity(t *testing.T) {
 		{
 			name: "host shell",
 			openShell: func(runtime *HostRuntime) error {
-				return runtime.OpenHostShell(context.Background(), nil, nil, nil)
+				return runtime.OpenHostShell(context.Background(), nil, nil, nil, nil)
 			},
 			sentinel: ErrHostShellUnsupported,
 		},

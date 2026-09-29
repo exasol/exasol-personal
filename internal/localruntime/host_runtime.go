@@ -272,6 +272,7 @@ func (runtime *HostRuntime) HealthCheck(ctx context.Context) (*HealthCheckResult
 
 func (runtime *HostRuntime) OpenHostShell(
 	context.Context,
+	[]string,
 	io.Reader,
 	io.Writer,
 	io.Writer,

@@ -445,7 +445,7 @@ printf 'host-stderr' >&2
 
 	// When
 	if err := localRuntime.OpenHostShell(
-		context.Background(), strings.NewReader("host-input\n"), &stdout, &stderr,
+		context.Background(), nil, strings.NewReader("host-input\n"), &stdout, &stderr,
 	); err != nil {
 		t.Fatalf("host shell failed: %v", err)
 	}
@@ -474,6 +474,41 @@ printf 'host-stderr' >&2
 			stdout.String(),
 			stderr.String(),
 		)
+	}
+}
+
+//nolint:paralleltest // test runner scripts fork executable fixtures.
+func TestMacVMRuntimeOpenHostShellForwardsCommandArguments(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	argsPath := filepath.Join(t.TempDir(), "host-args")
+	runnerScript := fmt.Sprintf(`#!/bin/sh
+set -eu
+: > %q
+for arg do printf '%%s\n' "$arg" >> %q; done
+`, argsPath, argsPath)
+	localRuntime := NewMacVMRuntime(
+		deployment, newTestManagerForRunner(t, []byte(runnerScript)),
+	)
+	if err := os.MkdirAll(localRuntime.paths.WorkDir, dirMode); err != nil {
+		t.Fatalf("failed to create runtime work dir: %v", err)
+	}
+
+	// When
+	err := localRuntime.OpenHostShell(
+		context.Background(), []string{"sh", "-c", "printf '%s' hello world"},
+		strings.NewReader(""), io.Discard, io.Discard,
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("host command failed: %v", err)
+	}
+	args, err := os.ReadFile(argsPath)
+	want := "run\n--\nsh\n-c\nprintf '%s' hello world\n"
+	if err != nil || string(args) != want {
+		t.Fatalf("host command args = %q, err=%v; want %q", args, err, want)
 	}
 }
 
@@ -574,7 +609,7 @@ func TestMacVMRuntimeOpenHostShellPreservesRunnerFailure(t *testing.T) {
 
 	// When
 	err := localRuntime.OpenHostShell(
-		context.Background(), strings.NewReader(""), io.Discard, io.Discard,
+		context.Background(), nil, strings.NewReader(""), io.Discard, io.Discard,
 	)
 
 	// Then

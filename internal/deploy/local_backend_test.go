@@ -864,6 +864,7 @@ func TestLocalBackend_LinuxShellsAreUnsupported(t *testing.T) {
 	if err := backend.OpenHostShell(
 		context.Background(),
 		"",
+		nil,
 	); !errors.Is(
 		err,
 		localruntime.ErrHostShellUnsupported,
@@ -893,7 +894,7 @@ func TestLocalBackendShellErrorsBypassReachabilityClassification(t *testing.T) {
 		{
 			name: "host shell",
 			openShell: func(backend *localBackend) error {
-				return backend.OpenHostShell(context.Background(), "")
+				return backend.OpenHostShell(context.Background(), "", nil)
 			},
 			configureError: func(runtime *endpointRuntimeStub, err error) {
 				runtime.hostShellErr = err

@@ -14,6 +14,7 @@ const shellHostCmdLongDesc = shellHostCmdShortDesc + `
 
 Creates a secure host OS shell connection to a node in the active deployment.
 If no specific node is specified, connects to the first node available.
+Pass a command after -- to run it without opening an interactive shell.
 `
 
 var shellHostCmdOpts = struct {
@@ -23,13 +24,15 @@ var shellHostCmdOpts = struct {
 }
 
 var shellHostCmd = &cobra.Command{
-	Use:   "host",
+	Use:   "host [-- command...]",
 	Short: shellHostCmdShortDesc,
 	Long:  shellHostCmdLongDesc,
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, _ []string) error {
+	Args:  cobra.ArbitraryArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
-		return deploy.OpenHostShell(cmd.Context(), commonFlags.Deployment(), shellHostCmdOpts.Node)
+		return deploy.OpenHostShell(
+			cmd.Context(), commonFlags.Deployment(), shellHostCmdOpts.Node, args,
+		)
 	},
 }
 
