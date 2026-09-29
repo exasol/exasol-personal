@@ -163,7 +163,12 @@ type Runtime interface {
 
 	ReadEndpoints() (*VMRuntimeEndpoint, error)
 	HealthCheck(ctx context.Context) (*HealthCheckResult, error)
-	OpenHostShell(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) error
+	OpenHostShell(
+		ctx context.Context,
+		command []string,
+		stdin io.Reader,
+		stdout, stderr io.Writer,
+	) error
 	OpenContainerShell(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) error
 }
 

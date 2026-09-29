@@ -64,7 +64,7 @@ type deploymentBackend interface {
 	) error
 	ReadConfiguration() ([]DeploymentConfigValue, error)
 	ReadDeploymentConfigVariables() (map[string]ConfigVariableDefinition, error)
-	OpenHostShell(ctx context.Context, selectedNode string) error
+	OpenHostShell(ctx context.Context, selectedNode string, command []string) error
 	OpenCOSShell(ctx context.Context) error
 	Deploy(ctx context.Context, out, outErr io.Writer, options DeployOptions) error
 	Start(ctx context.Context, out, outErr io.Writer, waitTimeoutSeconds int) error

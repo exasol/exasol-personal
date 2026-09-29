@@ -560,6 +560,7 @@ func (runtime *endpointRuntimeStub) HealthCheck(
 
 func (runtime *endpointRuntimeStub) OpenHostShell(
 	context.Context,
+	[]string,
 	io.Reader,
 	io.Writer,
 	io.Writer,

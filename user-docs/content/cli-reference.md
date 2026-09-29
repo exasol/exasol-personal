@@ -941,9 +941,10 @@ Establish a secure shell connection to a host node
 
 Creates a secure host OS shell connection to a node in the active deployment.
 If no specific node is specified, connects to the first node available.
+Pass a command after -- to run it without opening an interactive shell.
 
 Usage:
-	exasol shell host [flags]
+	exasol shell host [-- command...] [flags]
 
 Flags:
   -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory

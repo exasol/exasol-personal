@@ -18,6 +18,9 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
+- `exasol shell host -- <command>` now runs a command directly on the deployment host while the
+  command without arguments continues to open an interactive shell.
+
 - `exasol --help` now names the Exasol Launcher, rather than Exasol Personal, as what selects the
   default deployment directory. The documentation follows the same distinction: Exasol Launcher is
   the command-line tool, and Exasol Personal is the product and the license the database is

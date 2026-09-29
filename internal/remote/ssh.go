@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
@@ -111,6 +112,36 @@ func (s *SSHRemote) RunInteractiveCommand(
 	}
 
 	return nil
+}
+
+func (s *SSHRemote) RunCommand(
+	ctx context.Context,
+	command []string,
+	stdin io.Reader,
+	out, errOut io.Writer,
+) error {
+	session, err := startSSHSession(s.options)
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	session.Stdin = stdin
+	session.Stdout = out
+	session.Stderr = errOut
+	stop := context.AfterFunc(ctx, func() { _ = session.Close() })
+	defer stop()
+
+	return session.Run(shellCommand(command))
+}
+
+func shellCommand(args []string) string {
+	quoted := make([]string, len(args))
+	for i, arg := range args {
+		quoted[i] = "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'"
+	}
+
+	return strings.Join(quoted, " ")
 }
 
 func (s *SSHRemote) RunScript(ctx context.Context, script io.Reader, out, errOut io.Writer) error {

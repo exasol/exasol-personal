@@ -15,11 +15,11 @@ import (
 
 var ErrNoNodesFound = errors.New("no nodes found in the active deployment")
 
-// OpenHostShell starts an interactive shell using stdin stdout & stderr.
 func OpenHostShell(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 	selectedNode string,
+	command []string,
 ) error {
 	return withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
 		backend, err := newDeploymentBackendForDeployment(ctx, deployment)
@@ -27,7 +27,7 @@ func OpenHostShell(
 			return err
 		}
 
-		return backend.OpenHostShell(ctx, selectedNode)
+		return backend.OpenHostShell(ctx, selectedNode, command)
 	})
 }
 
