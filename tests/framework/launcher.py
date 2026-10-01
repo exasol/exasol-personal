@@ -139,6 +139,13 @@ class Launcher:
     ) -> CompletedProcess[str]:
         return self.run_command("deploy", deployment_dir, *args, **kwargs)
 
+    def config_set(
+        self,
+        deployment_dir: str,
+        *args: str,
+    ) -> CompletedProcess[str]:
+        return self.run_command("config", deployment_dir, "set", *args)
+
     def deploy_no_block(
         self,
         deployment_dir: str,

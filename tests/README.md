@@ -46,11 +46,11 @@ The project uses multiple layers of testing to ensure quality at different level
 - **Resources:** No external dependencies
 - **When to use:** Test core logic, data structures, utility functions
 
-### 2. Python Integration Tests
+### 2. Python Launcher Tests
 
-- **Location:** `tests/integration/`
-- **Purpose:** Test CLI behavior and command interactions without cloud resources
-- **Run with:** `task tests-integration` (from project root)
+- **Location:** `tests/launcher/`
+- **Purpose:** Test launcher behavior through its supported interfaces without provisioned infrastructure
+- **Run with:** `task tests-launcher` (from project root)
 - **Speed:** Fast (seconds to minutes)
 - **Resources:** No cloud resources provisioned
 - **When to use:**
@@ -58,19 +58,27 @@ The project uses multiple layers of testing to ensure quality at different level
   - Test command help output and error messages
   - Validate idempotency and state management
   - Check file creation and configuration handling
-  
-### 3. Python Deployment Tests (cloud and local)
 
-Cloud tests provision real infrastructure and share one session-scoped deployment
-(the `reusable_deployment` fixture). They are split by kind across three directories,
-and each test is stamped with a kind marker matching its directory (`-m deployment`,
-`-m e2e`, `-m chaos`):
+### 3. Python End-to-End Tests
 
-- **`tests/deployment/`** — provisioning and lifecycle (stop/start, custom sizing, local VM ports, remote archive).
-- **`tests/e2e/`** — read-only connect / query / output workflows against the running deployment.
-- **`tests/chaos/`** — fault injection and recovery (interrupting in-flight lifecycle operations).
+Live tests live under `tests/live/` and are named for the launcher capability they
+exercise. Recovery and smoke evidence remains beside that capability.
 
-- **Run with:** `task tests-deployment` (runs all three), or the marker-scoped tasks below.
+Tests request one of five execution boundaries: `deployment` for controlled state,
+`local_deployment` for a real local runtime, `shared_live_deployment` for repeatable
+read-only live behavior, `reusable_live_deployment` for vetted restorable mutations,
+or `isolated_live_deployment` for destructive or non-restorable behavior. Pytest
+automatically keeps shared and reusable deployments in exclusive groups and serializes
+local deployment work when tests run concurrently.
+The final pytest and GitHub summaries report how many deployments the run created.
+
+Tests use `smoke`, `chaos`, `stress`, `providers`, and `platform` annotations only
+when those facts affect selection. Product-facing evidence is linked with
+`openspec("capability-id")`; this is a review aid, not strict one-to-one validation.
+See the [testing architecture](../doc/testing-architecture-proposal.md) for the full
+contract.
+
+- **Run with:** `task tests-deployment`, or one of the focused tasks below.
 - **Speed:** Slow (10-30+ minutes)
 - **Resources:** **Creates real cloud resources (incurs costs!)**
 - **When to use:**
@@ -102,22 +110,19 @@ All integration and deployment tests are written using [pytest](https://pytest.o
 # Run all Go unit tests
 task tests-unit
 
-# Run Python integration tests
-task tests-integration
+# Run cloud-free launcher tests
+task tests-launcher
 
-# Run Python deployment tests (default: AWS)
+# Run broad live evidence on AWS, excluding opt-in stress tests
 task tests-deployment
 
-# Run Python deployment tests with Azure preset
-task tests-deployment INFRA=azure
+# Run the focused smoke path on AWS, Azure, or Exoscale
+task tests-deployment-smoke INFRA=azure
 
-# Run infrastructure-focused deployment tests
-task tests-deployment-infrastructure INFRA=aws
+# Run deliberately abnormal recovery scenarios
+task tests-deployment-chaos INFRA=aws
 
-# Run installation-focused end-to-end tests
-task tests-deployment-installation INFRA=aws
-
-# Run local deployment tests on a supported Linux or macOS host
+# Run the local smoke path on a supported Linux or macOS host
 task tests-deployment-local
 ```
 
@@ -128,35 +133,34 @@ If you need more control over pytest execution:
 ```bash
 cd tests
 
-# Run all integration tests
-uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/integration
+# Run all launcher tests
+uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/launcher
 
 # Run specific test file
-uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/integration/test_cli.py
+uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/launcher/test_cli.py
 
 # Run specific test
-uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/integration/test_cli.py::test_init_idempotent
+uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/launcher/test_init.py::test_init_idempotent
 
 # Run with verbose output
-uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/integration -v
+uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/launcher -v
 
-# Run all cloud tests (default: AWS preset)
+# Run broad cloud evidence with bounded deployment concurrency
 export AWS_PROFILE=your-profile
-uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/deployment tests/e2e tests/chaos
+EXASOL_RUN_CLOUD_DEPLOY_CASES=1 uv run --locked --no-build pytest -n 2 --dist loadgroup -rP -m "not stress" --exasol-path=../bin/exasol tests/live
 
-# Run all cloud tests with Azure preset
-uv run --locked --no-build pytest --exasol-path=../bin/exasol --infra=azure tests/deployment tests/e2e tests/chaos
+# Run an Azure smoke path
+EXASOL_RUN_CLOUD_DEPLOY_CASES=1 uv run --locked --no-build pytest -n 2 --dist loadgroup -rP -m smoke --infra=azure --exasol-path=../bin/exasol tests/live
 
-# Run a single kind (directory or marker both work)
-uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/e2e
-uv run --locked --no-build pytest --exasol-path=../bin/exasol -m "chaos" tests/deployment tests/e2e tests/chaos
+# Run recovery evidence
+EXASOL_RUN_CLOUD_DEPLOY_CASES=1 uv run --locked --no-build pytest -n 2 --dist loadgroup -rP -m chaos --infra=aws --exasol-path=../bin/exasol tests/live
 
-# Run only infrastructure-focused tests
-uv run --locked --no-build pytest --exasol-path=../bin/exasol --infra=aws -m "infrastructure_e2e" tests/deployment tests/e2e tests/chaos
-
-# Run only installation-focused end-to-end tests
-uv run --locked --no-build pytest --exasol-path=../bin/exasol --infra=aws -m "installation_e2e" tests/deployment tests/e2e tests/chaos
+# Run local evidence; pytest detects the host platform
+uv run --locked --no-build pytest -n 2 --dist loadgroup -rP -m smoke --infra=local --exasol-path=../bin/exasol tests/live
 ```
+
+Cloud tasks create billable resources. STACKIT live evidence is omitted until its
+deployment path works correctly.
 
 ### Seeing the commands a test runs
 
@@ -165,7 +169,7 @@ invocations. Raise it to `DEBUG` and every command the suite executes is printed
 before it starts, with its working directory when one is set:
 
 ```bash
-uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/integration --log-cli-level=DEBUG
+uv run --locked --no-build pytest --exasol-path=../bin/exasol tests/launcher --log-cli-level=DEBUG
 ```
 
 ```
@@ -181,6 +185,6 @@ they all funnel through. Nothing needs to be passed to the helpers to opt in.
 ## Continuous Integration
 
 GitHub Actions CI coverage:
-- Unit tests and integration tests run on every push
+- Unit tests and cloud-free launcher tests run on every push
 - Deployment tests run manually via workflow dispatch; the local suite has Linux AMD64 and macOS ARM64 lanes
 - See [CI Documentation](../doc/ci.md) for details

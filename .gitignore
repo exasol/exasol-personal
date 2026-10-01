@@ -25,10 +25,10 @@ tfstate*
 .terraform/
 __pycache__
 coverage-unit.out
-coverage-integration.out
-covdata-integration/
-coverage-integration-linux/
-coverage-integration-windows/
+coverage-launcher.out
+covdata-launcher/
+coverage-launcher-linux/
+coverage-launcher-windows/
 
 # Credentials and secrets
 *.pem
