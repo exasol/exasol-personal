@@ -8,6 +8,7 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Final
@@ -47,7 +48,7 @@ def test_full_local_deployment_lifecycle(exasol_path: str, tmp_path: Path) -> No
         connection = deployment_data["connection"]
         assert connection["host"] == "127.0.0.1"
         assert connection["dbPort"]
-        if IS_MACOS_ARM:
+        if IS_MACOS_ARM or sys.platform == "linux":
             assert connection["shellSupported"] is True
         else:
             assert "shellSupported" not in connection
