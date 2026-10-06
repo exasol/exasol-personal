@@ -158,6 +158,32 @@ uv run --locked --no-build pytest --exasol-path=../bin/exasol --infra=aws -m "in
 uv run --locked --no-build pytest --exasol-path=../bin/exasol --infra=aws -m "installation_e2e" tests/deployment tests/e2e tests/chaos
 ```
 
+### Sidecar fixture builds
+
+Build the launcher with the disposable Caddy catalog before running sidecar
+deployment tests:
+
+```bash
+task build SIDECAR_TEST_CATALOG=true COMMAND_NAME=exasol-sidecar-tests
+task tests-integration COMMAND_NAME=exasol-sidecar-tests
+task tests-deployment-local COMMAND_NAME=exasol-sidecar-tests
+```
+
+The catalog lives in `fixtures/sidecars/catalog.yaml`. Its Caddy 2.10.2 Alpine
+index digest includes Linux AMD64 and ARM64 images. It echoes randomly
+generated test credentials over loopback HTTP. Use it only with disposable
+deployments. The separate executable keeps the production build independent.
+
+Cloud sidecar tests use `reusable_deployment` and check every provisioned node.
+They configure Caddy for host networking and probe its loopback endpoint on
+each node through host commands. Run them with cloud credentials configured:
+
+```bash
+cd tests
+uv run --locked --no-build pytest tests/deployment/test_sidecar_cloud.py \
+  --exasol-path=../bin/exasol-sidecar-tests --infra=aws
+```
+
 ### Seeing the commands a test runs
 
 Live logging is on at `INFO`, which does not include the individual launcher
