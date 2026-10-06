@@ -614,7 +614,13 @@ func (install *PodmanInstall) runPodman(
 	out, outErr io.Writer,
 	arg ...string,
 ) error {
-	return install.environment.Run(ctx, nil, out, outErr, append([]string{"podman"}, arg...)...)
+	return install.environment.Run(
+		ctx,
+		nil,
+		nil,
+		out,
+		outErr,
+		append([]string{"podman"}, arg...)...)
 }
 
 func (install *PodmanInstall) runPodmanOutput(
@@ -629,7 +635,7 @@ func (install *PodmanInstall) runPodmanOutput(
 		out = io.MultiWriter(out, &stdout)
 	}
 	err := install.environment.Run(
-		ctx, nil, out, outErr, append([]string{"podman"}, arg...)...,
+		ctx, nil, nil, out, outErr, append([]string{"podman"}, arg...)...,
 	)
 
 	return stdout.String(), err

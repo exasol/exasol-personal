@@ -39,23 +39,27 @@ func TestVMPathMapperMapsOnlySharedPaths(t *testing.T) {
 
 //nolint:paralleltest // the test forks an executable fixture it just wrote.
 func TestRunnerExecutionEnvironmentPreservesCommandIOAndExitStatus(t *testing.T) {
+	// Given
 	requireRunnerEnvironmentPOSIX(t)
 
 	environment := newTestRunnerExecutionEnvironment(t)
 	var stdout, stderr bytes.Buffer
+	// When
 	err := environment.Run(
-		context.Background(),
+		context.Background(), map[string]string{"EXASOL_TEST_VALUE": "with 'quotes'\nand newline"},
 		strings.NewReader("input with spaces"),
 		&stdout,
 		&stderr,
 		"sh",
 		"-c",
-		`read value; printf '<%s>' "$value"; printf 'problem' >&2; exit 23`,
+		`read value; printf '<%s>%s' "$value" "$EXASOL_TEST_VALUE"; printf 'problem' >&2; exit 23`,
 	)
+	// Then
 	if !commandExitedWith(err, 23) {
 		t.Fatalf("expected exit status 23, got %v", err)
 	}
-	if stdout.String() != "<input with spaces>" || stderr.String() != "problem" {
+	if stdout.String() != "<input with spaces>with 'quotes'\nand newline" ||
+		stderr.String() != "problem" {
 		t.Fatalf("unexpected command output stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }

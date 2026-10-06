@@ -14,15 +14,26 @@ func materializeSidecarLocked(
 	document sidecar.Document,
 	catalog *sidecar.Catalog,
 	name, architecture string,
+	noDBPassword bool,
 ) (sidecar.Container, error) {
-	for _, container := range document.Containers {
+	for index, container := range document.Containers {
 		if container.Name == name {
-			return container, nil
+			if !noDBPassword {
+				return container, nil
+			}
+
+			container = sidecar.WithoutDatabasePassword(container)
+			document.Containers[index] = container
+
+			return container, config.WriteSidecars(deployment, document)
 		}
 	}
 	container, err := catalog.Resolve(name, architecture)
 	if err != nil {
 		return sidecar.Container{}, err
+	}
+	if noDBPassword {
+		container = sidecar.WithoutDatabasePassword(container)
 	}
 	document.Containers = append(document.Containers, container)
 	if err := config.WriteSidecars(deployment, document); err != nil {

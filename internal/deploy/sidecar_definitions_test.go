@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -43,7 +44,18 @@ func materializeTestSidecar(
 			if err != nil {
 				return err
 			}
-			_, err = materializeSidecarLocked(directory, document, catalog, "example", "amd64")
+			container, err := materializeSidecarLocked(
+				directory,
+				document,
+				catalog,
+				"example",
+				"amd64",
+				false,
+			)
+			if err == nil && container.Name != "example" {
+				t.Fatal("wrong materialized name")
+			}
+
 			return err
 		},
 	)
@@ -89,5 +101,49 @@ func TestSidecarEnablePreservesEdits(t *testing.T) {
 	require.NoError(t, err)
 	if string(actual) != string(edited) {
 		t.Fatalf("definition changed: %s", actual)
+	}
+}
+
+func TestMaterializeSidecarPasswordSelectionIsPersistent(t *testing.T) {
+	t.Parallel()
+	for _, alreadyEnabled := range []bool{false, true} {
+		t.Run(strconv.FormatBool(alreadyEnabled), func(t *testing.T) {
+			t.Parallel()
+			// Given
+			deployment := config.NewDeploymentDir(t.TempDir())
+			catalog := sidecarTestCatalog(t)
+			entry := catalog.Sidecars["example"]
+			entry.Container.Env = []sidecar.EnvVar{{
+				Name: "PASSWORD",
+				ValueFrom: &sidecar.EnvSource{SecretKeyRef: &sidecar.SecretKeyRef{
+					Name: sidecar.DatabaseSource, Key: "password",
+				}},
+			}}
+			catalog.Sidecars["example"] = entry
+			if alreadyEnabled {
+				materializeTestSidecar(t, deployment, catalog)
+			}
+			// When
+			err := withDeploymentExclusiveLock(context.Background(), deployment,
+				func(directory config.DeploymentDir) error {
+					document, err := config.ReadSidecars(directory)
+					if err != nil {
+						return err
+					}
+					_, err = materializeSidecarLocked(
+						directory, document, catalog, "example", "amd64", true,
+					)
+
+					return err
+				})
+			require.NoError(t, err)
+			materializeTestSidecar(t, deployment, catalog)
+			// Then
+			document, err := config.ReadSidecars(deployment)
+			require.NoError(t, err)
+			if len(document.Containers) != 1 || len(document.Containers[0].Env) != 0 {
+				t.Fatal("password reference reintroduced")
+			}
+		})
 	}
 }
