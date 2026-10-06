@@ -259,7 +259,14 @@ case "$1" in
     if [ "$2" = "inspect" ]; then printf 'false\\n'; exit 0; fi
     ;;
   load) printf 'Loaded image: docker.io/exasol/nano:test\\n' ;;
-  images|info|ps|logs) ;;
+  images|info|logs) ;;
+  ps) printf '[]\\n' ;;
+  network)
+    if [ "$2" = "inspect" ]; then
+      printf '[{"name":"%s","driver":"bridge","dns_enabled":true,' "$3"
+      printf '"labels":{"com.exasol.launcher.sidecar-owner":"%s"}}]\\n' "${3%-services}"
+    fi
+    ;;
   run) printf 'bind: address already in use\\n' >&2; exit 125 ;;
 esac
 """

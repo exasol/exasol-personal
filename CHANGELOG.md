@@ -18,6 +18,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
+- New local database containers use a deployment-specific bridge network with
+  the `database` DNS alias. Existing containers adopt it on their next explicit
+  `exasol stop` and `exasol start`.
+
 - `exasol shell host -- <command>` now runs a command directly on the deployment host while the
   command without arguments continues to open an interactive shell.
 
