@@ -46,6 +46,7 @@ type StartOptions struct {
 // when the backend was constructed (see newDeploymentBackend).
 // nolint: interfacebloat
 type deploymentBackend interface {
+	SidecarHosts(ctx context.Context) ([]sidecarHost, error)
 	// Prepare satisfies host prerequisites. It runs before the deployment
 	// records an operation in progress, so a declined or failed
 	// prerequisite leaves the deployment retryable.

@@ -44,6 +44,11 @@ func WriteSidecars(deployment DeploymentDir, document sidecar.Document) error {
 	if _, err := sidecar.Parse(data); err != nil {
 		return err
 	}
+
+	return writeSidecarFile(deployment, deployment.SidecarsPath(), data)
+}
+
+func writeSidecarFile(deployment DeploymentDir, path string, data []byte) error {
 	temporary, err := os.CreateTemp(deployment.Root(), ".sidecars-*.tmp")
 	if err != nil {
 		return err
@@ -60,8 +65,8 @@ func WriteSidecars(deployment DeploymentDir, document sidecar.Document) error {
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(temporary.Name(), deployment.SidecarsPath()); err != nil {
-		return fmt.Errorf("replace sidecars.yaml: %w", err)
+	if err := os.Rename(temporary.Name(), path); err != nil {
+		return fmt.Errorf("replace sidecar state: %w", err)
 	}
 
 	return nil

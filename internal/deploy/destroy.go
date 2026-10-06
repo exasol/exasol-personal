@@ -95,6 +95,9 @@ func runDestroyBackend(
 
 	// Stop handling interrupts before committing final initialized state
 	unregister()
+	if err := backendSidecarHooks(deployment, backend).AfterDestroy(); err != nil {
+		return err
+	}
 
 	// Returning to the initialized state is required so that `deploy` can be run again.
 	if err := exasolState.SetWorkflowStateAndWrite(
