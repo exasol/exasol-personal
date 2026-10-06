@@ -6,6 +6,15 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Added `exasol sidecar list`, `enable <name>`, `status <name>`, and
+  `disable <name>` with JSON output and a database-password opt-out. Enabled
+  sidecars follow local and cloud deployment start, stop, and destroy on every
+  host, with per-host runtime and reconciliation status. Status clears recorded
+  failures when live inspection verifies the desired outcome. Start reconciles
+  edited definitions and reports sidecar failures separately from database
+  state. macOS publishes sidecar ports through the local runner's live
+  forwarding. Example: `exasol sidecar enable <name> --no-db-password`.
+
 - Added a **CLI reference** page to the user documentation, listing every command and option of the
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each
   preset.

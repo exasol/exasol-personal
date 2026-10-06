@@ -182,7 +182,7 @@ func runInstallPersistentPostRun(cmd *cobra.Command, _ []string) error {
 
 func installDeploymentFailure(cause error) error {
 	err := fmt.Errorf("deployment failed: %w", cause)
-	addLocalPortRecoveryCallToAction(err)
+	addDeploymentRecoveryCallToAction(err)
 
 	return err
 }

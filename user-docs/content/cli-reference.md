@@ -69,6 +69,7 @@ Additional Commands:
 	info        Prints information about your Exasol deployment.
 	presets     Manage embedded presets
 	shell       Shell access to deployment host and container
+	sidecar     Manage deployment sidecars from the built-in catalog
 	slc         Manage script language containers (SLCs)
 	status      Get the status of a deployment
 	version     Print the program version and exit
@@ -950,6 +951,78 @@ Flags:
   -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -n, --node string                Name of the node to connect to. Connects to the first available node if not specified
+```
+
+### `exasol sidecar` { data-toc-label="sidecar" }
+
+```text
+Manage deployment sidecars from the built-in catalog
+
+Usage:
+	exasol sidecar [command] [flags]
+
+Additional Commands:
+	disable                       Disable a sidecar and remove its runtime resources
+	enable                        Enable a catalog sidecar
+	list                          List catalog sidecars and deployment enablement
+	status                        Show sidecar state and published endpoints
+```
+
+#### `exasol sidecar disable` { data-toc-label="sidecar disable" }
+
+```text
+Disable a sidecar and remove its runtime resources
+
+Usage:
+	exasol sidecar disable <name> [flags]
+
+Flags:
+  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+      --deployment-dir file-path   Override the deployment directory selected automatically
+  -j, --json                       Output in JSON format
+```
+
+#### `exasol sidecar enable` { data-toc-label="sidecar enable" }
+
+```text
+Enable a catalog sidecar
+
+Usage:
+	exasol sidecar enable <name> [flags]
+
+Flags:
+  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+      --deployment-dir file-path   Override the deployment directory selected automatically
+  -j, --json                       Output in JSON format
+      --no-db-password             Omit database password references from the saved sidecar definition
+```
+
+#### `exasol sidecar list` { data-toc-label="sidecar list" }
+
+```text
+List catalog sidecars and deployment enablement
+
+Usage:
+	exasol sidecar list [flags]
+
+Flags:
+  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+      --deployment-dir file-path   Override the deployment directory selected automatically
+  -j, --json                       Output in JSON format
+```
+
+#### `exasol sidecar status` { data-toc-label="sidecar status" }
+
+```text
+Show sidecar state and published endpoints
+
+Usage:
+	exasol sidecar status <name> [flags]
+
+Flags:
+  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+      --deployment-dir file-path   Override the deployment directory selected automatically
+  -j, --json                       Output in JSON format
 ```
 
 ### `exasol slc` { data-toc-label="slc" }
