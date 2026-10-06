@@ -130,13 +130,14 @@ tasks:
     vars:
       DEBUG_BUILD: '{{default "false" .DEBUG_BUILD}}'
       COVERAGE: '{{default "false" .COVERAGE}}'
+      SIDECAR_TEST_CATALOG: '{{default "false" .SIDECAR_TEST_CATALOG}}'
     env:
       CGO_ENABLED: "0"
     cmds:
       - |
         version=$(git describe --tags --abbrev=0 --match 'v*') # First character is "v".
         go build \
-          -tags=containers_image_openpgp \
+          -tags=containers_image_openpgp{{if eq .SIDECAR_TEST_CATALOG "true"}},sidecar_test_catalog{{end}} \
           -o {{.BUILD_DIR_NAME}}/{{.BINARY_NAME}} \
           {{if eq .COVERAGE "true"}}-cover -covermode=atomic {{end}}\
           {{if eq .DEBUG_BUILD "true"}}-gcflags="all=-N -l"{{else}}-trimpath \
@@ -149,6 +150,7 @@ tasks:
       DEBUG_BUILD: '{{default "false" .DEBUG_BUILD}}'
       TARGET_GOARCH: '{{default "amd64" .GOARCH}}'
       OUTPUT_NAME: '{{.COMMAND_NAME}}.exe'
+      SIDECAR_TEST_CATALOG: '{{default "false" .SIDECAR_TEST_CATALOG}}'
     deps:
       - task: generate
         vars:
@@ -161,7 +163,7 @@ tasks:
     cmds:
       - |
         version=$(git describe --tags --abbrev=0 --match 'v*') # First character is "v".
-        go build -tags=containers_image_openpgp -o {{.BUILD_DIR_NAME}}/{{.OUTPUT_NAME}} \
+        go build -tags=containers_image_openpgp{{if eq .SIDECAR_TEST_CATALOG "true"}},sidecar_test_catalog{{end}} -o {{.BUILD_DIR_NAME}}/{{.OUTPUT_NAME}} \
           {{if eq .DEBUG_BUILD "true"}}-gcflags="all=-N -l"{{else}}-trimpath \
           -gcflags=all=-l{{end}} \
           -ldflags "{{if ne .DEBUG_BUILD "true"}}-s -w {{end}}-X main.CurrentLauncherVersion=${version:1}" {{.MAIN_PATH_REL}}

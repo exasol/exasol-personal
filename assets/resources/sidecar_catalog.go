@@ -1,3 +1,5 @@
+//go:build !sidecar_test_catalog
+
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
