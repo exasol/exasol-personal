@@ -5,6 +5,7 @@ go 1.26.3
 require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/chzyer/readline v1.5.1
+	github.com/distribution/reference v0.6.0
 	github.com/exasol/exasol-driver-go v1.1.0
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/hashicorp/hcl/v2 v2.24.0
@@ -98,7 +99,6 @@ require (
 	github.com/dave/dst v0.27.4 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
-	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.6.0 // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.8 // indirect
