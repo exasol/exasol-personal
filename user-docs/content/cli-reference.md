@@ -915,7 +915,7 @@ Usage:
 
 Additional Commands:
 	container                     Establish an interactive COS container shell connection
-	host                          Establish a secure shell connection to a host node
+	host                          Open a shell on a deployment host
 ```
 
 #### `exasol shell container` { data-toc-label="shell container" }
@@ -937,10 +937,11 @@ Flags:
 #### `exasol shell host` { data-toc-label="shell host" }
 
 ```text
-Establish a secure shell connection to a host node
+Open a shell on a deployment host
 
-Creates a secure host OS shell connection to a node in the active deployment.
+Opens a host OS shell on a node in the active deployment.
 If no specific node is specified, connects to the first node available.
+Linux local deployments use the caller's shell, environment, and working directory.
 Pass a command after -- to run it without opening an interactive shell.
 
 Usage:

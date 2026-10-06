@@ -851,9 +851,10 @@ func TestLocalBackendConfigure_LinuxIgnoresVMSizingOverrides(t *testing.T) {
 	}
 }
 
-func TestLocalBackend_LinuxShellsAreUnsupported(t *testing.T) {
+func TestLocalBackend_LinuxContainerShellIsUnsupported(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	backend := newLocalBackendForPlatform(
 		deployment,
@@ -861,20 +862,10 @@ func TestLocalBackend_LinuxShellsAreUnsupported(t *testing.T) {
 		localruntime.NewHostLinuxRuntime(deployment, nil),
 		localLinuxOS, localLinuxAMD64,
 	)
-	if err := backend.OpenHostShell(
-		context.Background(),
-		"",
-		nil,
-	); !errors.Is(
-		err,
-		localruntime.ErrHostShellUnsupported,
-	) ||
-		!strings.Contains(err.Error(), "linux host runtime") {
-		t.Fatalf("expected explicit Linux host shell error, got %v", err)
-	}
-	if err := backend.OpenCOSShell(
-		context.Background(),
-	); !errors.Is(
+	// When
+	err := backend.OpenCOSShell(context.Background())
+	// Then
+	if !errors.Is(
 		err,
 		localruntime.ErrContainerShellUnsupported,
 	) ||

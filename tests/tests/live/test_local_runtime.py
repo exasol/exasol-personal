@@ -48,7 +48,7 @@ def test_full_local_deployment_lifecycle(local_deployment: Deployment) -> None:
     connection = deployment_data["connection"]
     assert connection["host"] == "127.0.0.1"
     assert connection["dbPort"]
-    if IS_MACOS_ARM:
+    if IS_MACOS_ARM or sys.platform == "linux":
         assert connection["shellSupported"] is True
     else:
         assert "shellSupported" not in connection
