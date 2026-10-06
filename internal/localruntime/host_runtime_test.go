@@ -98,8 +98,8 @@ func TestLinuxHostReadEndpoint_ReturnsPublishedDatabasePort(t *testing.T) {
 	if endpoint.DBPort != 28563 {
 		t.Fatalf("expected published DB port 28563, got %#v", endpoint)
 	}
-	if endpoint.ShellSupported {
-		t.Fatalf("expected Linux host shell to be unsupported, got %#v", endpoint)
+	if !endpoint.ShellSupported {
+		t.Fatalf("expected Linux host shell support, got %#v", endpoint)
 	}
 }
 
@@ -117,7 +117,7 @@ func TestLinuxHostReadEndpoint_RejectsReadBeforeStart(t *testing.T) {
 	}
 }
 
-func TestLinuxHostShellErrorsPreserveUnsupportedIdentity(t *testing.T) {
+func TestHostShellErrorsPreserveUnsupportedIdentity(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -125,13 +125,6 @@ func TestLinuxHostShellErrorsPreserveUnsupportedIdentity(t *testing.T) {
 		openShell func(*HostRuntime) error
 		sentinel  error
 	}{
-		{
-			name: "host shell",
-			openShell: func(runtime *HostRuntime) error {
-				return runtime.OpenHostShell(context.Background(), nil, nil, nil, nil)
-			},
-			sentinel: ErrHostShellUnsupported,
-		},
 		{
 			name: "container shell",
 			openShell: func(runtime *HostRuntime) error {

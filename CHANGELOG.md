@@ -19,7 +19,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 ### Changed
 
 - `exasol shell host -- <command>` now runs a command directly on the deployment host while the
-  command without arguments continues to open an interactive shell.
+  command without arguments opens an interactive shell. Linux local deployments use the caller's
+  shell and execute explicit commands locally, inheriting the environment and working directory.
 
 - `exasol --help` now names the Exasol Launcher, rather than Exasol Personal, as what selects the
   default deployment directory. The documentation follows the same distinction: Exasol Launcher is
