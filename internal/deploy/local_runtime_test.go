@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/version_check"
 )
@@ -487,6 +488,14 @@ type endpointRuntimeStub struct {
 
 func (runtime *endpointRuntimeStub) Deployment() config.DeploymentDir {
 	return runtime.deployment
+}
+
+func (*endpointRuntimeStub) Sidecars(context.Context) (localinstall.SidecarManager, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (*endpointRuntimeStub) SidecarHostRunning(context.Context) (bool, error) {
+	return true, nil
 }
 
 func (*endpointRuntimeStub) EnsureQueryable(

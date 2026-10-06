@@ -144,6 +144,7 @@ type HealthCheckResult struct {
 // It intentionally owns the complete lifecycle and durability contract.
 // nolint: interfacebloat
 type Runtime interface {
+	localinstall.SidecarProvider
 	Deployment() config.DeploymentDir
 	Prepare(ctx context.Context, out, outErr io.Writer, options PrepareOptions) error
 	Start(ctx context.Context, out, outErr io.Writer, runtimeConfig VMConfig) error
