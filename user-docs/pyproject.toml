@@ -11,7 +11,7 @@ dependencies = [
 dev = [
     "mypy>=2.3.0",
     "pytest>=9.1.1",
-    "ruff>=0.16.2",
+    "ruff>=0.16.7",
 ]
 
 [tool.pytest.ini_options]
