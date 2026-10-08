@@ -23,17 +23,21 @@ func IdentityRuntimePath(path string) RuntimePath {
 	return RuntimePath{HostPath: path, RuntimePath: path}
 }
 
-// ExecutionEnvironment isolates installation logic from its command transport and filesystem.
-// It intentionally owns both command and filesystem operations for the same runtime.
-// nolint: interfacebloat
-type ExecutionEnvironment interface {
-	Sync(ctx context.Context, stdout, stderr io.Writer) error
+type CommandRunner interface {
 	Run(
 		ctx context.Context,
+		env map[string]string,
 		stdin io.Reader,
 		stdout, stderr io.Writer,
 		command ...string,
 	) error
+}
+
+// ExecutionEnvironment owns command and filesystem operations for the same runtime.
+// nolint: interfacebloat
+type ExecutionEnvironment interface {
+	CommandRunner
+	Sync(ctx context.Context, stdout, stderr io.Writer) error
 	PathExists(ctx context.Context, path string) (bool, error)
 	DirectoryHasEntries(ctx context.Context, path string) (bool, error)
 	MkdirAll(ctx context.Context, path string, mode os.FileMode) error
@@ -62,11 +66,12 @@ func (environment *DirectExecutionEnvironment) Sync(
 	ctx context.Context,
 	stdout, stderr io.Writer,
 ) error {
-	return environment.Run(ctx, nil, stdout, stderr, "sync")
+	return environment.Run(ctx, nil, nil, stdout, stderr, "sync")
 }
 
 func (environment *DirectExecutionEnvironment) Run(
 	ctx context.Context,
+	env map[string]string,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
 	command ...string,
@@ -78,6 +83,12 @@ func (environment *DirectExecutionEnvironment) Run(
 		return errors.New("execution environment command is empty")
 	}
 	cmd := exec.CommandContext(ctx, cmdLine[0], cmdLine[1:]...)
+	if len(env) > 0 {
+		cmd.Env = cmd.Environ()
+		for name, value := range env {
+			cmd.Env = append(cmd.Env, name+"="+value)
+		}
+	}
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

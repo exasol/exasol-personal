@@ -115,7 +115,7 @@ func (migration *macDataMigration) copyAndPublish(
 			migration.stagingDir, err)
 	}
 	if err := migration.environment.Run(
-		ctx,
+		ctx, nil,
 		nil,
 		out,
 		outErr,
@@ -275,7 +275,7 @@ func (migration *macDataMigration) markerMatches(
 		return false, err
 	}
 	err = migration.environment.Run(
-		ctx,
+		ctx, nil,
 		nil,
 		io.Discard,
 		io.Discard,
