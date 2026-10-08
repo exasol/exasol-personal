@@ -43,7 +43,16 @@ func materializeTestSidecar(
 			if err != nil {
 				return err
 			}
-			_, err = materializeSidecarLocked(directory, document, catalog, "example", "amd64")
+			container, err := materializeSidecarLocked(
+				directory,
+				document,
+				catalog,
+				"example",
+				"amd64",
+			)
+			if err == nil && container.Name != "example" {
+				t.Fatal("wrong materialized name")
+			}
 
 			return err
 		},
@@ -91,4 +100,30 @@ func TestSidecarEnablePreservesEdits(t *testing.T) {
 	if string(actual) != string(edited) {
 		t.Fatalf("definition changed: %s", actual)
 	}
+}
+
+func TestSidecarEnableStoresConnectionReferences(t *testing.T) {
+	t.Parallel()
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	catalog := sidecarTestCatalog(t)
+	entry := catalog.Sidecars["example"]
+	entry.Container.Env = []sidecar.EnvVar{{
+		Name: "DB_PASSWORD",
+		ValueFrom: &sidecar.EnvSource{SecretKeyRef: &sidecar.SecretKeyRef{
+			Name: sidecar.DatabaseSource, Key: "password",
+		}},
+	}}
+	catalog.Sidecars["example"] = entry
+	// When
+	materializeTestSidecar(t, deployment, catalog)
+	// Then
+	document, err := config.ReadSidecars(deployment)
+	require.NoError(t, err)
+	require.Len(t, document.Containers, 1)
+	saved := document.Containers[0].Env
+	require.Len(t, saved, 1)
+	require.Nil(t, saved[0].Value)
+	require.Equal(t, sidecar.DatabaseSource, saved[0].ValueFrom.SecretKeyRef.Name)
+	require.Equal(t, "password", saved[0].ValueFrom.SecretKeyRef.Key)
 }
