@@ -3,7 +3,10 @@
 
 """Shared fixtures for launcher tests."""
 
+import os
+import socket
 import subprocess
+import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -103,3 +106,42 @@ def get_version_check_count(base_url: str) -> int:
     response.raise_for_status()
     data = response.json()
     return int(data["count"])
+
+
+@pytest.fixture
+def unresponsive_db_port() -> Iterator[int]:
+    """Accept TCP connections on a loopback port and never answer them."""
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(16)
+    accepted: list[socket.socket] = []
+
+    def accept_forever() -> None:
+        while True:
+            try:
+                connection, _ = listener.accept()
+            except OSError:
+                return
+            accepted.append(connection)
+
+    threading.Thread(target=accept_forever, daemon=True).start()
+    try:
+        yield int(listener.getsockname()[1])
+    finally:
+        listener.close()
+        for connection in accepted:
+            connection.close()
+
+
+@pytest.fixture
+def hanging_podman_env(tmp_path: Path) -> dict[str, str]:
+    """Return an environment whose `podman` never completes."""
+    fake_bin = tmp_path / "hanging-podman-bin"
+    fake_bin.mkdir()
+    fake_podman = fake_bin / "podman"
+    fake_podman.write_text("#!/bin/sh\nexec sleep 600\n")
+    fake_podman.chmod(0o700)
+    environment = os.environ.copy()
+    environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
+
+    return environment

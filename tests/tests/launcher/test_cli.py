@@ -228,3 +228,14 @@ def test_unknown_flag_exits_nonzero_with_usage(exasol_path: str) -> None:
     combined = (proc.stdout + proc.stderr).lower()
     assert "unknown flag" in combined or "usage" in combined
     assert "traceback" not in combined
+
+
+@pytest.mark.parametrize("command", ["deploy", "install", "start"])
+def test_auto_approve_is_documented_for_lifecycle_commands(
+    exasol_path: str, command: str
+) -> None:
+    # When help is requested for a command that can prompt for approval
+    result = run_command([exasol_path, command, "--help"])
+
+    # Then --auto-approve is documented, and parsing it succeeds
+    assert "--auto-approve" in result.stdout
