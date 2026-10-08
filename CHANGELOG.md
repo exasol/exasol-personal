@@ -26,6 +26,19 @@ Notable user-facing changes to Exasol Personal are documented here.
   the command-line tool, and Exasol Personal is the product and the license the database is
   provided under.
 
+- Local deployments now run Exasol Nano 2026.2.0-nano.6 (previously 2026.2.0-nano.3). This update
+  fixes:
+  - a vulnerability that let malformed login packets crash the database's connection server;
+  - incorrect query results for window functions on self-joined tables, `BETWEEN` and
+    `TYPEOF`/`DUMP`/`IN`/`EXISTS` expressions over outer joins, joins over `UNION ALL`, `IN`
+    subqueries involving `NULL`, and casts of negative `DOUBLE` values to `VARCHAR` and of
+    single-digit strings to `DECIMAL`;
+  - query compilation hangs and internal errors with complex subqueries, `NULLIF`/`CASE`
+    expressions, and views projecting `NULL` joined with `USING`;
+  - login hangs and wrong statement IDs when reconnecting sessions.
+
+  Error messages for missing or misconfigured script language containers are also clearer.
+
 ### Fixed
 
 - `exasol init --help` and `exasol install --help` now list `--no-launcher-version-check`, the flag
