@@ -44,10 +44,16 @@ Notable user-facing changes to Exasol Personal are documented here.
 - `exasol init --help` and `exasol install --help` now list `--no-launcher-version-check`, the flag
   that disables the automatic check for new launcher releases. The flag was always accepted, but
   did not appear in the help output.
+- Debug logging of database connections no longer includes the database password. Previously,
+  `--log-level debug` and the deployment's `deployment.log` could contain the password in the
+  logged connection string; connections are now logged by user, host, and port.
 
 ### Breaking Changes
 
-- None.
+- New local deployments initialize the `sys` database user with a unique generated password instead
+  of `exasol`. The password is stored in the deployment's `secrets.json`, and `exasol connect` uses
+  it without extra setup; scripts that connect with other clients should read it from that file.
+  Existing local deployments keep their current credential.
 
 ## 2.3.0 - 2026-09-21
 

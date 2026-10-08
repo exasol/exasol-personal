@@ -6,6 +6,7 @@
 import json
 import os
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -54,11 +55,16 @@ def test_full_local_deployment_lifecycle(local_deployment: Deployment) -> None:
     assert "nodes" not in deployment_data
     assert "sshCommand" not in connection
     assert "sshPort" not in connection
-    secrets_data = json.loads((deployment_dir / "secrets.json").read_text())
-    assert secrets_data["dbPassword"] == "exasol"
+    password = _stored_db_password(deployment_dir)
+    assert re.fullmatch(r"[A-Za-z0-9]{16}", password)
+    _assert_password_only_in_secrets(deployment_dir, password)
 
     proc = local_deployment.connect(input="SELECT * FROM Dual", capture_output=True)
     assert "DUMMY" in proc.stdout
+    with pytest.raises(subprocess.CalledProcessError):
+        local_deployment.connect(
+            "--password", "exasol", input="SELECT * FROM Dual", capture_output=True
+        )
 
     local_deployment.stop()
     assert json.loads(local_deployment.status().stdout)["status"] == "stopped"
@@ -66,10 +72,29 @@ def test_full_local_deployment_lifecycle(local_deployment: Deployment) -> None:
     local_deployment.start()
     running = json.loads(local_deployment.status().stdout)
     assert running["status"] in {"database_ready", "database_connection_failed"}
+    assert _stored_db_password(deployment_dir) == password
+    proc = local_deployment.connect(input="SELECT * FROM Dual", capture_output=True)
+    assert "DUMMY" in proc.stdout
 
     local_deployment.destroy("--auto-approve")
     assert local_deployment.has_status(StatusInitialized)
     assert local_deployment.has_no_deployment()
+
+
+def _stored_db_password(deployment_dir: Path) -> str:
+    secrets_data = json.loads((deployment_dir / "secrets.json").read_text())
+    return str(secrets_data["dbPassword"])
+
+
+def _assert_password_only_in_secrets(deployment_dir: Path, password: str) -> None:
+    for bootstrap_dir in (
+        "local/runtime/bootstrap",
+        "local/runtime/vm-shared/bootstrap",
+    ):
+        assert not (deployment_dir / bootstrap_dir / "sys_password").exists()
+    deployment_log = deployment_dir / "deployment.log"
+    log_text = deployment_log.read_text(encoding="utf-8", errors="replace")
+    assert password not in log_text
 
 
 def _windows_podman_path() -> Path:

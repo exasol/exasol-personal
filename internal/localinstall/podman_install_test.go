@@ -25,6 +25,7 @@ const (
 	testContainerName      = "exasol-db-" + testDeploymentID
 	testLoadedImage        = "docker.io/exasol/nano:test"
 	testExecutableFileMode = 0o700
+	testInitialPassword    = "Initial1Password"
 )
 
 func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
@@ -58,6 +59,163 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 	})
 	if !strings.Contains(out.String(), loadedImagePrefix+" "+testLoadedImage) {
 		t.Fatalf("expected load output to be forwarded, got %q", out.String())
+	}
+}
+
+func withTestInitialPassword(startConfig *StartConfig) *int {
+	calls := 0
+	startConfig.BootstrapDir = filepath.Join(filepath.Dir(startConfig.DataDir), "bootstrap")
+	startConfig.InitialPassword = func(context.Context) (string, error) {
+		calls++
+		return testInitialPassword, nil
+	}
+
+	return &calls
+}
+
+func bootstrapPasswordPath(startConfig StartConfig) string {
+	return filepath.Join(startConfig.BootstrapDir, nanoBootstrapPasswordFile)
+}
+
+func TestPodmanInstallStart_BootstrapsInitialPasswordForFreshDatabase(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	calls := withTestInitialPassword(&startConfig)
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected fresh start with an initial password to succeed, got %v", err)
+	}
+	if *calls != 1 {
+		t.Fatalf("expected the initial password to be resolved once, got %d", *calls)
+	}
+	content, err := os.ReadFile(bootstrapPasswordPath(startConfig))
+	if err != nil || string(content) != testInitialPassword {
+		t.Fatalf("expected bootstrap password file, got %q, %v", content, err)
+	}
+	info, err := os.Stat(bootstrapPasswordPath(startConfig))
+	if err != nil || info.Mode().Perm() != bootstrapFileMode {
+		t.Fatalf("expected bootstrap file mode %o, got %v, %v", bootstrapFileMode, info, err)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	runCommand := commands[len(commands)-1]
+	for _, expected := range []string{
+		"<--restart><no>",
+		"<-v><" + startConfig.BootstrapDir + ":/run/secrets:ro,Z>",
+		"<params=maxConnectionsLicenseLimit=20><sys_password_file=/run/secrets/sys_password>",
+	} {
+		if !strings.Contains(runCommand, expected) {
+			t.Fatalf("expected run command to contain %q, got %q", expected, runCommand)
+		}
+	}
+	for _, command := range commands {
+		if strings.Contains(command, testInitialPassword) {
+			t.Fatalf("expected the password to stay out of commands, got %q", command)
+		}
+	}
+}
+
+func TestPodmanInstallStart_OmitsInitialPasswordForExistingDatabase(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	calls := withTestInitialPassword(&startConfig)
+	writeTestFile(t, filepath.Join(startConfig.DataDir, "exasol.conf"), "existing")
+	writeTestFile(t, bootstrapPasswordPath(startConfig), "stale")
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected existing database start to succeed, got %v", err)
+	}
+	if *calls != 0 {
+		t.Fatalf("expected no initial password for an existing database, got %d calls", *calls)
+	}
+	if _, statErr := os.Stat(bootstrapPasswordPath(startConfig)); !os.IsNotExist(statErr) {
+		t.Fatalf("expected stale bootstrap password to be removed, got %v", statErr)
+	}
+	commands := readCommandLog(t, fixture.logPath)
+	runCommand := commands[len(commands)-1]
+	if !strings.Contains(runCommand, "<--restart><always>") ||
+		strings.Contains(runCommand, "/run/secrets") {
+		t.Fatalf("expected a normal restartable container, got %q", runCommand)
+	}
+}
+
+func TestPodmanInstallStart_RemovesBootstrapPasswordWhenRunFails(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	withTestInitialPassword(&startConfig)
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "fail"), "run")
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "failed to start Nano container") {
+		t.Fatalf("expected Nano start failure, got %v", err)
+	}
+	if _, statErr := os.Stat(bootstrapPasswordPath(startConfig)); !os.IsNotExist(statErr) {
+		t.Fatalf("expected bootstrap password to be removed, got %v", statErr)
+	}
+}
+
+func TestPodmanInstallStart_StopsWhenInitialPasswordIsUnavailable(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	withTestInitialPassword(&startConfig)
+	startConfig.InitialPassword = func(context.Context) (string, error) {
+		return "", errors.New("credential unavailable")
+	}
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "credential unavailable") {
+		t.Fatalf("expected initial password failure, got %v", err)
+	}
+	for _, command := range readCommandLog(t, fixture.logPath) {
+		if strings.Contains(command, "<podman><run>") {
+			t.Fatalf("Nano must not start without its initial password: %q", command)
+		}
+	}
+}
+
+func TestRemoveHostBootstrapPassword_EmptiesDirectoryAndToleratesAbsence(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	bootstrapDir := t.TempDir()
+	writeTestFile(t, filepath.Join(bootstrapDir, nanoBootstrapPasswordFile), testInitialPassword)
+	writeTestFile(t, filepath.Join(bootstrapDir, ".runtime-write-123.tmp"), testInitialPassword)
+
+	// When
+	firstErr := RemoveHostBootstrapPassword(bootstrapDir)
+	secondErr := RemoveHostBootstrapPassword(bootstrapDir)
+	absentErr := RemoveHostBootstrapPassword(filepath.Join(bootstrapDir, "missing"))
+
+	// Then
+	if firstErr != nil || secondErr != nil || absentErr != nil {
+		t.Fatalf("expected removal to succeed, got %v, %v, %v", firstErr, secondErr, absentErr)
+	}
+	entries, err := os.ReadDir(bootstrapDir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("expected an empty bootstrap directory, got %v, %v", entries, err)
 	}
 }
 
@@ -579,6 +737,14 @@ func TestPodmanInstallStart_RejectsInvalidConfigurationBeforePodman(t *testing.T
 			name: "SLC target",
 			mutate: func(_ *PodmanInstall, config *StartConfig) {
 				config.SLCs = []SLCConfig{{Image: "example.test/slc:latest"}}
+			},
+		},
+		{
+			name: "bootstrap directory for an initial password",
+			mutate: func(_ *PodmanInstall, config *StartConfig) {
+				config.InitialPassword = func(context.Context) (string, error) {
+					return testInitialPassword, nil
+				}
 			},
 		},
 		{

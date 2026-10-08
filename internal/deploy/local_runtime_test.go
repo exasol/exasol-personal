@@ -11,10 +11,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
+	"syscall"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/util"
 	"github.com/exasol/exasol-personal/internal/version_check"
 )
 
@@ -267,6 +270,270 @@ func TestStartPreparedLocalRuntime_WritesHostEndpointArtifacts(t *testing.T) {
 	}
 }
 
+func TestWriteLocalDeploymentArtifacts_PreservesStoredSecretsAndRefreshesEndpoint(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := newTestDeploymentWithState(t)
+	stored := &config.Secrets{DbPassword: "stored-password"}
+	if err := config.WriteSecrets(deployment.Root(), stored); err != nil {
+		t.Fatalf("failed to write stored secrets: %v", err)
+	}
+	const changedDatabasePort = localTestDatabasePort + 1
+
+	// When
+	for _, port := range []int{localTestDatabasePort, changedDatabasePort} {
+		endpoint := &localruntime.VMRuntimeEndpoint{
+			RuntimeEndpoint: localruntime.RuntimeEndpoint{DBPort: port},
+		}
+		if err := writeLocalDeploymentArtifacts(deployment, endpoint); err != nil {
+			t.Fatalf("expected artifacts to be written, got %v", err)
+		}
+	}
+
+	// Then
+	secrets, err := config.ReadSecrets(deployment)
+	if err != nil {
+		t.Fatalf("expected secrets to be readable, got %v", err)
+	}
+	if *secrets != *stored {
+		t.Fatalf("expected stored secrets %#v, got %#v", *stored, *secrets)
+	}
+	info, err := config.ReadDeploymentInfo(deployment)
+	if err != nil {
+		t.Fatalf("expected deployment info to be readable, got %v", err)
+	}
+	if info.Connection == nil || info.Connection.DBPort != changedDatabasePort {
+		t.Fatalf(
+			"expected refreshed database port %d, got %#v",
+			changedDatabasePort,
+			info.Connection,
+		)
+	}
+}
+
+func TestWriteLocalDeploymentArtifacts_ReplacesUnusableSecrets(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		content string
+	}{
+		{name: "empty file", content: ""},
+		{name: "invalid JSON", content: "{"},
+		{name: "empty password", content: `{"dbPassword":""}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given
+			deployment := newTestDeploymentWithState(t)
+			if err := os.WriteFile(
+				deployment.SecretsPath(), []byte(test.content), 0o600,
+			); err != nil {
+				t.Fatalf("failed to write unusable secrets: %v", err)
+			}
+			endpoint := &localruntime.VMRuntimeEndpoint{
+				RuntimeEndpoint: localruntime.RuntimeEndpoint{DBPort: localTestDatabasePort},
+			}
+
+			// When
+			err := writeLocalDeploymentArtifacts(deployment, endpoint)
+			// Then
+			if err != nil {
+				t.Fatalf("expected artifacts to be written, got %v", err)
+			}
+			secrets, err := config.ReadSecrets(deployment)
+			if err != nil {
+				t.Fatalf("expected secrets to be readable, got %v", err)
+			}
+			if secrets.DbPassword != localDBPassword {
+				t.Fatalf(
+					"expected local DB password %q, got %q",
+					localDBPassword,
+					secrets.DbPassword,
+				)
+			}
+		})
+	}
+}
+
+func TestStartPreparedLocalRuntime_PreservesStoredSecrets(t *testing.T) {
+	// Given
+	t.Setenv(localSkipDatabaseWaitEnv, "true")
+	deployment := newTestDeploymentWithState(t)
+	stored := &config.Secrets{DbPassword: "stored-password"}
+	if err := config.WriteSecrets(deployment.Root(), stored); err != nil {
+		t.Fatalf("failed to write stored secrets: %v", err)
+	}
+	runtime := &endpointRuntimeStub{
+		deployment: deployment,
+		endpoint:   &localruntime.RuntimeEndpoint{DBPort: localTestDatabasePort},
+	}
+
+	// When
+	err := startPreparedLocalRuntime(
+		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("expected host runtime start to succeed, got %v", err)
+	}
+	secrets, err := config.ReadSecrets(deployment)
+	if err != nil {
+		t.Fatalf("expected secrets to be readable, got %v", err)
+	}
+	if *secrets != *stored {
+		t.Fatalf("expected stored secrets %#v, got %#v", *stored, *secrets)
+	}
+}
+
+func TestStartPreparedLocalRuntime_StoresGeneratedPasswordForFreshDatabase(t *testing.T) {
+	// Given
+	t.Setenv(localSkipDatabaseWaitEnv, "true")
+	deployment := newTestDeploymentWithState(t)
+	runtime := &endpointRuntimeStub{
+		deployment:      deployment,
+		endpoint:        &localruntime.RuntimeEndpoint{DBPort: localTestDatabasePort},
+		initializeFresh: true,
+	}
+
+	// When
+	err := startPreparedLocalRuntime(
+		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("expected fresh start to succeed, got %v", err)
+	}
+	secrets, err := config.ReadSecrets(deployment)
+	if err != nil {
+		t.Fatalf("expected secrets to be readable, got %v", err)
+	}
+	if secrets.DbPassword != runtime.initialPassword || secrets.DbPassword == localDBPassword {
+		t.Fatalf("expected the generated initial password to be stored, got %q", secrets.DbPassword)
+	}
+	if runtime.removeBootstrapCalls.Load() != 2 || runtime.stopCalls != 0 {
+		t.Fatalf(
+			"expected bootstrap cleanup without stopping, got removals=%d stops=%d",
+			runtime.removeBootstrapCalls.Load(), runtime.stopCalls,
+		)
+	}
+}
+
+func TestStartPreparedLocalRuntime_StopsAfterFailedFirstInitialization(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := newTestDeploymentWithState(t)
+	runtime := &endpointRuntimeStub{
+		deployment:      deployment,
+		initializeFresh: true,
+		startErr:        errors.New("nano failed"),
+	}
+
+	// When
+	err := startPreparedLocalRuntime(
+		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
+	)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected the failed first initialization to be reported")
+	}
+	if runtime.stopCalls != 1 || runtime.removeBootstrapCalls.Load() != 2 {
+		t.Fatalf(
+			"expected stop and bootstrap cleanup, got stops=%d removals=%d",
+			runtime.stopCalls, runtime.removeBootstrapCalls.Load(),
+		)
+	}
+	secrets, readErr := config.ReadSecrets(deployment)
+	if readErr != nil || secrets.DbPassword != runtime.initialPassword {
+		t.Fatalf("expected the initial password to stay stored for a retry, got %v, %v",
+			secrets, readErr)
+	}
+}
+
+func TestStartPreparedLocalRuntime_LeavesExistingDatabaseRunningAfterFailure(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	runtime := &endpointRuntimeStub{
+		deployment: newTestDeploymentWithState(t),
+		startErr:   errors.New("nano failed"),
+	}
+
+	// When
+	err := startPreparedLocalRuntime(
+		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
+	)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected the start failure to be reported")
+	}
+	if runtime.stopCalls != 0 {
+		t.Fatalf("expected lifecycle recovery to own stopping, got %d stops", runtime.stopCalls)
+	}
+}
+
+func TestWriteLocalDeploymentArtifacts_RefusesToInventGeneratedCredential(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := newTestDeploymentWithState(t)
+	if err := markLocalDatabasePasswordGenerated(deployment); err != nil {
+		t.Fatalf("failed to mark generated credential: %v", err)
+	}
+	endpoint := &localruntime.VMRuntimeEndpoint{
+		RuntimeEndpoint: localruntime.RuntimeEndpoint{DBPort: localTestDatabasePort},
+	}
+
+	// When
+	err := writeLocalDeploymentArtifacts(deployment, endpoint)
+
+	// Then
+	if !errors.Is(err, errLocalGeneratedSecretsUnavailable) {
+		t.Fatalf("expected missing generated credential error, got %v", err)
+	}
+	if _, statErr := os.Stat(deployment.SecretsPath()); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no secrets file to be invented, got %v", statErr)
+	}
+}
+
+//nolint:paralleltest // Replaces the process-wide signal handler.
+func TestStartPreparedLocalRuntime_RemovesBootstrapPasswordOnInterrupt(t *testing.T) {
+	// Given
+	util.StopSignalHandler()
+	t.Cleanup(util.StopSignalHandler)
+	signals := make(chan os.Signal, 1)
+	exited := make(chan struct{})
+	util.StartSignalHandlerWithChannel(signals, func(os.Signal) { close(exited) })
+	var removalsBeforeExit int32
+	runtime := &endpointRuntimeStub{
+		deployment: newTestDeploymentWithState(t),
+		startErr:   errors.New("interrupted"),
+	}
+	runtime.onStart = func() {
+		signals <- syscall.SIGINT
+		<-exited
+		removalsBeforeExit = runtime.removeBootstrapCalls.Load()
+	}
+
+	// When
+	_ = startPreparedLocalRuntime(
+		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
+	)
+
+	// Then
+	if removalsBeforeExit != 2 {
+		t.Fatalf(
+			"expected cleanup before the start and from the signal handler, got %d removals",
+			removalsBeforeExit,
+		)
+	}
+}
+
 func TestWaitForLocalDatabaseAndSyncRunsSyncAfterReadiness(t *testing.T) {
 	t.Parallel()
 
@@ -483,6 +750,14 @@ type endpointRuntimeStub struct {
 	honorContext      bool
 	hostShellErr      error
 	containerShellErr error
+	// initializeFresh makes Start behave like a fresh data directory, which
+	// asks for the initial password.
+	initializeFresh      bool
+	initialPassword      string
+	stopCalls            int
+	removeBootstrapCalls atomic.Int32
+	// onStart runs inside Start, for tests that act while a start is in flight.
+	onStart func()
 }
 
 func (runtime *endpointRuntimeStub) Deployment() config.DeploymentDir {
@@ -502,15 +777,28 @@ func (*endpointRuntimeStub) Prepare(
 }
 
 func (runtime *endpointRuntimeStub) Start(
-	context.Context,
-	io.Writer,
-	io.Writer,
-	localruntime.VMConfig,
+	ctx context.Context,
+	_ io.Writer,
+	_ io.Writer,
+	runtimeConfig localruntime.VMConfig,
 ) error {
+	if runtime.onStart != nil {
+		runtime.onStart()
+	}
+	if runtime.initializeFresh && runtimeConfig.InitialPassword != nil {
+		password, err := runtimeConfig.InitialPassword(ctx)
+		if err != nil {
+			return err
+		}
+		runtime.initialPassword = password
+	}
+
 	return runtime.startErr
 }
 
-func (*endpointRuntimeStub) Stop(context.Context, io.Writer, io.Writer) error {
+func (runtime *endpointRuntimeStub) Stop(context.Context, io.Writer, io.Writer) error {
+	runtime.stopCalls++
+
 	return nil
 }
 
@@ -537,6 +825,12 @@ func (runtime *endpointRuntimeStub) WorkaroundNanoStartupDurability(
 	runtime.syncOutErr = outErr
 
 	return runtime.syncErr
+}
+
+func (runtime *endpointRuntimeStub) RemoveBootstrapPassword() error {
+	runtime.removeBootstrapCalls.Add(1)
+
+	return nil
 }
 
 func (runtime *endpointRuntimeStub) ReadEndpoints() (*localruntime.VMRuntimeEndpoint, error) {

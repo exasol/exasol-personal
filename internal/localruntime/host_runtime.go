@@ -232,6 +232,10 @@ func (runtime *HostRuntime) WorkaroundNanoStartupDurability(
 	return nil
 }
 
+func (runtime *HostRuntime) RemoveBootstrapPassword() error {
+	return localinstall.RemoveHostBootstrapPassword(runtime.paths.BootstrapDir)
+}
+
 func (runtime *HostRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
 	if runtime.endpoint == nil {
 		info, err := config.ReadDeploymentInfo(runtime.Deployment())
@@ -400,6 +404,8 @@ func (runtime *HostRuntime) podmanStartConfig(
 		InitParams:          append([]string(nil), nanoInitParams...),
 		VersionCheck:        runtimeConfig.VersionCheck,
 		SLCs:                runtimeConfig.SLCs,
+		BootstrapDir:        runtime.paths.BootstrapDir,
+		InitialPassword:     runtimeConfig.InitialPassword,
 	}, nil
 }
 

@@ -307,12 +307,18 @@ def test_license_session_limit(shared_live_deployment: Deployment) -> None:
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
-def test_password_marker_not_leaked_to_logs(shared_live_deployment: Deployment) -> None:
+@pytest.mark.openspec("credential-confidentiality")
+@pytest.mark.parametrize(
+    "log_level_args", [(), ("--log-level", "debug")], ids=["default", "debug"]
+)
+def test_password_marker_not_leaked_to_logs(
+    shared_live_deployment: Deployment, log_level_args: tuple[str, ...]
+) -> None:
     """A marker password must not appear in any output or log.
 
     Connect is invoked with an obviously wrong marker password to force a
-    failure path. The marker must not appear in stdout, stderr, or in
-    deployment.log.
+    failure path, at the default and the debug log level. The marker must not
+    appear in stdout, stderr, or in deployment.log.
     """
     # ========== GIVEN ==========
     # A deployment and a distinctive password marker
@@ -324,6 +330,7 @@ def test_password_marker_not_leaked_to_logs(shared_live_deployment: Deployment) 
     # we capture the same fields from the exception for inspection.
     try:
         proc = shared_live_deployment.connect(
+            *log_level_args,
             "--password",
             marker,
             input="SELECT 1 FROM Dual;\nexit\n",

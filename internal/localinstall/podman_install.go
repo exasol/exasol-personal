@@ -34,6 +34,16 @@ const (
 	nanoSecurityOpt        = "unmask=ALL"
 	nanoSELinuxSecurityOpt = "label=disable"
 	nanoRestartPolicy      = "always"
+	// Nano rejects initial-password options once its runtime is initialized,
+	// and Podman replays a container's original arguments when it restarts it,
+	// so the container that receives the initial password must not restart.
+	nanoBootstrapRestartPolicy = "no"
+	// nanoBootstrapMountPath is where the first container sees the bootstrap
+	// directory holding the initial sys password.
+	nanoBootstrapMountPath    = "/run/secrets"
+	nanoBootstrapPasswordFile = "sys_password"
+	bootstrapDirMode          = 0o700
+	bootstrapFileMode         = 0o600
 	// nanoDataMountPath is where Nano expects its persistent data inside the
 	// container; the target adds SELinux relabelling for the bind mount.
 	nanoDataMountPath        = "/exa"
@@ -125,6 +135,10 @@ func (install *PodmanInstall) Start(
 	if err != nil {
 		return err
 	}
+	// An interrupted first initialization can leave its password file behind.
+	if err := install.RemoveBootstrapPassword(ctx, startConfig.BootstrapDir); err != nil {
+		return err
+	}
 	if len(startConfig.LegacyContainerNames) > 0 {
 		if err := install.adoptLegacyContainerName(
 			ctx, out, outErr, containerName, startConfig.LegacyContainerNames,
@@ -204,37 +218,19 @@ func (install *PodmanInstall) Start(
 			fmt.Errorf("failed to synchronize local runtime storage before starting Nano: %w", err))
 	}
 
-	args := []string{
-		"run", "-d", "--replace",
-		"--name", containerName,
-		"--shm-size=" + nanoShmSize,
-		"--pids-limit=" + nanoPIDsLimit,
-		"--security-opt", nanoSecurityOpt,
-		"--security-opt", nanoSELinuxSecurityOpt,
-		"--restart", nanoRestartPolicy,
-		"-p", podmanDBPortMapping(startConfig),
-		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
+	bootstrap := freshDeployment && startConfig.InitialPassword != nil
+	if bootstrap {
+		if err := install.writeBootstrapPassword(ctx, startConfig); err != nil {
+			return err
+		}
 	}
-	for _, slc := range availableSLCs {
-		// `rw=true` works around containers that ship no directory skeleton: the UDF
-		// sandbox launcher creates the mount points it binds into the container root
-		// (/proc, /dev, /buckets, /var/tmp and siblings) only where that root is
-		// writable, and a missing one fails every UDF as an opaque `VM crashed`.
-		// Podman keeps the writes in an ephemeral per-container overlay, so the image
-		// is never modified and the UDF-visible root stays read-only.
-		args = append(args,
-			"--mount",
-			fmt.Sprintf("type=image,source=%s,destination=%s,rw=true", slc.Image, slc.Target),
-		)
-	}
-	if startConfig.VersionCheck.Enabled {
-		args = append(args, "-e", "VERSION_CHECK_IDENTITY="+startConfig.VersionCheck.Identity)
-	}
-	args = append(args, loadedImage, "init")
-	if freshDeployment && len(startConfig.InitParams) > 0 {
-		args = append(args, "params="+strings.Join(startConfig.InitParams, " "))
-	}
-	args = append(args, nanoVersionCheckInitArgs(startConfig.VersionCheck)...)
+	args := nanoRunArgs(startConfig, nanoRunOptions{
+		containerName: containerName,
+		loadedImage:   loadedImage,
+		slcs:          availableSLCs,
+		fresh:         freshDeployment,
+		bootstrap:     bootstrap,
+	})
 	var startDiagnostic bytes.Buffer
 	startErrOutput := io.Writer(&startDiagnostic)
 	if outErr != nil {
@@ -251,9 +247,51 @@ func (install *PodmanInstall) Start(
 			failure,
 			startDiagnostic.String(),
 		)
+		if bootstrap {
+			if err := install.RemoveBootstrapPassword(ctx, startConfig.BootstrapDir); err != nil {
+				failure = errors.Join(failure, err)
+			}
+		}
 
 		return install.failureWithDiagnostics(ctx, outErr, containerName,
 			failure)
+	}
+
+	return nil
+}
+
+// RemoveHostBootstrapPassword empties a bootstrap directory on the host
+// filesystem without needing the runtime, including temporary files left by an
+// interrupted write. The directory stays because a container may mount it.
+func RemoveHostBootstrapPassword(hostBootstrapDir string) error {
+	entries, err := os.ReadDir(hostBootstrapDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to inspect the initial database password directory: %w", err)
+	}
+	for _, entry := range entries {
+		if err := os.RemoveAll(filepath.Join(hostBootstrapDir, entry.Name())); err != nil {
+			return fmt.Errorf("failed to remove initial database password material: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// RemoveBootstrapPassword deletes the initial password file from bootstrapDir.
+// It is safe to call when the file or directory does not exist.
+func (install *PodmanInstall) RemoveBootstrapPassword(
+	ctx context.Context,
+	bootstrapDir string,
+) error {
+	if strings.TrimSpace(bootstrapDir) == "" {
+		return nil
+	}
+	path := filepath.Join(bootstrapDir, nanoBootstrapPasswordFile)
+	if err := install.environment.RemoveFile(ctx, path); err != nil {
+		return fmt.Errorf("failed to remove the initial database password file: %w", err)
 	}
 
 	return nil
@@ -294,6 +332,64 @@ func podmanDBPortMapping(startConfig StartConfig) string {
 	return startConfig.ContainerDBBindHost + ":" + ports
 }
 
+type nanoRunOptions struct {
+	containerName string
+	loadedImage   string
+	slcs          []SLCConfig
+	fresh         bool
+	bootstrap     bool
+}
+
+func nanoRunArgs(startConfig StartConfig, options nanoRunOptions) []string {
+	restartPolicy := nanoRestartPolicy
+	if options.bootstrap {
+		restartPolicy = nanoBootstrapRestartPolicy
+	}
+	args := []string{
+		"run", "-d", "--replace",
+		"--name", options.containerName,
+		"--shm-size=" + nanoShmSize,
+		"--pids-limit=" + nanoPIDsLimit,
+		"--security-opt", nanoSecurityOpt,
+		"--security-opt", nanoSELinuxSecurityOpt,
+		"--restart", restartPolicy,
+		"-p", podmanDBPortMapping(startConfig),
+		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
+	}
+	if options.bootstrap {
+		args = append(args,
+			"-v", startConfig.BootstrapDir+":"+nanoBootstrapMountPath+":ro,Z",
+		)
+	}
+	for _, slc := range options.slcs {
+		// `rw=true` works around containers that ship no directory skeleton: the UDF
+		// sandbox launcher creates the mount points it binds into the container root
+		// (/proc, /dev, /buckets, /var/tmp and siblings) only where that root is
+		// writable, and a missing one fails every UDF as an opaque `VM crashed`.
+		// Podman keeps the writes in an ephemeral per-container overlay, so the image
+		// is never modified and the UDF-visible root stays read-only.
+		args = append(args,
+			"--mount",
+			fmt.Sprintf("type=image,source=%s,destination=%s,rw=true", slc.Image, slc.Target),
+		)
+	}
+	if startConfig.VersionCheck.Enabled {
+		args = append(args, "-e", "VERSION_CHECK_IDENTITY="+startConfig.VersionCheck.Identity)
+	}
+	args = append(args, options.loadedImage, "init")
+	if options.fresh && len(startConfig.InitParams) > 0 {
+		args = append(args, "params="+strings.Join(startConfig.InitParams, " "))
+	}
+	if options.bootstrap {
+		args = append(args,
+			"sys_password_file="+nanoBootstrapMountPath+"/"+nanoBootstrapPasswordFile,
+		)
+	}
+	args = append(args, nanoVersionCheckInitArgs(startConfig.VersionCheck)...)
+
+	return args
+}
+
 func (install *PodmanInstall) Stop(ctx context.Context, out, outErr io.Writer) error {
 	containerName, err := getContainerName(install.deployment)
 	if err != nil {
@@ -332,6 +428,27 @@ func (install *PodmanInstall) Status(
 
 func (install *PodmanInstall) Destroy(ctx context.Context, out, outErr io.Writer) error {
 	return install.Stop(ctx, out, outErr)
+}
+
+func (install *PodmanInstall) writeBootstrapPassword(
+	ctx context.Context,
+	startConfig StartConfig,
+) error {
+	password, err := startConfig.InitialPassword(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to resolve the initial database password: %w", err)
+	}
+	if password == "" {
+		return errors.New("the initial database password is empty")
+	}
+	path := filepath.Join(startConfig.BootstrapDir, nanoBootstrapPasswordFile)
+	if err := install.environment.WriteFileAtomically(
+		ctx, path, []byte(password), bootstrapDirMode, bootstrapFileMode,
+	); err != nil {
+		return fmt.Errorf("failed to write the initial database password file: %w", err)
+	}
+
+	return nil
 }
 
 func (install *PodmanInstall) adoptLegacyContainerName(
@@ -427,6 +544,9 @@ func (install *PodmanInstall) validateStartConfig(startConfig StartConfig) error
 	}
 	if strings.TrimSpace(startConfig.DataDir) == "" {
 		return errors.New("nano data directory is required")
+	}
+	if startConfig.InitialPassword != nil && strings.TrimSpace(startConfig.BootstrapDir) == "" {
+		return errors.New("nano bootstrap directory is required for an initial password")
 	}
 	if startConfig.VersionCheck.Enabled {
 		for name, value := range map[string]string{

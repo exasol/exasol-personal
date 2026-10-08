@@ -18,6 +18,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 	"github.com/exasol/exasol-personal/internal/slc"
+	"github.com/exasol/exasol-personal/internal/util"
 )
 
 // Internal escape hatch for fake local-runner integration tests.
@@ -38,6 +39,58 @@ func startPreparedLocalRuntime(
 	if err != nil {
 		return err
 	}
+	deployment := runtime.Deployment()
+	localConfig.InitialPassword = func(context.Context) (string, error) {
+		return resolveLocalInitialPassword(deployment)
+	}
+	if err := runtime.RemoveBootstrapPassword(); err != nil {
+		return err
+	}
+	// The process exits right after signal handlers run, so cleanup on an
+	// interrupt cannot wait for this function to return.
+	unregister, _ := util.RegisterOnceSignalHandler(func() {
+		if err := runtime.RemoveBootstrapPassword(); err != nil {
+			slog.Warn("failed to remove the initial database password after an interrupt",
+				"error", err)
+		}
+	})
+	defer unregister()
+
+	err = startLocalRuntimeAndWait(ctx, runtime, localConfig, waitTimeoutSeconds, out, outErr)
+	// Read after the start: a fresh initialization records the pending check.
+	verificationPending, markerErr := localCredentialVerificationPending(deployment)
+	if markerErr != nil {
+		err = errors.Join(err, markerErr)
+	}
+	if err == nil && verificationPending && os.Getenv(localSkipDatabaseWaitEnv) == "" {
+		err = verifyLocalStoredCredentialFn(ctx, deployment)
+		if err == nil {
+			err = markLocalDatabasePasswordVerified(deployment)
+		}
+	}
+	if err != nil && verificationPending {
+		// Stopping leaves a retry to start from the stored password.
+		if stopErr := runtime.Stop(ctx, out, outErr); stopErr != nil {
+			err = errors.Join(err, fmt.Errorf(
+				"failed to stop the local database before its password was verified: %w",
+				stopErr,
+			))
+		}
+	}
+	if removeErr := runtime.RemoveBootstrapPassword(); removeErr != nil {
+		err = errors.Join(err, removeErr)
+	}
+
+	return err
+}
+
+func startLocalRuntimeAndWait(
+	ctx context.Context,
+	runtime localruntime.Runtime,
+	localConfig localruntime.VMConfig,
+	waitTimeoutSeconds int,
+	out, outErr io.Writer,
+) error {
 	if err := runtime.Start(ctx, out, outErr, localConfig); err != nil {
 		return diagnoseLocalFailure(ctx, runtime, err)
 	}
@@ -375,6 +428,39 @@ func writeLocalDeploymentArtifacts(
 	if err := config.WriteDeploymentInfo(deployment.Root(), info); err != nil {
 		return err
 	}
+
+	return ensureLocalSecrets(deployment)
+}
+
+// ensureLocalSecrets keeps a stored database password, because it must keep
+// matching the one the database was initialized with. A missing, unreadable, or
+// empty credential is replaced with the local default only for deployments
+// whose password was not generated.
+func ensureLocalSecrets(deployment config.DeploymentDir) error {
+	_, err := os.Stat(deployment.SecretsPath())
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to inspect local secrets file: %w", err)
+	}
+	if err == nil {
+		secrets, readErr := config.ReadSecrets(deployment)
+		if readErr == nil && secrets.DbPassword != "" {
+			return nil
+		}
+	}
+	generated, err := localDatabasePasswordGenerated(deployment)
+	if err != nil {
+		return err
+	}
+	if generated {
+		return fmt.Errorf(
+			"%w; restore %s from a backup, or run `exasol destroy` and then "+
+				"`exasol deploy` to recreate the deployment, which deletes its data",
+			errLocalGeneratedSecretsUnavailable,
+			deployment.SecretsPath(),
+		)
+	}
+	slog.Warn("writing the default credential to a missing or unusable local secrets file",
+		"path", deployment.SecretsPath())
 
 	return config.WriteSecrets(deployment.Root(), &config.Secrets{
 		DbPassword: localDBPassword,

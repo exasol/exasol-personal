@@ -80,6 +80,38 @@ func TestLinuxHostPodmanStartConfig_UsesOnlyCommonRuntimeConfig(t *testing.T) {
 	if startConfig.SLCs == nil || len(startConfig.SLCs) != 0 {
 		t.Fatalf("expected authoritative empty SLC set, got %#v", startConfig.SLCs)
 	}
+	expectedBootstrapDir := filepath.Join(localRuntime.paths.WorkDir, bootstrapDirName)
+	if startConfig.BootstrapDir != expectedBootstrapDir {
+		t.Fatalf(
+			"expected bootstrap directory %q, got %q",
+			expectedBootstrapDir,
+			startConfig.BootstrapDir,
+		)
+	}
+}
+
+func TestHostRuntimeRemoveBootstrapPassword_RemovesHostFile(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	localRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	path := filepath.Join(localRuntime.paths.BootstrapDir, "sys_password")
+	if err := os.MkdirAll(localRuntime.paths.BootstrapDir, 0o700); err != nil {
+		t.Fatalf("failed to create bootstrap directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("password"), 0o600); err != nil {
+		t.Fatalf("failed to write bootstrap password: %v", err)
+	}
+
+	// When
+	err := localRuntime.RemoveBootstrapPassword()
+	// Then
+	if err != nil {
+		t.Fatalf("expected bootstrap password removal to succeed, got %v", err)
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("expected bootstrap password to be removed, got %v", statErr)
+	}
 }
 
 func TestLinuxHostReadEndpoint_ReturnsPublishedDatabasePort(t *testing.T) {
