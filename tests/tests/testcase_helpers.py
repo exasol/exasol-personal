@@ -38,6 +38,7 @@ __all__ = [
     "requires_posix_pty",
     "run_command",
     "run_in_local_vm",
+    "windows_podman_path",
 ]
 
 
@@ -63,6 +64,11 @@ def assert_lifecycle_json_signal(
         "deploymentState": deployment_state,
         "databaseReady": database_ready,
     }
+
+
+def windows_podman_path() -> Path:
+    """Return where the Windows host runtime installs Podman."""
+    return Path(os.environ["PROGRAMFILES"]) / "RedHat" / "Podman" / "podman.exe"
 
 
 def local_deploy_base_args(deployment_dir: str) -> list[str]:

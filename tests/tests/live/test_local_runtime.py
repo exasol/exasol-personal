@@ -22,6 +22,7 @@ from tests.testcase_helpers import (
     assert_lifecycle_json_signal,
     run_command,
     run_in_local_vm,
+    windows_podman_path,
 )
 
 pytestmark = pytest.mark.openspec("exasol-local-deployment")
@@ -71,9 +72,12 @@ def test_full_local_deployment_lifecycle(local_deployment: Deployment) -> None:
     assert local_deployment.has_status(StatusInitialized)
     assert local_deployment.has_no_deployment()
 
-
-def _windows_podman_path() -> Path:
-    return Path(os.environ["PROGRAMFILES"]) / "RedHat" / "Podman" / "podman.exe"
+    # Then no database container is left behind on a direct-host runtime
+    if sys.platform.startswith("linux"):
+        containers = run_command(
+            ["podman", "ps", "-a", "--format", "{{.Names}}"]
+        ).stdout.split()
+        assert f"exasol-db-{deployment_data['deploymentId']}" not in containers
 
 
 def _podman_query(podman_path: Path, *args: str) -> str:
@@ -204,7 +208,7 @@ def test_install_local_windows_lifecycle(
         )
         assert install_result.returncode == 0
 
-        podman_path = _windows_podman_path()
+        podman_path = windows_podman_path()
         assert podman_path.is_file()
         assert _windows_machine_state(podman_path) == "running"
 
@@ -318,6 +322,95 @@ def test_install_local_windows_lifecycle(
         assert container_name not in _windows_container_names(podman_path)
         assert not (deployment_dir / "local").exists()
         assert not host_exa.exists()
+        assert _windows_machine_state(podman_path) == "running"
+    except BaseException as error:
+        original_error = error
+        raise
+    finally:
+        try:
+            deployment_manager.release(deployment)
+        except RuntimeError:
+            if original_error is None:
+                raise
+
+
+def _windows_machine_resources(podman_path: Path) -> str:
+    return _podman_query(
+        podman_path,
+        "machine",
+        "inspect",
+        "--format",
+        "{{.Resources.CPUs}} {{.Resources.Memory}} {{.Resources.DiskSize}}",
+        "podman-machine-default",
+    ).strip()
+
+
+@pytest.mark.providers("local")
+@pytest.mark.platform("windows-amd64")
+@pytest.mark.openspec("windows-host-runtime-environment")
+@pytest.mark.skipif(
+    not IS_WINDOWS_AMD64,
+    reason="the Podman machine is used only by the Windows host runtime",
+)
+def test_install_local_windows_keeps_existing_machine_configuration(
+    deployment_manager: DeploymentManager,
+    exasol_path: str,
+) -> None:
+    """The launcher borrows an existing Podman machine without reconfiguring it."""
+    # Given an existing Podman default machine
+    podman_path = windows_podman_path()
+    if not podman_path.is_file():
+        pytest.skip("Podman is not installed")
+    machines = _podman_query(podman_path, "machine", "list", "--format", "{{.Name}}")
+    if not any(name.startswith("podman-machine-default") for name in machines.split()):
+        pytest.skip("no Podman default machine exists")
+    baseline = _windows_machine_resources(podman_path)
+    destroyed = False
+
+    def cleanup(deployment_dir: Path) -> None:
+        if not destroyed and (deployment_dir / ".exasolLauncherState.json").exists():
+            run_command(
+                [
+                    exasol_path,
+                    "destroy",
+                    "--deployment-dir",
+                    str(deployment_dir),
+                    "--auto-approve",
+                ]
+            )
+
+    deployment = deployment_manager.local_install_target(cleanup)
+    base = ["--deployment-dir", deployment.deployment_dir.name]
+    original_error: BaseException | None = None
+
+    try:
+        # When a local deployment is installed on it
+        run_command(
+            [
+                exasol_path,
+                "install",
+                "local",
+                *base,
+                "--auto-approve",
+                "--no-launcher-version-check",
+            ]
+        )
+
+        # Then the machine's CPU, memory, and disk settings are unchanged
+        assert _windows_machine_resources(podman_path) == baseline
+
+        # When the deployment is stopped
+        run_command([exasol_path, "stop", *base])
+
+        # Then the machine keeps running
+        assert _windows_machine_state(podman_path) == "running"
+
+        # When the deployment is destroyed
+        run_command([exasol_path, "destroy", *base, "--auto-approve"])
+        destroyed = True
+
+        # Then the machine still exists, unchanged and running
+        assert _windows_machine_resources(podman_path) == baseline
         assert _windows_machine_state(podman_path) == "running"
     except BaseException as error:
         original_error = error

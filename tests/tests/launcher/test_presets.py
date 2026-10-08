@@ -2,13 +2,22 @@
 # SPDX-License-Identifier: MIT
 
 import json
+import os
 from pathlib import Path
 from subprocess import CalledProcessError
-from typing import Any
+from typing import Any, Final
 
 import pytest
 
-from .helpers import run_command
+from .helpers import preset_id_or_skip, run_command
+
+BUILT_IN_INFRASTRUCTURE_PRESETS: Final = {
+    "aws",
+    "azure",
+    "exoscale",
+    "local",
+    "stackit",
+}
 
 
 def _get_presets_catalog(exasol_path: str) -> Any:  # noqa: ANN401
@@ -138,3 +147,67 @@ def test_presets_export_fails_on_non_empty_dir(
     # Then it fails
     assert exc.value.returncode != 0
     assert "not empty" in exc.value.stderr.lower()
+
+
+def _env_without_launcher_cache(tmp_path: Path) -> dict[str, str]:
+    empty = tmp_path / "empty-user-dirs"
+    empty.mkdir()
+    env = os.environ.copy()
+    for variable in ("HOME", "USERPROFILE", "XDG_CACHE_HOME", "LOCALAPPDATA"):
+        env[variable] = str(empty)
+
+    return env
+
+
+def test_presets_list_reports_all_built_in_presets_without_cache(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a launcher with no runtime-artifact cache
+    env = _env_without_launcher_cache(tmp_path)
+
+    # When the presets are listed as text and as JSON
+    text = run_command([exasol_path, "presets", "list"], env=env).stdout
+    catalog = json.loads(
+        run_command([exasol_path, "presets", "list", "--json"], env=env).stdout
+    )
+
+    # Then every built-in infrastructure preset is listed in both forms
+    listed_in_text = {
+        line.split(" - ", maxsplit=1)[0].strip()
+        for line in text.split("Installation presets:")[0].splitlines()
+        if " - " in line
+    }
+    listed_in_json = {preset["id"] for preset in catalog["infrastructures"]}
+    assert listed_in_text >= BUILT_IN_INFRASTRUCTURE_PRESETS
+    assert listed_in_json == listed_in_text
+
+
+def test_presets_export_writes_nested_directories(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given an embedded preset whose templates live in nested directories
+    preset_id = preset_id_or_skip(exasol_path, "infrastructures", "aws")
+    target = tmp_path / "export"
+    target.mkdir()
+
+    # When it is exported
+    run_command(
+        [
+            exasol_path,
+            "presets",
+            "export",
+            preset_id,
+            "--type",
+            "infrastructure",
+            "--to",
+            str(target),
+        ]
+    )
+
+    # Then files below nested directories are written, not only top-level ones
+    nested_files = [
+        path
+        for path in target.rglob("*")
+        if path.is_file() and len(path.relative_to(target).parts) > 2  # noqa: PLR2004
+    ]
+    assert nested_files

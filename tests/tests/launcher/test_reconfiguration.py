@@ -1019,6 +1019,53 @@ def test_remove_removes_local_deployment_directory_without_destroy(
     assert not deployment_dir.exists()
 
 
+@pytest.mark.parametrize(
+    ("command", "extra_args"),
+    [("remove", []), ("destroy", ["--remove"])],
+)
+def test_removal_without_terminal_proceeds_without_auto_approve(
+    exasol_path: str, tmp_path: Path, command: str, extra_args: list[str]
+) -> None:
+    # Given a minimal initialized deployment whose backend has no external resources
+    infra_dir, install_dir = _copy_named_no_resource_presets(
+        tmp_path,
+        f"{command}-no-terminal",
+        "No Terminal Infrastructure",
+        "No Terminal Installation",
+    )
+    deployment_dir = tmp_path / "deployment"
+    run_command(
+        [
+            exasol_path,
+            "init",
+            str(infra_dir),
+            str(install_dir),
+            "--deployment-dir",
+            str(deployment_dir),
+            "--no-launcher-version-check",
+        ]
+    )
+
+    # When the command runs with no terminal attached and no --auto-approve
+    result = subprocess.run(
+        [
+            exasol_path,
+            command,
+            *extra_args,
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        text=True,
+        capture_output=True,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+
+    # Then it proceeds as approved and removes the deployment directory
+    assert result.returncode == 0, result.stderr
+    assert not deployment_dir.exists()
+
+
 def test_remove_refuses_non_deployment_directory(
     exasol_path: str, tmp_path: Path
 ) -> None:
