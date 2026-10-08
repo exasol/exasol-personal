@@ -225,6 +225,7 @@ type windowsHostExecutionEnvironment struct {
 // installed during an earlier command in the same terminal.
 func (environment *windowsHostExecutionEnvironment) Run(
 	ctx context.Context,
+	env map[string]string,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
 	command ...string,
@@ -235,7 +236,7 @@ func (environment *windowsHostExecutionEnvironment) Run(
 		}
 	}
 
-	return environment.DirectExecutionEnvironment.Run(ctx, stdin, stdout, stderr, command...)
+	return environment.DirectExecutionEnvironment.Run(ctx, env, stdin, stdout, stderr, command...)
 }
 
 func (*windowsHostExecutionEnvironment) Sync(
