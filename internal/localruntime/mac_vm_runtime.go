@@ -271,6 +271,8 @@ func (runtime *MacVMRuntime) Start(
 		VersionCheck:         runtimeConfig.VersionCheck,
 		SLCs:                 runtimeConfig.SLCs,
 		LegacyContainerNames: []string{legacyNanoContainer},
+		BootstrapDir:         vmSharedBootstrapDir,
+		InitialPassword:      runtimeConfig.InitialPassword,
 	}
 	if err := install.Start(ctx, out, outErr, startConfig); err != nil {
 		return runtime.stopAfterStartFailure(ctx, runnerPath, out, outErr, err)
@@ -455,6 +457,12 @@ func (runtime *MacVMRuntime) WorkaroundNanoStartupDurability(
 	}
 
 	return nil
+}
+
+// RemoveBootstrapPassword deletes the file through the host side of the
+// shared directory, so it works while the VM is stopped.
+func (runtime *MacVMRuntime) RemoveBootstrapPassword() error {
+	return localinstall.RemoveHostBootstrapPassword(runtime.paths.SharedBootstrapDir)
 }
 
 func (runtime *MacVMRuntime) stopAfterStartFailure(

@@ -22,11 +22,30 @@ var (
 	ErrNoSessionID = errors.New("the database didn't return session id when queried")
 )
 
-const closePanicMsg = "tried to call Close before Connect on an instance of Exasol database"
+const (
+	closePanicMsg = "tried to call Close before Connect on an instance of Exasol database"
+	redactedValue = "<redacted>"
+)
+
+// connectionString holds a driver DSN, which embeds the password, so that
+// formatting or logging it never reveals the credential.
+type connectionString struct {
+	value string
+}
+
+func (connectionString) String() string { return redactedValue }
+
+func (connectionString) GoString() string { return redactedValue }
+
+func (connectionString) LogValue() slog.Value { return slog.StringValue(redactedValue) }
 
 type Database struct {
-	connectionString string
-	connect          types.ConnectFunc
+	connectionString          connectionString
+	username                  string
+	host                      string
+	port                      int
+	validateServerCertificate bool
+	connect                   types.ConnectFunc
 
 	conn              types.ExasolConnector
 	sessionID         *string
@@ -81,9 +100,13 @@ func New(
 		ValidateServerCertificate(opts.validateServerCertificate)
 
 	return &Database{
-		connectionString: dsnConfigBuilder.String(),
-		connect:          opts.connect,
-		versionOutput:    opts.versionOutput,
+		connectionString:          connectionString{value: dsnConfigBuilder.String()},
+		username:                  username,
+		host:                      host,
+		port:                      port,
+		validateServerCertificate: opts.validateServerCertificate,
+		connect:                   opts.connect,
+		versionOutput:             opts.versionOutput,
 	}, nil
 }
 
@@ -98,7 +121,12 @@ func defaultConnectFunc(input string) (types.ExasolConnector, error) {
 }
 
 func (db *Database) Connect(ctx context.Context) error {
-	slog.Debug("connecting to the database", "connection_string", db.connectionString)
+	slog.Debug("connecting to the database",
+		"user", db.username,
+		"host", db.host,
+		"port", db.port,
+		"validate_server_certificate", db.validateServerCertificate,
+	)
 
 	conn, err := db.connectWithContext(ctx)
 	if err != nil {
@@ -182,7 +210,7 @@ func (db *Database) connectWithContext(ctx context.Context) (types.ExasolConnect
 	resultCh := make(chan dialResult, 1)
 
 	go func() {
-		conn, err := db.connect(db.connectionString)
+		conn, err := db.connect(db.connectionString.value)
 		resultCh <- dialResult{conn, err}
 	}()
 

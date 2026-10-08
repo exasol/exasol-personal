@@ -15,6 +15,7 @@ import (
 
 const (
 	vmSharedNanoDataDir        = "/mnt/host/exa"
+	vmSharedBootstrapDir       = "/mnt/host/bootstrap"
 	vmNanoDataBackupDir        = "/var/lib/exa.migrated-backup"
 	vmSharedNanoDataStagingDir = "/mnt/host/.exa-migration"
 	hostLayoutMarkerName       = ".exasol-personal-host-layout"

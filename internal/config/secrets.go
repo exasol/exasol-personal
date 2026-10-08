@@ -4,13 +4,17 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"path/filepath"
 )
 
-//nolint:gosec // gosec thinks this is a password
-const secretsFileName = "secrets.json"
+const (
+	//nolint:gosec // gosec thinks this is a password
+	secretsFileName = "secrets.json"
+	secretsFileMode = 0o600
+)
 
 type Secrets struct {
 	DbPassword      string `json:"dbPassword"`
@@ -49,5 +53,15 @@ func WriteSecrets(deploymentDir string, secrets *Secrets) error {
 		secrets = &Secrets{}
 	}
 
-	return writeConfig(secrets, filepath.Join(deploymentDir, secretsFileName), "secrets")
+	data, err := json.Marshal(secrets)
+	if err != nil {
+		return fmt.Errorf("failed to encode secrets: %w", err)
+	}
+	path := filepath.Join(deploymentDir, secretsFileName)
+	if err := WriteFileAtomically(path, data, secretsFileMode); err != nil {
+		return fmt.Errorf("failed to write secrets file %s: %w", path, err)
+	}
+	slog.Debug("new config file written", "type", "secrets", "path", path)
+
+	return nil
 }

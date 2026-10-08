@@ -60,15 +60,23 @@ func verifyDatabaseConnection(ctx context.Context, deployment config.DeploymentD
 		}
 	}
 
-	if driverErr, ok := errors.AsType[exasolerrors.DriverErr](probeErr); ok {
-		// Look for SQLSTATE error 08004. This is used for authentication failures.
-		slog.Debug("received sql driver error", "error", driverErr.Error())
-		if strings.Contains(driverErr.Error(), "08004") {
-			return nil
-		}
+	if isAuthenticationFailure(probeErr) {
+		return nil
 	}
 
 	return probeErr
+}
+
+// isAuthenticationFailure reports whether err is the driver's SQLSTATE 08004,
+// which the database returns when it rejects a login.
+func isAuthenticationFailure(err error) bool {
+	driverErr, ok := errors.AsType[exasolerrors.DriverErr](err)
+	if !ok {
+		return false
+	}
+	slog.Debug("received sql driver error", "error", driverErr.Error())
+
+	return strings.Contains(driverErr.Error(), "08004")
 }
 
 // WaitForDatabaseStarted polls the database connection using verifyDatabaseConnection

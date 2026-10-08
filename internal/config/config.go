@@ -10,7 +10,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
+	"github.com/exasol/exasol-personal/internal/util"
 	"gopkg.in/yaml.v3"
 )
 
@@ -92,6 +95,100 @@ func writeConfig(config any, path string, name string) error {
 	slog.Debug("new config file written", "type", name, "path", path)
 
 	return nil
+}
+
+// beforeAtomicRename lets tests act between writing the temporary file and
+// replacing the target.
+var beforeAtomicRename = func() { /* no-op outside tests */ }
+
+// WriteFileAtomically replaces path with data so that readers and crashes see
+// either the previous content or the new content, never a partial file.
+// Callers serialize writes to path, as deployment files are written under the
+// deployment lock, so any existing temporary file for path is stale.
+func WriteFileAtomically(path string, data []byte, mode os.FileMode) error {
+	directory := filepath.Dir(path)
+	temporaryPrefix := "." + filepath.Base(path) + ".tmp-"
+	if err := removeStaleTemporaries(directory, temporaryPrefix); err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(directory, temporaryPrefix+"*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	// The launcher exits right after its signal handlers run, so a deferred
+	// removal alone would leave the temporary copy behind on an interrupt.
+	removeTemporary := util.EnsureOnInterrupt(func() { _ = os.Remove(temporaryPath) })
+	defer removeTemporary()
+
+	if err := temporary.Chmod(mode); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(data); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	beforeAtomicRename()
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return err
+	}
+
+	return syncDirectory(directory)
+}
+
+// temporaryFiles lists the files in directory whose names start with prefix.
+// The directory is read literally, so path characters are never treated as
+// glob syntax.
+func temporaryFiles(directory, prefix string) ([]string, error) {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), prefix) {
+			paths = append(paths, filepath.Join(directory, entry.Name()))
+		}
+	}
+
+	return paths, nil
+}
+
+func removeStaleTemporaries(directory, prefix string) error {
+	stale, err := temporaryFiles(directory, prefix)
+	if err != nil {
+		return err
+	}
+	for _, path := range stale {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to remove stale temporary file %s: %w", path, err)
+		}
+	}
+
+	return nil
+}
+
+// syncDirectory makes a completed rename durable. Windows cannot open a
+// directory for syncing, and NTFS journals the rename itself.
+func syncDirectory(directory string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	handle, err := os.Open(directory)
+	if err != nil {
+		return err
+	}
+	defer handle.Close()
+
+	return handle.Sync()
 }
 
 func readConfig[T any](path, name string) (*T, error) {

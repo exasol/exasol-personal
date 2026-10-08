@@ -8,7 +8,9 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -200,6 +202,53 @@ func TestConnectPrintsVersionToConfiguredOutput(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Exasol 2026.1.0\n", output.String())
 	require.NoError(t, database.Close())
+}
+
+//nolint:paralleltest // This test temporarily replaces the process-wide default logger.
+func TestConnectLogsConnectionWithoutPassword(t *testing.T) {
+	// Given
+	const passwordMarker = "Marker-Pa55word-d3adbeef"
+	var logs bytes.Buffer
+	originalLogger := slog.Default()
+	slog.SetDefault(
+		slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	)
+	defer slog.SetDefault(originalLogger)
+
+	var dialedConnectionString string
+	connect := func(connectionString string) (types.ExasolConnector, error) {
+		dialedConnectionString = connectionString
+		return nil, errTest
+	}
+	database, err := New("sys", passwordMarker, "127.0.0.1", "", 8563, WithConnectFunc(connect))
+	require.NoError(t, err)
+
+	// When
+	err = database.Connect(t.Context())
+
+	// Then
+	require.ErrorIs(t, err, errTest)
+	require.Contains(t, dialedConnectionString, passwordMarker)
+	require.NotContains(t, logs.String(), passwordMarker)
+	require.Contains(t, logs.String(), `"user":"sys"`)
+	require.Contains(t, logs.String(), `"host":"127.0.0.1"`)
+	require.Contains(t, logs.String(), `"port":8563`)
+}
+
+func TestConnectionStringIsRedactedWhenFormatted(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	const passwordMarker = "Marker-Pa55word-d3adbeef"
+	value := connectionString{value: "user=sys;password=" + passwordMarker + ";"}
+
+	// When
+	formatted := fmt.Sprintf("%v %s %+v %#v", value, value, value, value)
+	logged := value.LogValue().String()
+
+	// Then
+	require.NotContains(t, formatted, passwordMarker)
+	require.Equal(t, redactedValue, logged)
 }
 
 func TestClose(t *testing.T) {

@@ -16,6 +16,11 @@ type StartConfig struct {
 	VersionCheck         VersionCheckConfig
 	SLCs                 []SLCConfig
 	LegacyContainerNames []string
+	// BootstrapDir receives the initial sys password for a fresh data directory
+	// and is mounted read-only into that first container only.
+	BootstrapDir string
+	// InitialPassword is called only when the data directory is fresh.
+	InitialPassword func(context.Context) (string, error)
 }
 
 type VersionCheckConfig struct {

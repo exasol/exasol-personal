@@ -33,8 +33,12 @@ conflict and shows the same explicit and automatic replacement commands.
 
 On macOS, the managed virtual machine uses about half of the detected host memory by default. An
 explicitly configured memory value must be at least 4096 MB. Linux and Windows use host-managed
-resources, so the virtual-machine sizing options do not apply. The initial local database credentials
-are `sys` / `exasol`.
+resources, so the virtual-machine sizing options do not apply.
+
+Each new local deployment initializes the `sys` database user with a unique, randomly generated
+password and stores it in the deployment's `secrets.json`. `exasol connect` uses it automatically.
+Other SQL clients can connect as `sys` with the password from that file. Local deployments created
+by earlier launcher versions keep the credential they were created with.
 
 BucketFS HTTP access is not available for local deployments. BucketFS storage remains available
 through the deployment directory, as described in [Virtual schemas](virtual-schemas.md).
