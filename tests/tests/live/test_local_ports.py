@@ -23,6 +23,9 @@ pytestmark = [
 ]
 
 AUTOMATIC_BLOCKED_PORTS: Final = (8563, 8564)
+NON_LOOPBACK_CONNECT_TIMEOUT_SECONDS: Final = 3
+# Documentation-only address (RFC 5737); connecting a UDP socket sends nothing.
+ROUTE_PROBE_ADDRESS: Final = "192.0.2.1"
 EXPECTED_AUTOMATIC_PORT: Final = 8565
 EPHEMERAL_RESERVATION_ATTEMPTS: Final = 20
 
@@ -95,6 +98,54 @@ def _localhost_loopback_addresses() -> list[_LoopbackAddress]:
         raise _NoLoopbackAddressesError
 
     return addresses
+
+
+def _non_loopback_ipv4_addresses() -> list[str]:
+    candidates: set[str] = set()
+    try:
+        for *_, sockaddr in socket.getaddrinfo(
+            socket.gethostname(), None, socket.AF_INET
+        ):
+            candidates.add(str(sockaddr[0]))
+    except OSError:
+        pass
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect((ROUTE_PROBE_ADDRESS, 9))
+        candidates.add(str(probe.getsockname()[0]))
+    except OSError:
+        pass
+    finally:
+        probe.close()
+
+    return sorted(
+        address
+        for address in candidates
+        if not ip_address(address).is_loopback
+        and not ip_address(address).is_unspecified
+    )
+
+
+def _accepts_connection(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection(
+            (host, port), timeout=NON_LOOPBACK_CONNECT_TIMEOUT_SECONDS
+        ):
+            return True
+    except OSError:
+        return False
+
+
+def _diag_local(deployment: Deployment) -> dict[str, object]:
+    result = deployment.launcher.run_command(
+        "diag",
+        deployment.deployment_dir.name,
+        "local",
+        capture_output=True,
+    )
+    diagnostics: dict[str, object] = json.loads(result.stdout)
+
+    return diagnostics
 
 
 def _close_listeners(listeners: list[socket.socket]) -> None:
@@ -225,7 +276,7 @@ def test_ports_override_sets_db_port(
 ) -> None:
     """--ports db:<port> passes the port to the selected local runtime.
 
-    The DB is reachable on the specified port.
+    The DB is reachable on the specified port on loopback only.
     """
     deployment, custom_db_port = local_ports_deployment
 
@@ -235,6 +286,10 @@ def test_ports_override_sets_db_port(
 
     proc = deployment.connect(input="SELECT * FROM Dual", capture_output=True)
     assert "DUMMY" in proc.stdout
+
+    assert _accepts_connection("127.0.0.1", custom_db_port)
+    for address in _non_loopback_ipv4_addresses():
+        assert not _accepts_connection(address, custom_db_port), address
 
 
 def test_ports_override_stable_across_restarts(
@@ -310,3 +365,31 @@ def test_static_local_port_selection_reconfiguration_and_recovery(
         _close_listeners(reservations)
         if deployment is not None:
             deployment_manager.release(deployment)
+
+
+@pytest.mark.openspec("local-reachability-diagnostics")
+def test_diag_local_reports_runtime_state_when_running_and_stopped(
+    local_ports_deployment: tuple[Deployment, int],
+) -> None:
+    """`diag local` succeeds in both states and reports what each state allows."""
+    deployment, db_port = local_ports_deployment
+
+    # When diagnostics are collected for the running deployment
+    running = _diag_local(deployment)
+
+    # Then the runtime, its bound port, reachability, and readiness are reported
+    assert running["platformSupported"] is True
+    assert running["vmRunning"] is True
+    assert running["ports"] == {"db": db_port}
+    assert running["portHealth"] == {"db": "reachable"}
+    assert running["databaseReady"] is True
+
+    # When diagnostics are collected after the deployment is stopped
+    deployment.stop()
+    stopped = _diag_local(deployment)
+
+    # Then the stopped runtime is reported with guidance to start it
+    assert stopped["platformSupported"] is True
+    assert stopped["vmRunning"] is False
+    assert "exasol start" in str(stopped["message"])
+    assert "databaseReady" not in stopped

@@ -16,6 +16,7 @@ import subprocess
 import sys
 import textwrap
 import time
+import uuid
 from pathlib import Path
 from typing import Final
 
@@ -397,3 +398,65 @@ def test_many_statements_remain_stable(shared_live_deployment: Deployment) -> No
     # The shell terminates cleanly and the deployment is still healthy
     assert proc.returncode == 0
     assert shared_live_deployment.db_connectable()
+
+
+def _semicolon_script_statements(schema: str) -> str:
+    return textwrap.dedent(
+        f"""\
+        CREATE SCHEMA {schema};
+        CREATE OR REPLACE LUA SCALAR SCRIPT {schema}.semi() RETURNS VARCHAR(20) AS
+        function run(ctx)
+          local parts = 'x;y;z'
+          return parts .. ';done'
+        end
+        /
+        SELECT {schema}.semi();
+        """
+    )
+
+
+@pytest.mark.parametrize("mode", ["command", "file", "stdin"])
+def test_script_body_with_semicolons_ends_on_lone_slash(
+    shared_live_deployment: Deployment, tmp_path: Path, mode: str
+) -> None:
+    """A CREATE SCRIPT body keeps its semicolons until a line holding only `/`."""
+    # Given a script definition whose body contains semicolons
+    statements = _semicolon_script_statements(f"slash_{mode}_{uuid.uuid4().hex[:8]}")
+
+    # When it is run through the given input mode
+    if mode == "command":
+        proc = shared_live_deployment.connect(
+            "--command", statements, capture_output=True
+        )
+    elif mode == "file":
+        sql_file = tmp_path / "script.sql"
+        sql_file.write_text(statements)
+        proc = shared_live_deployment.connect(
+            "--file", str(sql_file), capture_output=True
+        )
+    else:
+        proc = shared_live_deployment.connect(input=statements, capture_output=True)
+
+    # Then the script was created as one unit and returns its full value
+    assert proc.returncode == 0, proc.stderr
+    assert "x;y;z;done" in proc.stdout
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.openspec("connect-json-output")
+def test_connect_json_output_omits_exit_hint(
+    shared_live_deployment: Deployment,
+) -> None:
+    """JSON output is machine-readable, so the text shell's exit hint is omitted."""
+    # When a piped session runs with JSON output
+    proc = shared_live_deployment.connect(
+        "--json", input="SELECT 1 AS ONE;\n", capture_output=True
+    )
+
+    # Then the query result is printed without the exit hint on either stream
+    assert proc.returncode == 0, proc.stderr
+    assert "ONE" in proc.stdout
+    assert 'Type "exit" to exit the shell' not in proc.stderr
+    assert 'Type "exit" to exit the shell' not in proc.stdout

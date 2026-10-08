@@ -11,6 +11,8 @@ local path or an https URL.
 
 import json
 import os
+import platform
+import re
 import textwrap
 from collections.abc import Iterator
 from pathlib import Path
@@ -34,6 +36,13 @@ UNKNOWN_ALIAS: Final = "invalid-test-slc-alias"
 CUSTOM_SLC_FILE_ENV: Final = "EXASOL_TEST_CUSTOM_SLC_FILE"
 CUSTOM_SLC_URL_ENV: Final = "EXASOL_TEST_CUSTOM_SLC_URL"
 CUSTOM_ALIAS: Final = "MYPY3"
+DUPLICATE_ALIAS: Final = "MYPYDUP"
+
+RUST_ALIAS: Final = "RUST"
+RUST_ASSET_PATTERN: Final = re.compile(
+    r"/lc-rust-[0-9][0-9A-Za-z.+-]*?(-aarch64)?\.tar\.gz$"
+)
+ARM64_MACHINES: Final = {"arm64", "aarch64"}
 
 
 @pytest.fixture(scope="module")
@@ -305,12 +314,15 @@ def test_custom_slc_rejects_invalid_container(
     assert _custom_status(slc_deployment, CUSTOM_ALIAS) is None
 
 
+@pytest.mark.openspec("custom-slc-language-identifiers")
 def test_custom_slc_install_runs_udf(slc_deployment: Deployment) -> None:
     """Installing a custom container makes its UDFs runnable and lists it as active."""
-    # When: installing it under a custom alias (this restarts the database).
-    _install_custom(slc_deployment, "--auto-approve")
+    # When: installing it under a custom alias (this restarts the database),
+    # with a padded, upper-case language identifier.
+    _install_custom(slc_deployment, "--auto-approve", language="  PYTHON  ")
 
-    # Then: the alias is listed as an available custom entry.
+    # Then: the alias is listed as an available custom entry, with the
+    # language recorded in normalized form.
     status = _custom_status(slc_deployment, CUSTOM_ALIAS)
     assert status is not None
     assert status["language"] == "python"
@@ -421,8 +433,107 @@ def test_custom_slc_no_restart_activates_on_next_start(
     _slc(slc_deployment, "custom", "remove", CUSTOM_ALIAS)
 
 
+def test_custom_slc_rejects_alias_already_provided_by_another_custom_slc(
+    slc_deployment: Deployment,
+) -> None:
+    """A package declaring an alias another custom SLC owns fails before restart."""
+    # Given: the custom container is installed under its own alias.
+    _install_custom(slc_deployment, "--auto-approve")
+
+    # When: the same package, which declares the same internal aliases, is
+    # installed under a second launcher alias.
+    with pytest.raises(CalledProcessError) as exc_info:
+        _slc(
+            slc_deployment,
+            "custom",
+            "install",
+            "--source",
+            _custom_slc_source(),
+            "--alias",
+            DUPLICATE_ALIAS,
+            "--language",
+            "python",
+            "--auto-approve",
+            capture=True,
+        )
+
+    # Then: it is rejected naming the owning SLC, and nothing changed.
+    stderr = exc_info.value.stderr or ""
+    assert "is already provided by SLC" in stderr
+    assert CUSTOM_ALIAS in stderr
+    assert _custom_status(slc_deployment, DUPLICATE_ALIAS) is None
+    _assert_database_responds(slc_deployment)
+    assert "hi" in _run_scalar_udf(slc_deployment, CUSTOM_ALIAS, "slc_e2e_custom_dup")
+
+    _slc(slc_deployment, "custom", "remove", CUSTOM_ALIAS)
+
+
+def _expected_rust_arch_suffix() -> str:
+    return "-aarch64" if platform.machine().lower() in ARM64_MACHINES else ""
+
+
+def test_rust_slc_install_update_remove_and_pinned_install(
+    slc_deployment: Deployment,
+) -> None:
+    """`slc install rust` tracks the latest host-architecture release."""
+    # Given: the Rust SLC is not installed (removal is idempotent).
+    _slc(slc_deployment, "remove", "rust", "--auto-approve")
+    assert _custom_status(slc_deployment, RUST_ALIAS) is None
+
+    # When: installing it by its special alias.
+    _slc(slc_deployment, "install", "rust", "--auto-approve")
+
+    # Then: it is registered under RUST as an available rust container whose
+    # release asset matches this host's CPU architecture.
+    status = _custom_status(slc_deployment, RUST_ALIAS)
+    assert status is not None
+    assert status["language"] == "rust"
+    assert status["available"] is True
+    source = str(status["source"])
+    match = RUST_ASSET_PATTERN.search(source)
+    assert match is not None, source
+    assert (match.group(1) or "") == _expected_rust_arch_suffix()
+
+    # When / Then: installing or updating again without a new release is a no-op.
+    reinstall = _slc(slc_deployment, "install", "rust", "--auto-approve", capture=True)
+    assert "already installed" in reinstall.stdout
+    update = _slc(slc_deployment, "update", "rust", "--auto-approve", capture=True)
+    assert "already up to date" in update.stdout
+
+    # When: removing it.
+    _slc(slc_deployment, "remove", "rust", "--auto-approve")
+
+    # Then: the alias is gone.
+    assert _custom_status(slc_deployment, RUST_ALIAS) is None
+
+    # When: pinning that same build through a custom install, the documented
+    # escape hatch from always tracking the latest release.
+    _slc(
+        slc_deployment,
+        "custom",
+        "install",
+        "--source",
+        source,
+        "--alias",
+        RUST_ALIAS,
+        "--language",
+        "rust",
+        "--no-restart",
+    )
+
+    # Then: the pinned build is recorded under RUST.
+    pinned = _custom_status(slc_deployment, RUST_ALIAS)
+    assert pinned is not None
+    assert pinned["source"] == source
+
+    _slc(slc_deployment, "remove", "rust", "--auto-approve")
+
+
 def _install_custom(
-    deployment: Deployment, *extra: str, capture: bool = False
+    deployment: Deployment,
+    *extra: str,
+    language: str = "python",
+    capture: bool = False,
 ) -> CompletedProcess[str]:
     """Install the runner-supplied custom container under CUSTOM_ALIAS (idempotent)."""
     return _slc(
@@ -434,7 +545,7 @@ def _install_custom(
         "--alias",
         CUSTOM_ALIAS,
         "--language",
-        "python",
+        language,
         *extra,
         capture=capture,
     )
