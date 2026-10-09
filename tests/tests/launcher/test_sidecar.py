@@ -82,10 +82,11 @@ def test_sidecar_saved_definition_commands(
     # Then
     assert enabled == status
     assert enabled["enabled"]
-    assert enabled["hosts"] == []
+    assert not enabled["hosts"][0]["running"]
+    assert enabled["hosts"][0]["endpoints"] == []
     assert disabled == again
     assert not disabled["enabled"]
-    assert disabled["hosts"] == []
+    assert not disabled["hosts"][0]["running"]
     log = (sidecar_directory / "deployment.log").read_text(encoding="utf-8")
     for operation in ["enable", "status", "disable"]:
         assert f"command={operation}" in log

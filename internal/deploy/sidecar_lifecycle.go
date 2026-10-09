@@ -14,6 +14,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/sidecar"
 )
 
@@ -58,6 +59,16 @@ func backendSidecarHooks(deployment config.DeploymentDir, backend deploymentBack
 	}
 }
 
+func runtimeSidecarHooks(selected localruntime.Runtime) sidecarHooks {
+	return sidecarHooks{
+		deployment: selected.Deployment(),
+		hosts: func(context.Context) ([]sidecarHost, error) {
+			return []sidecarHost{localSidecarHost(selected)}, nil
+		},
+		ports: selected,
+	}
+}
+
 func (hooks sidecarHooks) HostsReady(ctx context.Context) error {
 	return hooks.reconcile(ctx, false)
 }
@@ -99,6 +110,10 @@ func (hooks sidecarHooks) reconcile(ctx context.Context, cleanup bool) error {
 	}
 
 	return operations.reconcile(ctx, cleanup)
+}
+
+func reconcileRuntimeSidecars(ctx context.Context, selected localruntime.Runtime) error {
+	return runtimeSidecarHooks(selected).HostsReady(ctx)
 }
 
 func (operations *sidecarOperations) reconcile(ctx context.Context, cleanup bool) error {
@@ -202,6 +217,10 @@ func (operations *sidecarOperations) recordDefinitionFailures(
 	}
 
 	return errors.Join(failures...)
+}
+
+func cleanupRuntimeSidecars(ctx context.Context, selected localruntime.Runtime) error {
+	return runtimeSidecarHooks(selected).BeforeStop(ctx)
 }
 
 func reconcileRunningSidecars(ctx context.Context, deployment config.DeploymentDir) error {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
+	"github.com/exasol/exasol-personal/internal/sidecar"
 )
 
 const (
@@ -132,6 +133,16 @@ var (
 	)
 )
 
+// PortPublisher opens sidecar endpoints beyond the host that runs the
+// containers. A runtime whose container host is the user's own machine has
+// nothing to open: the container runtime already binds the requested address.
+type PortPublisher interface {
+	// OpenPorts opens exactly the given endpoints and withdraws the ones it
+	// opened earlier that are no longer requested.
+	OpenPorts(ctx context.Context, ports []sidecar.PublishedPort) error
+	OpenedPorts(ctx context.Context) ([]sidecar.PublishedPort, error)
+}
+
 type PortState string
 
 const (
@@ -153,6 +164,8 @@ type HealthCheckResult struct {
 // It intentionally owns the complete lifecycle and durability contract.
 // nolint: interfacebloat
 type Runtime interface {
+	localinstall.SidecarProvider
+	PortPublisher
 	Deployment() config.DeploymentDir
 	Prepare(ctx context.Context, out, outErr io.Writer, options PrepareOptions) error
 	Start(ctx context.Context, out, outErr io.Writer, runtimeConfig VMConfig) error
