@@ -24,10 +24,12 @@ Notable user-facing changes to Exasol Personal are documented here.
   database state. A sidecar that fails to start names the cause and points at
   `exasol sidecar status <name>` for the full diagnosis. Connection values
   reach containers through an owner-readable file the launcher removes once the
-  container is created. macOS publishes a
-  declared host port through the local runner's live forwarding. Cloud
-  deployments report that sidecars are unsupported for their type.
-  Example: `exasol sidecar enable <name>`.
+  container is created. macOS publishes a declared host port through the local
+  runner's live forwarding. Cloud deployments report that sidecars are
+  unsupported for their type. The catalog includes the official Exasol MCP
+  server for local deployments with read-oriented query tools and a loopback
+  endpoint reported by status. Examples: `exasol sidecar enable <name>` and
+  `exasol sidecar enable mcp`.
 
 - Added a **CLI reference** page to the user documentation, listing every command and option of the
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each
