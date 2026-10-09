@@ -141,7 +141,7 @@ func TestSidecarEnableCommandUsesSavedDefinition(t *testing.T) {
 	}
 	var decoded deploy.SidecarResult
 	require.NoError(t, json.Unmarshal([]byte(strings.Join(terminalOutputs, "")), &decoded))
-	if !decoded.Enabled || len(decoded.Hosts) != 0 || decoded.Name != "saved" {
+	if !decoded.Enabled || decoded.Hosts[0].Running || decoded.Name != "saved" {
 		t.Fatalf("result: %+v", decoded)
 	}
 }
