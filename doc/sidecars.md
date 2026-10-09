@@ -1,7 +1,8 @@
 # Developing sidecars
 
-See the [architecture overview](architecture.md#sidecar-lifecycle) for
-ownership boundaries.
+See the [architecture overview](architecture.md#sidecar-lifecycle) for ownership
+boundaries and the [user guide](../user-docs/content/sidecars.md) for supported
+Container fields, connection references, and networking behavior.
 
 ## Adding a catalog entry
 
@@ -23,7 +24,8 @@ connections because sidecar startup can precede SQL readiness.
 For entries intended for both local and cloud deployments, use equal
 `hostPort` and `containerPort` values. Configure the application's listening
 address explicitly: cloud host networking relies on the application's bind
-configuration for exposure.
+configuration for exposure. Review the user guide's networking contract when
+choosing that address.
 
 Catalog changes supply templates for new enablement. Existing deployments
 retain their saved definitions, so test both a fresh enable and repeated
@@ -31,7 +33,10 @@ enable after editing the saved definition.
 
 Use [catalog tests](../internal/sidecar/catalog_test.go) for loading,
 architecture selection, and validation. Run `task tests-unit` and
-`task tests-launcher`.
+`task tests-launcher`. For runtime checks, see the
+[sidecar fixture catalog](../tests/README.md#sidecar-fixture-catalog). The
+[fixture definition](../tests/fixtures/sidecars/catalog.yaml) demonstrates
+connection references using disposable test credentials.
 
 ## Supplying templates from a command
 
