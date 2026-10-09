@@ -165,3 +165,22 @@ Omitting `hostPort` does not isolate the service from the node's network.
 Status reports declared endpoints from the applied container definition in
 that node's network context, including loopback addresses for node-local
 access. Sidecar DNS aliases are provided by the local bridge only.
+
+## MCP server
+
+For a local deployment, enable the official Exasol MCP server with:
+
+```bash
+exasol sidecar enable mcp
+```
+
+The default MCP endpoint is `http://127.0.0.1:4896/mcp`. Use
+`exasol sidecar status mcp` to obtain the effective endpoint after changing
+the saved port mapping. If the default host port is occupied, change the
+mapping as described in [Networking](#networking).
+
+The endpoint has no authentication and uses the deployment's saved database
+credentials. Only connect trusted local MCP clients. The catalog enables
+read-oriented query tools and disables write-query, BucketFS, and preprocessor
+tools. These controls limit the exposed MCP tools; they do not change the
+database privileges of the saved user.

@@ -1,2 +1,45 @@
 version: 1
-sidecars: {}
+sidecars:
+  mcp:
+    description: Exasol MCP server with read-oriented query tools
+    architectures: [amd64, arm64]
+    container:
+      image: docker.io/exasol/mcp-server:2.2.0@sha256:2f27525e93d3e117e7ae0d8512bbacb19d083cff66d001c0642681f29eba547f
+      args:
+        - --host
+        - 0.0.0.0
+        - --port
+        - "4896"
+        - --no-auth
+      env:
+        - name: EXASOL_DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: exasol-database
+              key: host
+        - name: EXASOL_DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: exasol-database
+              key: port
+        - name: EXA_DSN
+          value: $(EXASOL_DB_HOST):$(EXASOL_DB_PORT)
+        - name: EXA_USER
+          valueFrom:
+            secretKeyRef:
+              name: exasol-database
+              key: username
+        - name: EXA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: exasol-database
+              key: password
+        - name: EXA_SSL_CERT_VALIDATION
+          value: "false"
+        - name: EXA_MCP_SETTINGS
+          value: '{"enable_read_query": true, "enable_summarize_table": true, "enable_query_profiling": true, "enable_preprocessor_tools": false, "enable_write_query": false, "enable_read_bucketfs": false, "enable_write_bucketfs": false}'
+      ports:
+        - name: mcp
+          containerPort: 4896
+          hostPort: 4896
+          hostIP: 127.0.0.1

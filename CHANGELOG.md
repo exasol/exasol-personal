@@ -13,7 +13,10 @@ Notable user-facing changes to Exasol Personal are documented here.
   failures when live inspection verifies the desired outcome. Start reconciles
   edited definitions and reports sidecar failures separately from database
   state. macOS publishes sidecar ports through the local runner's live
-  forwarding. Example: `exasol sidecar enable <name> --no-db-password`.
+  forwarding. The catalog includes the official Exasol MCP server for local
+  deployments with read-oriented query tools and a loopback endpoint reported
+  by status. Examples: `exasol sidecar enable <name> --no-db-password` and
+  `exasol sidecar enable mcp`.
 
 - Added a **CLI reference** page to the user documentation, listing every command and option of the
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each

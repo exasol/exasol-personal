@@ -184,25 +184,27 @@ def _redact_command_string(command: str) -> str:
     return redacted
 
 
-def _logging_popen(
-    args: Any,  # noqa: ANN401
-    *rest: Any,  # noqa: ANN401
-    **kwargs: Any,  # noqa: ANN401
-) -> subprocess.Popen[Any]:
-    """Log the command line at DEBUG, then start it through the real ``Popen``."""
-    # The working directory is logged when set, because several tests rely on
-    # resolution relative to the cwd; the environment is not, since dumping it
-    # would bury the command line.
-    cwd = kwargs.get("cwd")
-    context = f" (cwd: {cwd})" if cwd is not None else ""
-    _command_logger.debug("executing command%s: %s", context, _format_command(args))
-    return _real_popen(args, *rest, **kwargs)
+class _LoggingPopen(subprocess.Popen[Any]):
+    def __init__(
+        self,
+        args: Any,  # noqa: ANN401
+        *rest: Any,  # noqa: ANN401
+        **kwargs: Any,  # noqa: ANN401
+    ) -> None:
+        """Log the command line at DEBUG, then start it through ``Popen``."""
+        # The working directory is logged when set, because several tests rely on
+        # resolution relative to the cwd; the environment is not, since dumping it
+        # would bury the command line.
+        cwd = kwargs.get("cwd")
+        context = f" (cwd: {cwd})" if cwd is not None else ""
+        _command_logger.debug("executing command%s: %s", context, _format_command(args))
+        super().__init__(args, *rest, **kwargs)
 
 
 # pytest passes only the hook arguments a hook actually declares, so both of
 # these take none.
 def pytest_configure() -> None:
-    subprocess.Popen = _logging_popen  # type: ignore[assignment,misc]
+    subprocess.Popen = _LoggingPopen  # type: ignore[misc]
 
 
 def pytest_unconfigure() -> None:
