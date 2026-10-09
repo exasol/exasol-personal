@@ -81,6 +81,10 @@ type RootFlags struct {
 
 var rootOpts = &RootFlags{}
 
+// Set only after shared pre-run succeeds, so help and rejected commands cannot
+// trigger the post-success automatic update check.
+var postSuccessVersionCheckCommand *cobra.Command
+
 // ApprovalMode resolves the flag together with terminal availability, so each
 // command can respond to "nobody can be asked" on its own terms rather than
 // having it collapsed into a plain refusal here.
@@ -128,6 +132,7 @@ var rootCmd = &cobra.Command{
 		if err := resolveDeploymentDirForCommand(cmd, commonFlags); err != nil {
 			return err
 		}
+		printTerminalMessages()
 		deployment := commonFlags.Deployment()
 
 		// Deployment-directory compatibility is enforced centrally and only for commands
@@ -143,11 +148,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		// Best-effort version update hint (non-blocking; terminal-only when available).
-		// Design decision: never block commands on this.
-		if cmd.Name() != "version" && !cmd.Hidden {
-			maybeAddVersionUpdateHint(cmd, deployment)
-		}
+		postSuccessVersionCheckCommand = cmd
 
 		return nil
 	},
@@ -196,6 +197,7 @@ func addHelpFlag(cmd *cobra.Command) {
 
 func Execute() error {
 	resetTerminalMessages()
+	postSuccessVersionCheckCommand = nil
 	registerLogLevelFlag(rootCmd, commonFlags)
 	registerAutoApproveFlag(rootCmd, rootOpts)
 
@@ -246,6 +248,7 @@ func Execute() error {
 	addHelpFlag(rootCmd)
 
 	err = rootCmd.ExecuteContext(ctx)
+	maybeAddVersionUpdateHint(postSuccessVersionCheckCommand, commonFlags.Deployment(), err)
 	runDeploymentLogCleanup()
 	if err == nil {
 		printTerminalMessages()
@@ -254,7 +257,24 @@ func Execute() error {
 	return err
 }
 
-func maybeAddVersionUpdateHint(cmd *cobra.Command, deployment config.DeploymentDir) {
+func maybeAddVersionUpdateHint(
+	cmd *cobra.Command,
+	deployment config.DeploymentDir,
+	commandErr error,
+) {
+	if commandErr != nil || cmd == nil || cmd.Name() == "version" || cmd.Hidden {
+		return
+	}
+
+	hasState, err := config.HasExasolPersonalStateFile(deployment)
+	if err != nil {
+		slog.Debug("launcher version update check state not available", "error", err)
+		return
+	}
+	if !hasState {
+		return
+	}
+
 	result, err := deploy.PerformSilentVersionCheck(
 		cmd.Context(),
 		deployment,

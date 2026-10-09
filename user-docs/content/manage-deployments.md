@@ -7,6 +7,9 @@ directory. Keep this directory until you have destroyed the deployment resources
 
 The default deployment is stored in `~/.exasol/personal/deployments/default`. When you run a command
 from an existing deployment directory, the launcher selects that deployment automatically.
+When the launcher selects the default directory, it reports the selected path on stderr before the
+command starts, including for interactive sessions. The notice appears once and leaves stdout free
+for command output.
 
 To maintain multiple deployments, give each one a case-sensitive name with `--deployment` or `-d`:
 

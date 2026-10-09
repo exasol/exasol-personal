@@ -59,7 +59,6 @@ func printTerminalCallsToActionAfterError() {
 	writeTerminalCallsToAction(
 		os.Stderr,
 		callsToActionVisible(commonFlags.OutputJson),
-		true,
 	)
 }
 
@@ -76,21 +75,24 @@ type terminalConfig struct {
 }
 
 func writeTerminalMessages(cfg terminalConfig) {
-	hasPrecedingMessages := len(terminalNotices) > 0 || len(terminalOutputs) > 0
-	for _, message := range terminalNotices {
-		_, _ = fmt.Fprintln(cfg.stderr, message)
-	}
-	terminalNotices = nil
+	writeTerminalNotices(cfg.stderr)
 	for _, message := range terminalOutputs {
 		_, _ = fmt.Fprintln(cfg.stdout, message)
 	}
 	terminalOutputs = nil
-	writeTerminalCallsToAction(cfg.stderr, cfg.showCallsToAction, hasPrecedingMessages)
+	writeTerminalCallsToAction(cfg.stderr, cfg.showCallsToAction)
 }
 
-func writeTerminalCallsToAction(writer io.Writer, visible, separate bool) {
+func writeTerminalNotices(writer io.Writer) {
+	for _, message := range terminalNotices {
+		_, _ = fmt.Fprintln(writer, message)
+	}
+	terminalNotices = nil
+}
+
+func writeTerminalCallsToAction(writer io.Writer, visible bool) {
 	if visible {
-		if len(terminalCallsToAction) > 0 && separate {
+		if len(terminalCallsToAction) > 0 {
 			_, _ = fmt.Fprintln(writer)
 		}
 		for _, message := range terminalCallsToAction {

@@ -118,6 +118,12 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- Terminal messages queued during startup now appear before command execution, so the selected
+  default or named deployment directory is visible before an interactive `exasol connect` session
+  opens. Remaining messages appear after success; automatic update guidance is checked only then,
+  and `install` displays the EULA only after deployment succeeds. Notices stay on stderr and JSON
+  stdout remains machine-readable.
+
 - `exasol status` now explains what to do when it reports `database_connection_failed`, which
   previously printed no message at all.
 

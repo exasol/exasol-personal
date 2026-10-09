@@ -87,7 +87,7 @@ func TestAddLocalPortRecoveryCallToActionQueuesStructuredRecovery(t *testing.T) 
 		Cause:   errors.New("runtime command failed"),
 	})
 	var stderr bytes.Buffer
-	writeTerminalCallsToAction(&stderr, true, false)
+	writeTerminalCallsToAction(&stderr, true)
 
 	for _, expected := range []string{
 		`local service "db"`,
@@ -113,7 +113,7 @@ func TestAddLocalPortRecoveryCallToActionQueuesRetryGuidance(t *testing.T) {
 		Cause:     errors.New("runtime reported an unrecognized diagnostic"),
 	})
 	var stderr bytes.Buffer
-	writeTerminalCallsToAction(&stderr, true, false)
+	writeTerminalCallsToAction(&stderr, true)
 
 	for _, expected := range []string{
 		"exasol start",

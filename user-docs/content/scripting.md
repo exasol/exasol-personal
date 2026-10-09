@@ -13,6 +13,11 @@ A non-interactive invocation of a command that supports `--json` writes exactly 
 value to standard output when it succeeds. Operational notices can still appear on standard error.
 Check each command's help to see whether JSON output is available.
 
+Messages queued during launcher startup, such as the selected deployment directory, appear before
+the command runs. Remaining notices and results appear after a successful command; optional update
+guidance appears last and is omitted when the command fails or uses `--json`. A command that removes
+its deployment directory does not check for updates afterward.
+
 Expected failures, including invalid input and unsupported operations, are reported on standard
 error and exit with status `1`; successful commands exit with status `0`. A status reported inside a
 successful JSON result is data, not the process exit status. `exasol connect --json` is a special
