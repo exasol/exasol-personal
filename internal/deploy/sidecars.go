@@ -297,6 +297,9 @@ func (ops *sidecarOperations) ensure(
 	if err != nil {
 		return err
 	}
+	if host.databasePort != "" {
+		sources[sidecar.DatabaseSource]["port"] = host.databasePort
+	}
 
 	return manager.Ensure(ctx, definition, sources)
 }
