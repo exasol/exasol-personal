@@ -158,3 +158,22 @@ publishes it on the requested loopback `hostIP`, defaulting to `127.0.0.1`.
 Status reports the effective IP and port. An occupied host port is reported
 with the conflicting port; choose a free one in the saved mapping and retry
 start.
+
+## MCP server
+
+For a local deployment, enable the official Exasol MCP server with:
+
+```bash
+exasol sidecar enable mcp
+```
+
+The default MCP endpoint is `http://127.0.0.1:4896/mcp`. Use
+`exasol sidecar status mcp` to obtain the effective endpoint after changing
+the saved port mapping. If the default host port is occupied, change the
+mapping as described in [Networking](#networking).
+
+The endpoint has no authentication and uses the deployment's saved database
+credentials. Only connect trusted local MCP clients. The catalog enables
+read-oriented query tools and disables write-query, BucketFS, and preprocessor
+tools. These controls limit the exposed MCP tools; they do not change the
+database privileges of the saved user.
