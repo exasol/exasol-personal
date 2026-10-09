@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,9 @@ import (
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
+
+const sidecarRestartGuidance = "Run `exasol stop` followed by `exasol start` " +
+	"to restart the deployment and start the enabled sidecars."
 
 func newSidecarCommand(flags *CommonFlags) *cobra.Command {
 	command := &cobra.Command{
@@ -82,6 +86,12 @@ func newSidecarActionCommand(
 }
 
 func renderSidecarResult(result deploy.SidecarResult, jsonOutput bool) error {
+	if slices.ContainsFunc(
+		result.Hosts,
+		func(host deploy.SidecarHostResult) bool { return host.RestartRequired },
+	) {
+		addTerminalCallToAction(sidecarRestartGuidance)
+	}
 	if jsonOutput {
 		return addJSONTerminalOutput(result)
 	}
@@ -107,6 +117,9 @@ func formatSidecarResult(result deploy.SidecarResult) string {
 func formatSidecarHost(result deploy.SidecarHostResult) []string {
 	lines := []string{fmt.Sprintf("Host %s: %s", result.Name, result.State)}
 	lines = append(lines, "Reconciliation: "+result.Reconciliation)
+	if result.RestartRequired {
+		lines = append(lines, "Deployment restart required.")
+	}
 	for _, endpoint := range result.Endpoints {
 		lines = append(
 			lines,

@@ -5,6 +5,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -231,12 +232,13 @@ func runDeployBackend(
 		return err
 	}
 
-	if err := backend.Deploy(
+	sidecarErr, err := splitSidecarFailure(backend.Deploy(
 		ctx,
 		externalCommandOutput,
 		externalCommandOutput,
 		options,
-	); err != nil {
+	))
+	if err != nil {
 		unregister()
 		_, unavailable := localports.AsUnavailable(err)
 		if unavailable {
@@ -258,11 +260,14 @@ func runDeployBackend(
 
 		return recordDeployFailure(exasolState, deployment, err)
 	}
+	if !isLocalDeployment(deployment) {
+		sidecarErr = backendSidecarHooks(deployment, backend).HostsReady(ctx)
+	}
 
 	// Stop handling interrupts before committing success state
 	unregister()
 
-	return finalizeSuccessfulDeploy(ctx, exasolState, deployment)
+	return errors.Join(finalizeSuccessfulDeploy(ctx, exasolState, deployment), sidecarErr)
 }
 
 // recordDeployFailure appends diagnostic hints to err and persists the

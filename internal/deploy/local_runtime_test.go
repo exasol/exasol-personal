@@ -11,10 +11,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
+	"github.com/exasol/exasol-personal/internal/sidecar"
 	"github.com/exasol/exasol-personal/internal/version_check"
 )
 
@@ -483,10 +486,49 @@ type endpointRuntimeStub struct {
 	honorContext      bool
 	hostShellErr      error
 	containerShellErr error
+	publishedPorts    []sidecar.PublishedPort
+	publishCalls      int
+	// A forwarding runtime serves endpoints itself, the way a VM boundary
+	// requires; a direct runtime leaves publication to the container runtime.
+	forwarding bool
 }
 
 func (runtime *endpointRuntimeStub) Deployment() config.DeploymentDir {
 	return runtime.deployment
+}
+
+func (*endpointRuntimeStub) Sidecars(context.Context) (localinstall.SidecarManager, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (*endpointRuntimeStub) SidecarHostRunning(context.Context) (bool, error) {
+	return true, nil
+}
+
+func (runtime *endpointRuntimeStub) OpenPorts(
+	_ context.Context,
+	ports []sidecar.PublishedPort,
+) error {
+	runtime.publishedPorts = slices.Clone(ports)
+	runtime.publishCalls++
+
+	return nil
+}
+
+func (runtime *endpointRuntimeStub) OpenedPorts(
+	context.Context,
+) ([]sidecar.PublishedPort, error) {
+	if !runtime.forwarding {
+		return nil, nil
+	}
+	opened := []sidecar.PublishedPort{}
+	for _, port := range runtime.publishedPorts {
+		if port.RuntimePort > 0 {
+			opened = append(opened, port)
+		}
+	}
+
+	return opened, nil
 }
 
 func (*endpointRuntimeStub) EnsureQueryable(
