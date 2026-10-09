@@ -341,6 +341,12 @@ func startLocked(
 	}
 	if !decision.shouldRun {
 		logLifecycleGuidance(decision.guidance)
+		workflow, _ := exasolState.GetWorkflowState()
+		if _, running := workflow.(*config.WorkflowStateRunning); running {
+			if err := reconcileRunningSidecars(ctx, deployment); err != nil {
+				return err
+			}
+		}
 		if decision.showConnectionInstructions {
 			return nil
 		}
@@ -414,12 +420,13 @@ func runStartBackend(
 	// Fallback cleanup
 	defer unregister()
 
-	if err := backend.Start(
+	sidecarErr, err := splitSidecarFailure(backend.Start(
 		ctx,
 		externalCommandOutput,
 		externalCommandOutput,
 		waitTimeoutSeconds,
-	); err != nil {
+	))
+	if err != nil {
 		unregister()
 
 		return recordLifecycleFailure(
@@ -455,7 +462,10 @@ func runStartBackend(
 		return err
 	}
 
-	return writeConnectionInstructionsFile(deployment, connectionInstructions)
+	return errors.Join(
+		writeConnectionInstructionsFile(deployment, connectionInstructions),
+		sidecarErr,
+	)
 }
 
 func workflowStatePermitsStop(
@@ -547,7 +557,7 @@ func stopLocked(ctx context.Context, deployment config.DeploymentDir, verbose bo
 	if !decision.shouldRun {
 		logLifecycleGuidance(decision.guidance)
 
-		return nil
+		return cleanupStoppedSidecars(ctx, deployment)
 	}
 
 	slog.Info("stopping deployment. this may take a few minutes")
@@ -602,11 +612,12 @@ func runStopBackend(
 		externalCommandOutput = os.Stderr
 	}
 
-	if err := backend.Stop(
+	sidecarErr, err := splitSidecarFailure(backend.Stop(
 		ctx,
 		externalCommandOutput,
 		externalCommandOutput,
-	); err != nil {
+	))
+	if err != nil {
 		unregister()
 
 		return recordLifecycleFailure(
@@ -629,5 +640,5 @@ func runStopBackend(
 
 	slog.Info("database is stopped and no longer accepts connections")
 
-	return nil
+	return sidecarErr
 }

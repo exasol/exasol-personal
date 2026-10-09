@@ -4,7 +4,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -42,6 +44,69 @@ func TestSidecarCommandFlagsAndArguments(t *testing.T) {
 			t.Fatal("extra argument accepted")
 		}
 	}
+}
+
+//nolint:paralleltest // Terminal queues are process-global.
+func TestSidecarFailureGuidanceFollowsOutputMode(t *testing.T) {
+	for _, jsonOutput := range []bool{false, true} {
+		// Given
+		resetTerminalMessages()
+		t.Cleanup(resetTerminalMessages)
+		cause := errors.Join(errors.New("another host failed"), deploy.ErrSidecarRestartRequired)
+		// When
+		err := installDeploymentFailure(cause)
+		var stderr bytes.Buffer
+		writeTerminalCallsToAction(&stderr, callsToActionVisible(jsonOutput), true)
+		// Then
+		require.ErrorIs(t, err, deploy.ErrSidecarRestartRequired)
+		require.NotContains(t, err.Error(), "exasol stop")
+		require.Empty(t, terminalOutputs)
+		require.Empty(t, terminalNotices)
+		if jsonOutput {
+			require.Empty(t, stderr.String())
+		} else {
+			require.Equal(t, "\n"+sidecarRestartGuidance+"\n", stderr.String())
+		}
+	}
+}
+
+//nolint:paralleltest // Terminal queues are process-global.
+func TestSidecarRestartGuidanceFollowsOutputMode(t *testing.T) {
+	for _, jsonOutput := range []bool{false, true} {
+		// Given
+		resetTerminalMessages()
+		result := deploy.SidecarResult{
+			Name: "example", Enabled: true,
+			Hosts: []deploy.SidecarHostResult{{
+				Name: "local", State: "stopped",
+				RestartRequired: true, Endpoints: []deploy.SidecarEndpoint{},
+			}},
+		}
+		// When
+		err := renderSidecarResult(result, jsonOutput)
+		var stdout, stderr bytes.Buffer
+		writeTerminalMessages(terminalConfig{
+			stdout: &stdout, stderr: &stderr,
+			showCallsToAction: callsToActionVisible(jsonOutput),
+		})
+		// Then
+		require.NoError(t, err)
+		if jsonOutput {
+			var decoded deploy.SidecarResult
+			require.NoError(t, json.Unmarshal(stdout.Bytes(), &decoded))
+			if !decoded.Hosts[0].RestartRequired || !decoded.Enabled || decoded.Hosts[0].Running ||
+				stderr.Len() != 0 {
+				t.Fatalf("JSON result: %+v, stderr=%q", decoded, stderr.String())
+			}
+		} else if !strings.Contains(stdout.String(), "Host local: stopped") ||
+			!strings.Contains(
+				stderr.String(),
+				"exasol stop",
+			) || !strings.Contains(stderr.String(), "exasol start") {
+			t.Fatalf("text result: %q, %q", stdout.String(), stderr.String())
+		}
+	}
+	resetTerminalMessages()
 }
 
 //nolint:paralleltest // Terminal queues are process-global.
