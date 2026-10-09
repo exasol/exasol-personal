@@ -170,6 +170,17 @@ before enabling it, so they run against the ordinary launcher build. Its Caddy
 randomly generated test credentials over loopback HTTP. Use it only with
 disposable deployments.
 
+Cloud sidecar evidence lives in `tests/live/test_sidecar_cloud.py`, uses the
+reusable live deployment, and checks every provisioned node. Run it with cloud
+credentials configured:
+
+```bash
+cd tests
+EXASOL_RUN_CLOUD_DEPLOY_CASES=1 uv run --locked --no-build pytest \
+  tests/live/test_sidecar_cloud.py \
+  --exasol-path=../bin/exasol --infra=aws
+```
+
 ### Seeing the commands a test runs
 
 Live logging is on at `INFO`, which does not include the individual launcher
