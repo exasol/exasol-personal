@@ -84,6 +84,9 @@ owns start, stop, and the container's restart policy, and resolved values
 reach the container as container secrets created over private standard input.
 Keep the unit and every launcher command free of credential values.
 
+A custom infrastructure preset must declare the `sidecar_ports` variable the
+launcher maintains, or the preset admits no sidecar endpoint.
+
 Opening an endpoint beyond the host that runs the container is the deployment
 backend's job, through `OpenPorts` and `OpenedPorts` in
 [port publication](../internal/deploy/sidecar_publication.go). The shared

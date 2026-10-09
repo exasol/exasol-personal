@@ -93,10 +93,11 @@ The Exasol Launcher (`exasol`) is a command-line application that automates the 
 One shared service manages sidecar definitions, reconciliation, and per-host
 outcomes. Deployment backends provide hosts, command transports, and the
 opening of endpoints beyond the hosts that run the containers. Host adapters
-own container networking. Lifecycle hooks reconcile services when hosts are
-ready, clean up before stopping hosts, and clear observed state after
-destruction. Sidecar failures remain separate from database lifecycle
-outcomes. See the
+own container networking. Cloud nodes run sidecars as services of their own
+deployment service, so the node starts, stops, and restarts them with its
+database. Lifecycle hooks reconcile services when hosts are ready, clean up
+before stopping hosts, and clear observed state after destruction. Sidecar
+failures remain separate from database lifecycle outcomes. See the
 [sidecar guide](../user-docs/content/sidecars.md) for configuration and
 user-visible behavior.
 
