@@ -37,7 +37,7 @@ var deployCmd = &cobra.Command{
 				),
 			},
 		); err != nil {
-			addLocalPortRecoveryCallToAction(err)
+			addDeploymentRecoveryCallToAction(err)
 
 			return err
 		}
