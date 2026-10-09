@@ -14,6 +14,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/sidecar"
 )
 
 const (
@@ -46,6 +47,12 @@ type StartOptions struct {
 // when the backend was constructed (see newDeploymentBackend).
 // nolint: interfacebloat
 type deploymentBackend interface {
+	SidecarHosts(ctx context.Context) ([]sidecarHost, error)
+	// OpenPorts makes exactly the given endpoints reachable beyond the hosts
+	// that run the containers and withdraws the ones it opened earlier that
+	// are no longer requested.
+	OpenPorts(ctx context.Context, ports []sidecar.PublishedPort) error
+	OpenedPorts(ctx context.Context) ([]sidecar.PublishedPort, error)
 	// Prepare satisfies host prerequisites. It runs before the deployment
 	// records an operation in progress, so a declined or failed
 	// prerequisite leaves the deployment retryable.

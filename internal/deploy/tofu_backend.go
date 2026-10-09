@@ -510,22 +510,24 @@ func (b *tofuBackend) Start(
 	if waitTimeoutSeconds <= 0 {
 		waitTimeoutSeconds = StartedDefaultTimeoutSeconds
 	}
+	sidecarErr := backendSidecarHooks(b.deployment, b).HostsReady(ctx)
 
 	waitCtx, cancel = context.WithTimeout(ctx, time.Duration(waitTimeoutSeconds)*time.Second)
 	defer cancel()
 
 	if err := WaitForDatabaseStarted(waitCtx, b.deployment); err != nil {
 		slog.Error("database did not become operational with timeout", "error", err.Error())
-		return err
+		return sidecarLifecycleResult(err, sidecarErr)
 	}
 
-	return nil
+	return sidecarLifecycleResult(nil, sidecarErr)
 }
 
 func (b *tofuBackend) Stop(
 	ctx context.Context,
 	out, outErr io.Writer,
 ) error {
+	sidecarErr := backendSidecarHooks(b.deployment, b).BeforeStop(ctx)
 	logBuffer := task_runner.NewLogBuffer()
 
 	if err := b.applyAction(
@@ -537,10 +539,10 @@ func (b *tofuBackend) Stop(
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("failed to stop the deployment")
 
-		return err
+		return sidecarLifecycleResult(err, sidecarErr)
 	}
 
-	return nil
+	return sidecarLifecycleResult(nil, sidecarErr)
 }
 
 func (b *tofuBackend) Destroy(
