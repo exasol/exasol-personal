@@ -4,6 +4,7 @@
 package localruntime
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -250,7 +251,10 @@ func (runtime *HostRuntime) ReadEndpoints() (*VMRuntimeEndpoint, error) {
 		runtime.endpoint = &RuntimeEndpoint{DBPort: info.Connection.DBPort}
 	}
 
-	return &VMRuntimeEndpoint{RuntimeEndpoint: *runtime.endpoint}, nil
+	endpoint := *runtime.endpoint
+	endpoint.ShellSupported = runtime.Platform() == HostPlatformLinux
+
+	return &VMRuntimeEndpoint{RuntimeEndpoint: endpoint}, nil
 }
 
 func (runtime *HostRuntime) HealthCheck(ctx context.Context) (*HealthCheckResult, error) {
@@ -275,12 +279,21 @@ func (runtime *HostRuntime) HealthCheck(ctx context.Context) (*HealthCheckResult
 }
 
 func (runtime *HostRuntime) OpenHostShell(
-	context.Context,
-	[]string,
-	io.Reader,
-	io.Writer,
-	io.Writer,
+	ctx context.Context,
+	command []string,
+	stdin io.Reader,
+	stdout io.Writer,
+	stderr io.Writer,
 ) error {
+	if runtime.Platform() == HostPlatformLinux {
+		if len(command) == 0 {
+			command = []string{cmp.Or(os.Getenv("SHELL"), "/bin/sh")}
+		}
+
+		return localinstall.NewDirectExecutionEnvironment(runtime.runCmd()).
+			Run(ctx, nil, stdin, stdout, stderr, command...)
+	}
+
 	return fmt.Errorf(
 		"%s host runtime does not support host shells: %w",
 		runtime.Platform(),
