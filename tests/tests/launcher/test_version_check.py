@@ -6,9 +6,12 @@ import json
 import os
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 import requests
+
+from .conftest import get_version_check_count
 
 
 def test_version_check_latest(exasol_path: str, mock_version_server: str) -> None:
@@ -56,6 +59,94 @@ def test_version_check_latest(exasol_path: str, mock_version_server: str) -> Non
     assert "Size: 1234567890 bytes" in output
     assert "Download URL: https://example.com/exasol-9.9.9.tar.gz" in output
     assert "SHA256: abcdef1234567890" in output
+
+
+@pytest.mark.openspec("launcher-version-check")
+def test_automatic_update_check_follows_only_success_and_skips_removed_state(
+    exasol_path: str, mock_version_server: str, tmp_path: Path
+) -> None:
+    deployment_dir = tmp_path / "deployment"
+    endpoint = f"{mock_version_server}/version-check"
+    env = {**os.environ, "EXASOL_VERSION_CHECK_URL": endpoint}
+
+    # Initialize without an implicit check, then enable checks in persisted state.
+    initialized = subprocess.run(
+        [
+            exasol_path,
+            "init",
+            "aws",
+            "--deployment-dir",
+            str(deployment_dir),
+            "--no-launcher-version-check",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "EULA" in initialized.stderr
+    assert get_version_check_count(mock_version_server) == 0
+    state_file = deployment_dir / ".exasolLauncherState.json"
+    state = json.loads(state_file.read_text())
+    state["versionCheckEnabled"] = True
+    state.pop("lastVersionCheck", None)
+    state_file.write_text(json.dumps(state))
+
+    # A command failure after shared startup must not request or show an update.
+    failed = subprocess.run(
+        [
+            exasol_path,
+            "status",
+            "--timeout",
+            "0",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert failed.returncode != 0
+    assert "--timeout must be positive" in failed.stderr
+    assert "A new version of Exasol Personal" not in failed.stderr
+    assert get_version_check_count(mock_version_server) == 0
+
+    # A successful command checks after its own output and leaves guidance last.
+    succeeded = subprocess.run(
+        [exasol_path, "status", "--deployment-dir", str(deployment_dir)],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=True,
+    )
+    assert "A new version of Exasol Personal is available: 9.9.9" in succeeded.stdout
+    assert succeeded.stdout.rfind(
+        "A new version of Exasol Personal"
+    ) > succeeded.stdout.find("Status:")
+    assert get_version_check_count(mock_version_server) == 1
+
+    # A successful remove has no state to check and must not recreate the directory.
+    state = json.loads(state_file.read_text())
+    state.pop("lastVersionCheck", None)
+    state_file.write_text(json.dumps(state))
+    removed = subprocess.run(
+        [
+            exasol_path,
+            "remove",
+            "--auto-approve",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "A new version of Exasol Personal" not in removed.stderr
+    assert not deployment_dir.exists()
+    assert get_version_check_count(mock_version_server) == 0
 
 
 def test_version_check_latest_json(exasol_path: str, mock_version_server: str) -> None:

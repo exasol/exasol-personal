@@ -37,6 +37,44 @@ func TestTerminalMessagesPrintNoticesInQueueOrderAndOutputToStdout(t *testing.T)
 	}
 }
 
+//nolint:paralleltest // mutates shared terminal message queues
+func TestStartupFlushDrainsAllMessageKindsBeforeLaterMessages(t *testing.T) {
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+
+	// Given messages queued during shared startup.
+	addTerminalNotice("Using default deployment directory: /deployments/default")
+	addTerminalOutput("startup result")
+	addTerminalCallToAction("startup guidance")
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	// When shared startup flushes all queues and the command later queues messages.
+	writeTerminalMessages(terminalConfig{
+		stdout: &stdout, stderr: &stderr, showCallsToAction: true,
+	})
+	if stdout.String() != "startup result\n" || stderr.String() !=
+		"Using default deployment directory: /deployments/default\n\nstartup guidance\n" {
+		t.Fatalf("startup messages not flushed before command: stdout=%q stderr=%q",
+			stdout.String(), stderr.String())
+	}
+	addTerminalOutput("command result")
+	addTerminalCallToAction("run `exasol connect`")
+	writeTerminalMessages(terminalConfig{
+		stdout: &stdout, stderr: &stderr, showCallsToAction: true,
+	})
+
+	// Then startup messages are not printed again and later guidance is last.
+	if stdout.String() != "startup result\ncommand result\n" {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+	expected := "Using default deployment directory: /deployments/default\n\n" +
+		"startup guidance\n\nrun `exasol connect`\n"
+	if stderr.String() != expected {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
 // TestTerminalMessagesShowCallsToActionOnlyWhenVisible must not run in parallel:
 // it mutates the package-level terminal message queues.
 //
@@ -89,6 +127,30 @@ func TestTerminalMessagesShowCallsToActionWhenVisible(t *testing.T) {
 	}
 	if stderr.String() != "directory notice\n\nrun `exasol deploy`\n" {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+//nolint:paralleltest // mutates shared terminal message queues
+func TestCallToActionOnlyBatchStartsWithOneBlankLine(t *testing.T) {
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+
+	addTerminalCallToAction("run `exasol init`")
+	addTerminalCallToAction("then run `exasol deploy`")
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	writeTerminalMessages(terminalConfig{
+		stdout: &stdout, stderr: &stderr, showCallsToAction: true,
+	})
+	writeTerminalMessages(terminalConfig{
+		stdout: &stdout, stderr: &stderr, showCallsToAction: true,
+	})
+
+	if stdout.Len() != 0 {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+	if stderr.String() != "\nrun `exasol init`\nthen run `exasol deploy`\n" {
+		t.Fatalf("unexpected CTA-only output: %q", stderr.String())
 	}
 }
 
@@ -146,7 +208,7 @@ func TestWriteTerminalCallsToActionFollowsCommandError(t *testing.T) {
 
 	addTerminalCallToAction("run `exasol config set`")
 	stderr := bytes.NewBufferString("Error: port unavailable\n")
-	writeTerminalCallsToAction(stderr, true, true)
+	writeTerminalCallsToAction(stderr, true)
 
 	if stderr.String() != "Error: port unavailable\n\nrun `exasol config set`\n" {
 		t.Fatalf("unexpected error and call-to-action output: %q", stderr.String())

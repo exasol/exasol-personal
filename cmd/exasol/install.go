@@ -102,12 +102,7 @@ func runInstallPreRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := setupDeploymentLogSession(cmd, deployment); err != nil {
-		return err
-	}
-	addTerminalNotice(deploy.EulaNoticeText)
-
-	return nil
+	return setupDeploymentLogSession(cmd, deployment)
 }
 
 // initializeInstall either reconciles an already-initialized deployment with
@@ -176,6 +171,7 @@ func runInstallPersistentPostRun(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to print deployment info: %w", err)
 	}
+	addTerminalNotice(deploy.EulaNoticeText)
 
 	return nil
 }
