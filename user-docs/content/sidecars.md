@@ -1,6 +1,6 @@
 # Manage sidecars
 
-Sidecars run alongside the database on a local deployment's host.
+Sidecars run alongside the database on the local host or every cloud node.
 The built-in catalog
 provides templates; each deployment owns its enabled definitions. Use the
 catalog names reported by your launcher:
@@ -15,12 +15,15 @@ exasol sidecar disable <name>
 Each command accepts `--deployment <name>` or `--deployment-dir <path>` and
 `--json`. JSON status includes `name`, `enabled`, and a `hosts` array. Each
 host has its own `name`, `running`, `state`, `exitCode`, `restartRequired`,
-`endpoints`, and an `error` when available. The local host is named `local`.
-A deployment without sidecar hosts reports an empty `hosts` array.
+`endpoints`, and an `error` when available. The local host is named `local`;
+cloud hosts use their node names. Before provisioning, `hosts` is empty.
 Status describes the container process, rather than application readiness.
 
 Sidecars use host Podman on Linux, Podman machine on Windows, and the local VM
 on macOS. macOS publication requires a runner with live-forwarding support.
+Cloud deployments install each sidecar as a service of the node's database
+service, so the node starts, stops, and restarts it together with the
+database.
 
 ## Enablement and lifecycle
 
@@ -108,7 +111,9 @@ Supported fields follow the Kubernetes Container shape:
 | `restartPolicy` | `Always`, `OnFailure`, `Never` |
 
 The default restart policy is `OnFailure`. Explicit stop and disable take
-precedence over process restart. Individual Container restart policies require
+precedence over process restart. On cloud nodes the policy is applied by the
+node's service manager, which also stops the sidecar when the database service
+stops. Individual Container restart policies require
 compatible Kubernetes feature support if these definitions are later used
 with Kubernetes.
 
@@ -123,7 +128,7 @@ The launcher resolves the `exasol-database` source at container creation:
 | Key | Runtime value |
 | --- | --- |
 | `host` | `database` |
-| `port` | The deployment's internal SQL port |
+| `port` | Local internal SQL port, or the cloud node's SQL port |
 | `username` | Saved database connection username |
 | `password` | Saved database password |
 
@@ -152,3 +157,21 @@ These names resolve inside that deployment's network.
 publishes it on the requested loopback `hostIP`, defaulting to `127.0.0.1`.
 Status reports the effective IP and port. If a host port is occupied, edit the
 saved mapping and retry start.
+
+Cloud sidecars share their node's host network. Each container receives a
+`database` hosts-file entry pointing to the node's private database address.
+A positive `hostPort` must equal `containerPort`. Configure the service itself
+to listen on the intended address and port: host networking performs no port
+translation, and `hostIP` does not restrict the application's listener.
+Omitting `hostPort` does not isolate the service from the node's network.
+Status reports declared endpoints from the applied container definition in
+that node's network context, including loopback addresses for node-local
+access. Sidecar DNS aliases are provided by the local bridge only.
+
+A positive `hostPort` also opens that port in the cloud provider's firewall
+for the deployment's allowed address range, alongside the database ports.
+Enable and disable apply the change to the provider configuration, and the
+open ports follow enablement across stop and start. Declare a `hostPort` only
+for services you intend to reach from outside the node, and keep the service's
+own listening address in mind: a service bound to loopback stays node-local
+even when its port is admitted.
