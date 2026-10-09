@@ -48,7 +48,11 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 		"<podman><container><exists><" + testContainerName + ">",
 		"<podman><load><-i><" + fixture.imagePath + ">",
 		"<sync>",
+		"<podman><network><create><--ignore><--driver><bridge><--label><" +
+			sidecarOwnerLabel + "=" + testContainerName + "><" + testContainerName + "-services>",
+		"<podman><network><inspect><" + testContainerName + "-services>",
 		"<podman><run><-d><--replace><--name><" + testContainerName + ">" +
+			"<--network><" + testContainerName + "-services><--network-alias><database>" +
 			"<--shm-size=512mb><--pids-limit=-1><--security-opt><unmask=ALL>" +
 			"<--security-opt><label=disable>" +
 			"<--restart><always><-p><127.0.0.1:28563:8563>" +
@@ -152,8 +156,8 @@ func TestPodmanInstallStart_ReusesExistingDatabaseConfiguration(t *testing.T) {
 		t.Fatalf("expected existing database start to succeed, got %v", err)
 	}
 	commands := readCommandLog(t, fixture.logPath)
-	if len(commands) != 4 {
-		t.Fatalf("expected four execution-environment commands, got %#v", commands)
+	if len(commands) != 6 {
+		t.Fatalf("expected six execution-environment commands, got %#v", commands)
 	}
 	runCommand := commands[len(commands)-1]
 	if !strings.HasSuffix(
@@ -359,7 +363,7 @@ func TestPodmanInstallStart_StopsAfterCommandFailure(t *testing.T) {
 			name:             "run",
 			failedCommand:    "run",
 			expectedError:    "failed to start Nano container",
-			expectedCommands: 9,
+			expectedCommands: 11,
 		},
 		{
 			name:             "unparseable load output",
@@ -861,6 +865,14 @@ if [ -f "$scenario_dir/fail-diagnostics" ]; then
 fi
 
 case "$command" in
+  network)
+    if [ "$3" = "inspect" ]; then
+      printf '[{"name":"%s","driver":"bridge","dns_enabled":true,' "$4"
+      printf '"labels":{"com.exasol.launcher.sidecar-owner":"%s"}}]\n' "${4%-services}"
+    elif [ "$3" = "ls" ]; then
+      printf '[]\n'
+    fi
+    ;;
   image)
     if [ "$3" != "exists" ]; then
       exit 93

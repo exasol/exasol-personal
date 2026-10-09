@@ -204,9 +204,18 @@ func (install *PodmanInstall) Start(
 			fmt.Errorf("failed to synchronize local runtime storage before starting Nano: %w", err))
 	}
 
+	services, err := NewSidecarRuntime(install.environment, containerName)
+	if err != nil {
+		return err
+	}
+	if err := services.EnsureNetwork(ctx); err != nil {
+		return err
+	}
+
 	args := []string{
 		"run", "-d", "--replace",
 		"--name", containerName,
+		"--network", services.NetworkName(), "--network-alias", databaseAlias,
 		"--shm-size=" + nanoShmSize,
 		"--pids-limit=" + nanoPIDsLimit,
 		"--security-opt", nanoSecurityOpt,
@@ -331,7 +340,19 @@ func (install *PodmanInstall) Status(
 }
 
 func (install *PodmanInstall) Destroy(ctx context.Context, out, outErr io.Writer) error {
-	return install.Stop(ctx, out, outErr)
+	if err := install.Stop(ctx, out, outErr); err != nil {
+		return err
+	}
+	owner, err := ContainerName(install.deployment)
+	if err != nil {
+		return err
+	}
+	services, err := NewSidecarRuntime(install.environment, owner)
+	if err != nil {
+		return err
+	}
+
+	return services.RemoveNetwork(ctx)
 }
 
 func (install *PodmanInstall) adoptLegacyContainerName(

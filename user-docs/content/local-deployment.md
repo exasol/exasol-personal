@@ -39,6 +39,14 @@ are `sys` / `exasol`.
 BucketFS HTTP access is not available for local deployments. BucketFS storage remains available
 through the deployment directory, as described in [Virtual schemas](virtual-schemas.md).
 
+## Deployment network
+
+Each new database container joins a named bridge network owned by its
+deployment, where it is reachable as `database`. The published database port
+remains the port saved in the deployment configuration. Existing containers
+adopt the deployment network after an explicit `exasol stop` followed by
+`exasol start`. Destroying the deployment removes its network.
+
 ## Linux host access
 
 Run `exasol shell host` to open your local shell. The launcher uses `SHELL`,
