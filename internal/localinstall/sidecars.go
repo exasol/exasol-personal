@@ -29,6 +29,7 @@ const (
 	sidecarOwnerLabel      = "com.exasol.launcher.sidecar-owner"
 	SidecarNameLabel       = "com.exasol.launcher.sidecar-name"
 	sidecarDefinitionLabel = "com.exasol.launcher.sidecar-definition"
+	sidecarPortsLabel      = "com.exasol.launcher.sidecar-ports"
 )
 
 // The container runtime reports a claimed address this way, and the saved
@@ -42,10 +43,11 @@ var ErrSidecarPortUnavailable = errors.New("sidecar host port is unavailable")
 var runtimeNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 
 type SidecarRuntime struct {
-	environment CommandRunner
-	owner       string
-	PublishPort func(sidecar.Port) string
-	Salt        string
+	environment  CommandRunner
+	owner        string
+	PublishPort  func(sidecar.Port) string
+	DatabaseHost string
+	Salt         string
 }
 
 type SidecarManager interface {
@@ -129,49 +131,49 @@ func (runtime *SidecarRuntime) List(ctx context.Context) ([]SidecarContainer, er
 	if err := json.Unmarshal(output, &containers); err != nil {
 		return nil, fmt.Errorf("decode sidecar container listing: %w", err)
 	}
+	for index := range containers {
+		container := &containers[index]
+		if ports := container.Labels[sidecarPortsLabel]; ports != "" {
+			if err := json.Unmarshal([]byte(ports), &container.Ports); err != nil {
+				return nil, fmt.Errorf("decode sidecar %s endpoints: %w", container.Name(), err)
+			}
+		}
+	}
 
 	return slices.DeleteFunc(containers, func(container SidecarContainer) bool {
 		return container.Labels[sidecarOwnerLabel] != runtime.owner || container.Name() == ""
 	}), nil
 }
 
+// sidecarPlan carries everything one container creation needs, so transports
+// that start containers differently still share resolution and comparison.
+type sidecarPlan struct {
+	resolved    sidecar.Resolved
+	fingerprint string
+	env         map[string]string
+	args        []string
+}
+
 func (runtime *SidecarRuntime) Ensure(
 	ctx context.Context, definition sidecar.Container, sources sidecar.Sources,
 ) error {
-	resolved, err := sidecar.Resolve(definition, sources)
+	plan, err := runtime.plan(definition, sources, containerCreation{
+		detach:  true,
+		restart: podmanRestartPolicies[definition.Defaults().RestartPolicy],
+		env:     func(name string) []string { return []string{"--env", name} },
+	})
 	if err != nil {
 		return err
 	}
-	fingerprint, err := runtime.fingerprint(resolved.Container)
-	if err != nil {
-		return err
-	}
-	args, err := runtime.createArgs(resolved.Container, fingerprint)
-	if err != nil {
-		return err
-	}
-	converged, err := runtime.converge(ctx, definition, fingerprint)
+	converged, err := runtime.converge(ctx, definition, plan.fingerprint)
 	if err != nil || converged {
 		return err
 	}
-	env := make(map[string]string, len(resolved.Container.Env))
-	for _, variable := range resolved.Container.Env {
-		env[variable.Name] = *variable.Value
-	}
 	var diagnostic bytes.Buffer
-	if err := runtime.environment.Run(ctx, env, nil, io.Discard, &diagnostic, args...); err != nil {
-		failure := fmt.Errorf(
-			"sidecar %s: %s",
-			definition.Name,
-			resolved.Redact(
-				fmt.Sprintf("container startup failed: %v: %s", err, diagnostic.String()),
-			),
-		)
-		if strings.Contains(diagnostic.String(), portInUseDiagnostic) {
-			return fmt.Errorf("%w: %w", ErrSidecarPortUnavailable, failure)
-		}
-
-		return failure
+	if err := runtime.environment.Run(
+		ctx, plan.env, nil, io.Discard, &diagnostic, plan.args...,
+	); err != nil {
+		return plan.startupError(definition.Name, err, diagnostic.String())
 	}
 
 	return nil
@@ -194,10 +196,62 @@ func (runtime *SidecarRuntime) Remove(ctx context.Context, name string) error {
 	return errors.Join(failures...)
 }
 
+// containerCreation varies how one transport starts a container: a systemd
+// service owns process restart and delivers values as container secrets, while
+// direct execution leaves both to Podman and the child environment.
+type containerCreation struct {
+	fingerprint string
+	detach      bool
+	restart     string
+	env         func(name string) []string
+}
+
 var podmanRestartPolicies = map[string]string{
 	sidecar.Always:    nanoRestartPolicy,
 	sidecar.OnFailure: "on-failure",
 	sidecar.Never:     "no",
+}
+
+func (runtime *SidecarRuntime) plan(
+	definition sidecar.Container, sources sidecar.Sources, creation containerCreation,
+) (sidecarPlan, error) {
+	resolved, err := sidecar.Resolve(definition, sources)
+	if err != nil {
+		return sidecarPlan{}, err
+	}
+	fingerprint, err := runtime.fingerprint(resolved.Container)
+	if err != nil {
+		return sidecarPlan{}, err
+	}
+	creation.fingerprint = fingerprint
+	args, err := runtime.createArgs(resolved.Container, creation)
+	if err != nil {
+		return sidecarPlan{}, err
+	}
+	env := make(map[string]string, len(resolved.Container.Env))
+	for _, variable := range resolved.Container.Env {
+		env[variable.Name] = *variable.Value
+	}
+
+	return sidecarPlan{resolved: resolved, fingerprint: fingerprint, env: env, args: args}, nil
+}
+
+// applied reports whether a running container already carries the definition.
+func (runtime *SidecarRuntime) applied(
+	ctx context.Context, name, fingerprint string,
+) (bool, error) {
+	containers, err := runtime.List(ctx)
+	if err != nil {
+		return false, fmt.Errorf("sidecar %s: %w", name, err)
+	}
+	for _, container := range containers {
+		if container.Name() == name && container.Running() &&
+			container.Labels[sidecarDefinitionLabel] == fingerprint {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // converge reports whether the running container already applies the
@@ -224,9 +278,24 @@ func (runtime *SidecarRuntime) converge(
 	return false, nil
 }
 
+func (plan sidecarPlan) startupError(name string, failure error, diagnostic string) error {
+	reported := fmt.Errorf(
+		"sidecar %s: %s",
+		name,
+		plan.resolved.Redact(
+			fmt.Sprintf("container startup failed: %v: %s", failure, diagnostic),
+		),
+	)
+	if strings.Contains(diagnostic, portInUseDiagnostic) {
+		return fmt.Errorf("%w: %w", ErrSidecarPortUnavailable, reported)
+	}
+
+	return reported
+}
+
 func (runtime *SidecarRuntime) createArgs(
 	container sidecar.Container,
-	fingerprint string,
+	creation containerCreation,
 ) ([]string, error) {
 	pulls := map[string]string{
 		sidecar.Always:       "always",
@@ -234,15 +303,45 @@ func (runtime *SidecarRuntime) createArgs(
 		sidecar.Never:        "never",
 	}
 	args := []string{
-		podmanCommand, "run", "--detach", "--name", runtime.ContainerName(container.Name),
+		podmanCommand, "run", "--replace", "--name", runtime.ContainerName(container.Name),
 		labelFlag, sidecarOwnerLabel + "=" + runtime.owner,
 		labelFlag, SidecarNameLabel + "=" + container.Name,
-		labelFlag, sidecarDefinitionLabel + "=" + fingerprint,
-		"--pull", pulls[container.ImagePullPolicy],
-		"--restart", podmanRestartPolicies[container.RestartPolicy],
-		"--network", runtime.NetworkName(), "--network-alias", container.Name,
+		labelFlag, sidecarDefinitionLabel + "=" + creation.fingerprint,
+		"--pull", pulls[container.ImagePullPolicy], "--restart", creation.restart,
+	}
+	if creation.detach {
+		args = append(args, "--detach")
+	}
+	if runtime.DatabaseHost != "" {
+		args = append(args, "--network", "host", "--add-host", "database:"+runtime.DatabaseHost)
+		ports := []SidecarPort{}
+		for _, port := range container.Ports {
+			if port.HostPort > 0 {
+				ports = append(ports, SidecarPort{
+					HostIP: port.HostIP, HostPort: port.HostPort,
+					ContainerPort: port.ContainerPort, Protocol: "tcp",
+				})
+			}
+		}
+		encoded, err := json.Marshal(ports)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, labelFlag, sidecarPortsLabel+"="+string(encoded))
+	} else {
+		args = append(args, "--network", runtime.NetworkName(), "--network-alias", container.Name)
 	}
 	for _, port := range container.Ports {
+		if runtime.DatabaseHost != "" {
+			if port.HostPort > 0 && port.HostPort != port.ContainerPort {
+				return nil, fmt.Errorf(
+					"host networking requires hostPort to equal containerPort for sidecar %s",
+					container.Name,
+				)
+			}
+
+			continue
+		}
 		if port.HostPort > 0 {
 			mapping := net.JoinHostPort(port.HostIP, strconv.Itoa(port.HostPort)) +
 				":" + strconv.Itoa(port.ContainerPort) + "/tcp"
@@ -263,7 +362,7 @@ func (runtime *SidecarRuntime) createArgs(
 		args = append(args, "--workdir", container.WorkingDir)
 	}
 	for _, env := range container.Env {
-		args = append(args, "--env", env.Name)
+		args = append(args, creation.env(env.Name)...)
 	}
 	args = append(args, container.Image)
 	args = append(args, container.Args...)
