@@ -109,6 +109,43 @@ class SidecarDeployment:
                 else:
                     return response.text
 
+    def external_unreachable(self, url: str, *, timeout: float = 60) -> None:
+        deadline = time.monotonic() + timeout
+        with requests.Session() as session:
+            session.trust_env = False
+            while True:
+                try:
+                    session.get(url, timeout=5)
+                except requests.RequestException:
+                    return
+                if time.monotonic() >= deadline:
+                    msg = f"{url} is still reachable"
+                    raise AssertionError(msg)
+                time.sleep(1)
+
+    def systemd(self, *args: str, node: str | None = None) -> str:
+        # A non-login SSH session does not set the runtime directory that the
+        # deployment user's own service manager is reachable through.
+        return self.host(
+            "sh",
+            "-c",
+            'export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"; '
+            'exec systemctl --user "$@"',
+            "sh",
+            *args,
+            node=node,
+        )
+
+    def unit(self, *args: str, node: str | None = None) -> str:
+        return self.systemd(*args, f"{self.container}.service", node=node)
+
+    def unit_active(self, *, node: str | None = None) -> bool:
+        try:
+            self.unit("is-active", "--quiet", node=node)
+        except subprocess.CalledProcessError:
+            return False
+        return True
+
     def sql(self, statement: str = "SELECT 42;") -> str:
         return self.deployment.connect(
             input=statement,
