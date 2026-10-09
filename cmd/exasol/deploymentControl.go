@@ -69,7 +69,7 @@ var startCmd = &cobra.Command{
 			if errors.Is(err, deploy.ErrLifecycleActionSkipped) {
 				return nil
 			}
-			addLocalPortRecoveryCallToAction(err)
+			addDeploymentRecoveryCallToAction(err)
 
 			return err
 		}

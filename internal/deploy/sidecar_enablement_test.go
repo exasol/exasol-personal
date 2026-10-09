@@ -43,18 +43,16 @@ func materializeTestSidecar(
 			if err != nil {
 				return err
 			}
-			container, err := materializeSidecarLocked(
-				directory,
-				document,
-				catalog,
-				"example",
-				"amd64",
-			)
-			if err == nil && container.Name != "example" {
-				t.Fatal("wrong materialized name")
+			if containsSidecar(document, "example") {
+				return nil
 			}
+			container, err := catalog.Resolve("example", runtime.GOARCH)
+			if err != nil {
+				return err
+			}
+			document.Containers = append(document.Containers, container)
 
-			return err
+			return config.WriteSidecars(directory, document)
 		},
 	)
 	require.NoError(t, err)
