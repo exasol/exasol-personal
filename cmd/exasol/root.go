@@ -102,55 +102,62 @@ func registerAutoApproveFlag(root *cobra.Command, state *RootFlags) {
 	)
 }
 
-var rootCmd = &cobra.Command{
-	Use:           "exasol",
-	Short:         rootCmdShortDesc,
-	Long:          rootCmdLongDesc,
-	Example:       rootCmdExample,
-	SilenceErrors: true,
-	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-		// Root-level pre-run is the single place where we enforce cross-cutting concerns.
-		// Design decision: keep this centralized so individual commands don't have to
-		// remember to repeat it (and so user-visible behavior stays consistent).
-		//
-		// Cobra only validates flag groups (e.g. MarkFlagsMutuallyExclusive) after
-		// PersistentPreRunE returns, so an invalid combination would otherwise reach
-		// resolution, compatibility enforcement, deployment logging, and the
-		// version-update check before being rejected. Validate here first so a
-		// rejected command has no side effects. Cobra's own later call becomes a
-		// harmless no-op on the success path.
-		if err := cmd.ValidateFlagGroups(); err != nil {
-			return err
-		}
-		if err := setupLogging(); err != nil {
-			return err
-		}
-		if err := resolveDeploymentDirForCommand(cmd, commonFlags); err != nil {
-			return err
-		}
-		deployment := commonFlags.Deployment()
+var rootCmd = newRootCommand()
 
-		// Deployment-directory compatibility is enforced centrally and only for commands
-		// that declare it via annotations.
-		err := enforceDeploymentDirectoryCompatibility(cmd, deployment)
-		if err != nil {
-			return err
-		}
-
-		if !deploymentLogSessionStartsAfterInit(cmd) {
-			if err := setupDeploymentLogSession(cmd, deployment); err != nil {
+func newRootCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:           "exasol",
+		Short:         rootCmdShortDesc,
+		Long:          rootCmdLongDesc,
+		Example:       rootCmdExample,
+		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			// Root-level pre-run is the single place where we enforce cross-cutting concerns.
+			// Design decision: keep this centralized so individual commands don't have to
+			// remember to repeat it (and so user-visible behavior stays consistent).
+			//
+			// Cobra only validates flag groups (e.g. MarkFlagsMutuallyExclusive) after
+			// PersistentPreRunE returns, so an invalid combination would otherwise reach
+			// resolution, compatibility enforcement, deployment logging, and the
+			// version-update check before being rejected. Validate here first so a
+			// rejected command has no side effects. Cobra's own later call becomes a
+			// harmless no-op on the success path.
+			if err := cmd.ValidateFlagGroups(); err != nil {
 				return err
 			}
-		}
+			if err := setupLogging(); err != nil {
+				return err
+			}
+			if err := resolveDeploymentDirForCommand(cmd, commonFlags); err != nil {
+				return err
+			}
+			deployment := commonFlags.Deployment()
 
-		// Best-effort version update hint (non-blocking; terminal-only when available).
-		// Design decision: never block commands on this.
-		if cmd.Name() != "version" && !cmd.Hidden {
-			maybeAddVersionUpdateHint(cmd, deployment)
-		}
+			// Deployment-directory compatibility is enforced centrally and only for commands
+			// that declare it via annotations.
+			err := enforceDeploymentDirectoryCompatibility(cmd, deployment)
+			if err != nil {
+				return err
+			}
 
-		return nil
-	},
+			if !deploymentLogSessionStartsAfterInit(cmd) {
+				if err := setupDeploymentLogSession(cmd, deployment); err != nil {
+					return err
+				}
+			}
+
+			// Best-effort version update hint (non-blocking; terminal-only when available).
+			// Design decision: never block commands on this.
+			if cmd.Name() != "version" && !cmd.Hidden {
+				maybeAddVersionUpdateHint(cmd, deployment)
+			}
+
+			return nil
+		},
+	}
+	command.AddCommand(newSidecarCommand(commonFlags))
+
+	return command
 }
 
 func setupLogging() error {

@@ -78,10 +78,12 @@ func TestRenderLifecycleCompletionJSON(t *testing.T) {
 
 //nolint:paralleltest // mutates shared terminal message queues
 func TestAddLocalPortRecoveryCallToActionQueuesStructuredRecovery(t *testing.T) {
+	// Given
 	resetTerminalMessages()
 	defer resetTerminalMessages()
 
-	addLocalPortRecoveryCallToAction(&deploy.LocalPortRecoveryError{
+	// When
+	addDeploymentRecoveryCallToAction(&deploy.LocalPortRecoveryError{
 		Service: "db",
 		Port:    28563,
 		Cause:   errors.New("runtime command failed"),
@@ -89,6 +91,7 @@ func TestAddLocalPortRecoveryCallToActionQueuesStructuredRecovery(t *testing.T) 
 	var stderr bytes.Buffer
 	writeTerminalCallsToAction(&stderr, true, false)
 
+	// Then
 	for _, expected := range []string{
 		`local service "db"`,
 		"exasol config set --ports db:<available-port>",
@@ -105,16 +108,19 @@ func TestAddLocalPortRecoveryCallToActionQueuesStructuredRecovery(t *testing.T) 
 //
 //nolint:paralleltest // mutates shared terminal message queues
 func TestAddLocalPortRecoveryCallToActionQueuesRetryGuidance(t *testing.T) {
+	// Given
 	resetTerminalMessages()
 	defer resetTerminalMessages()
 
-	addLocalPortRecoveryCallToAction(&deploy.LocalRetryableFailureError{
+	// When
+	addDeploymentRecoveryCallToAction(&deploy.LocalRetryableFailureError{
 		Operation: "start",
 		Cause:     errors.New("runtime reported an unrecognized diagnostic"),
 	})
 	var stderr bytes.Buffer
 	writeTerminalCallsToAction(&stderr, true, false)
 
+	// Then
 	for _, expected := range []string{
 		"exasol start",
 		"exasol config set --ports db:<available-port>",
