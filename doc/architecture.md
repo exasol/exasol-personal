@@ -96,7 +96,9 @@ opening of endpoints beyond the hosts that run the containers. Host adapters
 own container networking. Lifecycle hooks reconcile services when hosts are
 ready, clean up before stopping hosts, and clear observed state after
 destruction. Sidecar failures remain separate from database lifecycle
-outcomes.
+outcomes. See the
+[sidecar guide](../user-docs/content/sidecars.md) for configuration and
+user-visible behavior.
 
 ### Initialization Flow
 
