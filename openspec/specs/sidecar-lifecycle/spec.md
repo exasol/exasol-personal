@@ -61,12 +61,22 @@ and remove owned containers whose definitions were removed.
 Deployment stop SHALL stop all enabled sidecars and retain their definitions.
 The next successful start SHALL restore their services using saved definitions
 and current connection values.
+Cloud sidecars SHALL belong to their node's database service, so a node that
+starts that service SHALL start its enabled sidecars and a node that stops it
+SHALL stop them.
 
 #### Scenario: Deployment restart restores enabled sidecars
 
 - **WHEN** the user stops and then starts a deployment with enabled sidecars
 - **THEN** those sidecars are stopped during the stopped phase and available
   again after startup with their saved configuration
+
+#### Scenario: Cloud node follows its own database service
+
+- **WHEN** a cloud node restarts its database service without a launcher
+  command
+- **THEN** its enabled sidecars run again with their saved configuration
+- **AND** stopping that service leaves them stopped
 
 ### Requirement: Containers honor restart policy
 
@@ -108,7 +118,7 @@ Names already absent from desired state SHALL support cleanup retries.
 `exasol sidecar status <name>` SHALL report deployment-wide enabled state and
 a `hosts` array containing each host's name, running state, IP and port
 endpoints, and actionable failure when available. Local deployments SHALL use
-the host name `local`. Text and JSON
+the host name `local`; cloud deployments SHALL use node names. Text and JSON
 output SHALL represent the same domain result.
 Sidecar operation failures SHALL identify the affected host, sidecar, and cause;
 database state SHALL reflect the database's own condition.
@@ -157,3 +167,26 @@ state, and the deployment service network.
 
 - **WHEN** a user destroys a deployment that has enabled sidecars
 - **THEN** its owned sidecar runtime resources and service network are removed
+
+### Requirement: Cloud hosts share one desired definition
+
+Cloud deployments SHALL apply the saved definition to every node. Failed
+operations on one node SHALL allow attempts on the remaining nodes. Retrying
+SHALL reconcile every node against the same saved definition.
+
+#### Scenario: Cloud enablement precedes provisioning
+
+- **WHEN** the user enables a sidecar on an initialized cloud deployment
+- **THEN** its definition is saved and status reports enabled with empty hosts
+
+#### Scenario: Hosts reconcile independently after a failure
+
+- **WHEN** sidecar startup fails on one host and succeeds on another
+- **THEN** status reports each host's outcome and the definition remains enabled
+- **AND** retrying after correcting the failure starts the sidecar on every host
+
+#### Scenario: Disable retries a failed host independently
+
+- **WHEN** disable fails to remove a sidecar on one of several hosts
+- **THEN** the definition is disabled and cleanup proceeds on the other hosts
+- **AND** retrying disable finishes the remaining cleanup

@@ -75,4 +75,20 @@ resource "azurerm_network_security_group" "exasol_instance" {
     source_address_prefix      = var.allowed_cidr
     destination_address_prefix = "*"
   }
+
+  dynamic "security_rule" {
+    for_each = compact(split(",", var.sidecar_ports))
+
+    content {
+      name                       = "allow-sidecar-${security_rule.value}"
+      priority                   = 200 + security_rule.key
+      direction                  = "Inbound"
+      access                     = "Allow"
+      protocol                   = "Tcp"
+      source_port_range          = "*"
+      destination_port_range     = security_rule.value
+      source_address_prefix      = var.allowed_cidr
+      destination_address_prefix = "*"
+    }
+  }
 }

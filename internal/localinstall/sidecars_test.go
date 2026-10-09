@@ -107,7 +107,7 @@ func TestSidecarSupportedExecutionSettings(t *testing.T) {
 	want := []string{
 		"podman",
 		"run",
-		"--detach",
+		"--replace",
 		"--name",
 		"exasol-db-test-sidecar-example",
 		"--label",
@@ -120,6 +120,7 @@ func TestSidecarSupportedExecutionSettings(t *testing.T) {
 		"never",
 		"--restart",
 		"always",
+		"--detach",
 		"--network",
 		"exasol-db-test-services",
 		"--network-alias",

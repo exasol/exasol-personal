@@ -75,6 +75,9 @@ func (runtime *SidecarRuntime) EnsureNetwork(ctx context.Context) error {
 
 // AttachDatabase reports whether explicit stop/start is needed to gain service DNS.
 func (runtime *SidecarRuntime) AttachDatabase(ctx context.Context) (bool, error) {
+	if runtime.DatabaseHost != "" {
+		return false, nil
+	}
 	container, err := runtime.inspectDatabaseNetwork(ctx)
 	if err != nil {
 		return false, err
@@ -95,6 +98,9 @@ func (runtime *SidecarRuntime) AttachDatabase(ctx context.Context) (bool, error)
 }
 
 func (runtime *SidecarRuntime) DatabaseRestartRequired(ctx context.Context) (bool, error) {
+	if runtime.DatabaseHost != "" {
+		return false, nil
+	}
 	container, err := runtime.inspectDatabaseNetwork(ctx)
 	if err != nil {
 		return false, err
