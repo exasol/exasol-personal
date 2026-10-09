@@ -20,14 +20,15 @@ from tests.testcase_helpers import container_command, host_command
 
 
 class SidecarDeployment:
-    def __init__(self, deployment: Deployment) -> None:
+    def __init__(self, deployment: Deployment, sidecar_name: str = "caddy") -> None:
         self.deployment = deployment
+        self.sidecar_name = sidecar_name
         self.directory = Path(deployment.deployment_dir.name)
         state = json.loads(
             (self.directory / ".exasolLauncherState.json").read_text(encoding="utf-8")
         )
         self.database = "exasol-db-" + state["deploymentId"]
-        self.container = self.database + "-sidecar-caddy"
+        self.container = self.database + "-sidecar-" + sidecar_name
         self.network = self.database + "-services"
 
     def sidecar(self, operation: str, *args: str) -> dict[str, Any]:
@@ -35,7 +36,7 @@ class SidecarDeployment:
             "sidecar",
             str(self.directory),
             operation,
-            "caddy",
+            self.sidecar_name,
             "--json",
             *args,
             capture_output=True,
@@ -183,15 +184,29 @@ def sidecar_deployment(
     infra: str,
     *,
     running: bool = True,
+    sidecar_name: str = "caddy",
 ) -> Iterator[SidecarDeployment]:
     if infra != "local":
         pytest.skip("sidecar deployment tests require local infrastructure")
     deployment = manager.local(deploy=False)
     try:
+        if sidecar_name != "caddy":
+            catalog = json.loads(
+                deployment.launcher.run_command(
+                    "sidecar",
+                    deployment.deployment_dir.name,
+                    "list",
+                    "--json",
+                    capture_output=True,
+                ).stdout
+            )
+            if not any(entry["name"] == sidecar_name for entry in catalog):
+                pytest.skip(f'sidecar "{sidecar_name}" is not available in this build')
         if running:
             deployment.deploy()
-        _save_fixture(deployment)
-        yield SidecarDeployment(deployment)
+        if sidecar_name == "caddy":
+            _save_fixture(deployment)
+        yield SidecarDeployment(deployment, sidecar_name)
     finally:
         manager.release(deployment)
 
