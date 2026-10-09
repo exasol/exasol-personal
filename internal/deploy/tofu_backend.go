@@ -38,6 +38,7 @@ var tofuReservedVariableNames = map[string]struct{}{
 	"deployment_created_at":       {},
 	"infrastructure_artifact_dir": {},
 	"installation_preset_dir":     {},
+	tofuSidecarPortsVariable:      {},
 }
 
 // tofuBackend is a deploymentBackend implementation bound to a specific
@@ -151,6 +152,13 @@ func (b *tofuBackend) Configure(
 	infraVars["deployment_created_at"] = metadata.CreatedAt.UTC().Format(time.RFC3339)
 	infraVars["infrastructure_artifact_dir"] = string(layout.InfrastructureArtifactDir)
 	infraVars["installation_preset_dir"] = string(layout.InstallationPresetDir)
+	// Sidecar ingress follows enablement rather than the configuration
+	// surface, so reconfiguring keeps the ports that are already open.
+	ingress, err := b.sidecarIngressConfiguration()
+	if err != nil {
+		return err
+	}
+	infraVars[tofuSidecarPortsVariable] = ingress
 
 	return tofu.Configure(b.cfg, infraVars)
 }

@@ -26,6 +26,25 @@ type Variable struct {
 	Order       int
 }
 
+// SetVariables updates launcher-managed values in a configured workspace's
+// variables file, preserving every other assignment it already holds.
+func SetVariables(cfg *Config, values map[string]cty.Value) error {
+	current, err := os.ReadFile(cfg.VarsOutputFile())
+	if err != nil {
+		return err
+	}
+	assigned, err := ParseVarsValuesFile(current, cfg.VarsOutputFile())
+	if err != nil {
+		return err
+	}
+	vars := make(map[string]*Variable, len(assigned)+len(values))
+	for name, value := range assigned {
+		vars[name] = &Variable{Value: value}
+	}
+
+	return writeVarsFileWithOverrides(cfg.VarsOutputFile(), vars, values)
+}
+
 // writeVarsFileWithOverrides writes a tfvars file with defaults and user overrides.
 func writeVarsFileWithOverrides(
 	tfvarsFullPath string,

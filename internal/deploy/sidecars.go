@@ -324,8 +324,16 @@ func (ops *sidecarOperations) ensure(
 }
 
 // Resolution and verification have to agree on what a host supplies.
-func (ops *sidecarOperations) hostSources(sidecarHost) (sidecar.Sources, error) {
-	return config.SidecarSources(ops.deployment)
+func (ops *sidecarOperations) hostSources(host sidecarHost) (sidecar.Sources, error) {
+	sources, err := config.SidecarSources(ops.deployment)
+	if err != nil {
+		return nil, err
+	}
+	if host.databasePort != "" {
+		sources[sidecar.DatabaseSource]["port"] = host.databasePort
+	}
+
+	return sources, nil
 }
 
 func (ops *sidecarOperations) disable(ctx context.Context, name string) (SidecarResult, error) {

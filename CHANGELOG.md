@@ -7,14 +7,16 @@ Notable user-facing changes to Exasol Personal are documented here.
 ### Added
 
 - Added `exasol sidecar list`, `enable <name>`, `status <name>`, and
-  `disable <name>` with JSON output. The launcher keeps enabled definitions in
-  a deployment-owned `sidecars.yaml`, accepts edits to them, and uses the saved
-  values for later operations. Enabled sidecars follow local deployment start,
-  stop, and destroy, with per-host runtime and reconciliation status. Status
-  clears recorded failures when live inspection verifies the desired outcome.
-  Start reconciles edited definitions and reports sidecar failures separately
-  from database state. macOS publishes a declared host port through the local
-  runner's live forwarding. Example: `exasol sidecar enable <name>`.
+  `disable <name>` with JSON output. Enabled sidecars follow local and cloud
+  deployment start, stop, and destroy on every host, with per-host runtime and
+  reconciliation status. Status clears recorded failures when live inspection
+  verifies the desired outcome. Start reconciles edited definitions and reports
+  sidecar failures separately from database state. A declared host port is
+  opened by the deployment: macOS publishes it through the local runner's live
+  forwarding, and cloud deployments admit it through the provider firewall for
+  the deployment's allowed address range. Cloud nodes run each sidecar as a
+  service of their database service, so the node starts, stops, and restarts it
+  with the database. Example: `exasol sidecar enable <name>`.
 
 - Added a **CLI reference** page to the user documentation, listing every command and option of the
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each

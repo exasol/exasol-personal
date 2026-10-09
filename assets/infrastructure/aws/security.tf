@@ -1,3 +1,17 @@
+locals {
+  external_ingress_ports = merge(
+    {
+      22    = "SSH access"
+      2581  = "Default bucketfs"
+      8443  = "Exasol Admin UI"
+      8563  = "Default Exasol database connection"
+      20002 = "Exasol container ssh"
+      20003 = "Exasol confd API"
+    },
+    { for port in compact(split(",", var.sidecar_ports)) : port => "Exasol Personal sidecar" }
+  )
+}
+
 # Security group for the Exasol instance
 resource "aws_security_group" "exasol_instance" {
   name        = "${local.deployment_id}-sg"
@@ -15,14 +29,7 @@ resource "aws_security_group" "exasol_instance" {
 
   # External access rules
   dynamic "ingress" {
-    for_each = {
-      22    = "SSH access"
-      2581  = "Default bucketfs"
-      8443  = "Exasol Admin UI"
-      8563  = "Default Exasol database connection"
-      20002 = "Exasol container ssh"
-      20003 = "Exasol confd API"
-    }
+    for_each = local.external_ingress_ports
 
     content {
       from_port   = ingress.key

@@ -37,3 +37,9 @@ variable "installation_preset_dir" {
   default     = ".."
 }
 
+
+variable "sidecar_ports" {
+  description = "Comma-separated TCP ports declared by enabled sidecars; maintained by the Exasol Personal launcher"
+  type        = string
+  default     = ""
+}

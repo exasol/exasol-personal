@@ -44,14 +44,17 @@ resource "stackit_security_group_rule" "internal_icmp_ingress" {
 }
 
 locals {
-  external_ingress_ports = {
-    22    = "SSH access"
-    2581  = "Default bucketfs"
-    8443  = "Exasol Admin UI"
-    8563  = "Default Exasol database connection"
-    20002 = "Exasol container ssh"
-    20003 = "Exasol confd API"
-  }
+  external_ingress_ports = merge(
+    {
+      22    = "SSH access"
+      2581  = "Default bucketfs"
+      8443  = "Exasol Admin UI"
+      8563  = "Default Exasol database connection"
+      20002 = "Exasol container ssh"
+      20003 = "Exasol confd API"
+    },
+    { for port in compact(split(",", var.sidecar_ports)) : port => "Exasol Personal sidecar" }
+  )
 }
 
 resource "stackit_security_group_rule" "external_ingress" {

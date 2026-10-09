@@ -191,6 +191,22 @@ func newSidecarOperationsFixture(t *testing.T) (*sidecarOperations, *sidecarRunt
 	}, selected
 }
 
+func TestSidecarVerificationUsesTheHostDatabasePort(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, selected := newSidecarOperationsFixture(t)
+	operations.hosts[0].databasePort = "29563"
+	// When
+	_, err := operations.enable(t.Context(), "example")
+	require.NoError(t, err)
+	result, err := operations.status(t.Context(), "example")
+	// Then
+	require.NoError(t, err)
+	require.Equal(t, "29563", selected.manager.sources[sidecar.DatabaseSource]["port"])
+	require.Equal(t, selected.manager.sources, selected.manager.matchSources)
+	require.Equal(t, sidecarReconciliationComplete, result.Hosts[0].Reconciliation)
+}
+
 func TestSidecarDisableDefersPublicationWhileStopped(t *testing.T) {
 	t.Parallel()
 	// Given
