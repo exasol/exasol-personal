@@ -218,6 +218,14 @@ func (install *PodmanInstall) Start(
 			fmt.Errorf("failed to synchronize local runtime storage before starting Nano: %w", err))
 	}
 
+	services, err := NewSidecarRuntime(install.environment, containerName)
+	if err != nil {
+		return err
+	}
+	if err := services.EnsureNetwork(ctx); err != nil {
+		return err
+	}
+
 	bootstrap := freshDeployment && startConfig.InitialPassword != nil
 	if bootstrap {
 		if err := install.writeBootstrapPassword(ctx, startConfig); err != nil {
@@ -230,6 +238,7 @@ func (install *PodmanInstall) Start(
 		slcs:          availableSLCs,
 		fresh:         freshDeployment,
 		bootstrap:     bootstrap,
+		network:       services.NetworkName(),
 	})
 	var startDiagnostic bytes.Buffer
 	startErrOutput := io.Writer(&startDiagnostic)
@@ -338,6 +347,7 @@ type nanoRunOptions struct {
 	slcs          []SLCConfig
 	fresh         bool
 	bootstrap     bool
+	network       string
 }
 
 func nanoRunArgs(startConfig StartConfig, options nanoRunOptions) []string {
@@ -348,14 +358,19 @@ func nanoRunArgs(startConfig StartConfig, options nanoRunOptions) []string {
 	args := []string{
 		"run", "-d", "--replace",
 		"--name", options.containerName,
-		"--shm-size=" + nanoShmSize,
-		"--pids-limit=" + nanoPIDsLimit,
+	}
+	if options.network != "" {
+		args = append(args, "--network", options.network, "--network-alias", databaseAlias)
+	}
+	args = append(args,
+		"--shm-size="+nanoShmSize,
+		"--pids-limit="+nanoPIDsLimit,
 		"--security-opt", nanoSecurityOpt,
 		"--security-opt", nanoSELinuxSecurityOpt,
 		"--restart", restartPolicy,
 		"-p", podmanDBPortMapping(startConfig),
-		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
-	}
+		"-v", startConfig.DataDir+":"+nanoDataMountTarget,
+	)
 	if options.bootstrap {
 		args = append(args,
 			"-v", startConfig.BootstrapDir+":"+nanoBootstrapMountPath+":ro,Z",
@@ -427,7 +442,19 @@ func (install *PodmanInstall) Status(
 }
 
 func (install *PodmanInstall) Destroy(ctx context.Context, out, outErr io.Writer) error {
-	return install.Stop(ctx, out, outErr)
+	if err := install.Stop(ctx, out, outErr); err != nil {
+		return err
+	}
+	owner, err := ContainerName(install.deployment)
+	if err != nil {
+		return err
+	}
+	services, err := NewSidecarRuntime(install.environment, owner)
+	if err != nil {
+		return err
+	}
+
+	return services.RemoveNetwork(ctx)
 }
 
 func (install *PodmanInstall) writeBootstrapPassword(
