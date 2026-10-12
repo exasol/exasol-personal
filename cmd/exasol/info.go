@@ -72,16 +72,7 @@ var deploymentInfoCmd = &cobra.Command{
 			return addRenderedDeploymentInfoJSON(report)
 		}
 
-		if err := addRenderedDeploymentInfoText(report); err != nil {
-			return err
-		}
-		guidance, err := formatDeploymentInfoNotice(report)
-		if err != nil {
-			return err
-		}
-		addTerminalCallToAction(guidance)
-
-		return nil
+		return addRenderedDeploymentInfoTextAndNotice(report)
 	},
 }
 
@@ -91,10 +82,19 @@ func addRenderedDeploymentInfoJSON(report *deploy.DeploymentInfoReport) error {
 	})
 }
 
-func addRenderedDeploymentInfoText(report *deploy.DeploymentInfoReport) error {
-	return addRenderedTerminalOutput(func(writer io.Writer) error {
+func addRenderedDeploymentInfoTextAndNotice(report *deploy.DeploymentInfoReport) error {
+	guidance, err := formatDeploymentInfoNotice(report)
+	if err != nil {
+		return err
+	}
+	if err := addRenderedTerminalOutput(func(writer io.Writer) error {
 		return renderDeploymentInfoText(writer, report)
-	})
+	}); err != nil {
+		return err
+	}
+	addTerminalCallToAction(guidance)
+
+	return nil
 }
 
 func formatDeploymentInfoNotice(report *deploy.DeploymentInfoReport) (string, error) {

@@ -8,10 +8,47 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"text/template"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 )
+
+//nolint:paralleltest // replaces package-level templates and terminal message queues
+func TestDeploymentInfoDoesNotCommitTextBeforeFormattingSucceeds(t *testing.T) {
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+	report := &deploy.DeploymentInfoReport{DeploymentState: deploy.StatusNotInitialized}
+
+	for _, target := range []string{"notice", "text"} {
+		t.Run(target, func(t *testing.T) {
+			// Given: one of the two required templates fails during formatting.
+			originalNotice := deploymentInfoNoticeTemplate
+			originalText := deploymentInfoTextTemplate
+			defer func() {
+				deploymentInfoNoticeTemplate = originalNotice
+				deploymentInfoTextTemplate = originalText
+			}()
+			broken := template.Must(template.New("broken").Parse("{{.MissingField}}"))
+			if target == "notice" {
+				deploymentInfoNoticeTemplate = broken
+			} else {
+				deploymentInfoTextTemplate = broken
+			}
+
+			// When: info prepares the text result and guidance.
+			if err := addRenderedDeploymentInfoTextAndNotice(report); err == nil {
+				t.Fatal("expected formatting to fail")
+			}
+
+			// Then: neither a success payload nor guidance has been committed.
+			if len(terminalOutputs)+len(terminalCallsToAction) != 0 {
+				t.Fatalf("unexpected committed messages: output=%q guidance=%q",
+					terminalOutputs, terminalCallsToAction)
+			}
+		})
+	}
+}
 
 func TestRenderDeploymentInfoJSONSerializesReportDirectly(t *testing.T) {
 	t.Parallel()
