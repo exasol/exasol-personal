@@ -165,12 +165,42 @@ For a local deployment, enable the official Exasol MCP server with:
 
 ```bash
 exasol sidecar enable mcp
+exasol sidecar status mcp
 ```
 
-The default MCP endpoint is `http://127.0.0.1:4896/mcp`. Use
-`exasol sidecar status mcp` to obtain the effective endpoint after changing
-the saved port mapping. If the default host port is occupied, change the
-mapping as described in [Networking](#networking).
+The default MCP endpoint is `http://127.0.0.1:4896/mcp`. The `Endpoint` line
+that `exasol sidecar status mcp` prints shows only the host address and port,
+for example `127.0.0.1:4896`; MCP clients need the full URL, so prefix it with
+`http://` and append `/mcp`. Use the status output to obtain the effective
+address after changing the saved port mapping. If the default host port is
+occupied, change the mapping as described in [Networking](#networking).
+
+To verify the complete connection with the official
+[MCP Inspector](https://github.com/modelcontextprotocol/inspector), install
+Node.js, set the endpoint (adjust the port if you changed the mapping), and run
+the following commands:
+
+```bash
+MCP_URL=http://127.0.0.1:4896/mcp
+npx @modelcontextprotocol/inspector --cli --transport http --server-url "$MCP_URL" --method initialize
+npx @modelcontextprotocol/inspector --cli --transport http --server-url "$MCP_URL" --method tools/list
+npx @modelcontextprotocol/inspector --cli --transport http --server-url "$MCP_URL" --method tools/call --tool-name execute_exasol_query --tool-args-json '{"query":"SELECT USER_NAME FROM EXA_ALL_USERS WHERE USER_NAME = CURRENT_USER"}'
+```
+
+The first command verifies the MCP connection, the second lists the available
+tools, and the third reads an existing database system view. A successful
+result contains the `USER_NAME` column and the current database user (`SYS` for
+a default local deployment).
+
+To use the server from your own MCP client, register the same URL in that
+client as a Streamable HTTP server; the exact steps depend on the client. Then
+ask the client to run a query, for example:
+
+> Use `execute_exasol_query` to run
+> `SELECT USER_NAME FROM EXA_ALL_USERS WHERE USER_NAME = CURRENT_USER`.
+
+The client returns the current database user (`SYS` for a default local
+deployment).
 
 The endpoint has no authentication and uses the deployment's saved database
 credentials. Only connect trusted local MCP clients. The catalog enables
