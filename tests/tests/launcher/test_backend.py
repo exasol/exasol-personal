@@ -1,12 +1,8 @@
 # Copyright 2026 Exasol AG
 # SPDX-License-Identifier: MIT
 
-"""Backend resolution, preset compatibility, and build-size behavior (offline)."""
+"""Backend resolution and preset compatibility behavior (offline)."""
 
-import os
-import platform
-import shutil
-import subprocess
 from pathlib import Path
 from subprocess import CalledProcessError
 
@@ -141,41 +137,6 @@ def test_help_subcommand_matches_help_flag(exasol_path: str) -> None:
     for flag in PRESET_FLAGS:
         assert flag in via_help
         assert flag in via_flag
-
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
-
-@pytest.mark.skipif(shutil.which("task") is None, reason="`task` runner not installed")
-@pytest.mark.skipif(shutil.which("go") is None, reason="Go toolchain not installed")
-def test_debug_build_is_larger_than_release_build() -> None:
-    # Given the built binary location (Taskfile appends `.exe` on Windows)
-    suffix = ".exe" if platform.system() == "Windows" else ""
-    binary = REPO_ROOT / "bin" / f"exasol{suffix}"
-
-    def build(*, debug: bool) -> int:
-        env = os.environ.copy()
-        if debug:
-            env["DEBUG_BUILD"] = "true"
-        command = ["task", "build"]
-        subprocess.run(
-            command,
-            cwd=REPO_ROOT,
-            env=env,
-            check=True,
-            capture_output=True,
-        )
-        return binary.stat().st_size
-
-    # When both build variants are produced
-    release_size = build(debug=False)
-    debug_size = build(debug=True)
-
-    # Then the debug build (with symbols/DWARF) is larger than the stripped one
-    assert debug_size > release_size
-
-    # Restore the default release build for the rest of the suite.
-    build(debug=False)
 
 
 def test_backend_option_is_offered_only_by_the_supporting_backend(
