@@ -28,7 +28,7 @@ func TestInstallDeploymentFailureShowsLocalPortRecovery(t *testing.T) {
 	}
 
 	var stderr bytes.Buffer
-	writeTerminalCallsToAction(&stderr, true, false)
+	writeTerminalCallsToAction(&stderr, true)
 	for _, expected := range []string{
 		"exasol config set --ports db:<available-port>",
 		"exasol config set --ports auto",
@@ -50,7 +50,7 @@ func TestInstallDeploymentFailureDoesNotShowPortRecoveryForUnrelatedError(t *tes
 	}
 
 	var stderr bytes.Buffer
-	writeTerminalCallsToAction(&stderr, true, false)
+	writeTerminalCallsToAction(&stderr, true)
 	if stderr.Len() != 0 {
 		t.Fatalf("expected no port recovery guidance, got %q", stderr.String())
 	}

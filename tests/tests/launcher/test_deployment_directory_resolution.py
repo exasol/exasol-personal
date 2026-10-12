@@ -93,6 +93,83 @@ def test_status_uses_default_deployment_dir_without_corrupting_json(
     assert data["deploymentDir"] == str(default_dir)
     _assert_deployment_dir_logged(result.stderr, default_dir, "default")
     assert f"Using default deployment directory: {default_dir}" in result.stderr
+    assert (
+        result.stderr.count(f"Using default deployment directory: {default_dir}") == 1
+    )
+
+
+@pytest.mark.openspec("cli-output-contract")
+def test_default_directory_notice_precedes_successful_command_result(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given an uninitialized default deployment outside the current directory.
+    home = tmp_path / "home"
+    cwd = tmp_path / "work"
+    home.mkdir()
+    cwd.mkdir()
+    default_dir = home / ".exasol" / "personal" / "deployments" / "default"
+
+    # When the command's streams are observed together as in a terminal.
+    result = subprocess.run(
+        [str(Path(exasol_path).resolve()), "status"],
+        cwd=cwd,
+        env=_env_with_home(home),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=True,
+    )
+
+    # Then startup context appears once before the command result.
+    notice = f"Using default deployment directory: {default_dir}"
+    assert result.stdout.count(notice) == 1
+    assert result.stdout.index(notice) < result.stdout.index("Status:")
+
+
+@pytest.mark.parametrize(
+    ("command_args", "deployment_name"),
+    [
+        (["status", "--timeout", "0"], None),
+        (["connect"], None),
+        (["status", "--timeout", "0", "--deployment", "staging"], "staging"),
+    ],
+)
+def test_resolved_deployment_dir_notice_precedes_command_error(
+    exasol_path: str,
+    tmp_path: Path,
+    command_args: list[str],
+    deployment_name: str | None,
+) -> None:
+    # Given an uninitialized deployment outside the current directory.
+    home = tmp_path / "home"
+    cwd = tmp_path / "work"
+    home.mkdir()
+    cwd.mkdir()
+    deployments_dir = home / ".exasol" / "personal" / "deployments"
+    launcher = str(Path(exasol_path).resolve())
+
+    # When a deployment command fails after resolving its directory.
+    result = subprocess.run(
+        [launcher, *command_args],
+        cwd=cwd,
+        env=_env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    # Then the single notice appears on stderr before the command's error.
+    if deployment_name is None:
+        notice = f"Using default deployment directory: {deployments_dir / 'default'}"
+    else:
+        notice = (
+            f'Using named deployment directory "{deployment_name}": '
+            f"{deployments_dir / deployment_name}"
+        )
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert result.stderr.count(notice) == 1
+    assert result.stderr.index(notice) < result.stderr.index("Error:")
 
 
 def test_status_uses_named_deployment_dir_without_corrupting_json(

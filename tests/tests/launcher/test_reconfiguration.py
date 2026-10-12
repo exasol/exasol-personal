@@ -1091,6 +1091,7 @@ def test_install_retries_same_preset_after_failed_state(
     # Then it preserves local state and completes deployment retry
     assert result.returncode != 0
     assert "deployment info file not found" in result.stderr.lower()
+    assert "End User License Agreement" not in result.stderr
     assert state_path.read_text() == "partial state"
     updated_state = json.loads(launcher_state_path.read_text())
     assert "running" in updated_state["currentWorkflowState"]
