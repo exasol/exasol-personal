@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-driver-go"
+	"github.com/exasol/exasol-driver-go/pkg/connection"
 	"github.com/exasol/exasol-personal/internal/connect/exasol/types"
 	generaltypes "github.com/exasol/exasol-personal/internal/connect/types"
 )
@@ -46,6 +47,7 @@ type Database struct {
 	port                      int
 	validateServerCertificate bool
 	connect                   types.ConnectFunc
+	importParquet             parquetImportFunc
 
 	conn              types.ExasolConnector
 	sessionID         *string
@@ -106,6 +108,7 @@ func New(
 		port:                      port,
 		validateServerCertificate: opts.validateServerCertificate,
 		connect:                   opts.connect,
+		importParquet:             connection.ImportParquetWithInferredSchema,
 		versionOutput:             opts.versionOutput,
 	}, nil
 }
@@ -168,7 +171,20 @@ func (db *Database) Exec(
 	maxRows int,
 ) (generaltypes.QueryResulter, error) {
 	slog.Debug("executing query", "query", query, "max_rows", maxRows)
+
 	statementType := generaltypes.ClassifyStatement(query)
+
+	if statementType == generaltypes.StatementTypeCreate {
+		parquetTable, err := generaltypes.ParseLocalParquetTable(query)
+		if err != nil {
+			return nil, db.wrapExecutionError(ctx, err)
+		}
+		if parquetTable != nil {
+			result, err := db.execLocalParquetTable(ctx, parquetTable)
+
+			return result, db.wrapExecutionError(ctx, err)
+		}
+	}
 
 	// Non-result statements use the driver's Exec path. IMPORT statements also
 	// belong here; LOCAL IMPORT streams a client-side file and never returns a

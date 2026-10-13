@@ -6,6 +6,12 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- `exasol connect` now creates a table from a local Parquet file, with columns taken from the file:
+
+  ```bash
+  exasol connect -c "CREATE TABLE DEMO.SALES AS (IMPORT FROM LOCAL PARQUET FILE '/data/sales.parquet')"
+  ```
+
 - Added a **CLI reference** page to the user documentation, listing every command and option of the
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each
   preset.

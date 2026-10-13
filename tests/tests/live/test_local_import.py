@@ -1,6 +1,7 @@
 # Copyright 2026 Exasol AG
 # SPDX-License-Identifier: MIT
 
+import csv
 import logging
 import os
 import shutil
@@ -229,6 +230,357 @@ def test_import_parquet_missing_file_reports_client_side(
         token in combined
         for token in ("not found", "no such file", "does not exist", "cannot open")
     ), f"Expected file-not-found error, got: {combined!r}"
+
+
+def _client_only_parquet(tmp_path: Path) -> Path:
+    local_only = tmp_path / "client_only" / f"{uuid.uuid4().hex}.parquet"
+    local_only.parent.mkdir()
+    shutil.copy(_PARQUET_FIXTURE, local_only)
+    return local_only
+
+
+def _inferred_table_statement(table: str, path: Path, *, replace: bool = False) -> str:
+    create = "CREATE OR REPLACE TABLE" if replace else "CREATE TABLE"
+    return f"{create} {table} AS (IMPORT FROM LOCAL PARQUET FILE '{path}');"
+
+
+def _drop_schema(deployment: Deployment, schema: str) -> None:
+    deployment.connect(
+        "--command", f"DROP SCHEMA IF EXISTS {schema} CASCADE;", capture_output=True
+    )
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.openspec("local-parquet-import")
+def test_create_table_from_local_parquet_infers_schema(
+    reusable_live_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """CREATE TABLE ... AS (IMPORT FROM LOCAL PARQUET ...) creates a filled table."""
+    # ========== GIVEN ==========
+    local_only = _client_only_parquet(tmp_path)
+    schema = f"PARQUET_INFER_{uuid.uuid4().hex[:8]}"
+    try:
+        statements = [
+            f"CREATE SCHEMA {schema};",
+            _inferred_table_statement(f"{schema}.parquet_rows", local_only),
+            f'SELECT "id", "name" FROM {schema}.parquet_rows ORDER BY "id";',  # noqa: S608 - test-generated identifier
+        ]
+
+        # ========== WHEN ==========
+        proc = reusable_live_deployment.connect(
+            "--command", "\n".join(statements), capture_output=True
+        )
+
+        # ========== THEN ==========
+        assert proc.returncode == 0, f"Inferred import failed: {proc.stderr!r}"
+        assert "alpha" in proc.stdout
+        assert "beta" in proc.stdout
+        assert "gamma" in proc.stdout
+        column_query = (
+            "SELECT COLUMN_NAME, COLUMN_TYPE FROM SYS.EXA_ALL_COLUMNS "  # noqa: S608 - test-generated identifier
+            f"WHERE COLUMN_SCHEMA = '{schema.upper()}' "
+            "AND COLUMN_TABLE = 'PARQUET_ROWS' "
+            "ORDER BY COLUMN_ORDINAL_POSITION;"
+        )
+        columns = reusable_live_deployment.connect(
+            "--csv", "--command", column_query, capture_output=True
+        )
+        assert list(csv.reader(columns.stdout.splitlines()))[1:] == [
+            ["id", "DECIMAL(19,0)"],
+            ["name", "VARCHAR(2000000) UTF8"],
+        ]
+    finally:
+        _drop_schema(reusable_live_deployment, schema)
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.openspec("local-parquet-import")
+def test_create_or_replace_table_from_local_parquet_replaces_table(
+    reusable_live_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """CREATE OR REPLACE replaces an existing table with the file's columns and rows."""
+    # ========== GIVEN ==========
+    local_only = _client_only_parquet(tmp_path)
+    schema = f"PARQUET_REPLACE_{uuid.uuid4().hex[:8]}"
+    try:
+        table = f"{schema}.parquet_rows"
+        statements = [
+            f"CREATE SCHEMA {schema};",
+            f"CREATE TABLE {table} (old_column VARCHAR(10));",
+            f"INSERT INTO {table} VALUES ('stale');",  # noqa: S608 - test-generated identifier
+            _inferred_table_statement(table, local_only, replace=True),
+            f'SELECT "id", "name" FROM {table} ORDER BY "id";',  # noqa: S608 - test-generated identifier
+        ]
+
+        # ========== WHEN ==========
+        proc = reusable_live_deployment.connect(
+            "--command", "\n".join(statements), capture_output=True
+        )
+
+        # ========== THEN ==========
+        assert proc.returncode == 0, f"Replacing import failed: {proc.stderr!r}"
+        assert "gamma" in proc.stdout
+        assert "stale" not in proc.stdout
+    finally:
+        _drop_schema(reusable_live_deployment, schema)
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.openspec("local-parquet-import")
+def test_create_table_from_local_parquet_rejects_existing_table(
+    reusable_live_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """CREATE TABLE without OR REPLACE fails and keeps an existing table."""
+    # ========== GIVEN ==========
+    local_only = _client_only_parquet(tmp_path)
+    schema = f"PARQUET_EXISTS_{uuid.uuid4().hex[:8]}"
+    try:
+        table = f"{schema}.parquet_rows"
+        reusable_live_deployment.connect(
+            "--command",
+            f"CREATE SCHEMA {schema}; CREATE TABLE {table} (old_column VARCHAR(10)); "  # noqa: S608 - test-generated identifier
+            f"INSERT INTO {table} VALUES ('kept');",
+            capture_output=True,
+        )
+
+        statement = _inferred_table_statement(table, local_only)
+
+        # ========== WHEN ==========
+        with pytest.raises(subprocess.CalledProcessError) as error_info:
+            reusable_live_deployment.connect(
+                "--command", statement, capture_output=True
+            )
+
+        # ========== THEN ==========
+        error = error_info.value
+        combined = _decode_stream(error.stdout) + _decode_stream(error.stderr)
+        assert "already exists" in combined, (
+            f"Expected existing-table error: {combined!r}"
+        )
+        proc = reusable_live_deployment.connect(
+            "--command",
+            f"SELECT old_column FROM {table};",  # noqa: S608 - test-generated identifier
+            capture_output=True,
+        )
+        assert "kept" in proc.stdout
+    finally:
+        _drop_schema(reusable_live_deployment, schema)
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.openspec("local-parquet-import")
+def test_create_table_from_missing_local_parquet_fails(
+    reusable_live_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """A missing file fails the inferred import and creates no table."""
+    # ========== GIVEN ==========
+    missing = tmp_path / "does_not_exist.parquet"
+    schema = f"PARQUET_MISSING_{uuid.uuid4().hex[:8]}"
+    try:
+        reusable_live_deployment.connect(
+            "--command", f"CREATE SCHEMA {schema};", capture_output=True
+        )
+
+        statement = _inferred_table_statement(f"{schema}.parquet_rows", missing)
+
+        # ========== WHEN ==========
+        with pytest.raises(subprocess.CalledProcessError) as error_info:
+            reusable_live_deployment.connect(
+                "--command", statement, capture_output=True
+            )
+
+        # ========== THEN ==========
+        error = error_info.value
+        combined = _decode_stream(error.stdout) + _decode_stream(error.stderr)
+        assert str(missing) in combined, f"Expected the missing path in: {combined!r}"
+        # The table name is still free, so no table was created.
+        reusable_live_deployment.connect(
+            "--command",
+            f"CREATE TABLE {schema}.parquet_rows (x INT);",
+            capture_output=True,
+        )
+    finally:
+        _drop_schema(reusable_live_deployment, schema)
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.openspec("local-parquet-import")
+def test_failed_replace_from_local_parquet_keeps_existing_table(
+    reusable_live_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """A failed CREATE OR REPLACE import keeps the existing table and its rows."""
+    # ========== GIVEN ==========
+    not_parquet = tmp_path / "not_parquet.parquet"
+    not_parquet.write_text("this is not a Parquet file\n")
+    schema = f"PARQUET_FAILED_{uuid.uuid4().hex[:8]}"
+    try:
+        table = f"{schema}.parquet_rows"
+        reusable_live_deployment.connect(
+            "--command",
+            f"CREATE SCHEMA {schema}; CREATE TABLE {table} (old_column VARCHAR(10)); "  # noqa: S608 - test-generated identifier
+            f"INSERT INTO {table} VALUES ('kept');",
+            capture_output=True,
+        )
+
+        statement = _inferred_table_statement(table, not_parquet, replace=True)
+
+        # ========== WHEN ==========
+        with pytest.raises(subprocess.CalledProcessError):
+            reusable_live_deployment.connect(
+                "--command", statement, capture_output=True
+            )
+
+        # ========== THEN ==========
+        proc = reusable_live_deployment.connect(
+            "--command",
+            f"SELECT old_column FROM {table};",  # noqa: S608 - test-generated identifier
+            capture_output=True,
+        )
+        assert "kept" in proc.stdout
+        tables = reusable_live_deployment.connect(
+            "--csv",
+            "--command",
+            "SELECT TABLE_NAME FROM SYS.EXA_ALL_TABLES "  # noqa: S608 - test-generated identifier
+            f"WHERE TABLE_SCHEMA = '{schema.upper()}' ORDER BY TABLE_NAME;",
+            capture_output=True,
+        )
+        assert list(csv.reader(tables.stdout.splitlines()))[1:] == [["PARQUET_ROWS"]]
+    finally:
+        _drop_schema(reusable_live_deployment, schema)
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.openspec("local-parquet-import")
+def test_user_without_schema_ownership_creates_and_replaces_tables(
+    reusable_live_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """A non-owner with ANY TABLE privileges creates and replaces tables."""
+    # ========== GIVEN ==========
+    local_only = _client_only_parquet(tmp_path)
+    suffix = uuid.uuid4().hex[:8].upper()
+    schema = f"PARQUET_FOREIGN_{suffix}"
+    user = f"PARQUET_USER_{suffix}"
+    password = f"Parquet{suffix}"
+    try:
+        reusable_live_deployment.connect(
+            "--command",
+            f"CREATE SCHEMA {schema}; "  # noqa: S608 - test-generated identifier
+            f"CREATE TABLE {schema}.parquet_rows (old_column VARCHAR(10)); "
+            f"INSERT INTO {schema}.parquet_rows VALUES ('stale'); "
+            f'CREATE USER {user} IDENTIFIED BY "{password}"; '
+            "GRANT CREATE SESSION, CREATE ANY TABLE, DROP ANY TABLE, SELECT ANY TABLE, "
+            f"INSERT ANY TABLE, IMPORT TO {user};",
+            capture_output=True,
+        )
+        statements = _inferred_table_statement(
+            f"{schema}.new_rows", local_only
+        ) + _inferred_table_statement(
+            f"{schema}.parquet_rows", local_only, replace=True
+        )
+
+        # ========== WHEN ==========
+        reusable_live_deployment.connect(
+            "-u", user, "-p", password, "--command", statements, capture_output=True
+        )
+
+        # ========== THEN ==========
+        for table in ("new_rows", "parquet_rows"):
+            names = reusable_live_deployment.connect(
+                "--csv",
+                "--command",
+                f'SELECT "name" FROM {schema}.{table} ORDER BY "id";',  # noqa: S608 - test-generated identifier
+                capture_output=True,
+            )
+            assert list(csv.reader(names.stdout.splitlines()))[1:] == [
+                ["alpha"],
+                ["beta"],
+                ["gamma"],
+            ]
+        tables = reusable_live_deployment.connect(
+            "--csv",
+            "--command",
+            "SELECT TABLE_NAME FROM SYS.EXA_ALL_TABLES "  # noqa: S608 - test-generated identifier
+            f"WHERE TABLE_SCHEMA = '{schema}' ORDER BY TABLE_NAME;",
+            capture_output=True,
+        )
+        assert list(csv.reader(tables.stdout.splitlines()))[1:] == [
+            ["NEW_ROWS"],
+            ["PARQUET_ROWS"],
+        ]
+    finally:
+        _drop_schema(reusable_live_deployment, schema)
+        reusable_live_deployment.connect(
+            "--command", f"DROP USER IF EXISTS {user};", capture_output=True
+        )
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.openspec("local-parquet-import")
+def test_create_table_from_local_parquet_rejects_unsupported_path(
+    shared_live_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """A path the driver cannot import fails with the supported characters named."""
+    # ========== GIVEN ==========
+    unsupported = tmp_path / "sales(2024).parquet"
+    shutil.copy(_PARQUET_FIXTURE, unsupported)
+
+    statement = _inferred_table_statement("s.parquet_rows", unsupported)
+
+    # ========== WHEN ==========
+    with pytest.raises(subprocess.CalledProcessError) as error_info:
+        shared_live_deployment.connect("--command", statement, capture_output=True)
+
+    # ========== THEN ==========
+    error = error_info.value
+    combined = _decode_stream(error.stdout) + _decode_stream(error.stderr)
+    assert "may only contain ASCII letters" in combined, combined
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.openspec("local-parquet-import")
+def test_create_table_from_local_parquet_subselect_names_supported_form(
+    shared_live_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """An unsupported statement shape fails with the supported form in the error."""
+    # ========== GIVEN ==========
+    local_only = _client_only_parquet(tmp_path)
+    statement = (
+        f'CREATE TABLE s.t AS SELECT "id" FROM '  # noqa: S608 - test-generated identifier
+        f"(IMPORT FROM LOCAL PARQUET FILE '{local_only}');"
+    )
+
+    # ========== WHEN ==========
+    with pytest.raises(subprocess.CalledProcessError) as error_info:
+        shared_live_deployment.connect("--command", statement, capture_output=True)
+
+    # ========== THEN ==========
+    error = error_info.value
+    combined = _decode_stream(error.stdout) + _decode_stream(error.stderr)
+    assert "CREATE [OR REPLACE] TABLE <schema>.<table> AS" in combined, combined
 
 
 @pytest.mark.skipif(
