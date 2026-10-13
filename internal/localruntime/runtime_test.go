@@ -94,10 +94,10 @@ func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
 		t.Fatalf("prepare failed: %v", err)
 	}
 	if err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
-		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
-		CPUCount:      4,
-		MemoryMB:      8192,
-		DataSizeGB:    100,
+		Ports:      "db:28563",
+		CPUCount:   4,
+		MemoryMB:   8192,
+		DataSizeGB: 100,
 	}); err != nil {
 		t.Fatalf("start failed: %v", err)
 	}
@@ -124,10 +124,10 @@ func TestMacVMRuntimeLifecycleUsesV2RunnerThenSharedInstall(t *testing.T) {
 		t.Fatalf("stop failed: %v", err)
 	}
 	if err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
-		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
-		CPUCount:      4,
-		MemoryMB:      8192,
-		DataSizeGB:    100,
+		Ports:      "db:28563",
+		CPUCount:   4,
+		MemoryMB:   8192,
+		DataSizeGB: 100,
 	}); err != nil {
 		t.Fatalf("restart failed: %v", err)
 	}
@@ -187,10 +187,10 @@ func TestMacVMRuntimeStartStopsVMWhenInstallFails(t *testing.T) {
 	}
 
 	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
-		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
-		CPUCount:      2,
-		MemoryMB:      4096,
-		DataSizeGB:    100,
+		Ports:      "db:28563",
+		CPUCount:   2,
+		MemoryMB:   4096,
+		DataSizeGB: 100,
 	})
 	if err == nil || !strings.Contains(err.Error(), "podman failed") {
 		t.Fatalf("expected install failure, got %v", err)
@@ -229,10 +229,10 @@ func TestMacVMRuntimeStartStopsVMWhenMigrationFails(t *testing.T) {
 	}
 
 	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
-		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
-		CPUCount:      2,
-		MemoryMB:      4096,
-		DataSizeGB:    100,
+		Ports:      "db:28563",
+		CPUCount:   2,
+		MemoryMB:   4096,
+		DataSizeGB: 100,
 	})
 	if err == nil || !strings.Contains(err.Error(), "migration failed") {
 		t.Fatalf("expected migration failure, got %v", err)
@@ -268,10 +268,10 @@ func TestMacVMRuntimeStartRejectsMismatchedReportedPort(t *testing.T) {
 	}
 
 	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
-		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
-		CPUCount:      2,
-		MemoryMB:      4096,
-		DataSizeGB:    100,
+		Ports:      "db:28563",
+		CPUCount:   2,
+		MemoryMB:   4096,
+		DataSizeGB: 100,
 	})
 
 	if err == nil || !strings.Contains(err.Error(), "expected configured port 28563") {
@@ -306,10 +306,10 @@ func TestMacVMRuntimeStartClassifiesBindDiagnostic(t *testing.T) {
 	}
 
 	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
-		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
-		CPUCount:      2,
-		MemoryMB:      4096,
-		DataSizeGB:    100,
+		Ports:      "db:28563",
+		CPUCount:   2,
+		MemoryMB:   4096,
+		DataSizeGB: 100,
 	})
 
 	var unavailable *localports.UnavailableError
@@ -356,10 +356,10 @@ func TestMacVMRuntimeStartKeepsUnrelatedAndPartialFailuresGeneric(t *testing.T) 
 			}
 
 			err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
-				RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
-				CPUCount:      2,
-				MemoryMB:      4096,
-				DataSizeGB:    100,
+				Ports:      "db:28563",
+				CPUCount:   2,
+				MemoryMB:   4096,
+				DataSizeGB: 100,
 			})
 
 			var unavailable *localports.UnavailableError
@@ -398,10 +398,10 @@ func TestMacVMRuntimeStartCleanupFailureIsNotRecoverable(t *testing.T) {
 
 	// When
 	err := localRuntime.Start(context.Background(), nil, nil, VMConfig{
-		RuntimeConfig: RuntimeConfig{Ports: "db:28563"},
-		CPUCount:      2,
-		MemoryMB:      4096,
-		DataSizeGB:    100,
+		Ports:      "db:28563",
+		CPUCount:   2,
+		MemoryMB:   4096,
+		DataSizeGB: 100,
 	})
 
 	// Then

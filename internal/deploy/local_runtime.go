@@ -300,14 +300,12 @@ func toLocalRuntimeConfig(
 	}
 
 	return localruntime.VMConfig{
-		RuntimeConfig: localruntime.RuntimeConfig{
-			Ports:        runtimeConfig.ports,
-			VersionCheck: versionCheck,
-			SLCs:         slcs,
-		},
-		CPUCount:   runtimeConfig.cpuCount,
-		MemoryMB:   runtimeConfig.memoryMB,
-		DataSizeGB: runtimeConfig.dataSizeGB,
+		Ports:        runtimeConfig.ports,
+		VersionCheck: versionCheck,
+		SLCs:         slcs,
+		CPUCount:     runtimeConfig.cpuCount,
+		MemoryMB:     runtimeConfig.memoryMB,
+		DataSizeGB:   runtimeConfig.dataSizeGB,
 	}, nil
 }
 
