@@ -339,7 +339,7 @@ func TestVerifyLocalStoredCredential_BoundsTheLogin(t *testing.T) {
 	// Given
 	deployment := newTestDeploymentWithState(t)
 	endpoint := &localruntime.VMRuntimeEndpoint{
-		RuntimeEndpoint: localruntime.RuntimeEndpoint{DBPort: localTestDatabasePort},
+		DBPort: localTestDatabasePort,
 	}
 	if err := writeLocalDeploymentArtifacts(deployment, endpoint); err != nil {
 		t.Fatalf("failed to write deployment artifacts: %v", err)

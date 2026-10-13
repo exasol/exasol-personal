@@ -122,11 +122,9 @@ func TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets(t *tes
 	// Given
 	deployment := newTestDeploymentWithState(t)
 	endpoint := &localruntime.VMRuntimeEndpoint{
-		RuntimeEndpoint: localruntime.RuntimeEndpoint{
-			DBPort:         localTestDatabasePort,
-			UIPort:         28443,
-			ShellSupported: true,
-		},
+		DBPort:         localTestDatabasePort,
+		UIPort:         28443,
+		ShellSupported: true,
 	}
 
 	// When
@@ -188,11 +186,9 @@ func TestWriteLocalDeploymentArtifacts_OmitsLocalOnlyCloudMetadataInJSON(t *test
 	// Given
 	deployment := newTestDeploymentWithState(t)
 	endpoint := &localruntime.VMRuntimeEndpoint{
-		RuntimeEndpoint: localruntime.RuntimeEndpoint{
-			DBPort:         localTestDatabasePort,
-			UIPort:         28443,
-			ShellSupported: true,
-		},
+		DBPort:         localTestDatabasePort,
+		UIPort:         28443,
+		ShellSupported: true,
 	}
 
 	// When
@@ -284,7 +280,7 @@ func TestWriteLocalDeploymentArtifacts_PreservesStoredSecretsAndRefreshesEndpoin
 	// When
 	for _, port := range []int{localTestDatabasePort, changedDatabasePort} {
 		endpoint := &localruntime.VMRuntimeEndpoint{
-			RuntimeEndpoint: localruntime.RuntimeEndpoint{DBPort: port},
+			DBPort: port,
 		}
 		if err := writeLocalDeploymentArtifacts(deployment, endpoint); err != nil {
 			t.Fatalf("expected artifacts to be written, got %v", err)
@@ -334,7 +330,7 @@ func TestWriteLocalDeploymentArtifacts_ReplacesUnusableSecrets(t *testing.T) {
 				t.Fatalf("failed to write unusable secrets: %v", err)
 			}
 			endpoint := &localruntime.VMRuntimeEndpoint{
-				RuntimeEndpoint: localruntime.RuntimeEndpoint{DBPort: localTestDatabasePort},
+				DBPort: localTestDatabasePort,
 			}
 
 			// When
@@ -486,7 +482,7 @@ func TestWriteLocalDeploymentArtifacts_RefusesToInventGeneratedCredential(t *tes
 		t.Fatalf("failed to mark generated credential: %v", err)
 	}
 	endpoint := &localruntime.VMRuntimeEndpoint{
-		RuntimeEndpoint: localruntime.RuntimeEndpoint{DBPort: localTestDatabasePort},
+		DBPort: localTestDatabasePort,
 	}
 
 	// When

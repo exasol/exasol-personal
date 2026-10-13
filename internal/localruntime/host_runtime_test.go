@@ -41,15 +41,13 @@ func TestLinuxHostPodmanStartConfig_UsesOnlyCommonRuntimeConfig(t *testing.T) {
 	// Given
 	localRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
 	vmConfig := VMConfig{
-		RuntimeConfig: RuntimeConfig{
-			Ports: "ssh:20022, db:28563, ui:28443",
-			VersionCheck: localinstall.VersionCheckConfig{
-				Enabled:  true,
-				URL:      "https://example.test",
-				Identity: "cluster-id",
-			},
-			SLCs: []localinstall.SLCConfig{},
+		Ports: "ssh:20022, db:28563, ui:28443",
+		VersionCheck: localinstall.VersionCheckConfig{
+			Enabled:  true,
+			URL:      "https://example.test",
+			Identity: "cluster-id",
 		},
+		SLCs:       []localinstall.SLCConfig{},
 		CPUCount:   32,
 		MemoryMB:   131072,
 		DataSizeGB: 4096,
