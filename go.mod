@@ -377,7 +377,7 @@ require (
 	github.com/uudashr/iface v1.5.1 // indirect
 	github.com/vbatts/tar-split v0.12.3 // indirect
 	github.com/vbauerster/cupwriter v0.0.4 // indirect
-	github.com/vbauerster/mpb/v8 v8.16.1 // indirect
+	github.com/vbauerster/mpb/v8 v8.15.2 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
