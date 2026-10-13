@@ -15,6 +15,7 @@ linters:
     - errcheck
     - err113
     - exhaustruct
+    - exhaustruct_v5
     - cyclop
     - funlen
     - gocognit
