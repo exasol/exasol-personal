@@ -495,3 +495,202 @@ def test_macos_host_data_migration_and_recovery(
         assert not (deployment_dir / "local").exists()
     finally:
         deployment_manager.release(deployment)
+
+
+def _container_binary() -> str:
+    resolved = shutil.which("container")
+    assert resolved is not None, "the `container` CLI must be on PATH"
+    return resolved
+
+
+def _container_query(*args: str) -> str:
+    return subprocess.run(
+        [_container_binary(), *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def _container_names() -> list[str]:
+    entries = json.loads(_container_query("list", "--all", "--format", "json") or "[]")
+    return [str(entry["id"]) for entry in entries]
+
+
+def _assert_container_host_data_mount(container_name: str, host_exa: Path) -> None:
+    inspected = json.loads(_container_query("inspect", container_name))
+    mounts = inspected[0]["configuration"]["mounts"]
+    exa_mounts = [mount for mount in mounts if mount["destination"] == "/exa"]
+    assert len(exa_mounts) == 1
+    assert "virtiofs" in exa_mounts[0]["type"] or "bind" in exa_mounts[0]["type"]
+    assert Path(exa_mounts[0]["source"]).resolve() == host_exa.resolve()
+    assert host_exa.is_dir()
+
+
+@pytest.mark.providers("local")
+@pytest.mark.platform("macos-arm64")
+@pytest.mark.openspec("local-apple-container-runtime")
+@pytest.mark.smoke
+@pytest.mark.skipif(
+    not IS_MACOS_ARM,
+    reason="the real Apple container lifecycle runs only on macOS Apple Silicon",
+)
+def test_install_local_apple_container_lifecycle(
+    deployment_manager: DeploymentManager,
+    exasol_path: str,
+) -> None:
+    destroyed = False
+
+    def cleanup(deployment_dir: Path) -> None:
+        if not destroyed and (deployment_dir / ".exasolLauncherState.json").exists():
+            run_command(
+                [
+                    exasol_path,
+                    "destroy",
+                    "--deployment-dir",
+                    str(deployment_dir),
+                    "--auto-approve",
+                    "--verbose",
+                ]
+            )
+
+    deployment = deployment_manager.local_install_target(cleanup)
+    deployment_dir = Path(deployment.deployment_dir.name)
+    original_error: BaseException | None = None
+
+    try:
+        install_result = run_command(
+            [
+                exasol_path,
+                "install",
+                "local-apple-container",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--auto-approve",
+                "--no-launcher-version-check",
+                "--verbose",
+            ]
+        )
+        assert install_result.returncode == 0
+        assert shutil.which("container") is not None
+
+        deployment_data = json.loads((deployment_dir / "deployment.json").read_text())
+        container_name = f"exasol-db-{deployment_data['deploymentId']}"
+        host_exa = deployment_dir / "local" / "runtime" / "exa"
+        _assert_container_host_data_mount(container_name, host_exa)
+
+        run_command(
+            [
+                exasol_path,
+                "connect",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--command",
+                (
+                    "CREATE SCHEMA APPLE_CONTAINER_LIFECYCLE; "
+                    "OPEN SCHEMA APPLE_CONTAINER_LIFECYCLE; "
+                    "CREATE TABLE SMOKE (ID DECIMAL(18,0)); "
+                    "INSERT INTO SMOKE VALUES 424242;"
+                ),
+            ]
+        )
+
+        stop_result = run_command(
+            [
+                exasol_path,
+                "stop",
+                "--json",
+                "--deployment-dir",
+                str(deployment_dir),
+            ]
+        )
+        assert_lifecycle_json_signal(
+            stop_result.stdout, "stopped", database_ready=False
+        )
+        assert container_name not in _container_names()
+
+        start_result = run_command(
+            [
+                exasol_path,
+                "start",
+                "--json",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--auto-approve",
+            ]
+        )
+        assert_lifecycle_json_signal(
+            start_result.stdout, "running", database_ready=True
+        )
+
+        persisted = run_command(
+            [
+                exasol_path,
+                "connect",
+                "--csv",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--command",
+                "SELECT ID FROM APPLE_CONTAINER_LIFECYCLE.SMOKE;",
+            ]
+        )
+        assert "424242" in persisted.stdout
+
+        # The container system service is host-wide state, like Windows's
+        # shared Podman machine: simulate it stopping outside the launcher
+        # and confirm `start` recovers it without requesting approval.
+        subprocess.run(
+            [_container_binary(), "system", "stop"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        recovered = run_command(
+            [
+                exasol_path,
+                "start",
+                "--json",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--auto-approve",
+            ]
+        )
+        assert_lifecycle_json_signal(recovered.stdout, "running", database_ready=True)
+
+        survived = run_command(
+            [
+                exasol_path,
+                "connect",
+                "--csv",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--command",
+                "SELECT ID FROM APPLE_CONTAINER_LIFECYCLE.SMOKE;",
+            ]
+        )
+        assert "424242" in survived.stdout
+
+        run_command(
+            [
+                exasol_path,
+                "destroy",
+                "--deployment-dir",
+                str(deployment_dir),
+                "--auto-approve",
+                "--verbose",
+            ]
+        )
+        destroyed = True
+
+        assert container_name not in _container_names()
+        assert not (deployment_dir / "local").exists()
+        assert not host_exa.exists()
+    except BaseException as error:
+        original_error = error
+        raise
+    finally:
+        try:
+            deployment_manager.release(deployment)
+        except RuntimeError:
+            if original_error is None:
+                raise
