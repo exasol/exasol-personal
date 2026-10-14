@@ -211,5 +211,7 @@ deployment).
 The endpoint has no authentication and uses the deployment's saved database
 credentials. Only connect trusted local MCP clients. The catalog enables
 read-oriented query tools and disables write-query, BucketFS, and preprocessor
-tools. These controls limit the exposed MCP tools; they do not change the
-database privileges of the saved user.
+tools. Queries that do not specify `row_limit` return at most 1000 rows by
+default; clients can request a different limit. These controls limit the
+exposed MCP tools; they do not change the database privileges of the saved
+user.
