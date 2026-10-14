@@ -143,3 +143,16 @@ sign, and unresolved references remain literal. Expanding a password into
 application arguments or output exposes it to that application; choose those
 settings with care. Launcher diagnostics withhold injected passwords and keep
 other values legible.
+
+## Networking
+
+Local services share the
+[deployment bridge](local-deployment.md#deployment-network).
+The database uses the DNS name `database`; each sidecar uses its saved name.
+These names resolve inside that deployment's network.
+
+`containerPort` alone declares an internal service port. A positive `hostPort`
+publishes it on the requested loopback `hostIP`, defaulting to `127.0.0.1`.
+Status reports the effective IP and port. A sidecar that fails to start names
+the cause and points at `exasol sidecar status <name>`, which reports the full
+diagnosis.

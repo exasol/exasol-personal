@@ -5,9 +5,14 @@ package localinstall
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
 	"slices"
+	"strings"
 )
+
+// podmanBridgeDriver routes between containers on one host.
+const podmanBridgeDriver = "bridge"
 
 // Podman's spellings for the policies the launcher asks for. A second runtime
 // brings its own table rather than new call sites.
@@ -122,6 +127,31 @@ func podmanExecutionArgs(args []string, spec ContainerSpec) ([]string, error) {
 	}
 
 	return args, nil
+}
+
+func podmanCreateNetworkArgs(spec NetworkSpec) []string {
+	args := []string{"network", "create", "--ignore", "--driver", podmanBridgeDriver}
+	if !spec.DNS {
+		args = append(args, "--disable-dns")
+	}
+	for _, key := range slices.Sorted(maps.Keys(spec.Labels)) {
+		args = append(args, "--label", key+"="+spec.Labels[key])
+	}
+
+	return append(args, spec.Name)
+}
+
+// decodeNetworks reads the runtime's own network listing.
+func decodeNetworks(output string) ([]ContainerNetwork, error) {
+	if strings.TrimSpace(output) == "" {
+		return nil, nil
+	}
+	var networks []ContainerNetwork
+	if err := json.Unmarshal([]byte(output), &networks); err != nil {
+		return nil, fmt.Errorf("decode container networks: %w", err)
+	}
+
+	return networks, nil
 }
 
 // podmanDiagnosticCommands reports what to run when a container fails, so the

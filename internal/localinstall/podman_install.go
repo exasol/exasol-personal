@@ -18,6 +18,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localports"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
+	"github.com/exasol/exasol-personal/internal/sidecar"
 )
 
 const (
@@ -209,6 +210,14 @@ func (install *PodmanInstall) Start(
 			fmt.Errorf("failed to synchronize local runtime storage before starting Nano: %w", err))
 	}
 
+	services, err := NewSidecarRuntime(install.environment, containerName, RuntimePath{})
+	if err != nil {
+		return err
+	}
+	if err := services.EnsureNetwork(ctx); err != nil {
+		return err
+	}
+
 	bootstrap := freshDeployment && startConfig.InitialPassword != nil
 	if bootstrap {
 		if err := install.writeBootstrapPassword(ctx, startConfig); err != nil {
@@ -221,6 +230,7 @@ func (install *PodmanInstall) Start(
 		slcs:          availableSLCs,
 		fresh:         freshDeployment,
 		bootstrap:     bootstrap,
+		network:       services.NetworkName(),
 	})
 	var startDiagnostic bytes.Buffer
 	startErrOutput := io.Writer(&startDiagnostic)
@@ -328,6 +338,7 @@ type nanoRunOptions struct {
 	slcs          []SLCConfig
 	fresh         bool
 	bootstrap     bool
+	network       string
 }
 
 func nanoRunSpec(startConfig StartConfig, options nanoRunOptions) ContainerSpec {
@@ -350,6 +361,10 @@ func nanoRunSpec(startConfig StartConfig, options nanoRunOptions) ContainerSpec 
 		Mounts: []Mount{
 			{Kind: MountBind, Source: startConfig.DataDir, Target: nanoDataMountTarget},
 		},
+	}
+	if options.network != "" {
+		spec.Network = options.network
+		spec.NetworkAlias = sidecar.DatabaseAlias
 	}
 	if options.bootstrap {
 		spec.Mounts = append(spec.Mounts, Mount{
@@ -417,7 +432,19 @@ func (install *PodmanInstall) Status(
 }
 
 func (install *PodmanInstall) Destroy(ctx context.Context, out, outErr io.Writer) error {
-	return install.Stop(ctx, out, outErr)
+	if err := install.Stop(ctx, out, outErr); err != nil {
+		return err
+	}
+	owner, err := ContainerName(install.deployment)
+	if err != nil {
+		return err
+	}
+	services, err := NewSidecarRuntime(install.environment, owner, RuntimePath{})
+	if err != nil {
+		return err
+	}
+
+	return services.RemoveNetwork(ctx)
 }
 
 func (install *PodmanInstall) writeBootstrapPassword(
