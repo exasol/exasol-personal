@@ -1,6 +1,6 @@
 # Deploy to the cloud
 
-The Exasol Launcher can provision a database in your own AWS, Azure, Exoscale, or STACKIT account.
+The Exasol Launcher can provision a database in your own AWS, Azure, Exoscale, STACKIT, or IONOS Cloud account.
 Cloud deployments are useful when you need more capacity, multiple nodes, or a shared database.
 
 ## Prepare your account
@@ -11,6 +11,7 @@ Follow the setup guide for your provider before starting the installation:
 - [Microsoft Azure](cloud/azure.md)
 - [Exoscale](cloud/exoscale.md)
 - [STACKIT](cloud/stackit.md)
+- [IONOS Cloud](cloud/ionos.md)
 
 Cloud resources incur charges in your account until you destroy them.
 See [Cloud resources and costs](cloud-resources.md) for the resources created by each preset and
@@ -25,6 +26,7 @@ exasol install aws
 exasol install azure --location westeurope
 exasol install exoscale
 exasol install stackit --project-id "<your-project-uuid>"
+exasol install ionos
 ```
 
 The launcher generates the deployment files, provisions the infrastructure, starts it, and installs
@@ -36,8 +38,8 @@ display them again.
 ## Choose the cluster size and compute type
 
 The default is a single-node cluster on a memory-optimized compute instance. Default types include
-`r6i.xlarge` on AWS, `Standard_E4s_v3` on Azure, `standard.extra-large` on Exoscale, and `m2i.4` on
-STACKIT.
+`r6i.xlarge` on AWS, `Standard_E4s_v3` on Azure, `standard.extra-large` on Exoscale, `m2i.4` on
+STACKIT, and `4x16` (4 dedicated cores, 16 GB RAM) on IONOS Cloud.
 
 Use `--cluster-size` and `--instance-type` to override the defaults:
 

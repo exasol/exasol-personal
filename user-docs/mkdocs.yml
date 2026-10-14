@@ -61,6 +61,7 @@ nav:
       - Azure account setup: cloud/azure.md
       - Exoscale account setup: cloud/exoscale.md
       - STACKIT account setup: cloud/stackit.md
+      - IONOS Cloud account setup: cloud/ionos.md
   - Manage deployments: manage-deployments.md
   - Use the database:
       - Connect to the database: connect.md
