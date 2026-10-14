@@ -255,7 +255,7 @@ func TestStoppedLocalDeploymentCanBeSetAndResetAll(t *testing.T) {
 	t.Parallel()
 
 	ctx := testManagerContext(t)
-	capabilities := localCapabilitiesForPlatform(runtime.GOOS, runtime.GOARCH)
+	capabilities := localCapabilitiesForPlatform(runtime.GOOS, runtime.GOARCH, "")
 	defaults := defaultLocalRuntimeConfig(detectLocalHostMemoryMB(ctx))
 	infraVars := map[string]string{localPortsConfigName: "db:18563"}
 	if capabilities.vmSizing {

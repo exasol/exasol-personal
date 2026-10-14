@@ -28,6 +28,10 @@ type InfrastructureLocal struct {
 	MemoryMB   int    `yaml:"memoryMB,omitempty"`
 	DataSizeGB int    `yaml:"dataSizeGB,omitempty"`
 	Ports      string `yaml:"ports,omitempty"`
+	// Runtime selects which local runtime implementation backs this preset,
+	// e.g. "apple-container". Empty selects the standard platform-selected
+	// runtime (VM-backed Podman on macOS, host Podman on Linux/Windows).
+	Runtime string `yaml:"runtime,omitempty"`
 }
 
 // InfrastructureManifest represents the infrastructure metadata and optional tofu configuration.

@@ -165,7 +165,7 @@ func TestNewLocalRuntimeForPlatform_SelectsRuntime(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			selected, err := newLocalRuntimeForPlatform(
-				deployment, nil, test.goos, test.goarch,
+				deployment, nil, test.goos, test.goarch, "",
 			)
 			if err != nil {
 				t.Fatalf("expected runtime selection to succeed, got %v", err)
@@ -179,7 +179,32 @@ func TestNewLocalRuntimeForPlatform_RejectsUnsupportedPlatform(t *testing.T) {
 	t.Parallel()
 
 	_, err := newLocalRuntimeForPlatform(
-		config.NewDeploymentDir(t.TempDir()), nil, "freebsd", "amd64",
+		config.NewDeploymentDir(t.TempDir()), nil, "freebsd", "amd64", "",
+	)
+	if !errors.Is(err, errUnsupportedLocalPlatform) {
+		t.Fatalf("expected unsupported platform error, got %v", err)
+	}
+}
+
+func TestNewLocalRuntimeForPlatform_SelectsAppleContainerRuntime(t *testing.T) {
+	t.Parallel()
+
+	deployment := config.NewDeploymentDir(t.TempDir())
+	selected, err := newLocalRuntimeForPlatform(
+		deployment, nil, localMacOS, localMacArch, localRuntimeKindAppleContainer,
+	)
+	if err != nil {
+		t.Fatalf("expected runtime selection to succeed, got %v", err)
+	}
+	assertHostRuntimePlatform(t, selected, localruntime.HostPlatformAppleContainer)
+}
+
+func TestNewLocalRuntimeForPlatform_RejectsAppleContainerOnNonMacPlatform(t *testing.T) {
+	t.Parallel()
+
+	_, err := newLocalRuntimeForPlatform(
+		config.NewDeploymentDir(t.TempDir()), nil,
+		localLinuxOS, localLinuxAMD64, localRuntimeKindAppleContainer,
 	)
 	if !errors.Is(err, errUnsupportedLocalPlatform) {
 		t.Fatalf("expected unsupported platform error, got %v", err)

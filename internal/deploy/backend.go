@@ -138,18 +138,58 @@ func readInfrastructurePresetConfigVariables(
 	return descriptor.presetConfigVariables(ctx, preset, manifest)
 }
 
+// newLocalRuntime resolves the already-initialized deployment's infrastructure
+// manifest from disk to pick the runtime kind. It is used by callers that
+// operate on a deployment whose manifest was already written by Configure,
+// such as connect, status, and destroy.
 func newLocalRuntime(
 	deployment config.DeploymentDir,
 	manager *runtimeartifacts.Manager,
 ) (localruntime.Runtime, error) {
-	return newLocalRuntimeForPlatform(deployment, manager, runtime.GOOS, runtime.GOARCH)
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return nil, err
+	}
+
+	return newLocalRuntimeForManifest(deployment, manager, manifest)
+}
+
+// newLocalRuntimeForManifest is used at backend-construction time, when the
+// manifest is already in hand (from preset resolution) and may not yet be
+// written to the deployment directory.
+func newLocalRuntimeForManifest(
+	deployment config.DeploymentDir,
+	manager *runtimeartifacts.Manager,
+	manifest *presets.InfrastructureManifest,
+) (localruntime.Runtime, error) {
+	return newLocalRuntimeForPlatform(
+		deployment, manager, runtime.GOOS, runtime.GOARCH, localRuntimeKind(manifest),
+	)
+}
+
+// localRuntimeKind reads which local runtime implementation a preset
+// selected. Empty selects the standard platform-selected runtime.
+func localRuntimeKind(manifest *presets.InfrastructureManifest) string {
+	if manifest != nil && manifest.Local != nil {
+		return strings.TrimSpace(manifest.Local.Runtime)
+	}
+
+	return ""
 }
 
 func newLocalRuntimeForPlatform(
 	deployment config.DeploymentDir,
 	manager *runtimeartifacts.Manager,
-	goos, goarch string,
+	goos, goarch, runtimeKind string,
 ) (localruntime.Runtime, error) {
+	if runtimeKind == localRuntimeKindAppleContainer {
+		if err := validateAppleContainerPlatform(goos, goarch); err != nil {
+			return nil, err
+		}
+
+		return localruntime.NewHostAppleContainerRuntime(deployment, manager), nil
+	}
+
 	switch {
 	case goos == localMacOS && goarch == localMacArch:
 		return localruntime.NewMacVMRuntime(deployment, manager), nil

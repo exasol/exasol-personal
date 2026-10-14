@@ -59,8 +59,9 @@ type VMConfig struct {
 type HostPlatform string
 
 const (
-	HostPlatformLinux   HostPlatform = "linux"
-	HostPlatformWindows HostPlatform = "windows"
+	HostPlatformLinux          HostPlatform = "linux"
+	HostPlatformWindows        HostPlatform = "windows"
+	HostPlatformAppleContainer HostPlatform = "apple-container"
 )
 
 // HostChangeKind identifies a host environment change that requires explicit
@@ -70,6 +71,10 @@ type HostChangeKind string
 // HostChangeInstallContainerRuntime covers installing the container runtime
 // (Podman) onto the host, which mutates state shared beyond this deployment.
 const HostChangeInstallContainerRuntime HostChangeKind = "install-container-runtime"
+
+// HostChangeInstallAppleContainer covers installing Apple's `container` CLI
+// onto the host, through Homebrew or its signed installer package.
+const HostChangeInstallAppleContainer HostChangeKind = "install-apple-container"
 
 // HostCommand describes a command that preparation intends to run. It is
 // data, not a closure, so the approver can show the user exactly what will

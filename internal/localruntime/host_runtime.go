@@ -40,8 +40,9 @@ var nanoInitParams = []string{"maxConnectionsLicenseLimit=20"}
 //     can lapse between Prepare and Start.
 //   - ContainerHostRunning: report whether whatever hosts the containers is
 //     running, reading state only and never starting anything.
-//   - NewExecutionEnvironment: build the environment PodmanInstall runs
-//     through, which is where a platform redirects individual commands.
+//   - NewExecutionEnvironment: build the environment the selected
+//     localinstall.LocalInstall runs through, which is where a platform
+//     redirects individual commands.
 type hostRuntimeEnvironmentPreparer interface {
 	Platform() HostPlatform
 	EnsureReady(ctx context.Context, options PrepareOptions) error
@@ -84,6 +85,28 @@ func (linuxHostEnvironmentPreparer) NewExecutionEnvironment(
 	return localinstall.NewDirectExecutionEnvironment(runtimeExec)
 }
 
+// newLocalInstall constructs the localinstall.LocalInstall a HostRuntime
+// drives its container lifecycle through. Every direct-host platform other
+// than Apple's `container` CLI uses Podman, so defaultNewLocalInstall covers
+// Linux and Windows; only the Apple-container runtime supplies a different one.
+type newLocalInstall func(
+	deployment config.DeploymentDir,
+	environment localinstall.ExecutionEnvironment,
+	resolveImage func(context.Context) (localinstall.RuntimePath, error),
+	slcStagingDir, slcStatusPath localinstall.RuntimePath,
+) localinstall.LocalInstall
+
+func defaultNewLocalInstall(
+	deployment config.DeploymentDir,
+	environment localinstall.ExecutionEnvironment,
+	resolveImage func(context.Context) (localinstall.RuntimePath, error),
+	slcStagingDir, slcStatusPath localinstall.RuntimePath,
+) localinstall.LocalInstall {
+	return localinstall.NewPodmanInstallWithEnvironment(
+		deployment, environment, resolveImage, slcStagingDir, slcStatusPath,
+	)
+}
+
 // HostRuntime owns direct-host prerequisites and delegates the database
 // container lifecycle to localinstall. Platform differences arrive through
 // the injected preparer rather than through branches in this type.
@@ -92,6 +115,7 @@ type HostRuntime struct {
 	paths       runtimePaths
 	manager     *runtimeartifacts.Manager
 	preparer    hostRuntimeEnvironmentPreparer
+	newInstall  newLocalInstall
 	endpoint    *RuntimeEndpoint
 	runtimeExec []string
 	dialContext func(context.Context, string, string) (net.Conn, error)
@@ -111,11 +135,21 @@ func newHostRuntime(
 	manager *runtimeartifacts.Manager,
 	preparer hostRuntimeEnvironmentPreparer,
 ) *HostRuntime {
+	return newHostRuntimeWithInstall(deployment, manager, preparer, defaultNewLocalInstall)
+}
+
+func newHostRuntimeWithInstall(
+	deployment config.DeploymentDir,
+	manager *runtimeartifacts.Manager,
+	preparer hostRuntimeEnvironmentPreparer,
+	install newLocalInstall,
+) *HostRuntime {
 	return &HostRuntime{
 		deployment: deployment,
 		paths:      newRuntimePaths(deployment),
 		manager:    manager,
 		preparer:   preparer,
+		newInstall: install,
 	}
 }
 
@@ -356,7 +390,7 @@ func isPeerReachedDialError(err error) bool {
 		errno == wsaeConnAborted || errno == wsaeNotConn
 }
 
-func (runtime *HostRuntime) install() *localinstall.PodmanInstall {
+func (runtime *HostRuntime) install() localinstall.LocalInstall {
 	resolveImage := func(ctx context.Context) (localinstall.RuntimePath, error) {
 		path, err := localinstall.ResolveNanoImage(ctx, runtime.manager)
 		if err != nil {
@@ -366,7 +400,7 @@ func (runtime *HostRuntime) install() *localinstall.PodmanInstall {
 		return localinstall.IdentityRuntimePath(path), nil
 	}
 
-	return localinstall.NewPodmanInstallWithEnvironment(
+	return runtime.newInstall(
 		runtime.Deployment(),
 		runtime.preparer.NewExecutionEnvironment(runtime.runCmd()),
 		resolveImage,

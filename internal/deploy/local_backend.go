@@ -47,6 +47,10 @@ const (
 	localMemoryMBConfigName   = "memory_mb"
 	localDataSizeGBConfigName = "data_size_gb"
 	localPortsConfigName      = "ports"
+	// localRuntimeKindAppleContainer selects the local-apple-container
+	// preset's runtime (internal/localruntime.NewHostAppleContainerRuntime)
+	// instead of the standard platform-selected runtime.
+	localRuntimeKindAppleContainer = "apple-container"
 )
 
 var errUnsupportedLocalPlatform = errors.New(
@@ -63,7 +67,7 @@ var localBackendDescriptor = backendDescriptor{
 		manifest *presets.InfrastructureManifest,
 		manager *runtimeartifacts.Manager,
 	) (deploymentBackend, error) {
-		localRuntime, err := newLocalRuntime(deployment, manager)
+		localRuntime, err := newLocalRuntimeForManifest(deployment, manager, manifest)
 		if err != nil {
 			return nil, err
 		}
@@ -172,7 +176,7 @@ func (b *localBackend) Configure(
 		return errors.New("local infrastructure manifest is missing")
 	}
 
-	capabilities := localCapabilitiesForPlatform(b.goos, b.goarch)
+	capabilities := localCapabilitiesForPlatform(b.goos, b.goarch, localRuntimeKind(b.manifest))
 	local := ensureLocalManifestConfig(ctx, b.manifest, capabilities)
 	if err := applyLocalConfigOverrides(local, overrides, capabilities); err != nil {
 		return err
@@ -283,7 +287,8 @@ func validateLocalInitMemoryForPlatform(
 	if manifest == nil || manifest.Backend != backendTypeLocal {
 		return nil
 	}
-	if !localPlatformSupportsVMSizing(goos, goarch) {
+	runtimeKind := localRuntimeKind(manifest)
+	if !localPlatformSupportsVMSizing(goos, goarch, runtimeKind) {
 		return nil
 	}
 
@@ -291,7 +296,7 @@ func validateLocalInitMemoryForPlatform(
 	if manifest.Local != nil {
 		candidate = *manifest.Local
 	}
-	capabilities := localCapabilitiesForPlatform(goos, goarch)
+	capabilities := localCapabilitiesForPlatform(goos, goarch, runtimeKind)
 	if err := applyLocalConfigOverrides(&candidate, overrides, capabilities); err != nil {
 		return err
 	}
@@ -308,7 +313,7 @@ func validateLocalInitMemoryForPlatform(
 
 func (b *localBackend) ReadConfiguration() ([]DeploymentConfigValue, error) {
 	detectedHostMemoryMB := 0
-	if localPlatformSupportsVMSizing(b.goos, b.goarch) {
+	if localPlatformSupportsVMSizing(b.goos, b.goarch, localRuntimeKind(b.manifest)) {
 		detectedHostMemoryMB = detectLocalHostMemoryMB(context.Background())
 	}
 	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
@@ -328,7 +333,7 @@ func (b *localBackend) ReadConfiguration() ([]DeploymentConfigValue, error) {
 		RawValue:   runtimeConfig.ports,
 		RawDefault: "",
 	}}
-	if !localPlatformSupportsVMSizing(b.goos, b.goarch) {
+	if !localPlatformSupportsVMSizing(b.goos, b.goarch, localRuntimeKind(b.manifest)) {
 		return values, nil
 	}
 
@@ -370,13 +375,34 @@ func validateLocalPlatform(goos, goarch string) error {
 	return fmt.Errorf("%w (current platform: %s/%s)", errUnsupportedLocalPlatform, goos, goarch)
 }
 
-func localPlatformSupportsVMSizing(goos, goarch string) bool {
-	return goos == localMacOS && goarch == localMacArch
+// validateAppleContainerPlatform rejects every platform other than macOS
+// Apple Silicon before any runtime is constructed, the same cheap,
+// syscall-free check every other local platform rejection uses. The
+// macOS-version floor the preset also requires needs a real syscall, so it is
+// checked separately, during Prepare, where it cannot make runtime selection
+// itself platform-dependent (see appleContainerHostEnvironmentPreparer.EnsureReady).
+func validateAppleContainerPlatform(goos, goarch string) error {
+	if goos != localMacOS || goarch != localMacArch {
+		return fmt.Errorf(
+			"%w: the local-apple-container preset requires macOS Apple Silicon (current platform: %s/%s)",
+			errUnsupportedLocalPlatform, goos, goarch,
+		)
+	}
+
+	return nil
 }
 
-func localCapabilitiesForPlatform(goos, goarch string) localPlatformCapabilities {
+// localPlatformSupportsVMSizing is true only for the macOS VM-backed runtime:
+// the local-apple-container preset runs on the same platform but manages its
+// own per-container VM sizing, so it has no shared VM to size either.
+func localPlatformSupportsVMSizing(goos, goarch, runtimeKind string) bool {
+	return goos == localMacOS && goarch == localMacArch &&
+		runtimeKind != localRuntimeKindAppleContainer
+}
+
+func localCapabilitiesForPlatform(goos, goarch, runtimeKind string) localPlatformCapabilities {
 	return localPlatformCapabilities{
-		vmSizing: localPlatformSupportsVMSizing(goos, goarch),
+		vmSizing: localPlatformSupportsVMSizing(goos, goarch, runtimeKind),
 	}
 }
 
@@ -441,7 +467,7 @@ func localConfigVariableDefinitionsForPlatform(
 			Type:        ConfigVariableTypeString,
 		},
 	}
-	if !localPlatformSupportsVMSizing(goos, goarch) {
+	if !localPlatformSupportsVMSizing(goos, goarch, localRuntimeKind(manifest)) {
 		return definitions
 	}
 
@@ -551,7 +577,7 @@ func resolveLocalRuntimeConfigForPlatform(
 	detectedHostMemoryMB int,
 	goos, goarch string,
 ) (localRuntimeConfig, error) {
-	if !localPlatformSupportsVMSizing(goos, goarch) {
+	if !localPlatformSupportsVMSizing(goos, goarch, localRuntimeKind(manifest)) {
 		runtimeConfig := localRuntimeConfig{}
 		if manifest != nil && manifest.Local != nil {
 			runtimeConfig.ports = manifest.Local.Ports

@@ -45,6 +45,13 @@ exasol-local-runner:
       url: https://github.com/exasol/exasol-local-vm/releases/download/v2.0.0/mac-launcher-aarch64.zip
       sha256: 0396aaa409e3ee925726a9c5dae6b7eafb4c27c29382f6e51b0e0502e26a563a
       resource_path: launcher
+apple-container-installer:
+  extract: false
+  embed: false
+  artifact:
+    darwin/arm64:
+      url: https://github.com/apple/container/releases/download/1.5.0/container-1.5.0-installer-signed.pkg
+      sha256: a24808cb202318fa1c3bbee0c6c6887fe1225fe899d7b687a0ddd939bd6573f8
 exasol-nano-image:
   extract: false
   embed: true

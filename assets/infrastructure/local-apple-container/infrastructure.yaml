@@ -1,0 +1,13 @@
+name: Exasol Local (Apple container)
+description: >-
+  Experimental: runs Exasol Local through Apple's `container` CLI instead of
+  Podman. macOS Apple Silicon only. Does not yet support script language
+  containers (UDFs) or automatic restart after an unexpected stop.
+backend: local
+
+local:
+  runtime: apple-container
+
+compatibility:
+  provides:
+    - local-exasol
