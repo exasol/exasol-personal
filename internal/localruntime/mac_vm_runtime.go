@@ -70,8 +70,9 @@ exec /bin/sh`
 
 //nolint:tagliatelle // Runner state JSON keys are defined by the runner contract.
 type runnerForwardState struct {
-	GuestPort int `json:"guest_port"`
-	HostPort  int `json:"host_port"`
+	HostIP    string `json:"host_ip"`
+	GuestPort int    `json:"guest_port"`
+	HostPort  int    `json:"host_port"`
 }
 
 //nolint:tagliatelle // Runner state JSON keys are defined by the runner contract.
