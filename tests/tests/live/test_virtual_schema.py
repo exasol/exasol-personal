@@ -13,7 +13,6 @@ import hashlib
 import json
 import platform
 import re
-import shlex
 import shutil
 import subprocess
 import time
@@ -28,7 +27,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.testcase_helpers import run_in_local_vm
+from tests.testcase_helpers import container_command
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -101,56 +100,24 @@ def _sql_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def _run_in_local_vm(
-    deployment: Deployment,
-    command: str,
-    input_text: str | None = None,
-) -> subprocess.CompletedProcess[str]:
-    return run_in_local_vm(
+def _container_runtime(deployment: Deployment) -> PodmanRunner:
+    runner = partial(
+        container_command,
         deployment.launcher.launcher_path,
         deployment.deployment_dir.name,
-        command,
-        input_text,
     )
 
+    def run(
+        args: list[str], input_text: str | None
+    ) -> subprocess.CompletedProcess[str]:
+        return runner(*args, input_text=input_text)
 
-def _run_podman(
-    args: list[str],
-    input_text: str | None,
-    *,
-    deployment: Deployment | None = None,
-    executable: str | None = None,
-) -> subprocess.CompletedProcess[str]:
-    if platform.system() == "Darwin":
-        if deployment is None:
-            pytest.fail("macOS Podman execution requires a deployment")
-        return _run_in_local_vm(
-            deployment,
-            shlex.join(["podman", *args]),
-            input_text,
-        )
-    if executable is None:
-        pytest.fail("Linux Podman execution requires an executable")
-    return subprocess.run(
-        [executable, *args],
-        check=True,
-        capture_output=True,
-        text=True,
-        input=input_text,
-    )
+    try:
+        run(["--version"], None)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pytest.skip("podman is required for the Virtual Schema smoke test")
 
-
-def _container_runtime(deployment: Deployment) -> PodmanRunner:
-    if platform.system() == "Darwin":
-        try:
-            _run_podman(["--version"], None, deployment=deployment)
-        except subprocess.CalledProcessError:
-            pytest.skip("podman is required inside the local Exasol VM")
-        return partial(_run_podman, deployment=deployment)
-    executable = shutil.which("podman")
-    if executable is not None:
-        return partial(_run_podman, executable=executable)
-    pytest.skip("podman is required for the Virtual Schema smoke test")
+    return run
 
 
 def _wait_for_postgres(source: PostgresSource) -> None:
