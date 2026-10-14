@@ -29,6 +29,51 @@ sidecars:
 	return catalog
 }
 
+// sidecarTestCredentialCatalog describes a service that consumes the
+// database password, so tests can observe resolved values reaching a
+// container.
+func sidecarTestCredentialCatalog(t *testing.T) *sidecar.Catalog {
+	t.Helper()
+	catalog, err := sidecar.LoadCatalog([]byte(`version: 1
+sidecars:
+  example:
+    description: Test service
+    architectures: [amd64, arm64]
+    container:
+      image: docker.io/library/caddy:2-alpine
+      env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: exasol-database
+              key: password
+`))
+	require.NoError(t, err)
+
+	return catalog
+}
+
+// sidecarTestPublishedCatalog describes a service that publishes a port, so
+// tests can observe the endpoint a user would reach.
+func sidecarTestPublishedCatalog(t *testing.T) *sidecar.Catalog {
+	t.Helper()
+	catalog, err := sidecar.LoadCatalog([]byte(`version: 1
+sidecars:
+  example:
+    description: Test service
+    architectures: [amd64, arm64]
+    container:
+      image: docker.io/library/caddy:2-alpine
+      ports:
+        - containerPort: 8080
+          hostPort: 18080
+          hostIP: 127.0.0.1
+`))
+	require.NoError(t, err)
+
+	return catalog
+}
+
 func materializeTestSidecar(
 	t *testing.T,
 	deployment config.DeploymentDir,

@@ -1,0 +1,54 @@
+version: 1
+sidecars:
+  caddy:
+    description: Disposable connection and lifecycle test service
+    architectures: [amd64, arm64]
+    container:
+      image: docker.io/library/caddy@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+      imagePullPolicy: IfNotPresent
+      restartPolicy: OnFailure
+      command: [caddy]
+      args:
+        - respond
+        - --listen
+        - :8080
+        - --body
+        - '$(DB_HOST)|$(DB_PORT)|$(DB_USER)|$(DB_PASSWORD)|$(TEST_MARKER)'
+      env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: exasol-database
+              key: host
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: exasol-database
+              key: port
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: exasol-database
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: exasol-database
+              key: password
+        - name: TEST_MARKER
+          value: initial-marker
+      ports:
+        - name: http
+          containerPort: 8080
+          hostPort: 18080
+          hostIP: 127.0.0.1
+  amd64-only:
+    description: Architecture selection test for AMD64
+    architectures: [amd64]
+    container:
+      image: docker.io/library/caddy@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+  arm64-only:
+    description: Architecture selection test for ARM64
+    architectures: [arm64]
+    container:
+      image: docker.io/library/caddy@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d

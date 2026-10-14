@@ -162,6 +162,14 @@ uv run --locked --no-build pytest -n 2 --dist loadgroup -rP --infra=local --exas
 Cloud tasks create billable resources. STACKIT live evidence is omitted until its
 deployment path works correctly.
 
+### Sidecar fixture catalog
+
+Live sidecar tests save their definition from `fixtures/sidecars/catalog.yaml`
+before enabling it, so they run against the ordinary launcher build. Its Caddy
+2.10.2 Alpine index digest covers Linux AMD64 and ARM64, and the service echoes
+randomly generated test credentials over loopback HTTP. Use it only with
+disposable deployments.
+
 ### Seeing the commands a test runs
 
 Live logging is on at `INFO`, which does not include the individual launcher
