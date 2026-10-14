@@ -12,7 +12,7 @@ Choose where the database will run:
   [System requirements](system-requirements.md) for platform-specific details.
 - For a cloud deployment, prepare an account with permission to provision compute resources. See
   the account setup guide for [AWS](cloud/aws.md), [Azure](cloud/azure.md),
-  [Exoscale](cloud/exoscale.md), or [STACKIT](cloud/stackit.md).
+  [Exoscale](cloud/exoscale.md), [STACKIT](cloud/stackit.md), or [IONOS Cloud](cloud/ionos.md).
 
 ## Install on macOS, Linux or Windows (WSL)
 

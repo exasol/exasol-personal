@@ -21,8 +21,8 @@ can reach them under `/buckets`. See
 ## Deployment
 
 One launcher-managed Exasol database and the resources that run it. A local deployment runs on your
-macOS, Linux, or Windows computer; a cloud deployment runs in your own AWS, Azure, Exoscale, or
-STACKIT account. See [Manage deployments](manage-deployments.md).
+macOS, Linux, or Windows computer; a cloud deployment runs in your own AWS, Azure, Exoscale,
+STACKIT, or IONOS Cloud account. See [Manage deployments](manage-deployments.md).
 
 ## Deployment directory
 
@@ -56,7 +56,7 @@ Exasol Launcher. It is also the name of the license the database is provided und
 ## Infrastructure preset
 
 A [preset](#preset) that provisions the local or cloud environment the database runs on. The
-built-in ones are `aws`, `azure`, `exoscale`, `stackit`, and `local`. See [Presets](presets.md).
+built-in ones are `aws`, `azure`, `exoscale`, `stackit`, `ionos`, and `local`. See [Presets](presets.md).
 
 ## Installation preset
 
