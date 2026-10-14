@@ -179,16 +179,17 @@ Initialize a new deployment directory
 
 	Tip: use "exasol presets" to discover and export presets.
 	
-	Available infrastructure presets: aws, azure, exoscale, local, stackit
+	Available infrastructure presets: aws, azure, exoscale, local, local-apple-container, stackit
 	Available installation presets: local, ubuntu
 
 	Compatibility matrix (embedded presets):
-	  infrastructure  local  ubuntu
-	  aws             no     yes   
-	  azure           no     yes   
-	  exoscale        no     yes   
-	  local           yes    no    
-	  stackit         no     yes
+	  infrastructure         local  ubuntu
+	  aws                    no     yes   
+	  azure                  no     yes   
+	  exoscale               no     yes   
+	  local                  yes    no    
+	  local-apple-container  yes    no    
+	  stackit                no     yes
 
 Usage:
 	exasol init <infra preset name-or-path> [install preset name-or-path] [flags]
@@ -265,6 +266,16 @@ Installation variable flags of preset `ubuntu`:
 
 ```text
 Infrastructure variable flags of preset `local`:
+      --cpu-count number      Number of CPUs for the Exasol Local VM (default: 2)
+      --data-size-gb number   VM runtime disk size in GB for Podman images and runtime state. (default: 100)
+      --memory-mb number      Memory in MB for the Exasol Local VM (default: 24576)
+      --ports string          Database port override for the local deployment
+```
+
+#### `exasol init local-apple-container` { data-toc-label="local-apple-container" }
+
+```text
+Infrastructure variable flags of preset `local-apple-container`:
       --ports string   Database port override for the local deployment
 ```
 
@@ -311,16 +322,17 @@ Initialize, apply configuration, and deploy Exasol in one step
 
 	Tip: use "exasol presets" to discover and export presets.
 	
-	Available infrastructure presets: aws, azure, exoscale, local, stackit
+	Available infrastructure presets: aws, azure, exoscale, local, local-apple-container, stackit
 	Available installation presets: local, ubuntu
 
 	Compatibility matrix (embedded presets):
-	  infrastructure  local  ubuntu
-	  aws             no     yes   
-	  azure           no     yes   
-	  exoscale        no     yes   
-	  local           yes    no    
-	  stackit         no     yes
+	  infrastructure         local  ubuntu
+	  aws                    no     yes   
+	  azure                  no     yes   
+	  exoscale               no     yes   
+	  local                  yes    no    
+	  local-apple-container  yes    no    
+	  stackit                no     yes
 
 Usage:
 	exasol install <infra preset name-or-path> [install preset name-or-path] [flags]
@@ -397,6 +409,16 @@ Installation variable flags of preset `ubuntu`:
 
 ```text
 Infrastructure variable flags of preset `local`:
+      --cpu-count number      Number of CPUs for the Exasol Local VM (default: 2)
+      --data-size-gb number   VM runtime disk size in GB for Podman images and runtime state. (default: 100)
+      --memory-mb number      Memory in MB for the Exasol Local VM (default: 24576)
+      --ports string          Database port override for the local deployment
+```
+
+#### `exasol install local-apple-container` { data-toc-label="local-apple-container" }
+
+```text
+Infrastructure variable flags of preset `local-apple-container`:
       --ports string   Database port override for the local deployment
 ```
 

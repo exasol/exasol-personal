@@ -55,6 +55,24 @@ change unless the option is present, unlike other confirmations, which an unatte
 automatically. Stopping or destroying an Exasol deployment leaves the shared Podman machine
 running.
 
+## Apple container runtime (experimental)
+
+On macOS Apple Silicon running macOS 15 or later, `local-apple-container` is an alternative local
+preset that runs the database through [Apple's `container`](https://github.com/apple/container)
+CLI instead of the managed virtual machine:
+
+```bash
+exasol install local-apple-container
+```
+
+If the `container` CLI is missing, the launcher offers to install it through Homebrew, or through
+Apple's signed installer package when Homebrew is not available, following the same approval and
+`--auto-approve` behavior as Windows's Podman installation.
+
+This preset does not support script language containers (UDFs), and does not restart the database
+automatically if it stops unexpectedly; run `exasol start` to recover it. It is not the default; use
+`local` unless you specifically want to try `container`.
+
 ## Next steps
 
 - [Connect to the database](connect.md).

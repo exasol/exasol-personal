@@ -8,8 +8,9 @@ Each deployment combines:
 - an infrastructure preset, which provisions a cloud or local environment; and
 - an installation preset, which installs and configures Exasol on that environment.
 
-The built-in infrastructure presets are `aws`, `azure`, `exoscale`, `stackit`, and `local`. The
-built-in `ubuntu` installation preset is selected by default where applicable.
+The built-in infrastructure presets are `aws`, `azure`, `exoscale`, `stackit`, `local`, and the
+experimental `local-apple-container` (see [Run Exasol locally](local-deployment.md)). The built-in
+`ubuntu` installation preset is selected by default where applicable.
 
 List the built-in presets with:
 

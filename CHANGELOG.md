@@ -6,6 +6,14 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Added an experimental **`local-apple-container`** infrastructure preset
+  (`exasol install local-apple-container`) for macOS Apple Silicon running macOS 15 or later. It
+  runs the local database through [Apple's `container`](https://github.com/apple/container) CLI
+  instead of the managed virtual machine `local` uses, installing `container` through Homebrew or
+  its signed installer package with the same approval and `--auto-approve` behavior as Windows's
+  Podman installation. It does not yet support script language containers (UDFs) or automatic
+  restart after an unexpected stop; `local` remains the default local preset.
+
 - Added a **CLI reference** page to the user documentation, listing every command and option of the
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each
   preset.
