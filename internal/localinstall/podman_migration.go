@@ -5,23 +5,11 @@ package localinstall
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
 )
-
-const podmanBindMountType = "bind"
-
-type podmanMount struct {
-	//nolint:tagliatelle // Podman inspect emits this exact field name.
-	Type string `json:"Type"`
-	//nolint:tagliatelle // Podman inspect emits this exact field name.
-	Source string `json:"Source"`
-	//nolint:tagliatelle // Podman inspect emits this exact field name.
-	Destination string `json:"Destination"`
-}
 
 func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 	ctx context.Context,
@@ -54,7 +42,7 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 		)
 	}
 
-	if err := install.runPodman(ctx, out, outErr, "stop", containerName); err != nil {
+	if err := install.client.Stop(ctx, containerName, out, outErr); err != nil {
 		return false, install.failureWithDiagnostics(
 			ctx, outErr, containerName,
 			fmt.Errorf(
@@ -76,13 +64,13 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 		)
 	}
 
-	if err := install.runPodman(
+	if err := install.client.CopyFrom(
 		ctx,
+		containerName,
+		nanoDataMountPath+"/.",
+		stagingDir,
 		out,
 		outErr,
-		"cp",
-		containerName+":"+nanoDataMountPath+"/.",
-		stagingDir,
 	); err != nil {
 		_ = install.environment.RemoveAll(ctx, stagingDir)
 
@@ -118,7 +106,9 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 		return false, fmt.Errorf("failed to remove empty Nano migration staging directory: %w", err)
 	}
 
-	if err := install.runPodman(ctx, out, outErr, "rm", containerName); err != nil {
+	if err := install.client.Remove(
+		ctx, containerName, false, out, outErr,
+	); err != nil {
 		return false, install.failureWithDiagnostics(ctx, outErr, containerName,
 			fmt.Errorf(
 				"migrated Nano data is installed at %s, but the legacy container %s "+
@@ -153,29 +143,14 @@ func (install *PodmanInstall) containerHasPersistentExaMount(
 	outErr io.Writer,
 	containerName string,
 ) (bool, error) {
-	output, err := install.runPodmanOutput(
-		ctx,
-		nil,
-		outErr,
-		"container",
-		"inspect",
-		"--format",
-		"{{json .Mounts}}",
-		containerName,
-	)
+	mounts, err := install.client.Mounts(ctx, containerName, outErr)
 	if err != nil {
 		return false, fmt.Errorf(
 			"failed to inspect mounts for Nano container %s: %w", containerName, err,
 		)
 	}
-	var mounts []podmanMount
-	if err := json.Unmarshal([]byte(output), &mounts); err != nil {
-		return false, fmt.Errorf(
-			"failed to parse mounts for Nano container %s: %w", containerName, err,
-		)
-	}
 	for _, mount := range mounts {
-		if mount.Destination == nanoDataMountPath && mount.Type == podmanBindMountType {
+		if mount.Destination == nanoDataMountPath && mount.BindMount() {
 			slog.Debug("Nano container has a bind-mounted /exa; skipping overlay migration",
 				"container", containerName, "source", mount.Source)
 
