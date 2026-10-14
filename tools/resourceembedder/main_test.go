@@ -701,7 +701,7 @@ func TestResolveResourceEmbed_RealPresetDirectoriesGlobToDeclaredMembers(t *test
 	if infra == nil {
 		t.Fatal("expected infrastructure-presets to embed for linux/amd64")
 	}
-	for _, want := range []string{"aws", "azure", "exoscale", "stackit", "local"} {
+	for _, want := range []string{"aws", "azure", "exoscale", "stackit", "ionos", "local"} {
 		if !slices.Contains(infra.Members, want) {
 			t.Fatalf("expected member %q, got %v", want, infra.Members)
 		}
