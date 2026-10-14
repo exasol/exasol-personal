@@ -30,12 +30,17 @@ MCP_READ_QUERY_TOOL = "execute_exasol_query"
 MCP_METADATA_TOOL = "list_exasol_tables_and_views"
 MCP_TEST_SCHEMA = "MCP_SIDECAR_TEST"
 MCP_TEST_VIEW = "ACTIVE_USER"
-MCP_TEST_QUERY = "SELECT USER_NAME FROM EXA_ALL_USERS WHERE USER_NAME = CURRENT_USER"
+MCP_TEST_VALUE = "MCP_DATA_SURVIVES"
+MCP_TEST_QUERY = "SELECT USER_NAME FROM MCP_SIDECAR_TEST.ACTIVE_USER"
+MCP_ROW_LIMIT = 1000
+MCP_ROW_LIMIT_QUERY = "SELECT LEVEL AS ID FROM DUAL CONNECT BY LEVEL <= 1001"
 MCP_TEST_METADATA_SQL = """
 CREATE SCHEMA MCP_SIDECAR_TEST;
 CREATE TABLE MCP_SIDECAR_TEST.USERS (USER_NAME VARCHAR(128));
+INSERT INTO MCP_SIDECAR_TEST.USERS VALUES ('MCP_DATA_SURVIVES');
 CREATE VIEW MCP_SIDECAR_TEST.ACTIVE_USER AS
 SELECT USER_NAME FROM MCP_SIDECAR_TEST.USERS;
+COMMIT;
 """
 
 
@@ -88,7 +93,7 @@ def set_host_port(service: SidecarDeployment, port: int) -> None:
 
 async def exercise_mcp(
     endpoint: str,
-) -> tuple[set[str], CallToolResult, CallToolResult]:
+) -> tuple[set[str], CallToolResult, CallToolResult, CallToolResult]:
     async with Client(f"{endpoint}/mcp") as client:
         tools = await client.list_tools()
         metadata_result = await client.call_tool(
@@ -97,10 +102,73 @@ async def exercise_mcp(
         query_result = await client.call_tool(
             MCP_READ_QUERY_TOOL, {"query": MCP_TEST_QUERY}
         )
-    return {tool.name for tool in tools.tools}, metadata_result, query_result
+        row_limit_result = await client.call_tool(
+            MCP_READ_QUERY_TOOL, {"query": MCP_ROW_LIMIT_QUERY}
+        )
+    return (
+        {tool.name for tool in tools.tools},
+        metadata_result,
+        query_result,
+        row_limit_result,
+    )
 
 
-def test_mcp_sidecar_connects_to_local_database(
+def result_text(result: CallToolResult) -> str:
+    return "\n".join(
+        block.text for block in result.content if isinstance(block, TextContent)
+    )
+
+
+def running_endpoint(status: dict[str, Any], host_port: int) -> str:
+    assert status["enabled"] is True
+    hosts = list(status["hosts"])
+    assert len(hosts) == 1
+    host = dict(hosts[0])
+    assert host["running"] is True
+    assert host["reconciliation"] == "complete"
+    assert host["endpoints"] == [{"ip": "127.0.0.1", "port": host_port}]
+    endpoint = dict(host["endpoints"][0])
+    return f"http://{endpoint['ip']}:{endpoint['port']}"
+
+
+def assert_mcp_interaction(endpoint: str) -> None:
+    health = wait_until_healthy(endpoint)
+    tool_names, metadata_result, query_result, row_limit_result = asyncio.run(
+        exercise_mcp(endpoint)
+    )
+
+    assert health["service"] == "exasol-mcp-server"
+    assert MCP_READ_QUERY_TOOL in tool_names
+    assert MCP_METADATA_TOOL in tool_names
+    assert "execute_exasol_write_query" not in tool_names
+    assert "set_exasol_preprocessor" not in tool_names
+    assert not any("bucketfs" in name for name in tool_names)
+    assert metadata_result.is_error is False
+    metadata_text = result_text(metadata_result)
+    assert MCP_TEST_SCHEMA in metadata_text
+    assert MCP_TEST_VIEW in metadata_text
+    assert query_result.is_error is False
+    query_text = result_text(query_result)
+    assert "USER_NAME" in query_text
+    assert MCP_TEST_VALUE in query_text
+    assert row_limit_result.is_error is False
+    row_limit_payload = json.loads(result_text(row_limit_result))
+    assert len(row_limit_payload["rows"]) == MCP_ROW_LIMIT
+
+
+def assert_mcp_unreachable(endpoint: str) -> None:
+    with requests.Session() as session:
+        session.trust_env = False
+        try:
+            response = session.get(f"{endpoint}/health", timeout=2)
+        except requests.RequestException:
+            return
+    pytest.fail(
+        f"MCP sidecar remained reachable after disable: HTTP {response.status_code}"
+    )
+
+
+def test_mcp_sidecar_complete_local_lifecycle(
     mcp_deployment: SidecarDeployment,
 ) -> None:
     # Given
@@ -110,36 +178,37 @@ def test_mcp_sidecar_connects_to_local_database(
     # When
     mcp_deployment.deployment.deploy()
     mcp_deployment.sql(MCP_TEST_METADATA_SQL)
-    status = mcp_deployment.sidecar("status")
-    hosts = list(status["hosts"])
-    assert len(hosts) == 1
-    host = dict(hosts[0])
-    endpoint = dict(host["endpoints"][0])
-    endpoint_url = f"http://{endpoint['ip']}:{endpoint['port']}"
-    health = wait_until_healthy(endpoint_url)
-    tool_names, metadata_result, query_result = asyncio.run(exercise_mcp(endpoint_url))
+    initial_status = mcp_deployment.sidecar("status")
     # Then
-    assert status["enabled"] is True
-    assert host["running"] is True
-    assert host["reconciliation"] == "complete"
-    assert host["endpoints"] == [{"ip": "127.0.0.1", "port": host_port}]
-    assert health["service"] == "exasol-mcp-server"
-    assert MCP_READ_QUERY_TOOL in tool_names
-    assert MCP_METADATA_TOOL in tool_names
-    assert "execute_exasol_write_query" not in tool_names
-    assert "set_exasol_preprocessor" not in tool_names
-    assert not any("bucketfs" in name for name in tool_names)
-    assert metadata_result.is_error is False
-    metadata_text = "\n".join(
-        block.text
-        for block in metadata_result.content
-        if isinstance(block, TextContent)
+    initial_endpoint = running_endpoint(initial_status, host_port)
+    assert_mcp_interaction(initial_endpoint)
+
+    # When
+    mcp_deployment.deployment.stop()
+    stopped_status = mcp_deployment.sidecar("status")
+    # Then
+    assert stopped_status["enabled"] is True
+    assert len(stopped_status["hosts"]) == 1
+    assert stopped_status["hosts"][0]["running"] is False
+    assert stopped_status["hosts"][0]["endpoints"] == []
+
+    # When
+    mcp_deployment.deployment.start()
+    restarted_status = mcp_deployment.sidecar("status")
+    # Then
+    restarted_endpoint = running_endpoint(restarted_status, host_port)
+    assert_mcp_interaction(restarted_endpoint)
+
+    # When
+    disabled_status = mcp_deployment.sidecar("disable")
+    assert_mcp_unreachable(restarted_endpoint)
+    preserved_data = mcp_deployment.sql(
+        "SELECT USER_NAME FROM MCP_SIDECAR_TEST.ACTIVE_USER;"
     )
-    assert MCP_TEST_SCHEMA in metadata_text
-    assert MCP_TEST_VIEW in metadata_text
-    assert query_result.is_error is False
-    query_text = "\n".join(
-        block.text for block in query_result.content if isinstance(block, TextContent)
-    )
-    assert "USER_NAME" in query_text
-    assert "SYS" in query_text
+    # Then
+    assert disabled_status["enabled"] is False
+    assert len(disabled_status["hosts"]) == 1
+    assert disabled_status["hosts"][0]["running"] is False
+    assert disabled_status["hosts"][0]["reconciliation"] == "complete"
+    assert disabled_status["hosts"][0]["endpoints"] == []
+    assert MCP_TEST_VALUE in preserved_data

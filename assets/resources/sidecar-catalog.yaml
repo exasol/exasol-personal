@@ -37,7 +37,7 @@ sidecars:
         - name: EXA_SSL_CERT_VALIDATION
           value: "false"
         - name: EXA_MCP_SETTINGS
-          value: '{"enable_read_query": true, "enable_summarize_table": true, "enable_query_profiling": true, "enable_preprocessor_tools": false, "enable_write_query": false, "enable_read_bucketfs": false, "enable_write_bucketfs": false, "views": {"enable": true}}'
+          value: '{"default_row_limit": 1000, "enable_read_query": true, "enable_summarize_table": true, "enable_query_profiling": true, "enable_preprocessor_tools": false, "enable_write_query": false, "enable_read_bucketfs": false, "enable_write_bucketfs": false, "views": {"enable": true}}'
       ports:
         - name: mcp
           containerPort: 4896
