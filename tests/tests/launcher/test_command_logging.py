@@ -19,15 +19,19 @@ def test_debug_command_logging_redacts_password_values(
     tmp_path: Path,
 ) -> None:
     # Given a command line with password-bearing arguments
-    def fake_popen(*_args: object, **_kwargs: object) -> object:
-        return object()
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    process = object()
+
+    def fake_popen(*args: object, **kwargs: object) -> object:
+        calls.append((args, kwargs))
+        return process
 
     monkeypatch.setattr(root_conftest, "_real_popen", fake_popen)
 
     # When the shared subprocess logger formats the command line
     caplog.set_level(logging.DEBUG, logger="tests.commands")
     deployment_dir = tmp_path / "deployment"
-    subprocess.Popen(
+    result = subprocess.Popen(
         [
             exasol_path,
             "init",
@@ -51,3 +55,8 @@ def test_debug_command_logging_redacts_password_values(
     assert "--db-password" in logged_text
     assert "--adminui-password" in logged_text
     assert "--password" in logged_text
+    assert result is process
+    assert len(calls) == 1
+    command = calls[0][0][0]
+    assert isinstance(command, list)
+    assert command[0] == exasol_path
