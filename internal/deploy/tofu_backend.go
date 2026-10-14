@@ -510,7 +510,6 @@ func (b *tofuBackend) Start(
 	if waitTimeoutSeconds <= 0 {
 		waitTimeoutSeconds = StartedDefaultTimeoutSeconds
 	}
-
 	waitCtx, cancel = context.WithTimeout(ctx, time.Duration(waitTimeoutSeconds)*time.Second)
 	defer cancel()
 
