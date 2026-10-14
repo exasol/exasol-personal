@@ -4,12 +4,14 @@
 package localinstall
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -116,8 +118,13 @@ func (install *AppleContainerInstall) Start(
 			ctx, outErr, containerName, fmt.Errorf("failed to resolve Nano image: %w", err),
 		)
 	}
+	loadablePath, cleanupLoadablePath, err := prepareLoadableOCIArchive(imagePath.RuntimePath)
+	if err != nil {
+		return install.failureWithDiagnostics(ctx, outErr, containerName, err)
+	}
+	defer cleanupLoadablePath()
 	loadOutput, err := install.runContainerOutput(
-		ctx, out, outErr, "image", "load", "--input", imagePath.RuntimePath,
+		ctx, out, outErr, "image", "load", "--input", loadablePath,
 	)
 	if err != nil {
 		return install.failureWithDiagnostics(ctx, outErr, containerName,
@@ -334,6 +341,83 @@ func (install *AppleContainerInstall) removeStaleNanoTLSFiles(
 		if err := install.environment.RemoveFile(ctx, path); err != nil {
 			return fmt.Errorf("failed to remove stale Nano TLS file %s: %w", path, err)
 		}
+	}
+
+	return nil
+}
+
+// prepareLoadableOCIArchive returns a path `container image load` can read.
+//
+// The pinned Nano image archive is produced by resolving a docker:// source
+// into an OCI-layout tar, whose directory entries (blobs/, blobs/sha256/)
+// carry mode 0600: readable and writable but not executable, so a directory
+// without the execute bit cannot be traversed. Podman's own loader tolerates
+// this, but Apple's `container image load` (and the standard `tar` command)
+// do not, and fail with a permission error on the first blob inside
+// blobs/sha256. This repacks the archive into a temporary file with the
+// owner execute bit added to every directory entry, changing nothing else.
+//
+// The returned cleanup function removes the temporary directory and must be
+// called once the caller is done with the returned path.
+func prepareLoadableOCIArchive(sourcePath string) (string, func(), error) {
+	stagingDir, err := os.MkdirTemp("", "exasol-nano-image-*")
+	if err != nil {
+		return "", nil, fmt.Errorf(
+			"failed to create a staging directory for the Nano image archive: %w", err,
+		)
+	}
+	cleanup := func() { _ = os.RemoveAll(stagingDir) }
+
+	destPath := filepath.Join(stagingDir, "nano-loadable.tar")
+	if err := repackWithTraversableDirectories(sourcePath, destPath); err != nil {
+		cleanup()
+
+		return "", nil, err
+	}
+
+	return destPath, cleanup, nil
+}
+
+func repackWithTraversableDirectories(sourcePath, destPath string) error {
+	source, err := os.Open(sourcePath) //nolint:gosec // resolved runtime artifact path
+	if err != nil {
+		return fmt.Errorf("failed to open Nano image archive %s: %w", sourcePath, err)
+	}
+	defer func() { _ = source.Close() }()
+
+	dest, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("failed to create a loadable Nano image archive: %w", err)
+	}
+	defer func() { _ = dest.Close() }()
+
+	const ownerExecuteBit = 0o100
+
+	reader := tar.NewReader(source)
+	writer := tar.NewWriter(dest)
+	for {
+		header, err := reader.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read Nano image archive %s: %w", sourcePath, err)
+		}
+		if header.Typeflag == tar.TypeDir {
+			header.Mode |= ownerExecuteBit
+		}
+		if err := writer.WriteHeader(header); err != nil {
+			return fmt.Errorf("failed to write loadable Nano image archive header: %w", err)
+		}
+		if header.Typeflag == tar.TypeReg {
+			if _, err := io.Copy(writer, reader); err != nil { //nolint:gosec // bounded by the source archive's own size
+				return fmt.Errorf("failed to copy Nano image archive contents: %w", err)
+			}
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("failed to finalize loadable Nano image archive: %w", err)
 	}
 
 	return nil

@@ -4,6 +4,7 @@
 package localinstall
 
 import (
+	"archive/tar"
 	"context"
 	"errors"
 	"os"
@@ -114,23 +115,33 @@ func TestAppleContainerInstallStart_StartsFreshDatabaseAndBootstraps(t *testing.
 	if err := install.Start(context.Background(), nil, nil, startConfig); err != nil {
 		t.Fatalf("expected Start to succeed, got %v", err)
 	}
-	// The resolved image path may differ from fixture.imagePath by a
-	// /private prefix on macOS, where TMPDIR is reached through a symlink.
-	resolvedImagePath, err := filepath.EvalSymlinks(fixture.imagePath)
-	if err != nil {
-		t.Fatalf("failed to resolve fixture image path: %v", err)
+	log := readAppleContainerCommandLog(t, fixture.logPath)
+	if len(log) != 4 {
+		t.Fatalf("expected 4 commands, got %#v", log)
 	}
-	assertAppleContainerCommandLog(t, fixture.logPath, []string{
-		"<container><inspect><" + testAppleContainerName + ">",
-		"<container><image><load><--input><" + resolvedImagePath + ">",
-		"<sync>",
-		"<container><run><-d><--name><" + testAppleContainerName + "><--shm-size=512M><--ulimit><nproc=unlimited>" +
-			"<-p><127.0.0.1:28563:8563><-v><" + startConfig.DataDir + ":/exa>" +
-			"<-v><" + startConfig.BootstrapDir + ":/run/secrets:ro>" +
-			"<" + testAppleContainerLoadedImage + "><init>" +
-			"<params=maxConnectionsLicenseLimit=20>" +
-			"<sys_password_file=/run/secrets/sys_password><VERSION_CHECK_ENABLED=0>",
-	})
+	if log[0] != "<container><inspect><"+testAppleContainerName+">" {
+		t.Errorf("unexpected inspect command %q", log[0])
+	}
+	// The repacked image path is a fresh staging file, not fixture.imagePath:
+	// Start repacks the archive before loading it (see
+	// repackWithTraversableDirectories) so only the directory and suffix
+	// are asserted here.
+	if !strings.Contains(log[1], "<container><image><load><--input></") ||
+		!strings.HasSuffix(log[1], ".tar>") {
+		t.Errorf("unexpected image load command %q", log[1])
+	}
+	if log[2] != "<sync>" {
+		t.Errorf("unexpected sync command %q", log[2])
+	}
+	expectedRun := "<container><run><-d><--name><" + testAppleContainerName + "><--shm-size=512M><--ulimit><nproc=unlimited>" +
+		"<-p><127.0.0.1:28563:8563><-v><" + startConfig.DataDir + ":/exa>" +
+		"<-v><" + startConfig.BootstrapDir + ":/run/secrets:ro>" +
+		"<" + testAppleContainerLoadedImage + "><init>" +
+		"<params=maxConnectionsLicenseLimit=20>" +
+		"<sys_password_file=/run/secrets/sys_password><VERSION_CHECK_ENABLED=0>"
+	if log[3] != expectedRun {
+		t.Errorf("expected run command %q, got %q", expectedRun, log[3])
+	}
 	passwordPath := filepath.Join(startConfig.BootstrapDir, nanoBootstrapPasswordFile)
 	data, err := os.ReadFile(passwordPath) //nolint:gosec // test-owned fixture path
 	if err != nil {
@@ -257,9 +268,7 @@ func newAppleContainerInstallFixture(
 	}
 	logPath := filepath.Join(root, "container.log")
 	imagePath := filepath.Join(root, "nano-image.tar")
-	if err := os.WriteFile(imagePath, []byte("image"), 0o600); err != nil {
-		t.Fatalf("failed to write fake image archive: %v", err)
-	}
+	writeFakeOCIArchive(t, imagePath)
 	manager := runtimeartifacts.NewResourceManagerForPlatform(
 		runtimeartifacts.ResourceSpec{
 			exasolNanoImageResourceID: {
@@ -347,6 +356,44 @@ func assertAppleContainerCommandLog(t *testing.T, path string, expected []string
 		if actual[index] != expected[index] {
 			t.Fatalf("expected command %d to be %q, got %q", index, expected[index], actual[index])
 		}
+	}
+}
+
+// writeFakeOCIArchive writes a minimal OCI-layout tar whose directory entry
+// carries mode 0600, the way the pinned Nano image archive's docker://
+// source actually produces it (see repackWithTraversableDirectories). This
+// is a regression fixture for that real, observed failure: without the
+// repack step, `container image load` (and the standard `tar` command)
+// cannot traverse a directory lacking the owner execute bit.
+func writeFakeOCIArchive(t *testing.T, path string) {
+	t.Helper()
+	file, err := os.Create(path) //nolint:gosec // test-owned fixture path
+	if err != nil {
+		t.Fatalf("failed to create fake image archive: %v", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	writer := tar.NewWriter(file)
+	if err := writer.WriteHeader(&tar.Header{
+		Name:     "blobs/",
+		Typeflag: tar.TypeDir,
+		Mode:     0o600,
+	}); err != nil {
+		t.Fatalf("failed to write fake image archive directory header: %v", err)
+	}
+	if err := writer.WriteHeader(&tar.Header{
+		Name:     "oci-layout",
+		Typeflag: tar.TypeReg,
+		Mode:     0o600,
+		Size:     int64(len("fake-oci-layout")),
+	}); err != nil {
+		t.Fatalf("failed to write fake image archive file header: %v", err)
+	}
+	if _, err := writer.Write([]byte("fake-oci-layout")); err != nil {
+		t.Fatalf("failed to write fake image archive file content: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("failed to finalize fake image archive: %v", err)
 	}
 }
 
