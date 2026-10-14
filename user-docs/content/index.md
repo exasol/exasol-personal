@@ -1,7 +1,7 @@
 # Exasol Personal
 
 Exasol Personal gives you a full Exasol database for personal use. Run it locally on macOS, Linux,
-or Windows, or deploy it into your own AWS, Azure, Exoscale, or STACKIT account.
+or Windows, or deploy it into your own AWS, Azure, Exoscale, STACKIT, or IONOS Cloud account.
 
 The Exasol Launcher (`exasol`) installs and manages the database from the command line. It can
 provision infrastructure, start and stop deployments, display connection details, and open SQL or
