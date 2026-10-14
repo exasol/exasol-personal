@@ -288,7 +288,7 @@ def test_ports_override_sets_db_port(
     assert "DUMMY" in proc.stdout
 
     assert _accepts_connection("127.0.0.1", custom_db_port)
-    for address in _non_loopback_ipv4_addresses():
+    for address in ["::1", *_non_loopback_ipv4_addresses()]:
         assert not _accepts_connection(address, custom_db_port), address
 
 

@@ -428,21 +428,29 @@ def test_script_body_with_semicolons_ends_on_lone_slash(
 ) -> None:
     """A CREATE SCRIPT body keeps its semicolons until a line holding only `/`."""
     # Given a script definition whose body contains semicolons
-    statements = _semicolon_script_statements(f"slash_{mode}_{uuid.uuid4().hex[:8]}")
+    schema = f"slash_{mode}_{uuid.uuid4().hex[:8]}"
+    statements = _semicolon_script_statements(schema)
 
     # When it is run through the given input mode
-    if mode == "command":
-        proc = shared_live_deployment.connect(
-            "--command", statements, capture_output=True
+    try:
+        if mode == "command":
+            proc = shared_live_deployment.connect(
+                "--command", statements, capture_output=True
+            )
+        elif mode == "file":
+            sql_file = tmp_path / "script.sql"
+            sql_file.write_text(statements)
+            proc = shared_live_deployment.connect(
+                "--file", str(sql_file), capture_output=True
+            )
+        else:
+            proc = shared_live_deployment.connect(input=statements, capture_output=True)
+    finally:
+        shared_live_deployment.connect(
+            "--command",
+            f"DROP SCHEMA IF EXISTS {schema} CASCADE;",
+            capture_output=True,
         )
-    elif mode == "file":
-        sql_file = tmp_path / "script.sql"
-        sql_file.write_text(statements)
-        proc = shared_live_deployment.connect(
-            "--file", str(sql_file), capture_output=True
-        )
-    else:
-        proc = shared_live_deployment.connect(input=statements, capture_output=True)
 
     # Then the script was created as one unit and returns its full value
     assert proc.returncode == 0, proc.stderr
