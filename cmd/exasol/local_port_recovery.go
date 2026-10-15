@@ -22,7 +22,19 @@ const localRetryGuidance = "The deployment is stopped, so you can fix the report
 	"  exasol config set --ports db:<available-port>\n" +
 	"  exasol config set --ports auto"
 
+const sidecarPortGuidance = "Choose a free `hostPort` for the reported sidecar in " +
+	"the deployment's sidecars.yaml, then retry:\n" +
+	"  exasol start"
+
 func addDeploymentRecoveryCallToAction(err error) {
+	if errors.Is(err, deploy.ErrSidecarRestartRequired) {
+		addTerminalCallToAction(sidecarRestartGuidance)
+	}
+
+	if errors.Is(err, deploy.ErrSidecarPortUnavailable) {
+		addTerminalCallToAction(sidecarPortGuidance)
+	}
+
 	if recovery, ok := errors.AsType[*deploy.LocalPortRecoveryError](err); ok {
 		addTerminalCallToAction(fmt.Sprintf(
 			"Select a replacement port for local service %q, then retry:\n"+
