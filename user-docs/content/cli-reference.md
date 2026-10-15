@@ -28,7 +28,7 @@ Getting Started:
 	To create and run an Exasol deployment, run "exasol install <infra preset name-or-path>".
 	This single command initializes your deployment directory, prepares the selected infrastructure,
 	and installs the database. It uses either a built-in infrastructure preset or a custom preset
-	at a path you provide. Built-in presets are: local, aws, azure, exoscale, and stackit.
+	at a path you provide. Built-in presets are: local, aws, azure, exoscale, stackit, and ionos.
 
 	Quick start: exasol install local
 	Deployment lifecycle: install -> status -> connect -> stop -> start
@@ -179,7 +179,7 @@ Initialize a new deployment directory
 
 	Tip: use "exasol presets" to discover and export presets.
 	
-	Available infrastructure presets: aws, azure, exoscale, local, stackit
+	Available infrastructure presets: aws, azure, exoscale, ionos, local, stackit
 	Available installation presets: local, ubuntu
 
 	Compatibility matrix (embedded presets):
@@ -187,6 +187,7 @@ Initialize a new deployment directory
 	  aws             no     yes   
 	  azure           no     yes   
 	  exoscale        no     yes   
+	  ionos           no     yes   
 	  local           yes    no    
 	  stackit         no     yes
 
@@ -261,6 +262,26 @@ Installation variable flags of preset `ubuntu`:
       --no-db-version-check     Disable the daily database version check (C4). (default: false)
 ```
 
+#### `exasol init ionos` { data-toc-label="ionos" }
+
+```text
+Infrastructure variable flags of preset `ionos`:
+      --adminui-password string   Optional Admin UI password. If empty, a random password is generated (default: "")
+      --cluster-size number       Number of nodes in the cluster (use 1 for single-node deployment); each node gets its own server, data volume and reserved public IP (default: 1)
+      --cpu-family string         CPU family for the servers; must be offered in the selected location (e.g. AMD_EPYC, INTEL_XEON, INTEL_ICELAKE) (default: "AMD_EPYC")
+      --data-volume-size number   Size in GB for the database data volume (default: 100)
+      --datacenter-id string      Optional ID of an existing IONOS datacenter to deploy into. If empty, a datacenter is created per deployment in --location (default: "")
+      --db-password string        Optional database password. If empty, a random password is generated (default: "")
+      --disk-type string          Volume type for both OS and data volumes (SSD Standard, SSD Premium, HDD) (default: "SSD Premium")
+      --instance-type string      Dedicated core server size per node as <cores>x<ram_gb> (e.g. 4x16, 8x32); must fit the location and contract limits (default: "4x16")
+      --location string           IONOS Cloud location to deploy into (e.g. de/fra, de/txl); ignored when --datacenter-id is set (default: "de/fra")
+      --os-volume-size number     Size in GB for the OS/root volume (default: 100)
+
+Installation variable flags of preset `ubuntu`:
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --no-db-version-check     Disable the daily database version check (C4). (default: false)
+```
+
 #### `exasol init local` { data-toc-label="local" }
 
 ```text
@@ -311,7 +332,7 @@ Initialize, apply configuration, and deploy Exasol in one step
 
 	Tip: use "exasol presets" to discover and export presets.
 	
-	Available infrastructure presets: aws, azure, exoscale, local, stackit
+	Available infrastructure presets: aws, azure, exoscale, ionos, local, stackit
 	Available installation presets: local, ubuntu
 
 	Compatibility matrix (embedded presets):
@@ -319,6 +340,7 @@ Initialize, apply configuration, and deploy Exasol in one step
 	  aws             no     yes   
 	  azure           no     yes   
 	  exoscale        no     yes   
+	  ionos           no     yes   
 	  local           yes    no    
 	  stackit         no     yes
 
@@ -387,6 +409,26 @@ Infrastructure variable flags of preset `exoscale`:
       --os-volume-size number     Size in GB for the OS/root volume (default: 100)
       --s3-archive-enabled        Enable remote archive/backup integration: creates SOS bucket, IAM API key, and registers the archive volume. (default: true)
       --zone string               Exoscale zone to deploy into (e.g. ch-gva-2, de-fra-1, de-muc-1, at-vie-1, at-vie-2, bg-sof-1). Set via TF_VAR_zone environment variable. (default: "ch-gva-2")
+
+Installation variable flags of preset `ubuntu`:
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --no-db-version-check     Disable the daily database version check (C4). (default: false)
+```
+
+#### `exasol install ionos` { data-toc-label="ionos" }
+
+```text
+Infrastructure variable flags of preset `ionos`:
+      --adminui-password string   Optional Admin UI password. If empty, a random password is generated (default: "")
+      --cluster-size number       Number of nodes in the cluster (use 1 for single-node deployment); each node gets its own server, data volume and reserved public IP (default: 1)
+      --cpu-family string         CPU family for the servers; must be offered in the selected location (e.g. AMD_EPYC, INTEL_XEON, INTEL_ICELAKE) (default: "AMD_EPYC")
+      --data-volume-size number   Size in GB for the database data volume (default: 100)
+      --datacenter-id string      Optional ID of an existing IONOS datacenter to deploy into. If empty, a datacenter is created per deployment in --location (default: "")
+      --db-password string        Optional database password. If empty, a random password is generated (default: "")
+      --disk-type string          Volume type for both OS and data volumes (SSD Standard, SSD Premium, HDD) (default: "SSD Premium")
+      --instance-type string      Dedicated core server size per node as <cores>x<ram_gb> (e.g. 4x16, 8x32); must fit the location and contract limits (default: "4x16")
+      --location string           IONOS Cloud location to deploy into (e.g. de/fra, de/txl); ignored when --datacenter-id is set (default: "de/fra")
+      --os-volume-size number     Size in GB for the OS/root volume (default: 100)
 
 Installation variable flags of preset `ubuntu`:
       --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)

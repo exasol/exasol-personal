@@ -6,6 +6,13 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Added IONOS Cloud as a cloud provider. `exasol install ionos` deploys Exasol Personal on dedicated
+  core servers in your IONOS Cloud contract, authenticated with an API token from `IONOS_TOKEN`.
+  Nodes are sized as `<cores>x<ram_gb>` with `--instance-type`, and `--datacenter-id` deploys into an
+  existing data center instead of creating one.
+
+  Example: `exasol install ionos --instance-type 8x32 --data-volume-size 200`
+
 - Added a **CLI reference** page to the user documentation, listing every command and option of the
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each
   preset.

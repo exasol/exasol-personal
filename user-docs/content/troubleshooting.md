@@ -97,7 +97,7 @@ connection details.
 The launcher uses the credentials your provider's CLI or environment already supplies, and reports
 the provider's own authentication error. Confirm the credentials outside the launcher, then run the
 installation again. See the setup guide for [AWS](cloud/aws.md), [Azure](cloud/azure.md),
-[Exoscale](cloud/exoscale.md), or [STACKIT](cloud/stackit.md).
+[Exoscale](cloud/exoscale.md), [STACKIT](cloud/stackit.md), or [IONOS Cloud](cloud/ionos.md).
 
 ### Azure reports resource-provider registration errors
 
