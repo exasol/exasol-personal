@@ -194,6 +194,7 @@ type copyFailingEnvironment struct {
 
 func (environment *copyFailingEnvironment) Run(
 	ctx context.Context,
+	env map[string]string,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
 	command ...string,
@@ -205,7 +206,7 @@ func (environment *copyFailingEnvironment) Run(
 		}
 	}
 
-	return environment.ExecutionEnvironment.Run(ctx, stdin, stdout, stderr, command...)
+	return environment.ExecutionEnvironment.Run(ctx, env, stdin, stdout, stderr, command...)
 }
 
 func newTestMacDataMigration(t *testing.T) *macDataMigration {

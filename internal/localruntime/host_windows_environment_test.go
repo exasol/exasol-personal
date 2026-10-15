@@ -352,7 +352,7 @@ func TestWindowsExecutionEnvironment_ResolvesPodmanMissingFromProcessPath(t *tes
 	environment := windowsHostEnvironmentPreparer{}.NewExecutionEnvironment(nil)
 
 	if err := environment.Run(
-		context.Background(), nil, nil, nil, "podman", "rm", "--force", "some-container",
+		context.Background(), nil, nil, nil, nil, "podman", "rm", "--force", "some-container",
 	); err != nil {
 		t.Fatalf("Run() unexpected error: %v", err)
 	}

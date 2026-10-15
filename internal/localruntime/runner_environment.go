@@ -36,17 +36,22 @@ func (environment *runnerExecutionEnvironment) Sync(
 	ctx context.Context,
 	stdout, stderr io.Writer,
 ) error {
-	return environment.Run(ctx, nil, stdout, stderr, "sync")
+	return environment.Run(ctx, nil, nil, stdout, stderr, "sync")
 }
 
 func (environment *runnerExecutionEnvironment) Run(
 	ctx context.Context,
+	env map[string]string,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
 	command ...string,
 ) error {
 	if len(command) == 0 {
 		return errors.New("execution environment command is empty")
+	}
+	command, stdin, err := localinstall.CommandEnvironment(env, stdin, command)
+	if err != nil {
+		return err
 	}
 	args := make(
 		[]string, 0, len(command)+runnerCommandPrefixArgumentCount,
@@ -67,7 +72,7 @@ func (environment *runnerExecutionEnvironment) PathExists(
 	runtimePath string,
 ) (bool, error) {
 	err := environment.Run(
-		ctx, nil, nil, nil,
+		ctx, nil, nil, nil, nil,
 		"sh", "-c", `[ -e "$1" ] || [ -L "$1" ]`, "sh", runtimePath,
 	)
 	if err == nil {
@@ -91,7 +96,7 @@ func (environment *runnerExecutionEnvironment) DirectoryHasEntries(
 
 	var output bytes.Buffer
 	if err := environment.Run(
-		ctx, nil, &output, nil,
+		ctx, nil, nil, &output, nil,
 		"find", directory, "-mindepth", "1", "-maxdepth", "1", "-print", "-quit",
 	); err != nil {
 		return false, fmt.Errorf("failed to inspect runtime directory %s: %w", directory, err)
@@ -106,7 +111,7 @@ func (environment *runnerExecutionEnvironment) MkdirAll(
 	mode os.FileMode,
 ) error {
 	return environment.Run(
-		ctx, nil, nil, nil,
+		ctx, nil, nil, nil, nil,
 		// Leaving an existing directory's mode alone keeps this usable on the
 		// host share's mount point, which the guest cannot chmod.
 		"sh", "-c", `umask 0; [ -d "$2" ] || { mkdir -p -- "$2" && chmod "$1" "$2"; }`,
@@ -121,7 +126,7 @@ func (environment *runnerExecutionEnvironment) MkdirTemp(
 	template := runtimeTempTemplate(pattern)
 	var output bytes.Buffer
 	if err := environment.Run(
-		ctx, nil, &output, nil, "mktemp", "-d", path.Join(parent, template),
+		ctx, nil, nil, &output, nil, "mktemp", "-d", path.Join(parent, template),
 	); err != nil {
 		return "", fmt.Errorf("failed to create runtime temporary directory: %w", err)
 	}
@@ -137,7 +142,7 @@ func (environment *runnerExecutionEnvironment) RemoveFile(
 	ctx context.Context,
 	runtimePath string,
 ) error {
-	return environment.Run(ctx, nil, nil, nil, "rm", "-f", "--", runtimePath)
+	return environment.Run(ctx, nil, nil, nil, nil, "rm", "-f", "--", runtimePath)
 }
 
 func (environment *runnerExecutionEnvironment) RemoveDir(
@@ -145,7 +150,7 @@ func (environment *runnerExecutionEnvironment) RemoveDir(
 	runtimePath string,
 ) error {
 	return environment.Run(
-		ctx, nil, nil, nil,
+		ctx, nil, nil, nil, nil,
 		"sh", "-c", `[ ! -e "$1" ] || rmdir -- "$1"`, "sh", runtimePath,
 	)
 }
@@ -154,14 +159,14 @@ func (environment *runnerExecutionEnvironment) RemoveAll(
 	ctx context.Context,
 	runtimePath string,
 ) error {
-	return environment.Run(ctx, nil, nil, nil, "rm", "-rf", "--", runtimePath)
+	return environment.Run(ctx, nil, nil, nil, nil, "rm", "-rf", "--", runtimePath)
 }
 
 func (environment *runnerExecutionEnvironment) Rename(
 	ctx context.Context,
 	oldPath, newPath string,
 ) error {
-	return environment.Run(ctx, nil, nil, nil, "mv", "--", oldPath, newPath)
+	return environment.Run(ctx, nil, nil, nil, nil, "mv", "--", oldPath, newPath)
 }
 
 func (environment *runnerExecutionEnvironment) WriteFileAtomically(
@@ -187,7 +192,7 @@ mv -- "$temporary" "$target"
 trap - EXIT`
 
 	if err := environment.Run(
-		ctx,
+		ctx, nil,
 		bytes.NewReader(data),
 		nil,
 		nil,
