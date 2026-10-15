@@ -33,22 +33,35 @@ does not impose an artificial data-size limit.
 
 ## 🚀 Get started
 
-On macOS, Linux, and Windows (WSL), install the launcher with:
+To install and run Exasol Personal locally on macOS, Linux, or Windows, follow these steps.
+
+Install the launcher:
+
 ```bash
 curl https://downloads.exasol.com/exasol-personal/installer.sh | sh
 ```
 
-For a quick start and a general overview of the available commands, type:
+The installer places the `exasol` binary in `~/.local/bin`. If that directory is not in `PATH`,
+follow the instructions printed by the installer.
+
+Install and start the database:
 
 ```bash
-exasol help
+exasol install local
 ```
 
-If you get a `command not found` error, add `~/.local/bin` to your `PATH`.
+Connect to your database:
 
-For next steps, read the [user documentation](https://exasol.github.io/exasol-personal/latest/).
-It also covers the system requirements and supported deployment targets, as well as tutorials,
-command guidance, and troubleshooting information.
+```bash
+exasol connect
+```
+
+Type any SQL statement terminated by `;`. For example, test your connection with `SELECT 1;`.
+See the [Exasol SQL reference](https://docs.exasol.com/db/latest/sql_reference.htm) for the
+full syntax.
+
+For next steps or instructions on how to install Exasol Personal on your cloud infrastructure,
+read the [user documentation](https://exasol.github.io/exasol-personal/latest/).
 
 If you work with AI coding agents, the
 [Exasol Personal Local Starter Kit](https://github.com/exasol-labs/exasol-personal-local-starterkit)
