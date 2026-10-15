@@ -4,9 +4,20 @@
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
+from typing import Final
 
-from .helpers import first_infrastructure_preset_id_or_skip, run_command
+import pytest
+
+from .helpers import (
+    first_infrastructure_preset_id_or_skip,
+    record_running_local_deployment,
+    run_command,
+)
+
+DEFAULT_STATUS_TIMEOUT_SECONDS: Final = 5
+UNRESPONSIVE_DEPLOYMENT_COUNT: Final = 3
 
 
 def _env_with_home(home: Path) -> dict[str, str]:
@@ -140,6 +151,58 @@ def test_deployments_list_reports_same_status_as_status_command(
     assert staging["infrastructure"]
     assert staging["installation"]
     assert "active" not in staging
+
+
+@pytest.mark.openspec("deployment-directory-listing", "deployment-status-timeout")
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX fake Podman executable")
+def test_deployments_list_bounds_status_checks_and_runs_them_concurrently(
+    exasol_path: str,
+    tmp_path: Path,
+    unresponsive_db_port: int,
+    hanging_podman_env: dict[str, str],
+) -> None:
+    # Given several named deployments whose runtime and database never answer
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {**_env_with_home(home), "PATH": hanging_podman_env["PATH"]}
+    launcher = str(Path(exasol_path).resolve())
+    names = [f"hung-{index}" for index in range(UNRESPONSIVE_DEPLOYMENT_COUNT)]
+    for name in names:
+        run_command(
+            [
+                launcher,
+                "init",
+                "local",
+                "--deployment",
+                name,
+                "--no-launcher-version-check",
+            ],
+            env=env,
+        )
+        record_running_local_deployment(
+            home / ".exasol" / "personal" / "deployments" / name,
+            unresponsive_db_port,
+        )
+
+    # When deployments list is invoked
+    started = time.monotonic()
+    result = subprocess.run(
+        [launcher, "deployments", "list", "--json"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=120,
+    )
+    elapsed = time.monotonic() - started
+
+    # Then every deployment is reported, and the whole call waits about one
+    # status bound rather than one bound per deployment
+    entries = json.loads(result.stdout)
+    assert sorted(entry["name"] for entry in entries) == names
+    assert all(entry["status"] for entry in entries)
+    assert elapsed >= DEFAULT_STATUS_TIMEOUT_SECONDS - 1
+    assert elapsed < 2 * DEFAULT_STATUS_TIMEOUT_SECONDS
 
 
 def test_deployments_list_does_not_accept_deployment_dir_or_deployment(

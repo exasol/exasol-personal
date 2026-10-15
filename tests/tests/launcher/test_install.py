@@ -3,12 +3,16 @@
 
 import json
 import platform
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from subprocess import CalledProcessError
 from typing import Final
 
 import pytest
+
+from tests.testcase_helpers import windows_podman_path
 
 from .helpers import (
     compatible_preset_pair_or_skip,
@@ -322,6 +326,46 @@ def test_init_local_host_configuration_omits_vm_sizing(
     assert int(raw_port) > 0
 
 
+@pytest.mark.openspec("exasol-local-deployment")
+@pytest.mark.skipif(
+    not IS_HOST_LOCAL_PLATFORM,
+    reason="shell access is refused only by the direct-host local runtime",
+)
+@pytest.mark.parametrize(
+    ("shell", "kind"), [("host", "host shells"), ("container", "container shells")]
+)
+def test_local_shell_is_refused_on_direct_host_platforms(
+    exasol_path: str, tmp_path: Path, shell: str, kind: str
+) -> None:
+    # Given an initialized local deployment on a direct-host platform
+    deployment_dir = tmp_path / "deployment"
+    run_command(
+        [
+            exasol_path,
+            "init",
+            "local",
+            "--deployment-dir",
+            str(deployment_dir),
+            "--no-launcher-version-check",
+        ]
+    )
+
+    # When a shell is requested
+    result = subprocess.run(
+        [exasol_path, "shell", shell, "--deployment-dir", str(deployment_dir)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+
+    # Then it fails, naming the platform and stating the shell is unsupported
+    assert result.returncode != 0
+    assert platform.system().lower() in result.stderr
+    assert f"does not support {kind}" in result.stderr
+
+
 @pytest.mark.skipif(
     not IS_MACOS_APPLE_SILICON,
     reason="local memory sizing applies only to the macOS VM runtime",
@@ -464,3 +508,45 @@ def test_windows_lifecycle_flags_are_accepted(
 
     # Then parsing succeeded
     assert result.returncode == 0
+
+
+@pytest.mark.openspec("windows-host-runtime-environment")
+@pytest.mark.skipif(
+    not IS_WINDOWS_LOCAL_PLATFORM,
+    reason="Podman host preparation is approval-gated only on Windows",
+)
+def test_install_local_without_terminal_refuses_host_preparation(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    """A run with no terminal and no --auto-approve must not install Podman."""
+    # Given a Windows host where Podman is absent and winget could install it
+    if shutil.which("podman") is not None or windows_podman_path().is_file():
+        pytest.skip("Podman is already installed, so no host preparation is needed")
+    if shutil.which("winget") is None:
+        pytest.skip("winget is unavailable, so the approval step is never reached")
+    deployment_dir = tmp_path / "deployment"
+
+    # When install runs without a terminal and without --auto-approve
+    result = subprocess.run(
+        [
+            exasol_path,
+            "install",
+            "local",
+            "--deployment-dir",
+            str(deployment_dir),
+            "--no-launcher-version-check",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+
+    # Then it fails, explaining that approval is required and how to give it
+    assert result.returncode != 0
+    assert "requires approval" in result.stderr
+    assert "--auto-approve" in result.stderr
+
+    # And Podman was not installed
+    assert not windows_podman_path().is_file()

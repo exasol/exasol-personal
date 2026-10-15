@@ -143,13 +143,23 @@ def test_import_csv_uses_local_filesystem(
     )
 
 
+def _parquet_rows_statements(schema: str) -> list[str]:
+    return [
+        f"CREATE SCHEMA {schema};",
+        f"OPEN SCHEMA {schema};",
+        'CREATE TABLE ParquetRows ("id" BIGINT, "name" VARCHAR(32));',
+    ]
+
+
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.openspec("local-parquet-import")
+@pytest.mark.parametrize("mode", ["stdin", "file"])
 def test_import_parquet_uses_local_filesystem(
     shared_live_deployment: Deployment,
     tmp_path: Path,
+    mode: str,
 ) -> None:
     """IMPORT INTO ... FROM LOCAL PARQUET must read a client-local file."""
     # ========== GIVEN ==========
@@ -158,19 +168,24 @@ def test_import_parquet_uses_local_filesystem(
     local_only.parent.mkdir()
     shutil.copy(_PARQUET_FIXTURE, local_only)
 
-    schema = f"test_import_parquet_{uuid.uuid4().hex[:8]}"
-    statements = [
-        f"CREATE SCHEMA {schema};",
-        f"OPEN SCHEMA {schema};",
-        'CREATE TABLE ParquetRows ("id" BIGINT, "name" VARCHAR(32));',
-        f"IMPORT INTO ParquetRows FROM LOCAL PARQUET FILE '{local_only}';",
-        'SELECT "id", "name" FROM ParquetRows ORDER BY "id";',
-    ]
+    schema = f"test_import_parquet_{mode}_{uuid.uuid4().hex[:8]}"
+    script = "\n".join(
+        [
+            *_parquet_rows_statements(schema),
+            f"IMPORT INTO ParquetRows FROM LOCAL PARQUET FILE '{local_only}';",
+            'SELECT "id", "name" FROM ParquetRows ORDER BY "id";',
+        ]
+    )
 
     # ========== WHEN ==========
-    proc = shared_live_deployment.connect(
-        input="\n".join(statements), capture_output=True
-    )
+    if mode == "file":
+        sql_file = tmp_path / "import.sql"
+        sql_file.write_text(script)
+        proc = shared_live_deployment.connect(
+            "--file", str(sql_file), capture_output=True
+        )
+    else:
+        proc = shared_live_deployment.connect(input=script, capture_output=True)
 
     # ========== THEN ==========
     assert proc.returncode == 0, f"Parquet import failed: {proc.stderr!r}"
@@ -284,3 +299,45 @@ def test_import_large_csv_completes_or_fails_actionably(
             token in combined
             for token in ("timeout", "size", "memory", "disk", "too large", "limit")
         ), f"Stress failure was not actionable: {combined!r}"
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.openspec("local-parquet-import")
+def test_import_parquet_missing_file_leaves_target_table_unchanged(
+    shared_live_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """A failed LOCAL PARQUET import neither empties nor partially fills the table."""
+    # Given a table already holding the fixture's rows
+    schema = f"test_import_parquet_keep_{uuid.uuid4().hex[:8]}"
+    fixture = _PARQUET_FIXTURE.absolute()
+    shared_live_deployment.connect(
+        "--command",
+        "\n".join(
+            [
+                *_parquet_rows_statements(schema),
+                f"IMPORT INTO ParquetRows FROM LOCAL PARQUET FILE '{fixture}';",
+            ]
+        ),
+        capture_output=True,
+    )
+    missing = tmp_path / "does_not_exist.parquet"
+
+    # When an import from a missing file into that table fails
+    with pytest.raises(subprocess.CalledProcessError):
+        shared_live_deployment.connect(
+            "--command",
+            f"IMPORT INTO {schema}.ParquetRows FROM LOCAL PARQUET FILE '{missing}';",
+            capture_output=True,
+        )
+
+    # Then the table still holds exactly its original rows
+    proc = shared_live_deployment.connect(
+        "--csv",
+        "--command",
+        f'SELECT "name" FROM {schema}.ParquetRows ORDER BY "id";',  # noqa: S608
+        capture_output=True,
+    )
+    assert proc.stdout.split() == ["name", "alpha", "beta", "gamma"]

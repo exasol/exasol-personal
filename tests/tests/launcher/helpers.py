@@ -6,6 +6,7 @@
 import json
 import os
 import subprocess
+from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Any
 
@@ -146,3 +147,26 @@ def export_preset(
             to_dir,
         ]
     )
+
+
+def record_running_local_deployment(deployment_dir: Path, db_port: int) -> None:
+    """Mark an initialized local deployment as running on the given database port."""
+    launcher_state_path = deployment_dir / ".exasolLauncherState.json"
+    state = json.loads(launcher_state_path.read_text())
+    state["currentWorkflowState"] = {"running": {}}
+    launcher_state_path.write_text(json.dumps(state))
+    (deployment_dir / "deployment.json").write_text(
+        json.dumps(
+            {
+                "backend": "local",
+                "deploymentId": deployment_dir.name,
+                "deploymentState": "running",
+                "connection": {
+                    "host": "127.0.0.1",
+                    "dbPort": db_port,
+                    "insecureSkipCertValidation": True,
+                },
+            }
+        )
+    )
+    (deployment_dir / "secrets.json").write_text(json.dumps({"dbPassword": "exasol"}))
