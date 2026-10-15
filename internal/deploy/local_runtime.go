@@ -180,7 +180,9 @@ func stopLocalRuntimeAfterFailure(
 		return err
 	}
 
-	return selectedRuntime.Stop(ctx, os.Stderr, os.Stderr)
+	sidecarErr := cleanupRuntimeSidecars(ctx, selectedRuntime)
+
+	return errors.Join(selectedRuntime.Stop(ctx, os.Stderr, os.Stderr), sidecarErr)
 }
 
 // reconcileLocalVMState corrects stale workflow state after an unclean local
@@ -237,11 +239,14 @@ func stopLocalRuntime(
 	runtime localruntime.Runtime,
 	out, outErr io.Writer,
 ) error {
+	sidecarErr := cleanupRuntimeSidecars(ctx, runtime)
 	if err := runtime.Stop(ctx, out, outErr); err != nil {
-		return err
+		return errors.Join(err, sidecarErr)
 	}
 
-	return updateLocalDeploymentArtifactState(runtime.Deployment(), StatusStopped)
+	return sidecarLifecycleResult(
+		updateLocalDeploymentArtifactState(runtime.Deployment(), StatusStopped), sidecarErr,
+	)
 }
 
 func destroyLocalRuntime(
@@ -249,8 +254,12 @@ func destroyLocalRuntime(
 	runtime localruntime.Runtime,
 	out, outErr io.Writer,
 ) error {
+	sidecarErr := cleanupRuntimeSidecars(ctx, runtime)
 	if err := runtime.Destroy(ctx, out, outErr); err != nil {
-		return err
+		return errors.Join(err, sidecarErr)
+	}
+	if sidecarErr != nil {
+		return sidecarErr
 	}
 
 	deployment := runtime.Deployment()
@@ -258,6 +267,7 @@ func destroyLocalRuntime(
 		deployment.NodeDetailsPath(),
 		deployment.SecretsPath(),
 		deployment.ConnectionInstructionsPath(),
+		deployment.SidecarStatePath(),
 	} {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("failed to remove local deployment artifact %s: %w", path, err)
@@ -347,13 +357,14 @@ func writeLocalRuntimeArtifactsAndWait(
 	if err := writeLocalDeploymentArtifacts(runtime.Deployment(), endpoint); err != nil {
 		return err
 	}
+	sidecarErr := reconcileRuntimeSidecars(ctx, runtime)
 	if os.Getenv(localSkipDatabaseWaitEnv) != "" {
-		return nil
+		return sidecarLifecycleResult(nil, sidecarErr)
 	}
 
 	waitTimeoutSeconds = boundedLocalDatabaseStartedTimeout(waitTimeoutSeconds)
 
-	return waitForLocalDatabaseAndSync(
+	databaseErr := waitForLocalDatabaseAndSync(
 		ctx,
 		runtime,
 		waitTimeoutSeconds,
@@ -361,6 +372,8 @@ func writeLocalRuntimeArtifactsAndWait(
 		outErr,
 		WaitForLocalDatabaseStarted,
 	)
+
+	return sidecarLifecycleResult(databaseErr, sidecarErr)
 }
 
 func boundedLocalDatabaseStartedTimeout(waitTimeoutSeconds int) int {
@@ -398,6 +411,12 @@ func writeLocalDeploymentArtifacts(
 	if endpoint.DBPort <= 0 || endpoint.DBPort > 65535 {
 		return fmt.Errorf("local runtime database port is invalid: %d", endpoint.DBPort)
 	}
+	username := localDBUser
+	if saved, err := config.ReadDeploymentInfo(deployment); err == nil && saved.Connection != nil {
+		if existing := strings.TrimSpace(saved.Connection.Username); existing != "" {
+			username = existing
+		}
+	}
 
 	deploymentID := "local"
 	if launcherState, err := config.ReadExasolPersonalState(deployment); err == nil {
@@ -418,7 +437,7 @@ func writeLocalDeploymentArtifacts(
 			DisplayHost:                localDeploymentPublicHost,
 			PublicIp:                   localDeploymentPublicHost,
 			DBPort:                     endpoint.DBPort,
-			Username:                   localDBUser,
+			Username:                   username,
 			InsecureSkipCertValidation: true,
 			ShellSupported:             endpoint.ShellSupported,
 		},
