@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"slices"
 	"strings"
 )
 
@@ -42,6 +43,48 @@ type ContainerPort struct {
 }
 
 func (container ContainerListing) Running() bool { return container.State == "running" }
+
+// ContainerNetwork is one entry of the runtime's own network listing.
+type ContainerNetwork struct {
+	Name   string `json:"name"`
+	Driver string `json:"driver"`
+	//nolint:tagliatelle // Podman's network schema uses snake_case.
+	DNSEnabled bool              `json:"dns_enabled"`
+	Labels     map[string]string `json:"labels"`
+}
+
+// Bridge reports a network that routes between containers on one host.
+func (network ContainerNetwork) Bridge() bool { return network.Driver == podmanBridgeDriver }
+
+// ContainerAttachment reports how a container is attached to networks.
+type ContainerAttachment struct {
+	HostConfig      attachmentHostConfig      `json:"hostConfig"`
+	NetworkSettings attachmentNetworkSettings `json:"networkSettings"`
+}
+
+type attachmentHostConfig struct {
+	NetworkMode string `json:"networkMode"`
+}
+
+type attachmentNetworkSettings struct {
+	Networks map[string]NetworkMembership `json:"networks"`
+}
+
+type NetworkMembership struct {
+	Aliases []string `json:"aliases"`
+}
+
+// Bridged reports a container the runtime can place on a managed network.
+func (attachment ContainerAttachment) Bridged() bool {
+	return attachment.HostConfig.NetworkMode == podmanBridgeDriver
+}
+
+// Member reports the container's membership of one network, if it has one.
+func (attachment ContainerAttachment) Member(network string) (NetworkMembership, bool) {
+	membership, joined := attachment.NetworkSettings.Networks[network]
+
+	return membership, joined
+}
 
 // ContainerMount is one entry of a container's filesystem mounts.
 //
@@ -153,6 +196,96 @@ func (client containerClient) ImportImage(
 	return client.run(ctx, out, outErr, append(args, path, image)...)
 }
 
+// Attachment reports how a container is attached to networks, and whether the
+// container exists at all. A stopped deployment has none, which callers answer
+// from rather than fail on.
+func (client containerClient) Attachment(
+	ctx context.Context, name string, outErr io.Writer,
+) (ContainerAttachment, bool, error) {
+	present, err := client.exists(ctx, name, outErr)
+	if err != nil || !present {
+		return ContainerAttachment{}, false, err
+	}
+	output, err := client.output(ctx, nil, outErr, "container", "inspect", name)
+	if err != nil {
+		return ContainerAttachment{}, false, err
+	}
+	var containers []ContainerAttachment
+	if err := json.Unmarshal([]byte(output), &containers); err != nil {
+		return ContainerAttachment{}, false, fmt.Errorf("decode container attachment: %w", err)
+	}
+	if len(containers) != 1 {
+		return ContainerAttachment{}, false, fmt.Errorf("runtime did not report container %s", name)
+	}
+
+	return containers[0], true, nil
+}
+
+// NetworkSpec describes a container network the launcher owns.
+type NetworkSpec struct {
+	Name   string
+	Labels map[string]string
+	// DNS lets containers on the network reach each other by name.
+	DNS bool
+}
+
+// CreateNetwork creates a network, accepting one that already exists.
+func (client containerClient) CreateNetwork(
+	ctx context.Context, spec NetworkSpec, out, outErr io.Writer,
+) error {
+	return client.run(ctx, out, outErr, podmanCreateNetworkArgs(spec)...)
+}
+
+// Network reports one network the runtime knows, absent when it has none.
+func (client containerClient) Network(
+	ctx context.Context, name string, outErr io.Writer,
+) (ContainerNetwork, bool, error) {
+	output, err := client.output(ctx, nil, outErr, "network", "inspect", name)
+	if err != nil {
+		return ContainerNetwork{}, false, err
+	}
+	networks, err := decodeNetworks(output)
+	if err != nil {
+		return ContainerNetwork{}, false, err
+	}
+	for _, network := range networks {
+		if network.Name == name {
+			return network, true, nil
+		}
+	}
+
+	return ContainerNetwork{}, false, nil
+}
+
+func (client containerClient) Networks(
+	ctx context.Context, outErr io.Writer,
+) ([]ContainerNetwork, error) {
+	output, err := client.output(ctx, nil, outErr, "network", "ls", "--format", "json")
+	if err != nil {
+		return nil, err
+	}
+
+	return decodeNetworks(output)
+}
+
+// ConnectNetwork attaches a container to a network under the given aliases.
+func (client containerClient) ConnectNetwork(
+	ctx context.Context, network, container string, aliases []string, out, outErr io.Writer,
+) error {
+	args := []string{"network", "connect"}
+	for _, alias := range aliases {
+		args = append(args, "--alias", alias)
+	}
+
+	return client.run(ctx, out, outErr, append(args, network, container)...)
+}
+
+func (client containerClient) RemoveNetwork(
+	ctx context.Context, name string, out, outErr io.Writer,
+) error {
+	return client.run(ctx, out, outErr, "network", "rm", name)
+}
+
 // Images reports the runtime's tagged images, narrowed by an optional filter.
 func (client containerClient) Images(
 	ctx context.Context, outErr io.Writer, filters ...string,
@@ -201,6 +334,20 @@ func (client containerClient) Diagnostics(
 			_, _ = fmt.Fprintf(out, "diagnostic command failed: %v\n", err)
 		}
 	}
+}
+
+// The runtime matches a name filter loosely, so the exact name decides.
+func (client containerClient) exists(
+	ctx context.Context, name string, outErr io.Writer,
+) (bool, error) {
+	containers, err := client.containers(ctx, outErr, "name="+name)
+	if err != nil {
+		return false, err
+	}
+
+	return slices.ContainsFunc(containers, func(container ContainerListing) bool {
+		return slices.Contains(container.Names, name)
+	}), nil
 }
 
 func (client containerClient) run(
