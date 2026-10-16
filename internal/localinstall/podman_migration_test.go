@@ -29,8 +29,7 @@ func TestPodmanInstallStart_MigratesLegacyOverlayDataAtomically(t *testing.T) {
 	}
 	commands := readCommandLog(t, fixture.logPath)
 	expectedPrefix := []string{
-		"<podman><container><exists><" + testContainerName + ">",
-		"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+		"<podman><ps><--all><--filter><name=^" + testContainerName + "$><--format><json>",
 		"<podman><container><inspect><--format><{{json .Mounts}}><" + testContainerName + ">",
 		"<podman><stop><" + testContainerName + ">",
 	}
@@ -42,11 +41,11 @@ func TestPodmanInstallStart_MigratesLegacyOverlayDataAtomically(t *testing.T) {
 			t.Fatalf("expected command %q at %d, got %q", expected, index, commands[index])
 		}
 	}
-	if !strings.HasPrefix(commands[4], "<podman><cp><"+testContainerName+":/exa/.><") {
-		t.Fatalf("expected staged Podman copy, got %q", commands[4])
+	if !strings.HasPrefix(commands[3], "<podman><cp><"+testContainerName+":/exa/.><") {
+		t.Fatalf("expected staged Podman copy, got %q", commands[3])
 	}
-	if commands[5] != "<podman><rm><"+testContainerName+">" {
-		t.Fatalf("expected old container removal after copy, got %q", commands[5])
+	if commands[4] != "<podman><rm><--><"+testContainerName+">" {
+		t.Fatalf("expected old container removal after copy, got %q", commands[4])
 	}
 	content, readErr := os.ReadFile(
 		filepath.Join(startConfig.DataDir, "storage", "data"),
@@ -78,11 +77,10 @@ func TestPodmanInstallStart_AdoptsAndMigratesLegacyNamedVolumeContainer(t *testi
 	}
 	commands := readCommandLog(t, fixture.logPath)
 	wantPrefix := []string{
-		"<podman><container><exists><" + testContainerName + ">",
-		"<podman><container><exists><exasol-local-db>",
+		"<podman><ps><--all><--filter><name=^" + testContainerName + "$><--format><json>",
+		"<podman><ps><--all><--filter><name=^exasol-local-db$><--format><json>",
 		"<podman><rename><exasol-local-db><" + testContainerName + ">",
-		"<podman><container><exists><" + testContainerName + ">",
-		"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+		"<podman><ps><--all><--filter><name=^" + testContainerName + "$><--format><json>",
 		"<podman><container><inspect><--format><{{json .Mounts}}><" + testContainerName + ">",
 		"<podman><stop><" + testContainerName + ">",
 	}
@@ -155,7 +153,7 @@ func TestPodmanInstallStart_RefusesToOverwritePopulatedMigrationDestination(t *t
 		t.Fatalf("expected populated destination refusal, got %v", err)
 	}
 	commands := readCommandLog(t, fixture.logPath)
-	if len(commands) != 3 {
+	if len(commands) != 2 {
 		t.Fatalf("expected inspection without stop or copy, got %#v", commands)
 	}
 	content, readErr := os.ReadFile(
@@ -186,7 +184,7 @@ func TestPodmanInstallStart_RetainsLegacyContainerWhenOverlayCopyFails(t *testin
 	assertLegacyContainerRetained(t, fixture)
 	assertNoMigrationStagingDirs(t, startConfig.DataDir)
 	for _, command := range readCommandLog(t, fixture.logPath) {
-		if command == "<podman><rm><"+testContainerName+">" {
+		if command == "<podman><rm><--><"+testContainerName+">" {
 			t.Fatalf("legacy container was removed after copy failure: %q", command)
 		}
 	}

@@ -23,17 +23,22 @@ func IdentityRuntimePath(path string) RuntimePath {
 	return RuntimePath{HostPath: path, RuntimePath: path}
 }
 
-// ExecutionEnvironment isolates installation logic from its command transport and filesystem.
-// It intentionally owns both command and filesystem operations for the same runtime.
-// nolint: interfacebloat
-type ExecutionEnvironment interface {
-	Sync(ctx context.Context, stdout, stderr io.Writer) error
+// CommandRunner runs a command on the host a runtime executes against.
+type CommandRunner interface {
 	Run(
 		ctx context.Context,
 		stdin io.Reader,
 		stdout, stderr io.Writer,
 		command ...string,
 	) error
+}
+
+// ExecutionEnvironment isolates installation logic from its command transport and filesystem.
+// It intentionally owns both command and filesystem operations for the same runtime.
+// nolint: interfacebloat
+type ExecutionEnvironment interface {
+	CommandRunner
+	Sync(ctx context.Context, stdout, stderr io.Writer) error
 	PathExists(ctx context.Context, path string) (bool, error)
 	DirectoryHasEntries(ctx context.Context, path string) (bool, error)
 	MkdirAll(ctx context.Context, path string, mode os.FileMode) error
