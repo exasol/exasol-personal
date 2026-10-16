@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/exasol/exasol-personal/internal/sidecar"
 )
 
 // localRetryGuidance is offered whenever a local lifecycle operation fails and
@@ -23,6 +24,18 @@ const localRetryGuidance = "The deployment is stopped, so you can fix the report
 	"  exasol config set --ports auto"
 
 func addDeploymentRecoveryCallToAction(err error) {
+	if errors.Is(err, deploy.ErrSidecarRestartRequired) {
+		addTerminalCallToAction(sidecarRestartGuidance)
+	}
+
+	if startup, ok := errors.AsType[*sidecar.StartupError](err); ok {
+		addTerminalCallToAction(fmt.Sprintf(
+			"Inspect the reported sidecar for the full diagnosis:\n"+
+				"  exasol sidecar status %s",
+			startup.Sidecar,
+		))
+	}
+
 	if recovery, ok := errors.AsType[*deploy.LocalPortRecoveryError](err); ok {
 		addTerminalCallToAction(fmt.Sprintf(
 			"Select a replacement port for local service %q, then retry:\n"+

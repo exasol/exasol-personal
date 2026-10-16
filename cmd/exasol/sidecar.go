@@ -6,12 +6,17 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
+
+const sidecarRestartGuidance = "Run `exasol stop` followed by `exasol start` " +
+	"to restart the deployment and start the enabled sidecars."
 
 // nolint: gochecknoinits
 func init() {
@@ -86,6 +91,9 @@ func newSidecarActionCommand(
 }
 
 func renderSidecarResult(result deploy.SidecarResult, jsonOutput bool) error {
+	if result.RestartRequired {
+		addTerminalCallToAction(sidecarRestartGuidance)
+	}
 	if jsonOutput {
 		return addJSONTerminalOutput(result)
 	}
@@ -99,8 +107,28 @@ func formatSidecarResult(result deploy.SidecarResult) string {
 	if result.Enabled {
 		enablement = "enabled"
 	}
+	lines := []string{
+		fmt.Sprintf("%s: %s", result.Name, enablement),
+		"State: " + result.State,
+		"Reconciliation: " + result.Reconciliation,
+	}
+	for _, endpoint := range result.Endpoints {
+		lines = append(
+			lines,
+			"Endpoint: "+net.JoinHostPort(endpoint.IP, strconv.Itoa(endpoint.Port)),
+		)
+	}
+	if result.State == "exited" {
+		lines = append(lines, fmt.Sprintf("Exit code: %d", result.ExitCode))
+	}
+	if result.Error != "" {
+		lines = append(lines, "Failure: "+result.Error)
+	}
+	if result.LastOperationError != "" {
+		lines = append(lines, "Unresolved operation failure: "+result.LastOperationError)
+	}
 
-	return fmt.Sprintf("%s: %s", result.Name, enablement)
+	return strings.Join(lines, "\n")
 }
 
 func formatSidecarList(entries []deploy.SidecarAvailability) string {
