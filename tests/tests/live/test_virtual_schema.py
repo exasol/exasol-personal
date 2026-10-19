@@ -130,7 +130,7 @@ def _run_podman(
             input_text,
         )
     if executable is None:
-        pytest.fail("Linux Podman execution requires an executable")
+        pytest.fail("Linux Docker execution requires an executable")
     return subprocess.run(
         [executable, *args],
         check=True,
@@ -147,10 +147,10 @@ def _container_runtime(deployment: Deployment) -> PodmanRunner:
         except subprocess.CalledProcessError:
             pytest.skip("podman is required inside the local Exasol VM")
         return partial(_run_podman, deployment=deployment)
-    executable = shutil.which("podman")
+    executable = shutil.which("docker")
     if executable is not None:
         return partial(_run_podman, executable=executable)
-    pytest.skip("podman is required for the Virtual Schema smoke test")
+    pytest.skip("docker is required for the Virtual Schema smoke test")
 
 
 def _wait_for_postgres(source: PostgresSource) -> None:

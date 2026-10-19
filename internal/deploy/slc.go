@@ -547,7 +547,7 @@ func applySLCChange(
 			return 0, err
 		}
 		// SLC restarts happen after the initial Prepare's approval moment.
-		// Podman and its machine are already set up, so preparation
+		// The container engine is already set up, so preparation
 		// short-circuits. The zero PrepareOptions carries no approver,
 		// which denies any host change instead of prompting mid-restart.
 		if err := Start(ctx, deployment, verbose, StartOptions{

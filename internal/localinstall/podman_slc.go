@@ -135,6 +135,14 @@ func (install *PodmanInstall) imageExists(
 	outErr io.Writer,
 	image string,
 ) (bool, error) {
+	if install.engine == EngineDocker {
+		output, err := install.runPodmanOutput(ctx, nil, outErr, "images", "--quiet", image)
+		if err != nil {
+			return false, fmt.Errorf("failed to find SLC image %s: %w", image, err)
+		}
+
+		return strings.TrimSpace(output) != "", nil
+	}
 	err := install.runPodman(ctx, nil, outErr, "image", "exists", image)
 	if err == nil {
 		return true, nil
@@ -196,7 +204,7 @@ func (install *PodmanInstall) pruneUnreferencedSLCImages(
 		ctx, nil, outErr, "images", "--format", "{{.Repository}}:{{.Tag}}",
 	)
 	if err != nil {
-		writeSLCPruneWarning(outErr, "failed to list Podman images", err)
+		writeSLCPruneWarning(outErr, "failed to list container images", err)
 	} else {
 		for image := range strings.FieldsSeq(allImages) {
 			if isUntaggedImage(image) || slcImageRepository(image) != officialSLCRepository {

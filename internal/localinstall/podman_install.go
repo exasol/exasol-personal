@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -25,15 +26,22 @@ const (
 	nanoImageOverridePathEnv  = "EXASOL_LOCAL_NANO_IMAGE_OVERRIDE_PATH"
 	exasolNanoImageResourceID = "exasol-nano-image"
 	loadedImagePrefix         = "Loaded image:"
-	dataDirMode               = 0o750
-	nanoInternalDBPort        = 8563
-	nanoShmSize               = "512mb"
-	nanoPIDsLimit             = "-1"
+	// Docker reports an image it could not tag by its ID instead.
+	loadedImageIDPrefix = "Loaded image ID:"
+	dataDirMode         = 0o750
+	nanoInternalDBPort  = 8563
+	nanoShmSize         = "512mb"
+	nanoPIDsLimit       = "-1"
 	// `unmask=ALL` and `label=disable` are required for UDFs to work, which need
 	// nested namespaces (at least user, mount and pid).
 	nanoSecurityOpt        = "unmask=ALL"
 	nanoSELinuxSecurityOpt = "label=disable"
-	nanoRestartPolicy      = "always"
+	// Docker has no `unmask`; these unconfine the same paths and also lift the
+	// default seccomp and AppArmor profiles that block nested namespaces.
+	nanoDockerSystemPathsOpt = "systempaths=unconfined"
+	nanoDockerSeccompOpt     = "seccomp=unconfined"
+	nanoDockerAppArmorOpt    = "apparmor=unconfined"
+	nanoRestartPolicy        = "always"
 	// Nano rejects initial-password options once its runtime is initialized,
 	// and Podman replays a container's original arguments when it restarts it,
 	// so the container that receives the initial password must not restart.
@@ -53,10 +61,21 @@ const (
 	nanoVersionCheckMin      = 60
 	nanoVersionCheckMax      = 604800
 	nanoVersionCheckRetryMax = 86400
+	dataCleanupImage         = "docker.io/library/busybox:1.36.1"
+	dataCleanupMountPath     = "/data"
+)
+
+// ContainerEngine names the container CLI that runs Nano.
+type ContainerEngine string
+
+const (
+	EnginePodman ContainerEngine = "podman"
+	EngineDocker ContainerEngine = "docker"
 )
 
 type PodmanInstall struct {
 	deployment    config.DeploymentDir
+	engine        ContainerEngine
 	environment   ExecutionEnvironment
 	resolveImage  func(context.Context) (RuntimePath, error)
 	slcStagingDir RuntimePath
@@ -82,6 +101,7 @@ func NewPodmanInstall(
 
 	return NewPodmanInstallWithEnvironment(
 		deployment,
+		EnginePodman,
 		directEnvironment,
 		resolveImage,
 		IdentityRuntimePath(slcStagingDir),
@@ -108,6 +128,7 @@ func ResolveNanoImage(
 
 func NewPodmanInstallWithEnvironment(
 	deployment config.DeploymentDir,
+	engine ContainerEngine,
 	environment ExecutionEnvironment,
 	resolveImage func(context.Context) (RuntimePath, error),
 	slcStagingDir RuntimePath,
@@ -115,6 +136,7 @@ func NewPodmanInstallWithEnvironment(
 ) *PodmanInstall {
 	return &PodmanInstall{
 		deployment:    deployment,
+		engine:        engine,
 		environment:   environment,
 		resolveImage:  resolveImage,
 		slcStagingDir: slcStagingDir,
@@ -224,7 +246,14 @@ func (install *PodmanInstall) Start(
 			return err
 		}
 	}
+	if install.engine == EngineDocker {
+		if err := install.removeContainer(ctx, out, outErr, containerName); err != nil {
+			return install.failureWithDiagnostics(ctx, outErr, containerName,
+				fmt.Errorf("failed to remove stopped Nano container %s: %w", containerName, err))
+		}
+	}
 	args := nanoRunArgs(startConfig, nanoRunOptions{
+		engine:        install.engine,
 		containerName: containerName,
 		loadedImage:   loadedImage,
 		slcs:          availableSLCs,
@@ -333,6 +362,7 @@ func podmanDBPortMapping(startConfig StartConfig) string {
 }
 
 type nanoRunOptions struct {
+	engine        ContainerEngine
 	containerName string
 	loadedImage   string
 	slcs          []SLCConfig
@@ -345,17 +375,31 @@ func nanoRunArgs(startConfig StartConfig, options nanoRunOptions) []string {
 	if options.bootstrap {
 		restartPolicy = nanoBootstrapRestartPolicy
 	}
-	args := []string{
-		"run", "-d", "--replace",
-		"--name", options.containerName,
-		"--shm-size=" + nanoShmSize,
-		"--pids-limit=" + nanoPIDsLimit,
-		"--security-opt", nanoSecurityOpt,
+	args := []string{"run", "-d"}
+	if options.engine == EngineDocker {
+		args = append(args,
+			"--name", options.containerName,
+			"--shm-size="+nanoShmSize,
+			"--pids-limit="+nanoPIDsLimit,
+			"--security-opt", nanoDockerSystemPathsOpt,
+			"--security-opt", nanoDockerSeccompOpt,
+			"--security-opt", nanoDockerAppArmorOpt,
+		)
+	} else {
+		args = append(args,
+			"--replace",
+			"--name", options.containerName,
+			"--shm-size="+nanoShmSize,
+			"--pids-limit="+nanoPIDsLimit,
+			"--security-opt", nanoSecurityOpt,
+		)
+	}
+	args = append(args,
 		"--security-opt", nanoSELinuxSecurityOpt,
 		"--restart", restartPolicy,
 		"-p", podmanDBPortMapping(startConfig),
-		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
-	}
+		"-v", startConfig.DataDir+":"+nanoDataMountTarget,
+	)
 	if options.bootstrap {
 		args = append(args,
 			"-v", startConfig.BootstrapDir+":"+nanoBootstrapMountPath+":ro,Z",
@@ -368,10 +412,13 @@ func nanoRunArgs(startConfig StartConfig, options nanoRunOptions) []string {
 		// writable, and a missing one fails every UDF as an opaque `VM crashed`.
 		// Podman keeps the writes in an ephemeral per-container overlay, so the image
 		// is never modified and the UDF-visible root stays read-only.
-		args = append(args,
-			"--mount",
-			fmt.Sprintf("type=image,source=%s,destination=%s,rw=true", slc.Image, slc.Target),
-		)
+		// Docker image mounts are always read-only, so SLCs without the skeleton
+		// cannot run UDFs there.
+		mount := fmt.Sprintf("type=image,source=%s,destination=%s", slc.Image, slc.Target)
+		if options.engine != EngineDocker {
+			mount += ",rw=true"
+		}
+		args = append(args, "--mount", mount)
 	}
 	if startConfig.VersionCheck.Enabled {
 		args = append(args, "-e", "VERSION_CHECK_IDENTITY="+startConfig.VersionCheck.Identity)
@@ -395,15 +442,7 @@ func (install *PodmanInstall) Stop(ctx context.Context, out, outErr io.Writer) e
 	if err != nil {
 		return err
 	}
-	if err := install.runPodman(
-		ctx,
-		out,
-		outErr,
-		"rm",
-		"--force",
-		"--ignore",
-		containerName,
-	); err != nil {
+	if err := install.removeContainer(ctx, out, outErr, containerName); err != nil {
 		return fmt.Errorf("failed to remove Nano container %s: %w", containerName, err)
 	}
 
@@ -428,6 +467,39 @@ func (install *PodmanInstall) Status(
 
 func (install *PodmanInstall) Destroy(ctx context.Context, out, outErr io.Writer) error {
 	return install.Stop(ctx, out, outErr)
+}
+
+// ClearDataDir empties dataDir from inside a container, which can delete the
+// files a rootful engine created there that the launcher user cannot.
+func (install *PodmanInstall) ClearDataDir(
+	ctx context.Context,
+	out, outErr io.Writer,
+	dataDir string,
+) error {
+	return install.runPodman(ctx, out, outErr,
+		"run", "--rm",
+		"--security-opt", nanoSELinuxSecurityOpt,
+		"-v", dataDir+":"+dataCleanupMountPath,
+		dataCleanupImage,
+		"find", dataCleanupMountPath, "-mindepth", "1", "-delete",
+	)
+}
+
+// removeContainer force-removes a container and succeeds when it is absent.
+func (install *PodmanInstall) removeContainer(
+	ctx context.Context,
+	out, outErr io.Writer,
+	containerName string,
+) error {
+	if install.engine != EngineDocker {
+		return install.runPodman(ctx, out, outErr, "rm", "--force", "--ignore", containerName)
+	}
+	exists, err := install.containerExists(ctx, outErr, containerName)
+	if err != nil || !exists {
+		return err
+	}
+
+	return install.runPodman(ctx, out, outErr, "rm", "--force", containerName)
 }
 
 func (install *PodmanInstall) writeBootstrapPassword(
@@ -521,7 +593,7 @@ func (install *PodmanInstall) writePodmanDiagnostics(
 	)
 	defer cancel()
 
-	_, _ = fmt.Fprintf(diagnosticOut, "Podman diagnostics for %s:\n", containerName)
+	_, _ = fmt.Fprintf(diagnosticOut, "%s diagnostics for %s:\n", install.engine, containerName)
 	commands := [][]string{
 		{"info"},
 		{"ps", "-a"},
@@ -529,7 +601,9 @@ func (install *PodmanInstall) writePodmanDiagnostics(
 		{"logs", containerName},
 	}
 	for _, command := range commands {
-		_, _ = fmt.Fprintf(diagnosticOut, "$ podman %s\n", strings.Join(command, " "))
+		_, _ = fmt.Fprintf(
+			diagnosticOut, "$ %s %s\n", install.engine, strings.Join(command, " "),
+		)
 		if err := install.runPodman(
 			diagnosticCtx, diagnosticOut, diagnosticOut, command...,
 		); err != nil {
@@ -621,6 +695,9 @@ func parseLoadedImage(output string) (string, error) {
 	for line := range strings.SplitSeq(output, "\n") {
 		_, image, found := strings.Cut(line, loadedImagePrefix)
 		if !found {
+			_, image, found = strings.Cut(line, loadedImageIDPrefix)
+		}
+		if !found {
 			continue
 		}
 		image = strings.TrimSpace(image)
@@ -628,12 +705,12 @@ func parseLoadedImage(output string) (string, error) {
 			continue
 		}
 		if loadedImage != "" && loadedImage != image {
-			return "", errors.New("podman load reported multiple Nano images")
+			return "", errors.New("image load reported multiple Nano images")
 		}
 		loadedImage = image
 	}
 	if loadedImage == "" {
-		return "", errors.New("could not determine the image reference reported by podman load")
+		return "", errors.New("could not determine the image reference reported by image load")
 	}
 
 	return loadedImage, nil
@@ -695,6 +772,9 @@ func (install *PodmanInstall) containerExists(
 	outErr io.Writer,
 	containerName string,
 ) (bool, error) {
+	if install.engine == EngineDocker {
+		return install.dockerContainerExists(ctx, outErr, containerName)
+	}
 	err := install.runPodman(
 		ctx,
 		nil,
@@ -712,6 +792,24 @@ func (install *PodmanInstall) containerExists(
 	}
 
 	return false, fmt.Errorf("failed to find Nano container %s: %w", containerName, err)
+}
+
+// dockerContainerExists lists instead of inspecting because docker exits 1
+// both for a missing container and for an unreachable daemon.
+func (install *PodmanInstall) dockerContainerExists(
+	ctx context.Context,
+	outErr io.Writer,
+	containerName string,
+) (bool, error) {
+	output, err := install.runPodmanOutput(
+		ctx, nil, outErr,
+		"ps", "--all", "--filter", "name="+containerName, "--format", "{{.Names}}",
+	)
+	if err != nil {
+		return false, fmt.Errorf("failed to find Nano container %s: %w", containerName, err)
+	}
+
+	return slices.Contains(strings.Fields(output), containerName), nil
 }
 
 func (install *PodmanInstall) resolveImagePath(ctx context.Context) (RuntimePath, error) {
@@ -734,7 +832,12 @@ func (install *PodmanInstall) runPodman(
 	out, outErr io.Writer,
 	arg ...string,
 ) error {
-	return install.environment.Run(ctx, nil, out, outErr, append([]string{"podman"}, arg...)...)
+	return install.environment.Run(
+		ctx,
+		nil,
+		out,
+		outErr,
+		append([]string{string(install.engine)}, arg...)...)
 }
 
 func (install *PodmanInstall) runPodmanOutput(
@@ -749,7 +852,7 @@ func (install *PodmanInstall) runPodmanOutput(
 		out = io.MultiWriter(out, &stdout)
 	}
 	err := install.environment.Run(
-		ctx, nil, out, outErr, append([]string{"podman"}, arg...)...,
+		ctx, nil, out, outErr, append([]string{string(install.engine)}, arg...)...,
 	)
 
 	return stdout.String(), err

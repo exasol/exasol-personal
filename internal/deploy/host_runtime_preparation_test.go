@@ -40,8 +40,8 @@ func TestDeployPreparationFailurePreservesInitializedWorkflowState(t *testing.T)
 
 	err := deployLocked(testManagerContext(t), deployment, false, DeployOptions{})
 
-	if err == nil || !strings.Contains(err.Error(), "'podman' is required") {
-		t.Fatalf("expected a Podman preparation failure, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "'docker' is required") {
+		t.Fatalf("expected a Docker preparation failure, got %v", err)
 	}
 	assertWorkflowState[*config.WorkflowStateInitialized](t, deployment)
 }
@@ -63,8 +63,8 @@ func TestStartPreparationFailurePreservesStoppedWorkflowState(t *testing.T) {
 
 	err = startLocked(testManagerContext(t), deployment, false, StartOptions{})
 
-	if err == nil || !strings.Contains(err.Error(), "'podman' is required") {
-		t.Fatalf("expected a Podman preparation failure, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "'docker' is required") {
+		t.Fatalf("expected a Docker preparation failure, got %v", err)
 	}
 	assertWorkflowState[*config.WorkflowStateStopped](t, deployment)
 }

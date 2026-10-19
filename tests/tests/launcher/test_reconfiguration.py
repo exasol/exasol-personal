@@ -203,7 +203,7 @@ def test_running_local_configuration_requires_stop(
 
 
 @pytest.mark.skipif(
-    not sys.platform.startswith("linux"), reason="uses the Linux Podman runtime"
+    not sys.platform.startswith("linux"), reason="uses the Linux Docker runtime"
 )
 def test_start_migrates_legacy_automatic_local_port_before_runtime(
     exasol_path: str, tmp_path: Path
@@ -219,9 +219,9 @@ def test_start_migrates_legacy_automatic_local_port_before_runtime(
     # And a visible but failing runtime executable, so start reaches the runtime
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
-    fake_podman = fake_bin / "podman"
-    fake_podman.write_text("#!/bin/sh\nexit 23\n")
-    fake_podman.chmod(0o700)
+    fake_docker = fake_bin / "docker"
+    fake_docker.write_text("#!/bin/sh\nexit 23\n")
+    fake_docker.chmod(0o700)
     environment = os.environ.copy()
     environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
 
@@ -243,7 +243,7 @@ def test_start_migrates_legacy_automatic_local_port_before_runtime(
 
 
 @pytest.mark.skipif(
-    not sys.platform.startswith("linux"), reason="uses the Linux Podman runtime"
+    not sys.platform.startswith("linux"), reason="uses the Linux Docker runtime"
 )
 def test_local_bind_conflict_restores_stopped_state_with_recovery_guidance(
     exasol_path: str, tmp_path: Path
@@ -254,13 +254,12 @@ def test_local_bind_conflict_restores_stopped_state_with_recovery_guidance(
     _init_stopped_local_deployment(exasol_path, deployment_dir, test_port)
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
-    fake_podman = fake_bin / "podman"
-    fake_podman.write_text(
+    fake_docker = fake_bin / "docker"
+    fake_docker.write_text(
         """#!/bin/sh
 set -eu
 case "$1" in
   container)
-    if [ "$2" = "exists" ]; then exit 1; fi
     if [ "$2" = "inspect" ]; then printf 'false\\n'; exit 0; fi
     ;;
   load) printf 'Loaded image: docker.io/exasol/nano:test\\n' ;;
@@ -269,7 +268,7 @@ case "$1" in
 esac
 """
     )
-    fake_podman.chmod(0o700)
+    fake_docker.chmod(0o700)
     environment = os.environ.copy()
     environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
 

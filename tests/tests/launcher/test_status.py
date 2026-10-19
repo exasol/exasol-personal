@@ -86,12 +86,12 @@ def test_status_rejects_non_positive_timeout(
     assert "--timeout must be positive" in result.stderr
 
 
-@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX fake Podman executable")
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX fake Docker executable")
 def test_status_returns_within_default_bound_for_unresponsive_deployment(
     exasol_path: str,
     tmp_path: Path,
     unresponsive_db_port: int,
-    hanging_podman_env: dict[str, str],
+    hanging_engine_env: dict[str, str],
 ) -> None:
     # Given a running local deployment whose runtime and database never answer
     deployment_dir = tmp_path / "deployment"
@@ -99,7 +99,7 @@ def test_status_returns_within_default_bound_for_unresponsive_deployment(
     record_running_local_deployment(deployment_dir, unresponsive_db_port)
 
     # When status runs without an explicit bound
-    elapsed, result = _timed_status(exasol_path, deployment_dir, hanging_podman_env)
+    elapsed, result = _timed_status(exasol_path, deployment_dir, hanging_engine_env)
 
     # Then it still reports a status, within the default bound
     assert result.returncode == 0, result.stderr
@@ -107,12 +107,12 @@ def test_status_returns_within_default_bound_for_unresponsive_deployment(
     assert elapsed < DEFAULT_STATUS_TIMEOUT_SECONDS + STATUS_TIMEOUT_SLACK_SECONDS
 
 
-@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX fake Podman executable")
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX fake Docker executable")
 def test_status_timeout_flag_sets_the_bound(
     exasol_path: str,
     tmp_path: Path,
     unresponsive_db_port: int,
-    hanging_podman_env: dict[str, str],
+    hanging_engine_env: dict[str, str],
 ) -> None:
     # Given a running local deployment whose runtime and database never answer
     deployment_dir = tmp_path / "deployment"
@@ -123,10 +123,10 @@ def test_status_timeout_flag_sets_the_bound(
 
     # When status runs with a short and a long explicit bound
     short_elapsed, short_result = _timed_status(
-        exasol_path, deployment_dir, hanging_podman_env, "--timeout", str(short_timeout)
+        exasol_path, deployment_dir, hanging_engine_env, "--timeout", str(short_timeout)
     )
     long_elapsed, long_result = _timed_status(
-        exasol_path, deployment_dir, hanging_podman_env, "--timeout", str(long_timeout)
+        exasol_path, deployment_dir, hanging_engine_env, "--timeout", str(long_timeout)
     )
 
     # Then each run waits for the configured bound, not the default

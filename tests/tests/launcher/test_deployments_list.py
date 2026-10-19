@@ -154,17 +154,17 @@ def test_deployments_list_reports_same_status_as_status_command(
 
 
 @pytest.mark.openspec("deployment-directory-listing", "deployment-status-timeout")
-@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX fake Podman executable")
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX fake Docker executable")
 def test_deployments_list_bounds_status_checks_and_runs_them_concurrently(
     exasol_path: str,
     tmp_path: Path,
     unresponsive_db_port: int,
-    hanging_podman_env: dict[str, str],
+    hanging_engine_env: dict[str, str],
 ) -> None:
     # Given several named deployments whose runtime and database never answer
     home = tmp_path / "home"
     home.mkdir()
-    env = {**_env_with_home(home), "PATH": hanging_podman_env["PATH"]}
+    env = {**_env_with_home(home), "PATH": hanging_engine_env["PATH"]}
     launcher = str(Path(exasol_path).resolve())
     names = [f"hung-{index}" for index in range(UNRESPONSIVE_DEPLOYMENT_COUNT)]
     for name in names:

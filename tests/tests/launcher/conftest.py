@@ -134,13 +134,13 @@ def unresponsive_db_port() -> Iterator[int]:
 
 
 @pytest.fixture
-def hanging_podman_env(tmp_path: Path) -> dict[str, str]:
-    """Return an environment whose `podman` never completes."""
-    fake_bin = tmp_path / "hanging-podman-bin"
+def hanging_engine_env(tmp_path: Path) -> dict[str, str]:
+    """Return an environment whose `docker` never completes."""
+    fake_bin = tmp_path / "hanging-engine-bin"
     fake_bin.mkdir()
-    fake_podman = fake_bin / "podman"
-    fake_podman.write_text("#!/bin/sh\nexec sleep 600\n")
-    fake_podman.chmod(0o700)
+    fake_engine = fake_bin / "docker"
+    fake_engine.write_text("#!/bin/sh\nexec sleep 600\n")
+    fake_engine.chmod(0o700)
     environment = os.environ.copy()
     environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
 

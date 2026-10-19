@@ -565,6 +565,7 @@ func (runtime *MacVMRuntime) install(
 
 	return localinstall.NewPodmanInstallWithEnvironment(
 		runtime.deployment,
+		localinstall.EnginePodman,
 		newRunnerExecutionEnvironment(runnerPath, runtime.paths.WorkDir),
 		resolveImage,
 		slcStagingDir,

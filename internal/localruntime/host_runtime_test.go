@@ -436,16 +436,16 @@ const fakeLinuxRuntimePodmanScript = `#!/bin/sh
 set -eu
 scenario_dir=$1
 shift
-if [ "$1" != "podman" ] || [ "$2" != "container" ]; then
+if [ "$1" != "docker" ]; then
   exit 90
 fi
-case "$3" in
-  exists)
-    if [ ! -f "$scenario_dir/existing" ] && [ ! -f "$scenario_dir/running" ]; then
-      exit 1
+case "$2 $3" in
+  "ps --all")
+    if [ -f "$scenario_dir/existing" ] || [ -f "$scenario_dir/running" ]; then
+      printf 'exasol-db-linux-runtime-status\n'
     fi
     ;;
-  inspect)
+  "container inspect")
     if [ -f "$scenario_dir/running" ]; then
       printf 'true\n'
     else
@@ -494,13 +494,13 @@ func TestResolveLinuxHostDBPort_RejectsInvalidMappings(t *testing.T) {
 	}
 }
 
-// Linux needs no readying step: Podman on PATH does not stop being reachable,
+// Linux needs no readying step: Docker on PATH does not stop being reachable,
 // so EnsureQueryable must not invoke it at all.
 //
 //nolint:paralleltest // The test replaces process-wide PATH with fake binary shims.
 func TestLinuxEnsureQueryable_InvokesNothing(t *testing.T) {
 	dir := newIsolatedShimDir(t)
-	logPath := dropShim(t, dir, "podman", `exit 1`)
+	logPath := dropShim(t, dir, "docker", `exit 1`)
 
 	hostRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
 
@@ -508,7 +508,7 @@ func TestLinuxEnsureQueryable_InvokesNothing(t *testing.T) {
 		t.Fatalf("EnsureQueryable() unexpected error: %v", err)
 	}
 	if _, err := os.Stat(logPath); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("Linux must not invoke podman to become queryable (err=%v)", err)
+		t.Errorf("Linux must not invoke docker to become queryable (err=%v)", err)
 	}
 }
 
@@ -595,5 +595,119 @@ func TestHostStatus_ResolvesUnreachableContainerProbeAgainstTheContainerHost(t *
 				t.Fatalf("expected running=false, got %#v", status)
 			}
 		})
+	}
+}
+
+func TestPrepareHostDataDir_OpensExistingPrivateDirectory(t *testing.T) {
+	t.Parallel()
+	skipPOSIXPermissionTest(t)
+
+	// Given a data directory created private by an earlier launcher
+	dataDir := filepath.Join(t.TempDir(), "exa")
+	if err := os.Mkdir(dataDir, 0o750); err != nil {
+		t.Fatalf("failed to create data directory: %v", err)
+	}
+
+	// When
+	err := prepareHostDataDir(dataDir)
+	// Then
+	if err != nil {
+		t.Fatalf("expected data directory preparation to succeed, got %v", err)
+	}
+	assertDirMode(t, dataDir, dataDirMode)
+}
+
+func TestPrepareHostDataDir_CreatesTraversableStagingDirectories(t *testing.T) {
+	t.Parallel()
+	skipPOSIXPermissionTest(t)
+
+	// Given a fresh deployment
+	dataDir := filepath.Join(t.TempDir(), "exa")
+
+	// When
+	err := prepareHostDataDir(dataDir)
+	// Then every staging path component exists and is traversable by the
+	// database's unprivileged UDF sandbox
+	if err != nil {
+		t.Fatalf("expected data directory preparation to succeed, got %v", err)
+	}
+	for _, path := range []string{
+		filepath.Join(dataDir, "bucketfs"),
+		filepath.Join(dataDir, "bucketfs", "bfsdefault"),
+		filepath.Join(dataDir, "bucketfs", "bfsdefault", "default"),
+		filepath.Join(dataDir, "jdbc"),
+	} {
+		assertDirMode(t, path, dataDirMode)
+	}
+}
+
+func TestPrepareHostDataDir_LeavesExistingStagingDirectoriesUnchanged(t *testing.T) {
+	t.Parallel()
+	skipPOSIXPermissionTest(t)
+
+	// Given a staging directory the user has already restricted
+	dataDir := filepath.Join(t.TempDir(), "exa")
+	jdbcDir := filepath.Join(dataDir, "jdbc")
+	if err := os.MkdirAll(jdbcDir, 0o700); err != nil {
+		t.Fatalf("failed to create staging directory: %v", err)
+	}
+	//nolint:gosec // directory mode under test
+	if err := os.Chmod(jdbcDir, 0o700); err != nil {
+		t.Fatalf("failed to restrict staging directory: %v", err)
+	}
+
+	// When
+	err := prepareHostDataDir(dataDir)
+	// Then
+	if err != nil {
+		t.Fatalf("expected data directory preparation to succeed, got %v", err)
+	}
+	assertDirMode(t, jdbcDir, 0o700)
+}
+
+func TestPrepareHostDataDir_ToleratesStagingParentOwnedByDatabase(t *testing.T) {
+	t.Parallel()
+	skipPOSIXPermissionTest(t)
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses the directory permission this test relies on")
+	}
+
+	// Given a deployment whose BucketFS directory the database created first,
+	// which the launcher user cannot write into
+	dataDir := filepath.Join(t.TempDir(), "exa")
+	bucketFSDir := filepath.Join(dataDir, "bucketfs")
+	if err := os.MkdirAll(bucketFSDir, 0o750); err != nil {
+		t.Fatalf("failed to create BucketFS directory: %v", err)
+	}
+	//nolint:gosec // directory mode under test
+	if err := os.Chmod(bucketFSDir, 0o555); err != nil {
+		t.Fatalf("failed to make BucketFS directory read-only: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(bucketFSDir, 0o750) }) //nolint:gosec // restores the fixture
+
+	// When
+	err := prepareHostDataDir(dataDir)
+	// Then start is not blocked, and the other staging directory is created
+	if err != nil {
+		t.Fatalf("expected data directory preparation to succeed, got %v", err)
+	}
+	assertDirMode(t, filepath.Join(dataDir, "jdbc"), dataDirMode)
+}
+
+func skipPOSIXPermissionTest(t *testing.T) {
+	t.Helper()
+	if os.PathSeparator == '\\' {
+		t.Skip("POSIX permission bits are not meaningful on Windows")
+	}
+}
+
+func assertDirMode(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("expected directory %s: %v", path, err)
+	}
+	if !info.IsDir() || info.Mode().Perm() != want {
+		t.Fatalf("expected %s to be a directory with mode %o, got %v", path, want, info.Mode())
 	}
 }

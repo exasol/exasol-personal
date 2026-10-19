@@ -102,19 +102,18 @@ const (
 func installFakePodmanStatus(t *testing.T, state fakePodmanContainerState) {
 	t.Helper()
 	directory := t.TempDir()
-	existsExit := "1"
+	listedName := ""
 	runningOutput := "false"
 	if state == fakePodmanContainerRunning {
-		existsExit = "0"
+		listedName = "exasol-db-local-test"
 		runningOutput = "true"
 	}
 	script := "#!/bin/sh\n" +
-		"if [ \"$1 $2 $3\" = \"container exists exasol-db-local-test\" ]; then exit " +
-		existsExit + "; fi\n" +
+		"if [ \"$1 $2\" = \"ps --all\" ]; then echo " + listedName + "; exit 0; fi\n" +
 		"if [ \"$1 $2 $3 $5\" = \"container inspect --format exasol-db-local-test\" ]; then " +
 		"echo " + runningOutput + "; exit 0; fi\n" +
-		"echo \"unexpected podman command: $*\" >&2\nexit 64\n"
-	podmanPath := filepath.Join(directory, "podman")
+		"echo \"unexpected docker command: $*\" >&2\nexit 64\n"
+	podmanPath := filepath.Join(directory, "docker")
 	//nolint:gosec // This test fixture must be executable.
 	if err := os.WriteFile(podmanPath, []byte(script), 0o700); err != nil {
 		t.Fatalf("failed to write fake podman: %v", err)

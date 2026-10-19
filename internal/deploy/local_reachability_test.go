@@ -232,7 +232,7 @@ func TestLocalReachabilityMessageForLinuxHostDoesNotUseMacOSGuidance(t *testing.
 
 	// Then
 	if message != linuxHostReachabilityMessage {
-		t.Fatalf("expected Linux Podman guidance, got %q", message)
+		t.Fatalf("expected Linux Docker guidance, got %q", message)
 	}
 	if strings.Contains(message, "Local Network") || strings.Contains(message, "host-to-VM") {
 		t.Fatalf("Linux guidance must not contain macOS VM advice: %q", message)
@@ -247,15 +247,15 @@ func TestLocalReachabilityMessageForWindowsHostDoesNotUseMacOSGuidance(t *testin
 	message := localReachabilityMessageForRuntime(localRuntime)
 
 	if message != windowsHostReachabilityMessage {
-		t.Fatalf("expected Windows Podman guidance, got %q", message)
+		t.Fatalf("expected Windows Docker guidance, got %q", message)
 	}
 	if strings.Contains(message, "Local Network") ||
 		strings.Contains(message, "System Settings") {
 		t.Fatalf("Windows guidance must not contain macOS advice: %q", message)
 	}
 	if !strings.Contains(message, "Windows Firewall") ||
-		!strings.Contains(message, "podman machine") {
-		t.Fatalf("Windows guidance must mention the firewall and the podman machine: %q", message)
+		!strings.Contains(message, "docker info") {
+		t.Fatalf("Windows guidance must mention the firewall and the Docker daemon: %q", message)
 	}
 	if strings.Contains(message, "set --rootful") {
 		t.Fatalf("Windows guidance must not advise converting to rootful: %q", message)

@@ -25,8 +25,16 @@ import (
 const (
 	nanoDBPort       = 8563
 	nanoDataDirName  = "exa"
+	dataDirMode      = 0o755
 	hostLoopbackHost = "127.0.0.1"
 )
+
+// userStagingDirs are the data directory paths user documentation directs
+// users to write: BucketFS content and JDBC drivers.
+var userStagingDirs = []string{
+	filepath.Join("bucketfs", "bfsdefault", "default"),
+	"jdbc",
+}
 
 var nanoInitParams = []string{"maxConnectionsLicenseLimit=20"}
 
@@ -50,7 +58,22 @@ type hostRuntimeEnvironmentPreparer interface {
 	NewExecutionEnvironment(runtimeExec []string) localinstall.ExecutionEnvironment
 }
 
-// linuxHostEnvironmentPreparer requires nothing but a Podman on PATH: the
+// hostContainerEngine is the container CLI direct-host runtimes use. It must
+// already be on PATH; the launcher never installs it.
+const hostContainerEngine = localinstall.EngineDocker
+
+func requireHostContainerEngine() error {
+	if _, err := exec.LookPath(string(hostContainerEngine)); err != nil {
+		return fmt.Errorf(
+			"'%s' is required to run exasol locally on this platform: %w",
+			hostContainerEngine, err,
+		)
+	}
+
+	return nil
+}
+
+// linuxHostEnvironmentPreparer requires nothing but a Docker on PATH: the
 // host kernel runs the containers directly, so there is no VM to manage and
 // nothing to install on the user's behalf.
 type linuxHostEnvironmentPreparer struct{}
@@ -58,11 +81,7 @@ type linuxHostEnvironmentPreparer struct{}
 func (linuxHostEnvironmentPreparer) Platform() HostPlatform { return HostPlatformLinux }
 
 func (linuxHostEnvironmentPreparer) EnsureReady(_ context.Context, _ PrepareOptions) error {
-	if _, err := exec.LookPath("podman"); err != nil {
-		return fmt.Errorf("'podman' is required to run exasol locally on this platform: %w", err)
-	}
-
-	return nil
+	return requireHostContainerEngine()
 }
 
 func (linuxHostEnvironmentPreparer) EnsureStartable(
@@ -156,9 +175,8 @@ func (runtime *HostRuntime) Start(
 	out, outErr io.Writer,
 	runtimeConfig VMConfig,
 ) error {
-	// Re-check prerequisites that can lapse between Prepare and Start (a
-	// stopped Podman machine, say). Without this the failure surfaces later
-	// as an opaque "podman socket unreachable".
+	// Re-check prerequisites that can lapse between Prepare and Start.
+	// Without this the failure surfaces later as an opaque engine error.
 	if err := runtime.preparer.EnsureStartable(ctx, out, outErr); err != nil {
 		return err
 	}
@@ -166,10 +184,63 @@ func (runtime *HostRuntime) Start(
 	if err != nil {
 		return err
 	}
+	if err := prepareHostDataDir(startConfig.DataDir); err != nil {
+		return err
+	}
 	if err := runtime.install().Start(ctx, out, outErr, startConfig); err != nil {
 		return err
 	}
 	runtime.endpoint = &RuntimeEndpoint{DBPort: startConfig.ContainerDBPort}
+
+	return nil
+}
+
+// prepareHostDataDir lets the unprivileged UDF sandbox enter the data
+// directory under a rootful engine, where the launcher user is not the
+// container's root. The parent work directory keeps other host users out.
+//
+// It also creates the directories users stage files in before Nano can create
+// them as root, so staging needs no elevated rights.
+func prepareHostDataDir(dataDir string) error {
+	if err := os.MkdirAll(dataDir, dataDirMode); err != nil {
+		return fmt.Errorf("failed to create Nano data directory %s: %w", dataDir, err)
+	}
+	if err := os.Chmod(dataDir, dataDirMode); err != nil {
+		return fmt.Errorf("failed to set permissions on Nano data directory %s: %w", dataDir, err)
+	}
+	for _, stagingDir := range userStagingDirs {
+		if err := createUserStagingDir(dataDir, stagingDir); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// createUserStagingDir creates the missing components of relativePath below
+// dataDir. Components that already exist are left as they are: Nano may own
+// them in a deployment it initialized before the launcher created them.
+func createUserStagingDir(dataDir string, relativePath string) error {
+	path := dataDir
+	for component := range strings.SplitSeq(relativePath, string(filepath.Separator)) {
+		path = filepath.Join(path, component)
+		err := os.Mkdir(path, dataDirMode)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if errors.Is(err, os.ErrPermission) {
+			slog.Warn("cannot create a user staging directory inside a directory the "+
+				"database owns; staging files there needs elevated rights", "path", path)
+
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("failed to create staging directory %s: %w", path, err)
+		}
+		if err := os.Chmod(path, dataDirMode); err != nil {
+			return fmt.Errorf("failed to set permissions on staging directory %s: %w", path, err)
+		}
+	}
 
 	return nil
 }
@@ -198,9 +269,7 @@ func (runtime *HostRuntime) Status(ctx context.Context) (*RuntimeStatus, error) 
 }
 
 // EnsureQueryable re-runs the platform's approval-free prerequisites so the
-// runtime can be observed. On Windows that starts a stopped Podman machine,
-// without which Status cannot distinguish a stopped container from a machine
-// it simply cannot reach.
+// runtime can be observed.
 func (runtime *HostRuntime) EnsureQueryable(
 	ctx context.Context,
 	out, outErr io.Writer,
@@ -209,11 +278,22 @@ func (runtime *HostRuntime) EnsureQueryable(
 }
 
 func (runtime *HostRuntime) Destroy(ctx context.Context, out, outErr io.Writer) error {
-	if err := runtime.install().Destroy(ctx, out, outErr); err != nil {
+	install := runtime.install()
+	if err := install.Destroy(ctx, out, outErr); err != nil {
 		return fmt.Errorf("failed to remove deployment: %w", err)
 	}
 
-	if err := os.RemoveAll(runtime.paths.Root); err != nil {
+	err := os.RemoveAll(runtime.paths.Root)
+	if err != nil && errors.Is(err, os.ErrPermission) {
+		// A rootful engine leaves database files owned by root.
+		dataDir := filepath.Join(runtime.paths.WorkDir, nanoDataDirName)
+		if clearErr := install.ClearDataDir(ctx, out, outErr, dataDir); clearErr != nil {
+			err = errors.Join(err, clearErr)
+		} else {
+			err = os.RemoveAll(runtime.paths.Root)
+		}
+	}
+	if err != nil {
 		return fmt.Errorf("failed to remove local runtime files %s: %w", runtime.paths.Root, err)
 	}
 
@@ -368,6 +448,7 @@ func (runtime *HostRuntime) install() *localinstall.PodmanInstall {
 
 	return localinstall.NewPodmanInstallWithEnvironment(
 		runtime.Deployment(),
+		hostContainerEngine,
 		runtime.preparer.NewExecutionEnvironment(runtime.runCmd()),
 		resolveImage,
 		localinstall.IdentityRuntimePath(SLCStagingDir(runtime.Deployment())),
@@ -389,16 +470,7 @@ func (runtime *HostRuntime) podmanStartConfig(
 
 	return localinstall.StartConfig{
 		ContainerDBPort: hostDBPort,
-		// Publish on 127.0.0.1 rather than the wildcard. On Windows the
-		// WSL2 podman machine has no IPv6 route, but pasta still creates a
-		// dual-stack published listener, and WSL's NAT localhost relay
-		// mirrors that as [::1] only. Clients then prefer the IPv6 path,
-		// connect successfully, and get reset because pasta cannot forward
-		// to the container's IPv4-only listener. Binding IPv4 explicitly
-		// keeps the relay on 127.0.0.1. See
-		// https://github.com/microsoft/WSL/issues/6387 and
-		// https://github.com/microsoft/WSL/blob/master/doc/docs/
-		// technical-documentation/localhost.md
+		// Publish on 127.0.0.1 so the database is not exposed beyond the host.
 		ContainerDBBindHost: hostLoopbackHost,
 		DataDir:             filepath.Join(runtime.paths.WorkDir, nanoDataDirName),
 		InitParams:          append([]string(nil), nanoInitParams...),

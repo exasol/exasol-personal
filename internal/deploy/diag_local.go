@@ -76,7 +76,7 @@ func diagnoseLocalUnsafe(
 	if err != nil {
 		runtimeName := "VM"
 		if _, isHostRuntime := localRuntime.(*localruntime.HostRuntime); isHostRuntime {
-			runtimeName = "Podman container"
+			runtimeName = "Docker container"
 		}
 		diagnostics.Message = fmt.Sprintf(
 			"could not determine local %s status: %s", runtimeName, err,
@@ -164,12 +164,12 @@ func unexpectedRunningVMWarning(deployment config.DeploymentDir) string {
 
 // orphanedRuntimeAdvice returns the platform-specific tail of
 // unexpectedRunningVMWarning: on macOS look for a mac-runner process, on
-// Linux/Windows look for a stray podman container.
+// Linux/Windows look for a stray Docker container.
 func orphanedRuntimeAdvice() string {
 	if runtime.GOOS == "darwin" {
 		return "Look for a `mac-runner` process for this deployment and stop it, then retry."
 	}
 
-	return "Look for a stray container with `podman ps -a` (name starts with " +
-		"`exasol-db-`) and remove it with `podman rm -f <name>`, then retry."
+	return "Look for a stray container with `docker ps -a` (name starts with " +
+		"`exasol-db-`) and remove it with `docker rm -f <name>`, then retry."
 }

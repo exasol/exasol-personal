@@ -59,27 +59,20 @@ const localReachabilityMessage = "could not reach the local database endpoint be
 	"access for that application. Then retry."
 
 const linuxHostReachabilityMessage = "could not reach the local database endpoint published " +
-	"by the Linux Podman container.\n\n" +
-	"Inspect the deployment container with `podman ps -a` and `podman logs`, then check for " +
+	"by the Linux Docker container.\n\n" +
+	"Inspect the deployment container with `docker ps -a` and `docker logs`, then check for " +
 	"a host firewall rule or another process using the configured database port."
 
 const windowsHostReachabilityMessage = "could not reach the local database endpoint published " +
-	"by podman-for-windows.\n\n" +
-	"On Windows the database port is forwarded from the Nano container, through the WSL2 podman " +
-	"machine, out to 127.0.0.1 on the host. If every forwarded port is unreachable the break is " +
-	"almost always in that host-to-VM path rather than in the database itself.\n\n" +
+	"by Docker.\n\n" +
 	"Likely causes, in decreasing order of frequency:\n" +
 	"  1. Windows Firewall or a third-party security product is blocking loopback traffic to the " +
 	"forwarded port. Temporarily allow the port and retry.\n" +
-	"  2. Another process (Docker Desktop, a running server, an older Exasol container) is " +
-	"already bound to the configured port. Use `netstat -ano | findstr <port>` to check.\n" +
-	"  3. The podman machine stopped between start and health-check. Run " +
-	"`podman machine ls` and start it if needed.\n" +
-	"  4. The port is published on IPv6 only. WSL's localhost relay mirrors a dual-stack " +
-	"listener as [::1] and cannot forward it to the container's IPv4 listener. Check with " +
-	"`netstat -ano | findstr <port>`: the launcher publishes on 127.0.0.1 explicitly, so a " +
-	"[::1]-only binding means the container was not started by this launcher.\n\n" +
-	"Diagnostic commands: `podman ps -a`, `podman logs <container>`, `podman machine inspect`."
+	"  2. Another process (a running server, an older Exasol container) is already bound to " +
+	"the configured port. Use `netstat -ano | findstr <port>` to check.\n" +
+	"  3. Docker stopped between start and health-check. Run `docker info` and start Docker " +
+	"if needed.\n\n" +
+	"Diagnostic commands: `docker ps -a`, `docker logs <container>`."
 
 // classifyLocalReachability inspects the local runtime's forwarded-port
 // health and returns a localReachabilityError when every forwarded port is

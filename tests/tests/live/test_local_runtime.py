@@ -84,7 +84,7 @@ def test_full_local_deployment_lifecycle(local_deployment: Deployment) -> None:
     # Then no database container is left behind on a direct-host runtime
     if sys.platform.startswith("linux"):
         containers = run_command(
-            ["podman", "ps", "-a", "--format", "{{.Names}}"]
+            ["docker", "ps", "-a", "--format", "{{.Names}}"]
         ).stdout.split()
         assert f"exasol-db-{deployment_data['deploymentId']}" not in containers
 
