@@ -6,7 +6,9 @@ package deploy
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -43,18 +45,16 @@ func materializeTestSidecar(
 			if err != nil {
 				return err
 			}
-			container, err := materializeSidecarLocked(
-				directory,
-				document,
-				catalog,
-				"example",
-				"amd64",
-			)
-			if err == nil && container.Name != "example" {
-				t.Fatal("wrong materialized name")
+			if containsSidecar(document, "example") {
+				return nil
 			}
+			container, err := catalog.Resolve("example", runtime.GOARCH)
+			if err != nil {
+				return err
+			}
+			document.Containers = append(document.Containers, container)
 
-			return err
+			return config.WriteSidecars(directory, document)
 		},
 	)
 	require.NoError(t, err)
@@ -126,4 +126,94 @@ func TestSidecarEnableStoresConnectionReferences(t *testing.T) {
 	require.Nil(t, saved[0].Value)
 	require.Equal(t, sidecar.DatabaseSecret, saved[0].ValueFrom.SecretKeyRef.Name)
 	require.Equal(t, "password", saved[0].ValueFrom.SecretKeyRef.Key)
+}
+
+func TestSidecarDisableRejectsUnknownName(t *testing.T) {
+	t.Parallel()
+	// Given
+	deployment := newTestDeploymentWithState(t)
+	materializeTestSidecar(t, deployment, sidecarTestCatalog(t))
+	// When
+	_, err := DisableSidecar(t.Context(), deployment, "absent")
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "absent") ||
+		!strings.Contains(err.Error(), "example") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	document, readErr := config.ReadSidecars(deployment)
+	require.NoError(t, readErr)
+	if len(document.Containers) != 1 {
+		t.Fatalf("saved definitions changed: %+v", document)
+	}
+}
+
+func TestSidecarStatusReportsEveryEnabledSidecar(t *testing.T) {
+	t.Parallel()
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	materializeTestSidecar(t, deployment, sidecarTestCatalog(t))
+	// When
+	results, err := GetAllSidecarStatus(t.Context(), deployment)
+	// Then
+	require.NoError(t, err)
+	if len(results) != 1 || results[0].Name != "example" || !results[0].Enabled {
+		t.Fatalf("unexpected status: %+v", results)
+	}
+}
+
+func TestSidecarStatusReportsNothingWhenNoneAreEnabled(t *testing.T) {
+	t.Parallel()
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	// When
+	results, err := GetAllSidecarStatus(t.Context(), deployment)
+	// Then
+	require.NoError(t, err)
+	if len(results) != 0 {
+		t.Fatalf("unexpected status: %+v", results)
+	}
+}
+
+func TestSidecarStatusRejectsUnknownName(t *testing.T) {
+	t.Parallel()
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	materializeTestSidecar(t, deployment, sidecarTestCatalog(t))
+	// When
+	_, err := GetSidecarStatus(t.Context(), deployment, "absent")
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "absent") ||
+		!strings.Contains(err.Error(), "supported choices") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSidecarListReportsCloudDeploymentsUnsupported(t *testing.T) {
+	t.Parallel()
+	// When
+	entries, err := unsupportedAvailability(backendTypeTofu, sidecarTestCatalog(t))
+	// Then
+	require.NoError(t, err)
+	require.NotEmpty(t, entries)
+	for _, entry := range entries {
+		if entry.Supported || !strings.Contains(entry.Unsupported, backendTypeTofu) {
+			t.Fatalf("unexpected availability: %+v", entry)
+		}
+	}
+}
+
+func TestSidecarListFailsOnUnreadableManifest(t *testing.T) {
+	t.Parallel()
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	require.NoError(t, os.MkdirAll(
+		filepath.Dir(deployment.InfrastructureManifestPath()), 0o700,
+	))
+	require.NoError(t, os.WriteFile(
+		deployment.InfrastructureManifestPath(), []byte("\tbackend: ?\n"), 0o600,
+	))
+	// When
+	_, err := ListSidecars(t.Context(), deployment)
+	// Then
+	require.Error(t, err)
 }
