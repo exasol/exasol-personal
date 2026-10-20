@@ -12,6 +12,13 @@ Notable user-facing changes to Exasol Personal are documented here.
   exasol connect -c "CREATE TABLE DEMO.SALES AS (IMPORT FROM LOCAL PARQUET FILE '/data/sales.parquet')"
   ```
 
+- Added `exasol sidecar list`, `enable <name>`, `status [name]`, and
+  `disable <name>` with JSON output. The launcher keeps enabled definitions in
+  a deployment-owned `sidecars.yaml`, accepts edits to them, and uses the saved
+  values for later operations. Status without a name reports every enabled
+  sidecar, and disabling one that is not enabled fails and lists those that
+  are. Example: `exasol sidecar enable <name>`.
+
 - Added a **CLI reference** page to the user documentation, listing every command and option of the
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each
   preset.
