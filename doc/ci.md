@@ -16,6 +16,8 @@ line under `release/`:
 - **Unit Tests** - Runs Go unit tests with coverage
 - **Launcher Tests** - Runs cloud-free Python launcher tests on Linux and Windows
 
+A new push to a pull request or to `main` cancels that pull request's or branch's previous run, so only the latest commit is fully tested.
+
 Build and launcher tests run on both `ubuntu-latest` and `windows-latest`, so Windows-only behavior — including Windows local deployments — is covered on every pull request. Unit tests and linting run on Linux only.
 
 This is the only workflow that runs contributor code in pull request context. It is intentionally non-privileged and does not use deployment/release credentials.

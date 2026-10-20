@@ -8,6 +8,12 @@ on:
 
 permissions: {}
 
+# A new push cancels the previous run of the same pull request or branch,
+# including main, where only the latest commit needs a complete run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # run all go-based linters together so they can share the go setup and the cache
   lint-go:
