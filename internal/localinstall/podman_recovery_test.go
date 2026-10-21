@@ -37,11 +37,10 @@ func TestPodmanInstallStart_QuarantinesInterruptedInitialCreate(t *testing.T) {
 	}
 	commands := readCommandLog(t, fixture.logPath)
 	expectedPrefix := []string{
-		"<podman><container><exists><" + testContainerName + ">",
-		"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+		"<podman><ps><--all><--filter><name=^" + testContainerName + "$><--format><json>",
 		"<podman><container><inspect><--format><{{json .Mounts}}><" + testContainerName + ">",
 		"<podman><stop><" + testContainerName + ">",
-		"<podman><rm><--force><--ignore><" + testContainerName + ">",
+		"<podman><rm><--force><--ignore><--><" + testContainerName + ">",
 	}
 	if len(commands) < len(expectedPrefix) {
 		t.Fatalf("expected recovery commands, got %#v", commands)

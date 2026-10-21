@@ -10,9 +10,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
+	"slices"
 	"strings"
 	"time"
 
@@ -33,11 +32,6 @@ const (
 	// nested namespaces (at least user, mount and pid).
 	nanoSecurityOpt        = "unmask=ALL"
 	nanoSELinuxSecurityOpt = "label=disable"
-	nanoRestartPolicy      = "always"
-	// Nano rejects initial-password options once its runtime is initialized,
-	// and Podman replays a container's original arguments when it restarts it,
-	// so the container that receives the initial password must not restart.
-	nanoBootstrapRestartPolicy = "no"
 	// nanoBootstrapMountPath is where the first container sees the bootstrap
 	// directory holding the initial sys password.
 	nanoBootstrapMountPath    = "/run/secrets"
@@ -58,6 +52,7 @@ const (
 type PodmanInstall struct {
 	deployment    config.DeploymentDir
 	environment   ExecutionEnvironment
+	client        ContainerRuntime
 	resolveImage  func(context.Context) (RuntimePath, error)
 	slcStagingDir RuntimePath
 	slcStatusPath RuntimePath
@@ -116,6 +111,7 @@ func NewPodmanInstallWithEnvironment(
 	return &PodmanInstall{
 		deployment:    deployment,
 		environment:   environment,
+		client:        newPodmanRuntime(environment),
 		resolveImage:  resolveImage,
 		slcStagingDir: slcStagingDir,
 		slcStatusPath: slcStatusPath,
@@ -196,18 +192,13 @@ func (install *PodmanInstall) Start(
 			ctx, outErr, containerName, fmt.Errorf("failed to resolve Nano image: %w", err),
 		)
 	}
-	loadOutput, err := install.runPodmanOutput(
-		ctx, out, outErr, "load", "-i", imagePath.RuntimePath,
+	loadedImage, err := install.client.LoadImage(
+		ctx, imagePath.RuntimePath, out, outErr,
 	)
 	if err != nil {
 		return install.failureWithDiagnostics(ctx, outErr, containerName,
 			fmt.Errorf("failed to load Nano image %s: %w", imagePath.RuntimePath, err))
 	}
-	loadedImage, err := parseLoadedImage(loadOutput)
-	if err != nil {
-		return install.failureWithDiagnostics(ctx, outErr, containerName, err)
-	}
-
 	availableSLCs, err := install.materializeSLCs(ctx, out, outErr, containerName, startConfig.SLCs)
 	if err != nil {
 		return err
@@ -224,7 +215,7 @@ func (install *PodmanInstall) Start(
 			return err
 		}
 	}
-	args := nanoRunArgs(startConfig, nanoRunOptions{
+	spec := nanoRunSpec(startConfig, nanoRunOptions{
 		containerName: containerName,
 		loadedImage:   loadedImage,
 		slcs:          availableSLCs,
@@ -236,7 +227,7 @@ func (install *PodmanInstall) Start(
 	if outErr != nil {
 		startErrOutput = io.MultiWriter(outErr, &startDiagnostic)
 	}
-	if err := install.runPodman(ctx, out, startErrOutput, args...); err != nil {
+	if err := install.client.Create(ctx, spec, out, startErrOutput); err != nil {
 		failure := fmt.Errorf("failed to start Nano container %s: %w", containerName, err)
 		failure = classifyPodmanStartBindFailure(
 			ctx,
@@ -323,13 +314,12 @@ func classifyPodmanStartBindFailure(
 	)
 }
 
-func podmanDBPortMapping(startConfig StartConfig) string {
-	ports := fmt.Sprintf("%d:%d", startConfig.ContainerDBPort, nanoInternalDBPort)
-	if startConfig.ContainerDBBindHost == "" {
-		return ports
+func nanoDBPortMapping(startConfig StartConfig) PortMapping {
+	return PortMapping{
+		HostIP:        startConfig.ContainerDBBindHost,
+		HostPort:      startConfig.ContainerDBPort,
+		ContainerPort: nanoInternalDBPort,
 	}
-
-	return startConfig.ContainerDBBindHost + ":" + ports
 }
 
 type nanoRunOptions struct {
@@ -340,54 +330,62 @@ type nanoRunOptions struct {
 	bootstrap     bool
 }
 
-func nanoRunArgs(startConfig StartConfig, options nanoRunOptions) []string {
-	restartPolicy := nanoRestartPolicy
+func nanoRunSpec(startConfig StartConfig, options nanoRunOptions) ContainerSpec {
+	restartPolicy := RestartAlways
 	if options.bootstrap {
-		restartPolicy = nanoBootstrapRestartPolicy
+		// Nano rejects initial-password options once its runtime is initialized,
+		// and a restart replays the container's original arguments, so the
+		// container that receives the initial password must not restart.
+		restartPolicy = RestartNever
 	}
-	args := []string{
-		"run", "-d", "--replace",
-		"--name", options.containerName,
-		"--shm-size=" + nanoShmSize,
-		"--pids-limit=" + nanoPIDsLimit,
-		"--security-opt", nanoSecurityOpt,
-		"--security-opt", nanoSELinuxSecurityOpt,
-		"--restart", restartPolicy,
-		"-p", podmanDBPortMapping(startConfig),
-		"-v", startConfig.DataDir + ":" + nanoDataMountTarget,
+	spec := ContainerSpec{
+		Name:             options.containerName,
+		Image:            options.loadedImage,
+		Replace:          true,
+		Restart:          restartPolicy,
+		SharedMemorySize: nanoShmSize,
+		ProcessLimit:     nanoPIDsLimit,
+		SecurityOptions:  []string{nanoSecurityOpt, nanoSELinuxSecurityOpt},
+		Ports:            []PortMapping{nanoDBPortMapping(startConfig)},
+		Mounts: []Mount{
+			{Kind: MountBind, Source: startConfig.DataDir, Target: nanoDataMountTarget},
+		},
 	}
 	if options.bootstrap {
-		args = append(args,
-			"-v", startConfig.BootstrapDir+":"+nanoBootstrapMountPath+":ro,Z",
-		)
+		spec.Mounts = append(spec.Mounts, Mount{
+			Kind: MountBind, Source: startConfig.BootstrapDir,
+			Target: nanoBootstrapMountPath, ReadOnly: true, Relabel: true,
+		})
 	}
 	for _, slc := range options.slcs {
-		// `rw=true` works around containers that ship no directory skeleton: the UDF
+		// Writable works around containers that ship no directory skeleton: the UDF
 		// sandbox launcher creates the mount points it binds into the container root
 		// (/proc, /dev, /buckets, /var/tmp and siblings) only where that root is
 		// writable, and a missing one fails every UDF as an opaque `VM crashed`.
-		// Podman keeps the writes in an ephemeral per-container overlay, so the image
-		// is never modified and the UDF-visible root stays read-only.
-		args = append(args,
-			"--mount",
-			fmt.Sprintf("type=image,source=%s,destination=%s,rw=true", slc.Image, slc.Target),
-		)
+		// The runtime keeps the writes in an ephemeral per-container overlay, so the
+		// image is never modified and the UDF-visible root stays read-only.
+		spec.Mounts = append(spec.Mounts, Mount{
+			Kind: MountImage, Source: slc.Image, Target: slc.Target, Writable: true,
+		})
 	}
 	if startConfig.VersionCheck.Enabled {
-		args = append(args, "-e", "VERSION_CHECK_IDENTITY="+startConfig.VersionCheck.Identity)
+		spec.Env = map[string]string{
+			"VERSION_CHECK_IDENTITY": startConfig.VersionCheck.Identity,
+		}
 	}
-	args = append(args, options.loadedImage, "init")
+	spec.Args = []string{"init"}
 	if options.fresh && len(startConfig.InitParams) > 0 {
-		args = append(args, "params="+strings.Join(startConfig.InitParams, " "))
+		spec.Args = append(spec.Args, "params="+strings.Join(startConfig.InitParams, " "))
 	}
 	if options.bootstrap {
-		args = append(args,
+		spec.Args = append(
+			spec.Args,
 			"sys_password_file="+nanoBootstrapMountPath+"/"+nanoBootstrapPasswordFile,
 		)
 	}
-	args = append(args, nanoVersionCheckInitArgs(startConfig.VersionCheck)...)
+	spec.Args = append(spec.Args, nanoVersionCheckInitArgs(startConfig.VersionCheck)...)
 
-	return args
+	return spec
 }
 
 func (install *PodmanInstall) Stop(ctx context.Context, out, outErr io.Writer) error {
@@ -395,15 +393,7 @@ func (install *PodmanInstall) Stop(ctx context.Context, out, outErr io.Writer) e
 	if err != nil {
 		return err
 	}
-	if err := install.runPodman(
-		ctx,
-		out,
-		outErr,
-		"rm",
-		"--force",
-		"--ignore",
-		containerName,
-	); err != nil {
+	if err := install.client.Remove(ctx, containerName, true, out, outErr); err != nil {
 		return fmt.Errorf("failed to remove Nano container %s: %w", containerName, err)
 	}
 
@@ -473,8 +463,8 @@ func (install *PodmanInstall) adoptLegacyContainerName(
 		if !exists {
 			continue
 		}
-		if err := install.runPodman(
-			ctx, out, outErr, "rename", legacyName, containerName,
+		if err := install.client.Rename(
+			ctx, legacyName, containerName, out, outErr,
 		); err != nil {
 			return install.failureWithDiagnostics(
 				ctx,
@@ -521,21 +511,8 @@ func (install *PodmanInstall) writePodmanDiagnostics(
 	)
 	defer cancel()
 
-	_, _ = fmt.Fprintf(diagnosticOut, "Podman diagnostics for %s:\n", containerName)
-	commands := [][]string{
-		{"info"},
-		{"ps", "-a"},
-		{"container", "inspect", containerName},
-		{"logs", containerName},
-	}
-	for _, command := range commands {
-		_, _ = fmt.Fprintf(diagnosticOut, "$ podman %s\n", strings.Join(command, " "))
-		if err := install.runPodman(
-			diagnosticCtx, diagnosticOut, diagnosticOut, command...,
-		); err != nil {
-			_, _ = fmt.Fprintf(diagnosticOut, "diagnostic command failed: %v\n", err)
-		}
-	}
+	_, _ = fmt.Fprintf(diagnosticOut, "Container diagnostics for %s:\n", containerName)
+	install.client.Diagnostics(diagnosticCtx, containerName, diagnosticOut)
 }
 
 func (install *PodmanInstall) validateStartConfig(startConfig StartConfig) error {
@@ -616,29 +593,6 @@ func (install *PodmanInstall) isFreshDeployment(
 	return !exists, nil
 }
 
-func parseLoadedImage(output string) (string, error) {
-	var loadedImage string
-	for line := range strings.SplitSeq(output, "\n") {
-		_, image, found := strings.Cut(line, loadedImagePrefix)
-		if !found {
-			continue
-		}
-		image = strings.TrimSpace(image)
-		if image == "" {
-			continue
-		}
-		if loadedImage != "" && loadedImage != image {
-			return "", errors.New("podman load reported multiple Nano images")
-		}
-		loadedImage = image
-	}
-	if loadedImage == "" {
-		return "", errors.New("could not determine the image reference reported by podman load")
-	}
-
-	return loadedImage, nil
-}
-
 func (install *PodmanInstall) containerRunning(
 	ctx context.Context,
 	outErr io.Writer,
@@ -653,65 +607,36 @@ type podmanContainerStatus struct {
 	Running bool
 }
 
-func (install *PodmanInstall) inspectContainerStatus(
-	ctx context.Context,
-	outErr io.Writer,
-	containerName string,
-) (podmanContainerStatus, error) {
-	exists, err := install.containerExists(ctx, outErr, containerName)
-	if err != nil || !exists {
-		return podmanContainerStatus{}, err
-	}
-	output, err := install.runPodmanOutput(
-		ctx,
-		nil,
-		outErr,
-		"container",
-		"inspect",
-		"--format",
-		"{{.State.Running}}",
-		containerName,
-	)
-	if err != nil {
-		return podmanContainerStatus{}, fmt.Errorf(
-			"failed to inspect Nano container %s: %w", containerName, err,
-		)
-	}
-	running, err := strconv.ParseBool(strings.TrimSpace(output))
-	if err != nil {
-		return podmanContainerStatus{}, fmt.Errorf(
-			"failed to parse running state for Nano container %s from %q: %w",
-			containerName,
-			strings.TrimSpace(output),
-			err,
-		)
-	}
-
-	return podmanContainerStatus{Exists: true, Running: running}, nil
-}
-
 func (install *PodmanInstall) containerExists(
 	ctx context.Context,
 	outErr io.Writer,
 	containerName string,
 ) (bool, error) {
-	err := install.runPodman(
-		ctx,
-		nil,
-		outErr,
-		"container",
-		"exists",
-		containerName,
-	)
-	if err == nil {
-		return true, nil
+	status, err := install.inspectContainerStatus(ctx, outErr, containerName)
+
+	return status.Exists, err
+}
+
+// inspectContainerStatus asks podman's listing once rather than testing for
+// the container and then inspecting it.
+func (install *PodmanInstall) inspectContainerStatus(
+	ctx context.Context,
+	outErr io.Writer,
+	containerName string,
+) (podmanContainerStatus, error) {
+	containers, err := install.client.List(ctx, outErr, ContainerFilter{Name: containerName})
+	if err != nil {
+		return podmanContainerStatus{}, fmt.Errorf(
+			"failed to find Nano container %s: %w", containerName, err,
+		)
 	}
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) && exitError.ExitCode() == 1 {
-		return false, nil
+	for _, container := range containers {
+		if slices.Contains(container.Names, containerName) {
+			return podmanContainerStatus{Exists: true, Running: container.Running()}, nil
+		}
 	}
 
-	return false, fmt.Errorf("failed to find Nano container %s: %w", containerName, err)
+	return podmanContainerStatus{}, nil
 }
 
 func (install *PodmanInstall) resolveImagePath(ctx context.Context) (RuntimePath, error) {
@@ -727,32 +652,6 @@ func (install *PodmanInstall) resolveImagePath(ctx context.Context) (RuntimePath
 	}
 
 	return path, nil
-}
-
-func (install *PodmanInstall) runPodman(
-	ctx context.Context,
-	out, outErr io.Writer,
-	arg ...string,
-) error {
-	return install.environment.Run(ctx, nil, out, outErr, append([]string{"podman"}, arg...)...)
-}
-
-func (install *PodmanInstall) runPodmanOutput(
-	ctx context.Context,
-	out, outErr io.Writer,
-	arg ...string,
-) (string, error) {
-	var stdout bytes.Buffer
-	if out == nil {
-		out = &stdout
-	} else {
-		out = io.MultiWriter(out, &stdout)
-	}
-	err := install.environment.Run(
-		ctx, nil, out, outErr, append([]string{"podman"}, arg...)...,
-	)
-
-	return stdout.String(), err
 }
 
 func ContainerName(deployment config.DeploymentDir) (string, error) {

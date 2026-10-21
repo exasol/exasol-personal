@@ -43,3 +43,18 @@ Saved definitions stay authoritative once a name is enabled, so a template
 assembled for one command influences only the first enablement of that name.
 Listing reports the merged entries, which keeps availability and enablement
 consistent with whatever resolved the template.
+
+## Running container commands
+
+Every container command goes through the
+[`ContainerRuntime` interface](../internal/localinstall/container.go). Callers
+describe a container with a
+[`ContainerSpec`](../internal/localinstall/container_spec.go) and name
+operations like `Create`, `Remove` or `Images`; no caller spells a runtime
+flag.
+
+Everything runtime-specific lives in
+[the podman backend](../internal/localinstall/container_podman.go): the
+argument spelling, the pull and restart policy translations, the response
+schemas it parses, and which commands answer a diagnostic dump. A second
+runtime implements the interface rather than touching any call site.

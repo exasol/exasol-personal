@@ -126,8 +126,9 @@ func TestClassifyLocalReachability_HealthCheckUnavailableIsNoop(t *testing.T) {
 		"if [ \"$1\" = status ]; then echo '" + fakeRunnerRunningStatus + "'; exit 0; fi\n" +
 		"if [ \"$1\" = run ]; then\n" +
 		"  shift; [ \"$1\" = -- ]; shift\n" +
-		"  if [ \"$1 $2 $3\" = 'podman container exists' ]; then exit 0; fi\n" +
-		"  if [ \"$1 $2 $3\" = 'podman container inspect' ]; then echo true; exit 0; fi\n" +
+		"  if [ \"$1 $2\" = 'podman ps' ]; then echo " +
+		"'[{\"id\":\"fake\",\"names\":[\"exasol-db-local-test\"]," +
+		"\"state\":\"running\"}]'; exit 0; fi\n" +
 		"fi\n" +
 		"echo 'Unknown command: health-check' >&2\nexit 1\n"
 	manager := newTestManagerForRunner(t, []byte(runnerScript))
@@ -318,8 +319,9 @@ func writeFakeCombinedRunner(
 		"if [ \"$1\" = health-check ]; then echo '" + healthCheckJSON + "'; exit 0; fi\n" +
 		"if [ \"$1\" = run ]; then\n" +
 		"  shift; [ \"$1\" = -- ]; shift\n" +
-		"  if [ \"$1 $2 $3\" = 'podman container exists' ]; then exit 0; fi\n" +
-		"  if [ \"$1 $2 $3\" = 'podman container inspect' ]; then echo true; exit 0; fi\n" +
+		"  if [ \"$1 $2\" = 'podman ps' ]; then echo " +
+		"'[{\"id\":\"fake\",\"names\":[\"exasol-db-local-test\"]," +
+		"\"state\":\"running\"}]'; exit 0; fi\n" +
 		"fi\n" +
 		"exit 1\n"
 

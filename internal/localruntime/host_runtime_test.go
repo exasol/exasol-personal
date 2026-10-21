@@ -436,24 +436,27 @@ const fakeLinuxRuntimePodmanScript = `#!/bin/sh
 set -eu
 scenario_dir=$1
 shift
-if [ "$1" != "podman" ] || [ "$2" != "container" ]; then
+if [ "$1" != "podman" ] || [ "$2" != "ps" ]; then
   exit 90
 fi
-case "$3" in
-  exists)
-    if [ ! -f "$scenario_dir/existing" ] && [ ! -f "$scenario_dir/running" ]; then
-      exit 1
-    fi
-    ;;
-  inspect)
-    if [ -f "$scenario_dir/running" ]; then
-      printf 'true\n'
-    else
-      printf 'false\n'
-    fi
-    ;;
-  *) exit 91 ;;
-esac
+name=""
+for argument in "$@"; do
+  case "$argument" in
+    name=^*)
+      name=${argument#name=^}
+      name=${name%\$}
+      ;;
+  esac
+done
+if [ ! -f "$scenario_dir/existing" ] && [ ! -f "$scenario_dir/running" ]; then
+  printf '[]\n'
+  exit 0
+fi
+state=exited
+if [ -f "$scenario_dir/running" ]; then
+  state=running
+fi
+printf '[{"id":"fake","names":["%s"],"state":"%s"}]\n' "$name" "$state"
 `
 
 func TestResolveLinuxHostDBPort_RejectsInvalidMappings(t *testing.T) {
