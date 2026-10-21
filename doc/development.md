@@ -191,6 +191,9 @@ Adding a new built-in preset directory under `assets/infrastructure/` or `assets
 
 ## Development Workflow
 
+For catalog entries and runtime integration, see
+[Developing sidecars](sidecars.md).
+
 ### Essential Task Commands
 
 View all available tasks:
