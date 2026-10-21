@@ -42,8 +42,8 @@ exasol-local-runner:
   embed: true
   artifact:
     darwin/arm64:
-      url: https://github.com/exasol/exasol-local-vm/releases/download/v2.0.0/mac-launcher-aarch64.zip
-      sha256: 0396aaa409e3ee925726a9c5dae6b7eafb4c27c29382f6e51b0e0502e26a563a
+      url: https://github.com/exasol/exasol-local-vm/releases/download/v2.1.1/mac-launcher-aarch64.zip
+      sha256: cb20d22655bf90a6fc8f85cc02aff101ad435014194d91c45d180aff4d7bc6d4
       resource_path: launcher
 exasol-nano-image:
   extract: false

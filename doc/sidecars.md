@@ -58,3 +58,29 @@ Everything runtime-specific lives in
 argument spelling, the pull and restart policy translations, the response
 schemas it parses, and which commands answer a diagnostic dump. A second
 runtime implements the interface rather than touching any call site.
+
+## Running sidecar containers
+
+Reuse the [sidecar driver](../internal/localinstall/sidecars.go) on that
+runtime. It creates, inspects, compares, and cleans up containers carrying
+deployment ownership labels, and reports applied runtime endpoints so saved
+edits leave reported endpoints unchanged until reconciliation applies them.
+
+Resolved connection values reach a container through an
+[environment file](../internal/localinstall/sidecar_env.go) readable only by
+its owner and removed once the container is created, so credentials stay out of
+process arguments and launcher command logs. The file lives under the
+deployment's shared directory, which a runtime behind a virtual machine
+boundary reaches at its own mapped path. Values the file format cannot carry
+are rejected naming the variable.
+
+Keep container networking in the runtime. Local hosts use one managed bridge
+per deployment, where the database answers to `database` and each sidecar to
+its saved name.
+
+Opening an endpoint beyond the host that runs the container belongs to the
+runtime, through `OpenPorts` and `OpenedPorts` in
+[the runtime contract](../internal/localruntime/runtime.go). A runtime opens
+exactly the set it is handed and withdraws what it no longer receives. A
+runtime whose containers bind on the user's machine opens nothing. A VM runtime
+opens host forwards to the guest binding.

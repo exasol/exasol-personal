@@ -49,10 +49,14 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 		"<podman><ps><--all><--filter><name=^" + testContainerName + "$><--format><json>",
 		"<podman><load><-i><" + fixture.imagePath + ">",
 		"<sync>",
+		"<podman><network><create><--ignore><--driver><bridge><--label><" +
+			sidecarOwnerLabel + "=" + testContainerName + "><" + testContainerName + "-services>",
+		"<podman><network><inspect><" + testContainerName + "-services>",
 		"<podman><run><--detach><--replace><--name><" + testContainerName + ">" +
 			"<--restart><always>" +
 			"<--shm-size=512mb><--pids-limit=-1><--security-opt><unmask=ALL>" +
 			"<--security-opt><label=disable>" +
+			"<--network><" + testContainerName + "-services><--network-alias><database>" +
 			"<--publish><127.0.0.1:28563:8563/tcp>" +
 			"<--volume><" + startConfig.DataDir + ":/exa:Z>" +
 			"<" + testLoadedImage + "><init><params=maxConnectionsLicenseLimit=20>" +
@@ -311,8 +315,8 @@ func TestPodmanInstallStart_ReusesExistingDatabaseConfiguration(t *testing.T) {
 		t.Fatalf("expected existing database start to succeed, got %v", err)
 	}
 	commands := readCommandLog(t, fixture.logPath)
-	if len(commands) != 4 {
-		t.Fatalf("expected four execution-environment commands, got %#v", commands)
+	if len(commands) != 6 {
+		t.Fatalf("expected six execution-environment commands, got %#v", commands)
 	}
 	runCommand := commands[len(commands)-1]
 	if !strings.HasSuffix(
@@ -515,7 +519,7 @@ func TestPodmanInstallStart_StopsAfterCommandFailure(t *testing.T) {
 			name:             "run",
 			failedCommand:    "run",
 			expectedError:    "failed to start Nano container",
-			expectedCommands: 9,
+			expectedCommands: 11,
 		},
 		{
 			name:             "unparseable load output",
@@ -1021,7 +1025,7 @@ if [ -f "$scenario_dir/fail-diagnostics" ]; then
       printf 'fake diagnostic failure\n' >&2
       exit 43
       ;;
-  container)
+    container)
       if [ "$3" = "inspect" ] && [ "$4" != "--format" ]; then
         printf 'fake diagnostic failure\n' >&2
         exit 43
@@ -1031,6 +1035,14 @@ if [ -f "$scenario_dir/fail-diagnostics" ]; then
 fi
 
 case "$command" in
+  network)
+    if [ "$3" = "inspect" ]; then
+      printf '[{"name":"%s","driver":"bridge","dns_enabled":true,' "$4"
+      printf '"labels":{"com.exasol.launcher.sidecar-owner":"%s"}}]\n' "${4%-services}"
+    elif [ "$3" = "ls" ]; then
+      printf '[]\n'
+    fi
+    ;;
   image)
     if [ "$3" != "exists" ]; then
       exit 93
@@ -1049,33 +1061,33 @@ case "$command" in
     fi
     ;;
   ps)
-  name=""
-  for argument in "$@"; do
-    case "$argument" in
-      name=^*)
-        name=${argument#name=^}
-        name=${name%\$}
-        ;;
-    esac
-  done
-  state=exited
-  if [ -f "$scenario_dir/running" ]; then
-    state=running
-  fi
-  listed=no
-  if [ -f "$scenario_dir/legacy-name" ]; then
-    if [ "$(cat "$scenario_dir/legacy-name")" = "$name" ]; then
+    name=""
+    for argument in "$@"; do
+      case "$argument" in
+        name=^*)
+          name=${argument#name=^}
+          name=${name%\$}
+          ;;
+      esac
+    done
+    state=exited
+    if [ -f "$scenario_dir/running" ]; then
+      state=running
+    fi
+    listed=no
+    if [ -f "$scenario_dir/legacy-name" ]; then
+      if [ "$(cat "$scenario_dir/legacy-name")" = "$name" ]; then
+        listed=yes
+      fi
+    elif [ -f "$scenario_dir/running" ] || [ -f "$scenario_dir/existing" ]; then
       listed=yes
     fi
-  elif [ -f "$scenario_dir/running" ] || [ -f "$scenario_dir/existing" ]; then
-    listed=yes
-  fi
-  if [ "$listed" = yes ]; then
-    printf '[{"id":"fake","names":["%s"],"state":"%s"}]\n' "$name" "$state"
-  else
-    printf '[]\n'
-  fi
-  ;;
+    if [ "$listed" = yes ]; then
+      printf '[{"id":"fake","names":["%s"],"state":"%s"}]\n' "$name" "$state"
+    else
+      printf '[]\n'
+    fi
+    ;;
   container)
     operation=$3
     case "$operation" in
