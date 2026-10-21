@@ -6,10 +6,8 @@ package localinstall
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -90,7 +88,7 @@ func (install *PodmanInstall) materializeSLC(
 	}
 
 	if slc.Package == "" {
-		if err := install.runPodman(ctx, out, outErr, "pull", slc.Image); err != nil {
+		if err := install.client.PullImage(ctx, slc.Image, out, outErr); err != nil {
 			return false, "", install.failureWithDiagnostics(ctx, outErr, containerName,
 				fmt.Errorf("failed to pull SLC image %s: %w", slc.Image, err))
 		}
@@ -111,15 +109,13 @@ func (install *PodmanInstall) materializeSLC(
 	if !packageExists {
 		return false, slcStatusMissing, nil
 	}
-	if err := install.runPodman(
+	if err := install.client.ImportImage(
 		ctx,
-		out,
-		outErr,
-		"import",
-		"--change",
-		"LABEL "+slcImportLabel,
 		packagePath.RuntimePath,
 		slc.Image,
+		[]string{slcImportLabel},
+		out,
+		outErr,
 	); err != nil {
 		install.writePodmanDiagnostics(ctx, outErr, containerName)
 
@@ -135,16 +131,12 @@ func (install *PodmanInstall) imageExists(
 	outErr io.Writer,
 	image string,
 ) (bool, error) {
-	err := install.runPodman(ctx, nil, outErr, "image", "exists", image)
-	if err == nil {
-		return true, nil
-	}
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) && exitError.ExitCode() == 1 {
-		return false, nil
+	exists, err := install.client.ImageExists(ctx, image, outErr)
+	if err != nil {
+		return false, fmt.Errorf("failed to find SLC image %s: %w", image, err)
 	}
 
-	return false, fmt.Errorf("failed to find SLC image %s: %w", image, err)
+	return exists, nil
 }
 
 func (install *PodmanInstall) slcPackagePath(packageName string) (RuntimePath, bool) {
@@ -192,13 +184,11 @@ func (install *PodmanInstall) pruneUnreferencedSLCImages(
 	}
 
 	candidates := make(map[string]struct{})
-	allImages, err := install.runPodmanOutput(
-		ctx, nil, outErr, "images", "--format", "{{.Repository}}:{{.Tag}}",
-	)
+	allImages, err := install.client.Images(ctx, outErr)
 	if err != nil {
-		writeSLCPruneWarning(outErr, "failed to list Podman images", err)
+		writeSLCPruneWarning(outErr, "failed to list container images", err)
 	} else {
-		for image := range strings.FieldsSeq(allImages) {
+		for _, image := range allImages {
 			if isUntaggedImage(image) || slcImageRepository(image) != officialSLCRepository {
 				continue
 			}
@@ -206,20 +196,11 @@ func (install *PodmanInstall) pruneUnreferencedSLCImages(
 		}
 	}
 
-	importedImages, err := install.runPodmanOutput(
-		ctx,
-		nil,
-		outErr,
-		"images",
-		"--filter",
-		"label="+slcImportLabel,
-		"--format",
-		"{{.Repository}}:{{.Tag}}",
-	)
+	importedImages, err := install.client.Images(ctx, outErr, slcImportLabel)
 	if err != nil {
 		writeSLCPruneWarning(outErr, "failed to list imported SLC images", err)
 	} else {
-		for image := range strings.FieldsSeq(importedImages) {
+		for _, image := range importedImages {
 			if !isUntaggedImage(image) {
 				candidates[image] = struct{}{}
 			}
@@ -230,7 +211,7 @@ func (install *PodmanInstall) pruneUnreferencedSLCImages(
 		if _, referenced := desired[normalizeSLCImageRef(image)]; referenced {
 			continue
 		}
-		if err := install.runPodman(ctx, nil, outErr, "rmi", image); err != nil {
+		if err := install.client.RemoveImage(ctx, image, nil, outErr); err != nil {
 			writeSLCPruneWarning(outErr, "failed to remove unreferenced SLC image "+image, err)
 		}
 	}

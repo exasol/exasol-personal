@@ -46,14 +46,15 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 		t.Fatalf("expected persistent data directory, got info=%v error=%v", info, statErr)
 	}
 	assertCommandLog(t, fixture.logPath, []string{
-		"<podman><container><exists><" + testContainerName + ">",
+		"<podman><ps><--all><--filter><name=^" + testContainerName + "$><--format><json>",
 		"<podman><load><-i><" + fixture.imagePath + ">",
 		"<sync>",
-		"<podman><run><-d><--replace><--name><" + testContainerName + ">" +
+		"<podman><run><--detach><--replace><--name><" + testContainerName + ">" +
+			"<--restart><always>" +
 			"<--shm-size=512mb><--pids-limit=-1><--security-opt><unmask=ALL>" +
 			"<--security-opt><label=disable>" +
-			"<--restart><always><-p><127.0.0.1:28563:8563>" +
-			"<-v><" + startConfig.DataDir + ":/exa:Z>" +
+			"<--publish><127.0.0.1:28563:8563/tcp>" +
+			"<--volume><" + startConfig.DataDir + ":/exa:Z>" +
 			"<" + testLoadedImage + "><init><params=maxConnectionsLicenseLimit=20>" +
 			"<VERSION_CHECK_ENABLED=0>",
 	})
@@ -106,7 +107,7 @@ func TestPodmanInstallStart_BootstrapsInitialPasswordForFreshDatabase(t *testing
 	runCommand := commands[len(commands)-1]
 	for _, expected := range []string{
 		"<--restart><no>",
-		"<-v><" + startConfig.BootstrapDir + ":/run/secrets:ro,Z>",
+		"<--volume><" + startConfig.BootstrapDir + ":/run/secrets:ro,Z>",
 		"<params=maxConnectionsLicenseLimit=20><sys_password_file=/run/secrets/sys_password>",
 	} {
 		if !strings.Contains(runCommand, expected) {
@@ -235,7 +236,7 @@ func TestPodmanInstallStart_PublishesDatabaseForVMForwarding(t *testing.T) {
 	}
 	commands := readCommandLog(t, fixture.logPath)
 	runCommand := commands[len(commands)-1]
-	if !strings.Contains(runCommand, "<-p><28563:8563>") {
+	if !strings.Contains(runCommand, "<--publish><28563:8563/tcp>") {
 		t.Fatalf("expected VM-accessible DB port mapping, got %q", runCommand)
 	}
 }
@@ -386,7 +387,7 @@ func TestPodmanInstallStart_ConfiguresEnabledNanoVersionChecks(t *testing.T) {
 			commands := readCommandLog(t, fixture.logPath)
 			runCommand := commands[len(commands)-1]
 			expectedArgs := []string{
-				"<-e><VERSION_CHECK_IDENTITY=exasol-personal;deployment;local;local>",
+				"<--env><VERSION_CHECK_IDENTITY=exasol-personal;deployment;local;local>",
 				"<VERSION_CHECK_ENABLED=1>",
 				"<VERSION_CHECK_ENDPOINT=https://version-check.example.test>",
 				fmt.Sprintf("<VERSION_CHECK_INTERVAL_SEC=%d>", test.expectedInterval),
@@ -425,8 +426,7 @@ func TestPodmanInstallStart_ReturnsWhenContainerAlreadyRunning(t *testing.T) {
 		t.Fatalf("expected already-running start to succeed, got %v", err)
 	}
 	assertCommandLog(t, fixture.logPath, []string{
-		"<podman><container><exists><" + testContainerName + ">",
-		"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+		"<podman><ps><--all><--filter><name=^" + testContainerName + "$><--format><json>",
 		"<podman><container><inspect><--format><{{json .Mounts}}><" + testContainerName + ">",
 	})
 	if _, statErr := os.Stat(startConfig.DataDir); !os.IsNotExist(statErr) {
@@ -449,7 +449,7 @@ func TestPodmanInstallStatus_InspectsExactDeploymentContainer(t *testing.T) {
 			name:            "missing",
 			expectedRunning: false,
 			expectedCommands: []string{
-				"<podman><container><exists><" + testContainerName + ">",
+				"<podman><ps><--all><--filter><name=^" + testContainerName + "$><--format><json>",
 			},
 		},
 		{
@@ -457,8 +457,7 @@ func TestPodmanInstallStatus_InspectsExactDeploymentContainer(t *testing.T) {
 			scenarioFile:    "existing",
 			expectedRunning: false,
 			expectedCommands: []string{
-				"<podman><container><exists><" + testContainerName + ">",
-				"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+				"<podman><ps><--all><--filter><name=^" + testContainerName + "$><--format><json>",
 			},
 		},
 		{
@@ -466,8 +465,7 @@ func TestPodmanInstallStatus_InspectsExactDeploymentContainer(t *testing.T) {
 			scenarioFile:    "running",
 			expectedRunning: true,
 			expectedCommands: []string{
-				"<podman><container><exists><" + testContainerName + ">",
-				"<podman><container><inspect><--format><{{.State.Running}}><" + testContainerName + ">",
+				"<podman><ps><--all><--filter><name=^" + testContainerName + "$><--format><json>",
 			},
 		},
 	}
@@ -522,13 +520,13 @@ func TestPodmanInstallStart_StopsAfterCommandFailure(t *testing.T) {
 		{
 			name:             "unparseable load output",
 			loadOutput:       "Loaded something else\n",
-			expectedError:    "could not determine the image reference",
+			expectedError:    "reported no loaded image",
 			expectedCommands: 6,
 		},
 		{
 			name:             "multiple loaded images",
 			loadOutput:       "Loaded image: first:test\nLoaded image: second:test\n",
-			expectedError:    "multiple Nano images",
+			expectedError:    "reported multiple images",
 			expectedCommands: 6,
 		},
 	}
@@ -832,7 +830,7 @@ func TestPodmanInstallStop_RemovesContainerIdempotently(t *testing.T) {
 		t.Fatalf("expected stop to succeed, got %v", err)
 	}
 	assertCommandLog(t, fixture.logPath, []string{
-		"<podman><rm><--force><--ignore><" + testContainerName + ">",
+		"<podman><rm><--force><--ignore><--><" + testContainerName + ">",
 	})
 }
 
@@ -1013,11 +1011,17 @@ if [ "$command" = "rmi" ] &&
 fi
 if [ -f "$scenario_dir/fail-diagnostics" ]; then
   case "$command" in
-    info|ps|logs)
+    ps)
+      case "$*" in
+        *--format*) ;;
+        *) printf 'fake diagnostic failure\n' >&2; exit 43 ;;
+      esac
+      ;;
+    info|logs)
       printf 'fake diagnostic failure\n' >&2
       exit 43
       ;;
-    container)
+  container)
       if [ "$3" = "inspect" ] && [ "$4" != "--format" ]; then
         printf 'fake diagnostic failure\n' >&2
         exit 43
@@ -1044,6 +1048,34 @@ case "$command" in
       cat "$scenario_dir/images-output"
     fi
     ;;
+  ps)
+  name=""
+  for argument in "$@"; do
+    case "$argument" in
+      name=^*)
+        name=${argument#name=^}
+        name=${name%\$}
+        ;;
+    esac
+  done
+  state=exited
+  if [ -f "$scenario_dir/running" ]; then
+    state=running
+  fi
+  listed=no
+  if [ -f "$scenario_dir/legacy-name" ]; then
+    if [ "$(cat "$scenario_dir/legacy-name")" = "$name" ]; then
+      listed=yes
+    fi
+  elif [ -f "$scenario_dir/running" ] || [ -f "$scenario_dir/existing" ]; then
+    listed=yes
+  fi
+  if [ "$listed" = yes ]; then
+    printf '[{"id":"fake","names":["%s"],"state":"%s"}]\n' "$name" "$state"
+  else
+    printf '[]\n'
+  fi
+  ;;
   container)
     operation=$3
     case "$operation" in

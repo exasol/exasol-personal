@@ -29,9 +29,11 @@ from tests.launcher.helpers import (
 __all__ = [
     "IS_MACOS_ARM",
     "assert_lifecycle_json_signal",
+    "container_command",
     "export_preset",
     "first_infrastructure_preset_id_or_skip",
     "first_installation_preset_id_or_skip",
+    "host_command",
     "installation_preset_id_or_skip",
     "local_deploy_base_args",
     "preset_id_or_skip",
@@ -76,6 +78,64 @@ def local_deploy_base_args(deployment_dir: str) -> list[str]:
     return ["--deployment-dir", deployment_dir, "--no-launcher-version-check"]
 
 
+def host_command(
+    exasol_path: str,
+    deployment_dir: str | Path,
+    *args: str,
+    node: str | None = None,
+    input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a checked command where a deployment's containers run."""
+    if node is None and sys.platform.startswith("linux"):
+        # A direct-host runtime puts the containers on this machine.
+        return subprocess.run(
+            list(args),
+            check=True,
+            capture_output=True,
+            text=True,
+            input=input_text,
+        )
+    if node is None and sys.platform == "darwin":
+        return run_in_local_vm(
+            exasol_path, deployment_dir, shlex.join(args), input_text
+        )
+
+    return subprocess.run(
+        [
+            exasol_path,
+            "shell",
+            "host",
+            "--deployment-dir",
+            str(deployment_dir),
+            *(["--node", node] if node else []),
+            "--",
+            *args,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        input=input_text,
+    )
+
+
+def container_command(
+    exasol_path: str,
+    deployment_dir: str | Path,
+    *args: str,
+    node: str | None = None,
+    input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a checked container runtime command against a deployment."""
+    return host_command(
+        exasol_path,
+        deployment_dir,
+        "podman",
+        *args,
+        node=node,
+        input_text=input_text,
+    )
+
+
 def run_in_local_vm(
     exasol_path: str,
     deployment_dir: str | Path,
@@ -98,6 +158,10 @@ def run_in_local_vm(
     script = "\n".join(
         [
             "stty -echo",
+            # An interactive shell prompts for every line it reads, which would
+            # otherwise prefix the command output.
+            "PS1=''",
+            "PS2=''",
             f"printf '%s\\n' {shlex.quote(marker)}",
             command,
             "status=$?",

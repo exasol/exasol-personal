@@ -455,7 +455,7 @@ func writeFakeStoppedRunner(t *testing.T) *runtimeartifacts.Manager {
 		"if [ \"$1\" = status ]; then echo '{\"running\":false}'; exit 0; fi\n" +
 		"if [ \"$1\" = run ]; then\n" +
 		"  shift; [ \"$1\" = -- ]; shift\n" +
-		"  if [ \"$1 $2 $3\" = 'podman container exists' ]; then exit 1; fi\n" +
+		"  if [ \"$1 $2\" = 'podman ps' ]; then echo '[]'; exit 0; fi\n" +
 		"fi\n" +
 		"exit 1\n"
 

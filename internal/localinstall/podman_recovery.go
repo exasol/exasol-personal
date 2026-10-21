@@ -39,12 +39,12 @@ func (install *PodmanInstall) recoverIncompleteInitialCreate(
 	}
 
 	if containerStatus.Exists {
-		if err := install.runPodman(ctx, out, outErr, "stop", containerName); err != nil {
+		if err := install.client.Stop(ctx, containerName, out, outErr); err != nil {
 			return false, install.failureWithDiagnostics(ctx, outErr, containerName,
 				fmt.Errorf("failed to stop incomplete Nano container %s: %w", containerName, err))
 		}
-		if err := install.runPodman(
-			ctx, out, outErr, "rm", "--force", "--ignore", containerName,
+		if err := install.client.Remove(
+			ctx, containerName, true, out, outErr,
 		); err != nil {
 			return false, install.failureWithDiagnostics(ctx, outErr, containerName,
 				fmt.Errorf("failed to remove incomplete Nano container %s: %w", containerName, err))
