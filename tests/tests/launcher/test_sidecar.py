@@ -28,6 +28,30 @@ def sidecar_directory(exasol_path: str, tmp_path: Path) -> Path:
     return directory
 
 
+def test_sidecar_unsupported_deployment_type(exasol_path: str, tmp_path: Path) -> None:
+    # Given
+    directory = tmp_path / "cloud"
+    selection = ["--deployment-dir", str(directory)]
+    run_command(
+        [
+            exasol_path,
+            "init",
+            "aws",
+            "ubuntu",
+            *selection,
+            "--no-launcher-version-check",
+        ]
+    )
+    definition = "version: 1\ncontainers:\n- name: example\n  image: caddy:2\n"
+    (directory / "sidecars.yaml").write_text(definition, encoding="utf-8")
+    # When
+    with pytest.raises(CalledProcessError) as failure:
+        run_command([exasol_path, "sidecar", "enable", "example", *selection])
+    # Then
+    assert "not supported for this deployment type" in failure.value.stderr
+    assert (directory / "sidecars.yaml").read_text(encoding="utf-8") == definition
+
+
 def test_sidecar_saved_definition_commands(
     exasol_path: str, sidecar_directory: Path
 ) -> None:
@@ -47,13 +71,18 @@ def test_sidecar_saved_definition_commands(
     disabled = json.loads(
         run_command([exasol_path, "sidecar", "disable", "saved", *selection]).stdout
     )
-    with pytest.raises(CalledProcessError) as repeated:
-        run_command([exasol_path, "sidecar", "disable", "saved", *selection])
+    repeated = json.loads(
+        run_command([exasol_path, "sidecar", "disable", "saved", *selection]).stdout
+    )
     # Then
     assert enabled == status
     assert enabled["enabled"]
+    assert not enabled["running"]
+    assert enabled["endpoints"] == []
     assert not disabled["enabled"]
-    assert "not enabled" in repeated.value.stderr
+    assert not disabled["running"]
+    assert repeated["nothingToRemove"] is True
+    assert not repeated["enabled"]
     log = (sidecar_directory / "deployment.log").read_text(encoding="utf-8")
     for operation in ["enable", "status", "disable"]:
         assert f"command={operation}" in log

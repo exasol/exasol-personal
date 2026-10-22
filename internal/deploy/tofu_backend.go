@@ -409,10 +409,10 @@ func (b *tofuBackend) Deploy(
 	ctx context.Context,
 	out, outErr io.Writer,
 	options DeployOptions,
-) error {
+) DeploymentLifecycleResult {
 	if !b.hasTofu() {
 		slog.Info("tofu: no configuration defined; skipping")
-		return nil
+		return DeploymentLifecycleResult{}
 	}
 
 	slog.Info("beginning deployment with tofu")
@@ -423,7 +423,7 @@ func (b *tofuBackend) Deploy(
 
 	updateLockfile, err := options.boolOption(tofuUpdateLockfileOption)
 	if err != nil {
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 
 	lockfileMode := tofu.LockfileReadonly
@@ -437,31 +437,31 @@ func (b *tofuBackend) Deploy(
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("tofu: failed to init", "error", err)
 
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 
 	if err := tofu.Plan(ctx, b.cfg, stdOutWriter, stdErrWriter); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("tofu: failed to plan")
 
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 
 	if err := tofu.ApplyPlan(ctx, b.cfg, stdOutWriter, stdErrWriter); err != nil {
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("tofu: failed to apply")
 
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 
-	return nil
+	return DeploymentLifecycleResult{}
 }
 
 func (b *tofuBackend) Start(
 	ctx context.Context,
 	out, outErr io.Writer,
 	waitTimeoutSeconds int,
-) error {
+) DeploymentLifecycleResult {
 	logBuffer := task_runner.NewLogBuffer()
 	output := util.CombineWriters(logBuffer, out)
 	errOutput := util.CombineWriters(logBuffer, outErr)
@@ -470,7 +470,7 @@ func (b *tofuBackend) Start(
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("failed to start deployment")
 
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 
 	instPollCond := func(ctx context.Context) (bool, error) {
@@ -504,28 +504,27 @@ func (b *tofuBackend) Start(
 		LogPrefix:      "waiting to update EC2 Resources",
 	}); err != nil {
 		slog.Error("Updated EC2 resources not available in time")
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 
 	if waitTimeoutSeconds <= 0 {
 		waitTimeoutSeconds = StartedDefaultTimeoutSeconds
 	}
-
 	waitCtx, cancel = context.WithTimeout(ctx, time.Duration(waitTimeoutSeconds)*time.Second)
 	defer cancel()
 
 	if err := WaitForDatabaseStarted(waitCtx, b.deployment); err != nil {
 		slog.Error("database did not become operational with timeout", "error", err.Error())
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 
-	return nil
+	return DeploymentLifecycleResult{}
 }
 
 func (b *tofuBackend) Stop(
 	ctx context.Context,
 	out, outErr io.Writer,
-) error {
+) DeploymentLifecycleResult {
 	logBuffer := task_runner.NewLogBuffer()
 
 	if err := b.applyAction(
@@ -537,10 +536,10 @@ func (b *tofuBackend) Stop(
 		logBuffer.ReplayLogMessages(ctx)
 		slog.Error("failed to stop the deployment")
 
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 
-	return nil
+	return DeploymentLifecycleResult{}
 }
 
 func (b *tofuBackend) Destroy(

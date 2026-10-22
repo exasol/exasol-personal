@@ -28,8 +28,8 @@ func (backend unavailablePortBackend) Deploy(
 	io.Writer,
 	io.Writer,
 	DeployOptions,
-) error {
-	return backend.err
+) DeploymentLifecycleResult {
+	return DeploymentLifecycleResult{Database: backend.err}
 }
 
 func (backend unavailablePortBackend) Start(
@@ -37,8 +37,8 @@ func (backend unavailablePortBackend) Start(
 	io.Writer,
 	io.Writer,
 	int,
-) error {
-	return backend.err
+) DeploymentLifecycleResult {
+	return DeploymentLifecycleResult{Database: backend.err}
 }
 
 func newUnavailablePortBackend() unavailablePortBackend {

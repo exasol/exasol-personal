@@ -611,7 +611,7 @@ func (b *localBackend) Deploy(
 	ctx context.Context,
 	out, outErr io.Writer,
 	_ DeployOptions,
-) error {
+) DeploymentLifecycleResult {
 	// Deploy has no caller-supplied timeout in the backend interface, unlike
 	// Start; 0 falls back to LocalDatabaseStartedDefaultTimeoutSeconds.
 	return b.deployOrStart(ctx, 0, out, outErr)
@@ -621,14 +621,14 @@ func (b *localBackend) Start(
 	ctx context.Context,
 	out, outErr io.Writer,
 	waitTimeoutSeconds int,
-) error {
+) DeploymentLifecycleResult {
 	return b.deployOrStart(ctx, waitTimeoutSeconds, out, outErr)
 }
 
 func (b *localBackend) Stop(
 	ctx context.Context,
 	out, outErr io.Writer,
-) error {
+) DeploymentLifecycleResult {
 	return stopLocalRuntime(ctx, b.runtime, out, outErr)
 }
 
@@ -667,15 +667,15 @@ func (b *localBackend) deployOrStart(
 	ctx context.Context,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
-) error {
+) DeploymentLifecycleResult {
 	if err := b.ValidateEnvironment(); err != nil {
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
 		b.manifest, detectLocalHostMemoryMB(ctx), b.goos, b.goarch,
 	)
 	if err != nil {
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 
 	return startPreparedLocalRuntime(

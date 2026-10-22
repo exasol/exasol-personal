@@ -5,9 +5,12 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -15,6 +18,32 @@ import (
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
+
+// DeploymentLifecycleResult keeps a sidecar failure from standing in for the
+// database's own condition.
+type DeploymentLifecycleResult struct {
+	Database error
+	Sidecars map[string]error
+	// What no single sidecar can be blamed for, such as an unreadable document.
+	SidecarReconciliation error
+}
+
+func (result DeploymentLifecycleResult) Err() error {
+	return errors.Join(
+		result.Database,
+		result.SidecarReconciliation,
+		joinSidecarFailures(result.Sidecars),
+	)
+}
+
+func joinSidecarFailures(perSidecar map[string]error) error {
+	failures := make([]error, 0, len(perSidecar))
+	for _, name := range slices.Sorted(maps.Keys(perSidecar)) {
+		failures = append(failures, perSidecar[name])
+	}
+
+	return errors.Join(failures...)
+}
 
 const (
 	backendTypeTofu  = "tofu"
@@ -66,9 +95,13 @@ type deploymentBackend interface {
 	ReadDeploymentConfigVariables() (map[string]ConfigVariableDefinition, error)
 	OpenHostShell(ctx context.Context, selectedNode string, command []string) error
 	OpenCOSShell(ctx context.Context) error
-	Deploy(ctx context.Context, out, outErr io.Writer, options DeployOptions) error
-	Start(ctx context.Context, out, outErr io.Writer, waitTimeoutSeconds int) error
-	Stop(ctx context.Context, out, outErr io.Writer) error
+	Deploy(
+		ctx context.Context, out, outErr io.Writer, options DeployOptions,
+	) DeploymentLifecycleResult
+	Start(
+		ctx context.Context, out, outErr io.Writer, waitTimeoutSeconds int,
+	) DeploymentLifecycleResult
+	Stop(ctx context.Context, out, outErr io.Writer) DeploymentLifecycleResult
 	Destroy(ctx context.Context, out, outErr io.Writer) error
 }
 

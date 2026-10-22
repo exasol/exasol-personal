@@ -4,7 +4,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -45,6 +47,84 @@ func TestSidecarCommandFlagsAndArguments(t *testing.T) {
 }
 
 //nolint:paralleltest // Terminal queues are process-global.
+func TestSidecarFailureQueuesRestartGuidance(t *testing.T) {
+	// Given
+	resetTerminalMessages()
+	t.Cleanup(resetTerminalMessages)
+	cause := errors.Join(errors.New("another host failed"), deploy.ErrSidecarRestartRequired)
+	// When
+	err := installDeploymentFailure(cause)
+	var stderr bytes.Buffer
+	writeTerminalCallsToAction(&stderr, callsToActionVisible(false))
+	// Then
+	require.ErrorIs(t, err, deploy.ErrSidecarRestartRequired)
+	require.NotContains(t, err.Error(), "exasol stop")
+	require.Empty(t, terminalOutputs)
+	require.Empty(t, terminalNotices)
+	require.Equal(t, "\n"+sidecarRestartGuidance+"\n", stderr.String())
+}
+
+//nolint:paralleltest // Terminal queues are process-global.
+func TestSidecarStartupFailureOffersStatus(t *testing.T) {
+	for _, scenario := range []struct{ name, cause string }{
+		{"occupied port", "127.0.0.1:18080: bind: address already in use"},
+		{"unavailable image", "initializing source docker://caddy:2: reading manifest"},
+	} {
+		//nolint:paralleltest // Terminal queues are process-global.
+		t.Run(scenario.name, func(t *testing.T) {
+			// Given
+			resetTerminalMessages()
+			t.Cleanup(resetTerminalMessages)
+			cause := sidecar.NewStartupError("caddy", scenario.cause, "exit status 126")
+			// When
+			err := installDeploymentFailure(cause)
+			var stderr bytes.Buffer
+			writeTerminalCallsToAction(&stderr, callsToActionVisible(false))
+			// Then
+			require.ErrorContains(t, err, "sidecar caddy")
+			require.Contains(t, err.Error(), scenario.cause)
+			require.Contains(t, stderr.String(), "exasol sidecar status caddy")
+		})
+	}
+}
+
+//nolint:paralleltest // Terminal queues are process-global.
+func TestSidecarRestartGuidanceFollowsOutputMode(t *testing.T) {
+	for _, jsonOutput := range []bool{false, true} {
+		// Given
+		resetTerminalMessages()
+		result := deploy.SidecarResult{
+			Name: "example", Enabled: true, State: "stopped",
+			RestartRequired: true, Endpoints: []deploy.SidecarEndpoint{},
+		}
+		// When
+		err := renderSidecarResult(result, jsonOutput)
+		var stdout, stderr bytes.Buffer
+		writeTerminalMessages(terminalConfig{
+			stdout: &stdout, stderr: &stderr,
+			showCallsToAction: callsToActionVisible(jsonOutput),
+		})
+		// Then
+		require.NoError(t, err)
+		if jsonOutput {
+			var decoded deploy.SidecarResult
+			require.NoError(t, json.Unmarshal(stdout.Bytes(), &decoded))
+			if !decoded.RestartRequired || !decoded.Enabled || decoded.Running ||
+				stderr.Len() != 0 {
+				t.Fatalf("JSON result: %+v, stderr=%q", decoded, stderr.String())
+			}
+		} else if !strings.Contains(stdout.String(), "State: stopped") ||
+			!strings.Contains(
+				stderr.String(),
+				"exasol stop",
+			) || !strings.Contains(stderr.String(), "exasol start") {
+			t.Fatalf("text result: %q, %q", stdout.String(), stderr.String())
+		}
+	}
+	resetTerminalMessages()
+}
+
+//nolint:paralleltest // Terminal queues are process-global.
 func TestSidecarEnableCommandUsesSavedDefinition(t *testing.T) {
 	// Given
 	catalog := resources.SidecarCatalogYAML
@@ -76,9 +156,40 @@ func TestSidecarEnableCommandUsesSavedDefinition(t *testing.T) {
 	}
 	var decoded deploy.SidecarResult
 	require.NoError(t, json.Unmarshal([]byte(strings.Join(terminalOutputs, "")), &decoded))
-	if !decoded.Enabled || decoded.Name != "saved" {
+	if !decoded.Enabled || decoded.Running || decoded.Name != "saved" {
 		t.Fatalf("result: %+v", decoded)
 	}
+}
+
+func TestSidecarTextIncludesEndpointsAndFailure(t *testing.T) {
+	t.Parallel()
+	// Given
+	result := deploy.SidecarResult{
+		Name: "example", Enabled: true,
+		State: "exited", ExitCode: 1, Error: "startup failed",
+		Reconciliation:     "pending",
+		LastOperationError: "old cleanup failure",
+		Endpoints:          []deploy.SidecarEndpoint{{IP: "::1", Port: 18080}},
+	}
+	// When
+	text := formatSidecarResult(result)
+	// Then
+	for _, want := range []string{
+		"example: enabled", "State: exited", "[::1]:18080", "Exit code: 1", "startup failed",
+		"Reconciliation: pending", "Unresolved operation failure: old cleanup failure",
+	} {
+		require.Contains(t, text, want)
+	}
+}
+
+func TestSidecarTextReportsNothingToRemove(t *testing.T) {
+	t.Parallel()
+	// Given
+	result := deploy.SidecarResult{Name: "custom", NothingToRemove: true}
+	// When
+	text := formatSidecarResult(result)
+	// Then
+	require.Equal(t, "Sidecar custom is already disabled; nothing to remove.", text)
 }
 
 const architectureCatalogYAML = `version: 1

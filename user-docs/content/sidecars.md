@@ -16,9 +16,10 @@ Each command accepts `--deployment <name>` or `--deployment-dir <path>` and
 `--json`. `list` also answers without a deployment, reporting the catalog with
 the architecture support of the machine you run it on. Against a deployment
 that cannot run sidecars, every entry reports `supported: false` and says why.
-`status` and `disable` reject a name that is neither saved nor in the catalog. JSON status includes
-`name`, `enabled`, `running`, `state`, `exitCode`, `restartRequired`,
-`endpoints`, and an `error` when available.
+`status` rejects a name that is neither saved, in the catalog, nor associated
+with an unresolved operation failure. JSON status includes `name`, `enabled`,
+`running`, `state`, `exitCode`, `restartRequired`, `endpoints`, and an `error`
+when available.
 Status describes the container process, rather than application readiness.
 Without a name, `status` reports every enabled sidecar, and its JSON output is
 an array of those same entries.
@@ -28,9 +29,9 @@ on macOS. macOS publication requires a runner with live-forwarding support.
 
 ## Enablement and lifecycle
 
-Enable is idempotent, and disable requires a sidecar that is enabled:
-disabling any other name fails and lists the enabled ones. Enable on an
-initialized or stopped
+Enable and disable are idempotent. Disabling a sidecar that is already absent
+reports that there is nothing to remove (`nothingToRemove: true` in JSON).
+Enable on an initialized or stopped
 deployment records intent for the next deploy or start. Enable on a running
 deployment starts the selected sidecar on each host. Some existing local
 deployments report `restartRequired: true`; run `exasol stop` followed by
@@ -49,7 +50,8 @@ Failures identify the affected host and sidecar. Other hosts are still
 reconciled, and retries use the same deployment-wide saved definition.
 
 `exasol sidecar disable <name>` accepts user-added or renamed saved entries.
-It also retries cleanup when the name is already absent from `sidecars.yaml`.
+It also retries cleanup when the name is absent from `sidecars.yaml` but an
+unresolved cleanup failure remains recorded.
 `exasol start` retries removal of owned containers absent from desired state.
 Cleanup requires a reachable host and leaves the database deployment intact.
 
