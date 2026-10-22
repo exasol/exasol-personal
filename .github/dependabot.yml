@@ -76,3 +76,24 @@ updates:
           - "patch"
           - "minor"
     open-pull-requests-limit: 10
+
+  - package-ecosystem: "gomod"
+    directory: "/tools/cleanup"
+    schedule:
+      interval: "weekly"
+    allow:
+      - dependency-type: "all"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+    cooldown:
+      semver-patch-days: 21
+      semver-minor-days: 28
+    groups:
+      go-cleanup-weekly-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+    open-pull-requests-limit: 10

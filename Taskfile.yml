@@ -19,6 +19,7 @@ vars:
   # Developer tools live in their own module so their dependencies stay out of the launcher's module graph
   DEV_TOOLS_DIR: tools/devtools
   DEV_TOOL: go tool -modfile={{.DEV_TOOLS_DIR}}/go.mod
+  CLEANUP_DIR: tools/cleanup
 
 includes:
   github: ./tasks/github.Taskfile.yml
@@ -204,6 +205,7 @@ tasks:
     cmds:
       - go test -v  -tags=containers_image_openpgp -race{{if eq .COVERAGE "true"}} -coverprofile=coverage-unit.out -covermode=atomic{{end}}{{if .TEST}} -run "{{.TEST}}"{{end}} ./...
       - '{{if eq .COVERAGE "true"}}go tool cover -func=coverage-unit.out{{end}}'
+      - '{{.TASK_EXE}} -d {{.CLEANUP_DIR}} tests-unit TEST="{{.TEST}}"'
 
   tests-unit-find:
     desc: Find Go unit test names by wildcard on Linux (`task tests-unit-find TEST=*Ready*`)
@@ -356,16 +358,21 @@ tasks:
       - uv run --locked --no-build mypy {{.TESTS_DIR}}
 
   lint-golang:
-    desc: Run golangci-lint linters and verify go.mod/go.sum of all Go modules are tidy
+    desc: Run golangci-lint linters on the launcher and cleanup modules and verify go.mod/go.sum of all Go modules are tidy
     deps:
       - task: generate
         vars:
           SKIP_EMBED: "true"
     cmds:
       - '{{.DEV_TOOL}} golangci-lint run ./...'
+      - '{{.TASK_EXE}} -d {{.CLEANUP_DIR}} lint-golang'
       - go mod tidy
       - go -C {{.DEV_TOOLS_DIR}} mod tidy
-      - git diff --exit-code go.mod go.sum {{.DEV_TOOLS_DIR}}/go.mod {{.DEV_TOOLS_DIR}}/go.sum
+      - go -C {{.CLEANUP_DIR}} mod tidy
+      - >-
+        git diff --exit-code go.mod go.sum
+        {{.DEV_TOOLS_DIR}}/go.mod {{.DEV_TOOLS_DIR}}/go.sum
+        {{.CLEANUP_DIR}}/go.mod {{.CLEANUP_DIR}}/go.sum
 
   lint-golang-fix:
     desc: Run golangci-lint linters and apply automatic fixes
@@ -375,6 +382,7 @@ tasks:
           SKIP_EMBED: "true"
     cmds:
       - '{{.DEV_TOOL}} golangci-lint run ./... --fix'
+      - '{{.TASK_EXE}} -d {{.CLEANUP_DIR}} lint-golang-fix'
 
   lint-terraform:
     desc: Run tflint for Terraform files within assets/infrastructure

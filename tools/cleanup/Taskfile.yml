@@ -5,6 +5,8 @@ vars:
   BINARY_SUFFIX:
     sh: test "$(go env GOOS)" = "windows" && echo ".exe" || true
   BUILD_DIR_NAME: "bin"
+  # golangci-lint comes from the repository's developer tools module, built with that module's toolchain
+  GOLANGCI_LINT: '"$(go -C ../devtools tool -n golangci-lint)"'
 
 tasks:
   default:
@@ -19,19 +21,19 @@ tasks:
         go build -o {{.BUILD_DIR_NAME}}/{{.COMMAND_NAME}}{{.BINARY_SUFFIX}} ./cmd/cleanup
 
   tests-unit:
-    desc: Run unit tests
+    desc: 'Run unit tests. TEST is a regex for `go test -run`.'
     cmds:
-      - go test -v ./...
+      - go test -v{{if .TEST}} -run "{{.TEST}}"{{end}} ./...
 
   lint-golang:
     desc: Run golangci-lint linters
     cmds:
-      - go tool golangci-lint run ./...
+      - '{{.GOLANGCI_LINT}} run ./...'
 
   lint-golang-fix:
     desc: Run golangci-lint linters and apply automatic fixes
     cmds:
-      - go tool golangci-lint run ./... --fix
+      - '{{.GOLANGCI_LINT}} run ./... --fix'
 
   lint:
     desc: Run all linters
