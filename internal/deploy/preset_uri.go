@@ -17,13 +17,10 @@ import (
 // know which scheme the URI uses. cleanURI is then passed through unchanged to
 // the source classifiers, so ref suffix and scheme detection are unaffected.
 func parsePresetURI(uri string) (cleanURI, subpath string) { //nolint:nonamedreturns
-	idx := strings.LastIndex(uri, "#")
-	if idx < 0 {
+	cleanURI, rawSubpath, found := strings.CutLast(uri, "#")
+	if !found {
 		return uri, ""
 	}
-
-	cleanURI = uri[:idx]
-	rawSubpath := uri[idx+1:]
 
 	// Percent-decode so encoded characters (%2F, %23) work. On decoding
 	// failure return the raw string so the caller can produce a meaningful

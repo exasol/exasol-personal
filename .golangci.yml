@@ -88,6 +88,9 @@ linters:
           disabled: true
         - name: flag-parameter
           disabled: true
+        # Conflicts with golines, which wraps long if-init calls across lines.
+        - name: multiline-if-init
+          disabled: true
     gosec:
       excludes:
         - G204
