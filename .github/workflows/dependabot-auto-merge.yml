@@ -52,7 +52,7 @@ jobs:
               continue
             fi
 
-            if [[ "${head_ref}" != dependabot/go_modules/* && "${head_ref}" != dependabot/pip/* ]]; then
+            if [[ "${head_ref}" != dependabot/go_modules/* && "${head_ref}" != dependabot/uv/* ]]; then
               echo "Skipping Dependabot PR #${number}: manual review lane (${head_ref})"
               continue
             fi
