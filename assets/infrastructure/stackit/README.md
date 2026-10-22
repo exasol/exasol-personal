@@ -13,7 +13,7 @@ This document describes the Infrastructure as Code (IaC) implementation for Exas
 ### Compute
 - Servers named after their node IDs (e.g., `n11`, `n12`, ...).
 - Default machine type `m2i.4` (memory-optimized; configurable via `var.instance_type`).
-- Ubuntu image: selects the latest Ubuntu image for `var.ubuntu_version` unless `var.image_id` is provided.
+- Ubuntu image: selects the current x86_64 Ubuntu image for `var.ubuntu_version` unless `var.image_id` is provided.
 - Cluster support: one instance per node; controlled by `var.cluster_size` (default: 1).
 
 ### Storage
@@ -111,4 +111,5 @@ The following ports must be reachable from the operator’s network, controlled 
 - Security groups expose required ports publicly; restrict via security group rules or configure network policies as needed (e.g. `var.allowed_cidr`).
 - Server state (`running`/`stopped`) is managed directly on the server resource; no separate server state resource.
 - STACKIT bootstrap storage access is scoped by public IP because the preset has no provider feature equivalent to AWS VPC endpoints or Azure subnet-restricted blob access for cloud-init bootstrap reads.
+- Bootstrap downloads use HTTPS. STACKIT's [supported bucket policy conditions](https://docs.stackit.cloud/products/storage/object-storage/reference/supported-condition-operators-and-keys-in-bucket-policies/) exclude `aws:SecureTransport`, so the bucket policy restricts reads by source IP.
 - STACKIT does not support creating IAM roles or policies for this flow, so bootstrap and archive access rely on object storage credentials and bucket policy instead.

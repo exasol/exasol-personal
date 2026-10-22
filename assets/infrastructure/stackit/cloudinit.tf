@@ -171,7 +171,7 @@ data "cloudinit_config" "cloud_config" {
             path        = f.dest_path
             permissions = f.permissions
             source = {
-              uri = "https://${minio_s3_bucket.bootstrap_assets.bucket}.object.storage.${var.region}.onstackit.cloud/${minio_s3_object.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].object_name}"
+              uri = "https://${minio_s3_bucket.bootstrap_assets.bucket}.object.storage.${var.region}.onstackit.cloud/${trimsuffix(trimprefix(f.dest_path, "/"), "/")}"
             }
           }
         ],
@@ -180,7 +180,7 @@ data "cloudinit_config" "cloud_config" {
             path        = f.dest_path
             permissions = f.permissions
             source = {
-              uri = "https://${minio_s3_bucket.bootstrap_assets.bucket}.object.storage.${var.region}.onstackit.cloud/${minio_s3_object.bootstrap_assets[trimsuffix(trimprefix(f.dest_path, "/"), "/")].object_name}"
+              uri = "https://${minio_s3_bucket.bootstrap_assets.bucket}.object.storage.${var.region}.onstackit.cloud/${trimsuffix(trimprefix(f.dest_path, "/"), "/")}"
             }
           }
         ]
