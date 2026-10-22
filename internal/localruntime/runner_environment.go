@@ -216,8 +216,8 @@ func formatFileMode(mode os.FileMode) string {
 }
 
 func runtimeTempTemplate(pattern string) string {
-	if wildcard := strings.LastIndex(pattern, "*"); wildcard >= 0 {
-		return pattern[:wildcard] + "XXXXXX" + pattern[wildcard+1:]
+	if prefix, suffix, found := strings.CutLast(pattern, "*"); found {
+		return prefix + "XXXXXX" + suffix
 	}
 
 	return pattern + "XXXXXX"

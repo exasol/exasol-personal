@@ -145,17 +145,17 @@ func IsGitSourceURL(url string) bool {
 }
 
 func ParseGitURL(url string) (repoURL, ref string) { //nolint:nonamedreturns
-	atIdx := strings.LastIndex(url, "@")
-	if atIdx < 0 {
+	repoURL, ref, found := strings.CutLast(url, "@")
+	if !found {
 		return url, ""
 	}
 	// For git@ SCP URLs (git@host:path) the first @ is part of the scheme.
 	// A ref separator only exists when a colon appears before the last @.
-	if strings.HasPrefix(url, "git@") && !strings.Contains(url[:atIdx], ":") {
+	if strings.HasPrefix(url, "git@") && !strings.Contains(repoURL, ":") {
 		return url, ""
 	}
 
-	return url[:atIdx], url[atIdx+1:]
+	return repoURL, ref
 }
 
 // getRefName resolves ref against the remote and returns the canonical

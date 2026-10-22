@@ -13,7 +13,7 @@ import (
 	"time"
 
 	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"go.podman.io/image/v5/copy"
+	imagecopy "go.podman.io/image/v5/copy"
 	"go.podman.io/image/v5/docker"
 	"go.podman.io/image/v5/docker/reference"
 	ociarchive "go.podman.io/image/v5/oci/archive"
@@ -52,7 +52,7 @@ func (*DockerSource) Fetch(ctx context.Context, url, dstPath string) (string, er
 	}
 
 	timestamp := time.Unix(0, 0).UTC()
-	_, copyErr := copy.Image(ctx, policyContext, destRef, parsedRef.source, &copy.Options{
+	_, copyErr := imagecopy.Image(ctx, policyContext, destRef, parsedRef.source, &imagecopy.Options{
 		DestinationTimestamp: &timestamp,
 		PreserveDigests:      true,
 	})
