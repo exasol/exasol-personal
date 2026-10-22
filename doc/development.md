@@ -28,7 +28,7 @@ Development is supported on:
 
 ### Development Tools
 
-The project uses the following tools (automatically managed by Go's tool dependencies):
+The project uses the following tools (automatically managed by Go's tool dependencies; the linters are tracked in a separate developer tools module so their dependencies stay out of the launcher's module graph):
 
 - **[golangci-lint](https://golangci-lint.run/)** - Go linting and static analysis
 - **[counterfeiter](https://github.com/maxbrunsfeld/counterfeiter)** - Mock generation for testing

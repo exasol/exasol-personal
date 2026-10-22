@@ -16,6 +16,9 @@ vars:
   SEP: '{{if eq OS "windows"}}\\{{else}}/{{end}}'
   BUILD_DIR: '{{.ROOT_PATH}}{{.SEP}}{{.BUILD_DIR_NAME}}'
   TESTS_DIR: '{{.ROOT_PATH}}{{.SEP}}tests'
+  # Developer tools live in their own module so their dependencies stay out of the launcher's module graph
+  DEV_TOOLS_DIR: tools/devtools
+  DEV_TOOL: go tool -modfile={{.DEV_TOOLS_DIR}}/go.mod
 
 includes:
   github: ./tasks/github.Taskfile.yml
@@ -353,15 +356,16 @@ tasks:
       - uv run --locked --no-build mypy {{.TESTS_DIR}}
 
   lint-golang:
-    desc: Run golangci-lint linters and verify go.mod/go.sum are tidy
+    desc: Run golangci-lint linters and verify go.mod/go.sum of all Go modules are tidy
     deps:
       - task: generate
         vars:
           SKIP_EMBED: "true"
     cmds:
-      - go tool golangci-lint run ./...
+      - '{{.DEV_TOOL}} golangci-lint run ./...'
       - go mod tidy
-      - git diff --exit-code go.mod go.sum
+      - go -C {{.DEV_TOOLS_DIR}} mod tidy
+      - git diff --exit-code go.mod go.sum {{.DEV_TOOLS_DIR}}/go.mod {{.DEV_TOOLS_DIR}}/go.sum
 
   lint-golang-fix:
     desc: Run golangci-lint linters and apply automatic fixes
@@ -370,23 +374,23 @@ tasks:
         vars:
           SKIP_EMBED: "true"
     cmds:
-      - go tool golangci-lint run ./... --fix
+      - '{{.DEV_TOOL}} golangci-lint run ./... --fix'
 
   lint-terraform:
     desc: Run tflint for Terraform files within assets/infrastructure
     cmds:
-      - go tool tflint --init
-      - go tool tflint --recursive --format=default --chdir=./assets/infrastructure
+      - '{{.DEV_TOOL}} tflint --init'
+      - '{{.DEV_TOOL}} tflint --recursive --format=default --chdir=./assets/infrastructure'
 
   lint-licenses:
     desc: Run addlicense on check mode for all source files
     cmds:
-      - go tool addlicense -l mit -c "Exasol AG" -check -s=only $(git ls-files '*.go' '*.py')
+      - "{{.DEV_TOOL}} addlicense -l mit -c \"Exasol AG\" -check -s=only $(git ls-files '*.go' '*.py')"
 
   lint-licenses-fix:
     desc: Run addlicense to add the correct license header for all source files
     cmds:
-      - go tool addlicense -l mit -c "Exasol AG" -s=only $(git ls-files '*.go' '*.py')
+      - "{{.DEV_TOOL}} addlicense -l mit -c \"Exasol AG\" -s=only $(git ls-files '*.go' '*.py')"
 
   lint:
     desc: Run linters
