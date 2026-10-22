@@ -6,12 +6,17 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
+
+const sidecarRestartGuidance = "Run `exasol stop` followed by `exasol start` " +
+	"to restart the deployment and start the enabled sidecars."
 
 // nolint: gochecknoinits
 func init() {
@@ -77,7 +82,7 @@ func newSidecarStatusCommand(flags *CommonFlags) *cobra.Command {
 					command.Context(), flags.Deployment(), args[0],
 				)
 				if err != nil {
-					addDeploymentRecoveryCallToAction(err)
+					addDeploymentRecoveryCallToActionFor(err, flags.Selection())
 
 					return err
 				}
@@ -86,7 +91,7 @@ func newSidecarStatusCommand(flags *CommonFlags) *cobra.Command {
 			}
 			results, err := deploy.GetAllSidecarStatus(command.Context(), flags.Deployment())
 			if err != nil {
-				addDeploymentRecoveryCallToAction(err)
+				addDeploymentRecoveryCallToActionFor(err, flags.Selection())
 
 				return err
 			}
@@ -107,6 +112,10 @@ func renderSidecarResults(results []deploy.SidecarResult, jsonOutput bool) error
 	}
 	blocks := make([]string, 0, len(results))
 	for _, result := range results {
+		if result.RestartRequired {
+			addTerminalCallToAction(sidecarRestartGuidance)
+		}
+		addSidecarDeferredCallToAction(result)
 		blocks = append(blocks, formatSidecarResult(result))
 	}
 	addTerminalOutput(strings.Join(blocks, "\n\n"))
@@ -124,7 +133,7 @@ func newSidecarActionCommand(
 		RunE: func(command *cobra.Command, args []string) error {
 			result, err := action(command.Context(), flags.Deployment(), args[0])
 			if err != nil {
-				addDeploymentRecoveryCallToAction(err)
+				addDeploymentRecoveryCallToActionFor(err, flags.Selection())
 				return err
 			}
 
@@ -133,7 +142,22 @@ func newSidecarActionCommand(
 	}
 }
 
+const sidecarDeferredGuidance = "Sidecar %s will run after the next " +
+	"`exasol deploy` or `exasol start`."
+
+// addSidecarDeferredCallToAction answers the question enable leaves open on a
+// deployment whose database is not running.
+func addSidecarDeferredCallToAction(result deploy.SidecarResult) {
+	if result.Enabled && !result.Running {
+		addTerminalCallToAction(fmt.Sprintf(sidecarDeferredGuidance, result.Name))
+	}
+}
+
 func renderSidecarResult(result deploy.SidecarResult, jsonOutput bool) error {
+	if result.RestartRequired {
+		addTerminalCallToAction(sidecarRestartGuidance)
+	}
+	addSidecarDeferredCallToAction(result)
 	if jsonOutput {
 		return addJSONTerminalOutput(result)
 	}
@@ -143,12 +167,35 @@ func renderSidecarResult(result deploy.SidecarResult, jsonOutput bool) error {
 }
 
 func formatSidecarResult(result deploy.SidecarResult) string {
+	if result.NothingToRemove {
+		return fmt.Sprintf("Sidecar %s is already disabled; nothing to remove.", result.Name)
+	}
 	enablement := "disabled"
 	if result.Enabled {
 		enablement = "enabled"
 	}
+	lines := []string{
+		fmt.Sprintf("%s: %s", result.Name, enablement),
+		"State: " + result.State,
+		"Reconciliation: " + result.Reconciliation,
+	}
+	for _, endpoint := range result.Endpoints {
+		lines = append(
+			lines,
+			"Endpoint: "+net.JoinHostPort(endpoint.IP, strconv.Itoa(endpoint.Port)),
+		)
+	}
+	if result.State == "exited" {
+		lines = append(lines, fmt.Sprintf("Exit code: %d", result.ExitCode))
+	}
+	if result.Error != "" {
+		lines = append(lines, "Failure: "+result.Error)
+	}
+	if result.LastOperationError != "" {
+		lines = append(lines, "Unresolved operation failure: "+result.LastOperationError)
+	}
 
-	return fmt.Sprintf("%s: %s", result.Name, enablement)
+	return strings.Join(lines, "\n")
 }
 
 func formatSidecarList(entries []deploy.SidecarAvailability) string {

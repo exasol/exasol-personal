@@ -38,6 +38,19 @@ type CommonFlags struct {
 // Unit tests should generally create their own FlagState instead of mutating this.
 var commonFlags = &CommonFlags{}
 
+// Selection repeats how the caller chose the deployment, so a printed hint
+// stays runnable as written.
+func (state *CommonFlags) Selection() string {
+	switch {
+	case state.DeploymentName != "":
+		return " -d " + state.DeploymentName
+	case state.DeploymentDir != "":
+		return " --deployment-dir " + state.DeploymentDir
+	default:
+		return ""
+	}
+}
+
 func (state *CommonFlags) Deployment() config.DeploymentDir {
 	return config.NewDeploymentDir(state.DeploymentDir)
 }

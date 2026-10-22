@@ -244,7 +244,7 @@ func TestStartPreparedLocalRuntime_WritesHostEndpointArtifacts(t *testing.T) {
 	// When
 	err := startPreparedLocalRuntime(
 		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
-	)
+	).Err()
 	// Then
 	if err != nil {
 		t.Fatalf("expected host runtime start to succeed, got %v", err)
@@ -373,7 +373,7 @@ func TestStartPreparedLocalRuntime_PreservesStoredSecrets(t *testing.T) {
 	// When
 	err := startPreparedLocalRuntime(
 		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
-	)
+	).Err()
 	// Then
 	if err != nil {
 		t.Fatalf("expected host runtime start to succeed, got %v", err)
@@ -400,7 +400,7 @@ func TestStartPreparedLocalRuntime_StoresGeneratedPasswordForFreshDatabase(t *te
 	// When
 	err := startPreparedLocalRuntime(
 		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
-	)
+	).Err()
 	// Then
 	if err != nil {
 		t.Fatalf("expected fresh start to succeed, got %v", err)
@@ -434,7 +434,7 @@ func TestStartPreparedLocalRuntime_StopsAfterFailedFirstInitialization(t *testin
 	// When
 	err := startPreparedLocalRuntime(
 		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
-	)
+	).Err()
 
 	// Then
 	if err == nil {
@@ -465,7 +465,7 @@ func TestStartPreparedLocalRuntime_LeavesExistingDatabaseRunningAfterFailure(t *
 	// When
 	err := startPreparedLocalRuntime(
 		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
-	)
+	).Err()
 
 	// Then
 	if err == nil {
@@ -522,7 +522,7 @@ func TestStartPreparedLocalRuntime_RemovesBootstrapPasswordOnInterrupt(t *testin
 	// When
 	_ = startPreparedLocalRuntime(
 		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
-	)
+	).Err()
 
 	// Then
 	if removalsBeforeExit != 2 {
@@ -624,7 +624,7 @@ func TestStartPreparedLocalRuntime_PreservesHostStartFailure(t *testing.T) {
 	// When
 	err := startPreparedLocalRuntime(
 		context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
-	)
+	).Err()
 	// Then
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected host start error to be preserved, got %v", err)
@@ -713,7 +713,7 @@ esac
 		localruntime.NewMacVMRuntime(deployment, manager),
 		nil,
 		nil,
-	)
+	).Err()
 	// Then
 	if err != nil {
 		t.Fatalf("expected local stop to succeed, got %v", err)

@@ -231,12 +231,13 @@ func runDeployBackend(
 		return err
 	}
 
-	if err := backend.Deploy(
+	lifecycle := backend.Deploy(
 		ctx,
 		externalCommandOutput,
 		externalCommandOutput,
 		options,
-	); err != nil {
+	)
+	if err := lifecycle.Database; err != nil {
 		unregister()
 		_, unavailable := localports.AsUnavailable(err)
 		if unavailable {
@@ -258,9 +259,17 @@ func runDeployBackend(
 
 		return recordDeployFailure(exasolState, deployment, err)
 	}
-
 	// Stop handling interrupts before committing success state
 	unregister()
+
+	// Only the database decides whether the deployment succeeded, so a sidecar
+	// failure is reported without failing a database that is up.
+	for name, failure := range lifecycle.Sidecars {
+		slog.Warn("sidecar did not start", "sidecar", name, "error", failure)
+	}
+	if lifecycle.SidecarReconciliation != nil {
+		slog.Warn("sidecar reconciliation failed", "error", lifecycle.SidecarReconciliation)
+	}
 
 	return finalizeSuccessfulDeploy(ctx, exasolState, deployment)
 }

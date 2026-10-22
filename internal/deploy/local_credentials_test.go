@@ -245,7 +245,7 @@ func TestStartPreparedLocalRuntime_VerifiesStoredCredentialUntilLoginSucceeds(t 
 			// When
 			err := startPreparedLocalRuntime(
 				context.Background(), runtime, localRuntimeConfig{}, 0, nil, nil,
-			)
+			).Err()
 
 			// Then
 			assertErrorIs(t, err, test.verifyErr)

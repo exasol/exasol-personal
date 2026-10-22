@@ -34,17 +34,17 @@ func startPreparedLocalRuntime(
 	runtimeConfig localRuntimeConfig,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
-) error {
+) DeploymentLifecycleResult {
 	localConfig, err := toLocalRuntimeConfig(runtime.Deployment(), runtimeConfig)
 	if err != nil {
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 	deployment := runtime.Deployment()
 	localConfig.InitialPassword = func(context.Context) (string, error) {
 		return resolveLocalInitialPassword(deployment)
 	}
 	if err := runtime.RemoveBootstrapPassword(); err != nil {
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 	// The process exits right after signal handlers run, so cleanup on an
 	// interrupt cannot wait for this function to return.
@@ -56,32 +56,33 @@ func startPreparedLocalRuntime(
 	})
 	defer unregister()
 
-	err = startLocalRuntimeAndWait(ctx, runtime, localConfig, waitTimeoutSeconds, out, outErr)
+	result := startLocalRuntimeAndWait(ctx, runtime, localConfig, waitTimeoutSeconds, out, outErr)
 	// Read after the start: a fresh initialization records the pending check.
 	verificationPending, markerErr := localCredentialVerificationPending(deployment)
 	if markerErr != nil {
-		err = errors.Join(err, markerErr)
+		result.Database = errors.Join(result.Database, markerErr)
 	}
-	if err == nil && verificationPending && os.Getenv(localSkipDatabaseWaitEnv) == "" {
-		err = verifyLocalStoredCredentialFn(ctx, deployment)
-		if err == nil {
-			err = markLocalDatabasePasswordVerified(deployment)
+	if result.Database == nil && verificationPending &&
+		os.Getenv(localSkipDatabaseWaitEnv) == "" {
+		result.Database = verifyLocalStoredCredentialFn(ctx, deployment)
+		if result.Database == nil {
+			result.Database = markLocalDatabasePasswordVerified(deployment)
 		}
 	}
-	if err != nil && verificationPending {
+	if result.Database != nil && verificationPending {
 		// Stopping leaves a retry to start from the stored password.
 		if stopErr := runtime.Stop(ctx, out, outErr); stopErr != nil {
-			err = errors.Join(err, fmt.Errorf(
+			result.Database = errors.Join(result.Database, fmt.Errorf(
 				"failed to stop the local database before its password was verified: %w",
 				stopErr,
 			))
 		}
 	}
 	if removeErr := runtime.RemoveBootstrapPassword(); removeErr != nil {
-		err = errors.Join(err, removeErr)
+		result.Database = errors.Join(result.Database, removeErr)
 	}
 
-	return err
+	return result
 }
 
 func startLocalRuntimeAndWait(
@@ -90,14 +91,14 @@ func startLocalRuntimeAndWait(
 	localConfig localruntime.VMConfig,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
-) error {
+) DeploymentLifecycleResult {
 	if err := runtime.Start(ctx, out, outErr, localConfig); err != nil {
-		return diagnoseLocalFailure(ctx, runtime, err)
+		return DeploymentLifecycleResult{Database: diagnoseLocalFailure(ctx, runtime, err)}
 	}
 
 	endpoint, err := runtime.ReadEndpoints()
 	if err != nil {
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
 
 	return writeLocalRuntimeArtifactsAndWait(
@@ -180,7 +181,13 @@ func stopLocalRuntimeAfterFailure(
 		return err
 	}
 
-	return selectedRuntime.Stop(ctx, os.Stderr, os.Stderr)
+	failures, sidecarErr := cleanupRuntimeSidecars(ctx, selectedRuntime)
+
+	return errors.Join(
+		selectedRuntime.Stop(ctx, os.Stderr, os.Stderr),
+		sidecarErr,
+		joinSidecarFailures(failures),
+	)
 }
 
 // reconcileLocalVMState corrects stale workflow state after an unclean local
@@ -236,12 +243,17 @@ func stopLocalRuntime(
 	ctx context.Context,
 	runtime localruntime.Runtime,
 	out, outErr io.Writer,
-) error {
+) DeploymentLifecycleResult {
+	failures, sidecarErr := cleanupRuntimeSidecars(ctx, runtime)
+	result := DeploymentLifecycleResult{Sidecars: failures, SidecarReconciliation: sidecarErr}
 	if err := runtime.Stop(ctx, out, outErr); err != nil {
-		return err
-	}
+		result.Database = err
 
-	return updateLocalDeploymentArtifactState(runtime.Deployment(), StatusStopped)
+		return result
+	}
+	result.Database = updateLocalDeploymentArtifactState(runtime.Deployment(), StatusStopped)
+
+	return result
 }
 
 func destroyLocalRuntime(
@@ -249,8 +261,13 @@ func destroyLocalRuntime(
 	runtime localruntime.Runtime,
 	out, outErr io.Writer,
 ) error {
+	failures, sidecarErr := cleanupRuntimeSidecars(ctx, runtime)
+	sidecarErr = errors.Join(sidecarErr, joinSidecarFailures(failures))
 	if err := runtime.Destroy(ctx, out, outErr); err != nil {
-		return err
+		return errors.Join(err, sidecarErr)
+	}
+	if sidecarErr != nil {
+		return sidecarErr
 	}
 
 	deployment := runtime.Deployment()
@@ -258,6 +275,7 @@ func destroyLocalRuntime(
 		deployment.NodeDetailsPath(),
 		deployment.SecretsPath(),
 		deployment.ConnectionInstructionsPath(),
+		deployment.SidecarStatePath(),
 	} {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("failed to remove local deployment artifact %s: %w", path, err)
@@ -343,17 +361,18 @@ func writeLocalRuntimeArtifactsAndWait(
 	endpoint *localruntime.VMRuntimeEndpoint,
 	waitTimeoutSeconds int,
 	out, outErr io.Writer,
-) error {
+) DeploymentLifecycleResult {
 	if err := writeLocalDeploymentArtifacts(runtime.Deployment(), endpoint); err != nil {
-		return err
+		return DeploymentLifecycleResult{Database: err}
 	}
+	failures, sidecarErr := reconcileRuntimeSidecars(ctx, runtime)
+	result := DeploymentLifecycleResult{Sidecars: failures, SidecarReconciliation: sidecarErr}
 	if os.Getenv(localSkipDatabaseWaitEnv) != "" {
-		return nil
+		return result
 	}
 
 	waitTimeoutSeconds = boundedLocalDatabaseStartedTimeout(waitTimeoutSeconds)
-
-	return waitForLocalDatabaseAndSync(
+	result.Database = waitForLocalDatabaseAndSync(
 		ctx,
 		runtime,
 		waitTimeoutSeconds,
@@ -361,6 +380,8 @@ func writeLocalRuntimeArtifactsAndWait(
 		outErr,
 		WaitForLocalDatabaseStarted,
 	)
+
+	return result
 }
 
 func boundedLocalDatabaseStartedTimeout(waitTimeoutSeconds int) int {
@@ -398,6 +419,12 @@ func writeLocalDeploymentArtifacts(
 	if endpoint.DBPort <= 0 || endpoint.DBPort > 65535 {
 		return fmt.Errorf("local runtime database port is invalid: %d", endpoint.DBPort)
 	}
+	username := localDBUser
+	if saved, err := config.ReadDeploymentInfo(deployment); err == nil && saved.Connection != nil {
+		if existing := strings.TrimSpace(saved.Connection.Username); existing != "" {
+			username = existing
+		}
+	}
 
 	deploymentID := "local"
 	if launcherState, err := config.ReadExasolPersonalState(deployment); err == nil {
@@ -418,7 +445,7 @@ func writeLocalDeploymentArtifacts(
 			DisplayHost:                localDeploymentPublicHost,
 			PublicIp:                   localDeploymentPublicHost,
 			DBPort:                     endpoint.DBPort,
-			Username:                   localDBUser,
+			Username:                   username,
 			InsecureSkipCertValidation: true,
 			ShellSupported:             endpoint.ShellSupported,
 		},

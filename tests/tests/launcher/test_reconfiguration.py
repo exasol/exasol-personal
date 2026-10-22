@@ -1149,3 +1149,47 @@ def test_install_retries_same_preset_after_failed_state(
     assert state_path.read_text() == "partial state"
     updated_state = json.loads(launcher_state_path.read_text())
     assert "running" in updated_state["currentWorkflowState"]
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"), reason="uses the Linux Podman runtime"
+)
+def test_stop_on_stopped_local_deployment_succeeds_without_sidecars(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a stopped local deployment whose database container no longer exists
+    deployment_dir = tmp_path / "deployment"
+    _init_stopped_local_deployment(exasol_path, deployment_dir, 28563)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_podman = fake_bin / "podman"
+    fake_podman.write_text(
+        """#!/bin/sh
+set -eu
+case "$1" in
+  container)
+    if [ "$2" = "exists" ]; then exit 1; fi
+    printf 'Error: no such container\\n' >&2; exit 125
+    ;;
+  images|info|logs) ;;
+  ps) printf '[]\\n' ;;
+esac
+"""
+    )
+    fake_podman.chmod(0o700)
+    environment = os.environ.copy()
+    environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
+
+    # When stop runs again
+    result = subprocess.run(
+        [exasol_path, "stop", "--deployment-dir", str(deployment_dir)],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=environment,
+    )
+
+    # Then it reports the deployment is already stopped and does not fail
+    assert result.returncode == 0, result.stderr
+    assert "already stopped" in result.stderr
+    assert "sidecar" not in result.stderr.lower()

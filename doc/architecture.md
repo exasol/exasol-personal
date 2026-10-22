@@ -88,6 +88,18 @@ The Exasol Launcher (`exasol`) is a command-line application that automates the 
 
 ## Application Workflow
 
+### Sidecar lifecycle
+
+One shared service manages sidecar definitions, reconciliation, and reported
+outcomes. A deployment backend applies a desired set and reports what it
+observes; a deployment whose backend does not run sidecars reports them as
+unsupported. Local runtimes own container networking and whatever publication
+their platform requires. Deploy, start, stop, and destroy converge the saved
+definitions. Sidecar failures remain separate from database lifecycle
+outcomes. See the
+[sidecar guide](../user-docs/content/sidecars.md) for configuration and
+user-visible behavior.
+
 ### Initialization Flow
 
 The `init` command prepares a deployment directory:
