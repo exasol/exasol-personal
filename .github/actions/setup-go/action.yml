@@ -7,6 +7,10 @@ runs:
       uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
       with:
         go-version-file: go.mod
+        cache-dependency-path: |
+          go.sum
+          tools/devtools/go.sum
+          tools/cleanup/go.sum
 
     - name: Setup Task
       uses: ./.github/actions/setup-task
@@ -28,7 +32,7 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.GOLANGCI_LINT_CACHE }}
-        key: golangci-lint-${{ runner.os }}-${{ hashFiles('go.sum', 'tools/devtools/go.sum') }}
+        key: golangci-lint-${{ runner.os }}-${{ hashFiles('go.sum', 'tools/devtools/go.sum', 'tools/cleanup/go.sum') }}
         restore-keys: |
           golangci-lint-${{ runner.os }}-
 
@@ -41,14 +45,15 @@ runs:
     # This needs to be done so that different jobs can share the cache of the "setup-go" action
     # "setup-go" caches the entire go env but with a fixed key
     # If "lint-go" would not build the main app, it would populate the cache entry with the main app deps and vice-versa
-    # So we ensure that ALL go deps defined in "go.mod" and the developer tools module are downloaded and seen by every job
-    # 1) `go mod download` should download all the main app go deps
+    # So we ensure that ALL go deps of the launcher, cleanup and developer tools modules are downloaded and seen by every job
+    # 1) `go mod download` should download all the main app and cleanup tool go deps
     # 2) `go tool -modfile=...` downloads and builds the tool bins and their deps
     # 3) `tflint --init` ensure the tflinter plugins are downloaded into the cache
     - name: Warm up Go module and build cache
       shell: bash
       run: |
         go mod download
+        go -C tools/cleanup mod download
         go tool -modfile=tools/devtools/go.mod golangci-lint version || true
         go tool -modfile=tools/devtools/go.mod tflint --version || true
         go tool -modfile=tools/devtools/go.mod tflint --init || true
