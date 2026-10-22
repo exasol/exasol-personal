@@ -32,6 +32,7 @@ locals {
 # Find latest Ubuntu image
 data "stackit_image_v2" "ubuntu" {
   project_id = var.project_id
+  name       = "Ubuntu ${var.ubuntu_version}"
   filter = {
     distro  = "ubuntu"
     version = var.ubuntu_version
@@ -70,6 +71,8 @@ resource "stackit_public_ip" "public_ips" {
 }
 
 resource "stackit_server" "nodes" {
+  depends_on = [minio_s3_object.bootstrap_assets]
+
   lifecycle {
     precondition {
       condition     = local.machine_vcpus >= var.min_vcpus && local.machine_ram_gb >= var.min_ram_gb
@@ -198,21 +201,6 @@ resource "minio_s3_bucket_anonymous_access" "bootstrap_assets" {
             "aws:SourceIp" = local.bootstrap_source_cidrs
           }
         }
-      },
-      {
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource = [
-          "urn:sgws:s3:::${minio_s3_bucket.bootstrap_assets.bucket}",
-          "urn:sgws:s3:::${minio_s3_bucket.bootstrap_assets.bucket}/*"
-        ]
-        Condition = {
-          Bool = {
-            "aws:SecureTransport" = "false"
-          }
-        }
       }
     ]
   })
@@ -226,6 +214,6 @@ resource "minio_s3_object" "bootstrap_assets" {
   bucket_name  = minio_s3_bucket.bootstrap_assets.bucket
   object_name  = each.key
   source       = each.value.src_path
-  etag         = filemd5(each.value.src_path)
+  metadata     = { "content-sha256" = filesha256(each.value.src_path) }
   content_type = "text/plain"
 }

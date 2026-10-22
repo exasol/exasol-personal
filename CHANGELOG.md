@@ -47,6 +47,11 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- Fixed STACKIT deployments failing during Object Storage setup and server creation. The
+  provider now retries concurrent storage initialization, bootstrap bucket policies use supported
+  conditions, and Ubuntu image selection matches x86_64 servers. Unchanged bootstrap files no
+  longer cause server replacement during stop/start.
+
 - `exasol init --help` and `exasol install --help` now list `--no-launcher-version-check`, the flag
   that disables the automatic check for new launcher releases. The flag was always accepted, but
   did not appear in the help output.

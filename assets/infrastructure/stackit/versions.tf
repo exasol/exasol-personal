@@ -23,7 +23,7 @@ terraform {
     }
     stackit = {
       source  = "stackitcloud/stackit"
-      version = "~> 0.93"
+      version = "~> 0.120"
     }
   }
 }
