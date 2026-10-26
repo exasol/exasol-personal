@@ -79,3 +79,38 @@ The browser can display a warning because Exasol Admin uses a self-signed certif
 you are connecting to your deployment before accepting the certificate warning.
 
 Exasol Admin is not available for local deployments.
+
+## Access BucketFS on cloud deployments
+
+New deployments initialized with the current built-in cloud presets store credentials for service
+`bfsdefault`, bucket `default`, in `secrets.json`. The optional `bucketfs` object is keyed by service
+name; each service's `buckets` object is keyed by bucket name. Each bucket contains `read` and `write`
+objects with `username` and `password` fields. The default usernames are `r` and `w`; the write
+credential permits both reading and writing.
+
+Use `exasol info` to find the deployment directory and the node address. From a source permitted by
+`allowed_cidr`, upload a file to `https://<node-address>:2581/default/<path>`:
+
+```bash
+DEPLOY_DIR=$(exasol info --json | jq -r '.deploymentDir')
+NODE=$(jq -r '.nodes.n11.publicIp' "$DEPLOY_DIR/deployment.json")
+BUCKET_USER=$(jq -r '.bucketfs.bfsdefault.buckets.default.write.username' "$DEPLOY_DIR/secrets.json")
+curl --fail --insecure --user "$BUCKET_USER" --upload-file ./example.jar \
+  "https://$NODE:2581/default/example.jar"
+```
+
+This example requires `jq`. Curl prompts for the password: use
+`bucketfs.bfsdefault.buckets.default.write.password` from `secrets.json`. The example accepts the
+deployment's self-signed certificate with `--insecure`; verify that the address belongs to your
+deployment. Pass the same deployment selector to `info` when using a named deployment.
+
+The launcher establishes these credentials during installation and retains them across stop/start.
+Older deployment directories retain their extracted presets; a launcher upgrade does not add these
+credentials. Changes made outside the launcher are not synchronized back to `secrets.json`.
+
+For additional buckets and access policy, see the
+[BucketFS overview](https://docs.exasol.com/db/latest/administration/on-premise/bucketfs/bucketfs_overview.htm).
+For SQL connections and grants, see
+[Database access to BucketFS](https://docs.exasol.com/db/latest/administration/on-premise/bucketfs/database_access.htm).
+Local deployments use [filesystem-backed storage](virtual-schemas.md#where-local-deployments-keep-database-files)
+without BucketFS HTTP credentials.
