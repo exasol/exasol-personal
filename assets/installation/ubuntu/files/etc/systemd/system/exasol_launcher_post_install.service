@@ -11,6 +11,7 @@ After=exasol_launcher_install.service exasol_launcher_ready.service
 Type=oneshot
 ExecCondition=/opt/exasol_launcher/scripts/isAccessNode.sh
 ExecStart=/opt/exasol_launcher/scripts/uploadTLSCert.sh
+ExecStart=/opt/exasol_launcher/scripts/configureBucketFS.sh
 ExecStart=/opt/exasol_launcher/scripts/runInfraHookScripts.sh post-install
 ExecStartPost=/usr/bin/touch /var/lib/exasol_launcher/state/post_install.complete
 User=ubuntu
