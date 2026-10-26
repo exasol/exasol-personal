@@ -7,7 +7,7 @@ TBD - created by archiving change add-exasol-local-backend. Update Purpose after
 
 ### Requirement: Exasol Local deployment preset
 
-The system SHALL provide the standard local deployment option through a VM-backed Podman installation on macOS Apple Silicon and host Podman on Linux AMD64 and ARM64.
+The system SHALL provide the standard local deployment option through a VM-backed Podman installation on macOS Apple Silicon, and through host Docker or host Podman on Linux AMD64, Linux ARM64, and Windows AMD64.
 
 #### Scenario: Install local deployment
 
@@ -17,7 +17,12 @@ The system SHALL provide the standard local deployment option through a VM-backe
 #### Scenario: Install local deployment on Linux
 
 - **WHEN** a user runs `exasol install local` in an empty deployment directory on Linux AMD64 or ARM64
-- **THEN** the launcher initializes the deployment directory, starts Nano through host Podman, waits up to a bounded timeout until the database accepts connections, and records the deployment as running
+- **THEN** the launcher initializes the deployment directory, starts Nano through the container engine the deployment selects, waits up to a bounded timeout until the database accepts connections, and records the deployment as running
+
+#### Scenario: Install local deployment on Windows
+
+- **WHEN** a user runs `exasol install local` in an empty deployment directory on Windows AMD64
+- **THEN** the launcher initializes the deployment directory, starts Nano through host Docker when the deployment selects Docker, or otherwise prepares Podman and its default machine and starts Nano through host Podman, waits up to a bounded timeout until the database accepts connections, and records the deployment as running
 
 #### Scenario: Install local deployment times out
 
@@ -263,7 +268,7 @@ persisted VM sizing and use host-managed resources.
   images and runtime state
 
 ### Requirement: Linux local status and health reflect the published database endpoint
-The system SHALL derive Linux runtime status from the exact Podman deployment container, recover missing in-memory endpoints from deployment information, and probe the published database port for health.
+The system SHALL derive Linux runtime status from the exact deployment container in its container engine, recover missing in-memory endpoints from deployment information, and probe the published database port for health.
 
 #### Scenario: Runtime memory has no endpoints
 - **WHEN** Linux local status or health is requested after process restart and deployment information contains the database endpoint
@@ -307,7 +312,7 @@ The system SHALL preserve Nano data when adopting a historical local container, 
 
 ### Requirement: Local startup crosses explicit durability boundaries
 
-The system SHALL synchronize local runtime storage on Linux and macOS after preparing container images and SHALL flush Nano startup state after the database becomes ready, without automatically repairing or resetting the Podman store.
+The system SHALL synchronize local runtime storage on Linux and macOS after preparing container images and SHALL flush Nano startup state after the database becomes ready, without automatically repairing or resetting the container engine's storage.
 
 #### Scenario: Images are synchronized before container startup
 
@@ -322,7 +327,7 @@ The system SHALL synchronize local runtime storage on Linux and macOS after prep
 #### Scenario: Storage synchronization fails
 
 - **WHEN** either startup synchronization fails
-- **THEN** the launcher fails startup without automatically repairing or resetting the Podman store
+- **THEN** the launcher fails startup without automatically repairing or resetting the container engine's storage
 
 ### Requirement: Local readiness wait is short and diagnostic
 The system SHALL check local database readiness every one to two seconds and SHALL fail a local install or start operation within 30 seconds when the database does not accept connections. When the local runtime identifies a network-wide reachability problem, the failure SHALL retain the most recent database connection error and include the runtime's actionable reachability guidance.
