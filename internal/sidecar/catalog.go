@@ -41,12 +41,11 @@ func NewCatalog(entries map[string]Entry) (*Catalog, error) {
 	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		entry := entries[name].Clone()
 		location := "sidecars." + name
-		if entry.Container.Name == "" {
-			entry.Container.Name = name
+		definition, err := entry.named(name)
+		if err != nil {
+			return nil, err
 		}
-		if entry.Container.Name != name {
-			return nil, fmt.Errorf("%s.container.name: must match catalog key", location)
-		}
+		entry.Definition = definition
 		if strings.TrimSpace(entry.Description) == "" || len(entry.Architectures) == 0 {
 			return nil, fmt.Errorf("%s: description and architectures are required", location)
 		}
@@ -59,7 +58,7 @@ func NewCatalog(entries map[string]Entry) (*Catalog, error) {
 				)
 			}
 		}
-		if err := entry.Container.Validate(location + ".container"); err != nil {
+		if err := entry.validate(name); err != nil {
 			return nil, err
 		}
 		entry.Container = entry.Container.Defaults()

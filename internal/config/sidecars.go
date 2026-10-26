@@ -23,7 +23,7 @@ func (d DeploymentDir) SidecarsPath() string {
 func ReadSidecars(deployment DeploymentDir) (sidecar.Document, error) {
 	data, err := os.ReadFile(deployment.SidecarsPath())
 	if errors.Is(err, os.ErrNotExist) {
-		return sidecar.Document{Version: 1, Containers: []sidecar.Container{}}, nil
+		return sidecar.Document{Version: 1, Sidecars: map[string]sidecar.Definition{}}, nil
 	}
 	if err != nil {
 		return sidecar.Document{}, err
@@ -38,8 +38,8 @@ func ReadSidecars(deployment DeploymentDir) (sidecar.Document, error) {
 
 // WriteSidecars requires the deployment lock across read, mutation, and replacement.
 func WriteSidecars(deployment DeploymentDir, document sidecar.Document) error {
-	if document.Containers == nil {
-		document.Containers = []sidecar.Container{}
+	if document.Sidecars == nil {
+		document.Sidecars = map[string]sidecar.Definition{}
 	}
 	data, err := yaml.Marshal(document)
 	if err != nil {

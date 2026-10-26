@@ -89,40 +89,42 @@ func TestCatalogRejectsInvalidMetadata(t *testing.T) {
 	}
 }
 
+// containerDocument saves one sidecar under the key "example", so a fixture
+// supplies only the container body it needs.
+func containerDocument(container string) []byte {
+	return []byte("version: 1\nsidecars:\n  example:\n    container:\n      " + container + "\n")
+}
+
 func TestSidecarInvalidValuesNameOffendingField(t *testing.T) {
 	t.Parallel()
 	for _, fixture := range []struct{ name, container, location string }{
-		{"null", "image: null", "containers[0].image"},
-		{"image", "image: '-invalid'", "containers[0].image"},
-		{"pull", "image: caddy\n    imagePullPolicy: Sometimes", "imagePullPolicy"},
-		{"restart", "image: caddy\n    restartPolicy: Sometimes", "restartPolicy"},
-		{"env_duplicate", "image: caddy\n    env: [{name: X}, {name: X}]", "env[1].name"},
-		{"env_conflict", "image: caddy\n    env: [{name: X, value: '', " +
+		{"null", "image: null", "sidecars.example.container.image"},
+		{"image", "image: '-invalid'", "sidecars.example.container.image"},
+		{"pull", "image: caddy\n      imagePullPolicy: Sometimes", "imagePullPolicy"},
+		{"restart", "image: caddy\n      restartPolicy: Sometimes", "restartPolicy"},
+		{"env_duplicate", "image: caddy\n      env: [{name: X}, {name: X}]", "env[1].name"},
+		{"env_conflict", "image: caddy\n      env: [{name: X, value: '', " +
 			"valueFrom: {secretKeyRef: {name: x, key: y}}}]", "env[0]"},
 		{
-			"env_source", "image: caddy\n    env: [{name: X, valueFrom: {}}]",
+			"env_source", "image: caddy\n      env: [{name: X, valueFrom: {}}]",
 			"env[0].valueFrom.secretKeyRef",
 		},
-		{"port", "image: caddy\n    ports: [{containerPort: 0}]", "ports[0].containerPort"},
+		{"port", "image: caddy\n      ports: [{containerPort: 0}]", "ports[0].containerPort"},
 		{
-			"host_port", "image: caddy\n    ports: [{containerPort: 80, hostPort: 65536}]",
+			"host_port", "image: caddy\n      ports: [{containerPort: 80, hostPort: 65536}]",
 			"ports[0].hostPort",
 		},
 		{
-			"protocol", "image: caddy\n    ports: [{containerPort: 80, protocol: UDP}]",
+			"protocol", "image: caddy\n      ports: [{containerPort: 80, protocol: UDP}]",
 			"ports[0].protocol",
-		},
-		{
-			"duplicate_name", "image: caddy\n  - name: example\n    image: caddy",
-			"containers[1].name",
 		},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			t.Parallel()
 			// Given
-			data := "version: 1\ncontainers:\n  - name: example\n    " + fixture.container + "\n"
+			data := containerDocument(fixture.container)
 			// When
-			_, err := sidecar.Parse([]byte(data))
+			_, err := sidecar.Parse(data)
 			// Then
 			if err == nil || !strings.Contains(err.Error(), fixture.location) {
 				t.Fatalf("unexpected error: %v", err)
@@ -131,19 +133,40 @@ func TestSidecarInvalidValuesNameOffendingField(t *testing.T) {
 	}
 }
 
+func TestSavedEntryKeyNamesItsContainer(t *testing.T) {
+	t.Parallel()
+	// Given
+	data := containerDocument("image: caddy:2")
+	// When
+	document, err := sidecar.Parse(data)
+	// Then
+	require.NoError(t, err)
+	require.Equal(t, "example", document.Sidecars["example"].Container.Name)
+}
+
+func TestSavedContainerNameContradictingItsKeyFailsValidation(t *testing.T) {
+	t.Parallel()
+	// Given
+	data := containerDocument("name: another\n      image: caddy:2")
+	// When
+	_, err := sidecar.Parse(data)
+	// Then
+	require.ErrorContains(t, err, "sidecars.example.container.name")
+}
+
 func TestSidecarUnsupportedConfigurationIsRejected(t *testing.T) {
 	t.Parallel()
 	for _, fixture := range []struct{ name, container string }{
-		{"unknown field", "image: caddy\n    resources: {}"},
-		{"unknown nested field", "image: caddy\n    env: [{name: X, valueFrom: {fieldRef: {}}}]"},
-		{"duplicate field", "image: caddy\n    image: caddy"},
+		{"unknown field", "image: caddy\n      resources: {}"},
+		{"unknown nested field", "image: caddy\n      env: [{name: X, valueFrom: {fieldRef: {}}}]"},
+		{"duplicate field", "image: caddy\n      image: caddy"},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			t.Parallel()
 			// Given
-			data := "version: 1\ncontainers:\n  - name: example\n    " + fixture.container + "\n"
+			data := containerDocument(fixture.container)
 			// When
-			_, err := sidecar.Parse([]byte(data))
+			_, err := sidecar.Parse(data)
 			// Then
 			require.Error(t, err)
 		})
@@ -153,7 +176,7 @@ func TestSidecarUnsupportedConfigurationIsRejected(t *testing.T) {
 func TestDocumentBoundaries(t *testing.T) {
 	t.Parallel()
 	for _, data := range []string{
-		"", "[", "version: 1", "version: 1\ncontainers: null",
+		"", "[", "version: 1", "version: 1\nsidecars: null",
 	} {
 		t.Run(data, func(t *testing.T) {
 			t.Parallel()

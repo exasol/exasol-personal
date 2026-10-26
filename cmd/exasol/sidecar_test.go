@@ -136,12 +136,12 @@ func TestSidecarEnableCommandUsesSavedDefinition(t *testing.T) {
 	deployment := config.NewDeploymentDir(directory)
 	if err := config.WriteSidecars(deployment, sidecar.Document{
 		Version: 1,
-		Containers: []sidecar.Container{{
-			Name: "saved", Image: "caddy:2",
+		Sidecars: map[string]sidecar.Definition{"saved": {Container: sidecar.Container{
+			Image: "caddy:2",
 			Env: []sidecar.EnvVar{{Name: "PASSWORD", ValueFrom: &sidecar.EnvSource{
 				SecretKeyRef: &sidecar.SecretKeyRef{Name: sidecar.DatabaseSecret, Key: "password"},
 			}}},
-		}},
+		}}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestSidecarEnableCommandUsesSavedDefinition(t *testing.T) {
 	err := command.ExecuteContext(testManagerContext(t))
 	document, readErr := config.ReadSidecars(deployment)
 	// Then
-	if err != nil || readErr != nil || len(document.Containers[0].Env) != 1 {
+	if err != nil || readErr != nil || len(document.Sidecars["saved"].Container.Env) != 1 {
 		t.Fatalf("saved definition: %+v, %v, %v", document, err, readErr)
 	}
 	var decoded deploy.SidecarResult

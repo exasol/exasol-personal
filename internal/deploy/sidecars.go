@@ -214,11 +214,7 @@ func GetAllSidecarStatus(
 		if err != nil {
 			return err
 		}
-		names := make([]string, 0, len(document.Containers))
-		for _, container := range document.Containers {
-			names = append(names, container.Name)
-		}
-		slices.Sort(names)
+		names := document.Names()
 		results = make([]SidecarResult, 0, len(names))
 		for _, name := range names {
 			result, err := operations.status(ctx, name)
@@ -312,7 +308,7 @@ func (sidecars *deploymentSidecars) enable(
 		if err != nil {
 			return SidecarResult{}, err
 		}
-		document.Containers = append(document.Containers, container)
+		document.Sidecars[name] = sidecar.Definition{Container: container}
 		if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
 			return SidecarResult{}, err
 		}
@@ -344,10 +340,7 @@ func (sidecars *deploymentSidecars) disable(
 			}, nil
 		}
 	}
-	document.Containers = slices.DeleteFunc(
-		document.Containers,
-		func(container sidecar.Container) bool { return container.Name == name },
-	)
+	delete(document.Sidecars, name)
 	if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
 		return SidecarResult{}, err
 	}
@@ -382,7 +375,7 @@ func (sidecars *deploymentSidecars) applyAndReport(
 		document, readErr := config.ReadSidecars(sidecars.deployment)
 		failures = append(failures, readErr)
 		if readErr == nil {
-			failures = append(failures, sidecars.apply(ctx, document.Containers))
+			failures = append(failures, sidecars.apply(ctx, document.Containers()))
 		}
 	}
 	result, err := sidecars.status(ctx, name)
@@ -478,7 +471,7 @@ func (sidecars *deploymentSidecars) describe(
 	if err != nil || initialized {
 		return err
 	}
-	inspection, err := sidecars.inspectSidecars(ctx, document.Containers)
+	inspection, err := sidecars.inspectSidecars(ctx, document.Containers())
 	if err != nil || !inspection.Available {
 		return err
 	}
@@ -506,11 +499,8 @@ func reconciliation(
 	databaseRunning bool,
 ) string {
 	// Reconciled once nothing of an unwanted sidecar remains.
-	wanted := slices.IndexFunc(
-		document.Containers,
-		func(container sidecar.Container) bool { return container.Name == name },
-	)
-	if wanted < 0 || !databaseRunning {
+	definition, wanted := document.Sidecars[name]
+	if !wanted || !databaseRunning {
 		if len(observed) == 0 && len(result.Endpoints) == 0 {
 			return sidecarReconciliationComplete
 		}
@@ -523,7 +513,7 @@ func reconciliation(
 	if !observed[0].Running || !observed[0].Matches {
 		return sidecarReconciliationPending
 	}
-	if !endpointsMatch(document.Containers[wanted], result.Endpoints) {
+	if !endpointsMatch(definition.Container, result.Endpoints) {
 		return sidecarReconciliationPending
 	}
 
@@ -605,10 +595,9 @@ func (sidecars *deploymentSidecars) recordFailures(perSidecar map[string]error) 
 }
 
 func containsSidecar(document sidecar.Document, name string) bool {
-	return slices.ContainsFunc(
-		document.Containers,
-		func(container sidecar.Container) bool { return container.Name == name },
-	)
+	_, saved := document.Sidecars[name]
+
+	return saved
 }
 
 // Status keeps the full account; the command prints only the short cause.
@@ -969,7 +958,7 @@ func (sidecars *deploymentSidecars) reconcile(
 	if err != nil && !cleanup {
 		return nil, err
 	}
-	desired := document.Containers
+	desired := document.Containers()
 	if cleanup {
 		desired = nil
 	}
@@ -989,12 +978,13 @@ func (sidecars *deploymentSidecars) recordDefinitionFailures(
 	document sidecar.Document,
 	failure error,
 ) (map[string]error, error) {
-	if len(document.Containers) == 0 {
+	names := document.Names()
+	if len(names) == 0 {
 		return nil, failure
 	}
-	perSidecar := make(map[string]error, len(document.Containers))
-	for _, definition := range document.Containers {
-		perSidecar[definition.Name] = failure
+	perSidecar := make(map[string]error, len(names))
+	for _, name := range names {
+		perSidecar[name] = failure
 	}
 
 	return perSidecar, sidecars.recordFailures(perSidecar)
