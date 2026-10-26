@@ -16,10 +16,11 @@ General guidance is in [CI Security Best Practices](ci_security_best_practices.m
 
 ### Untrusted Pull Request Lane
 
-- Only [`ci.yml`](../.github/workflows/ci.yml) runs on `pull_request`.
+- Only [`ci.yml`](../.github/workflows/ci.yml) and [`build-native.yml`](../.github/workflows/build-native.yml) run on `pull_request`.
 - PR jobs are non-privileged and must not use secrets or OIDC cloud credentials.
 - PR jobs use explicit minimal permissions (`contents: read`).
 - `pull_request_target` is not used for contributor code execution.
+- The self-hosted macOS runner is used on `pull_request` only by `build-native.yml`, and only for pull requests whose head repository is this repository, so fork code never runs on it.
 - [`dependabot-auto-merge.yml`](../.github/workflows/dependabot-auto-merge.yml) may use `pull_request_target` only for Dependabot-authored pull requests, only without checking out or executing pull request code, and only to inspect pull request metadata (branch name, creation time, review status), approve eligible pull requests, and enable auto-merge.
 
 ### Trusted Privileged Lane
@@ -107,7 +108,7 @@ This keeps privileged automation aligned with least-privilege and limits blast r
 
 ## Control Alignment (Workflows vs Settings)
 
-- `ci.yml` as the only PR workflow is not sufficient unless PR write-token and secret sharing settings remain disabled.
+- `ci.yml` and `build-native.yml` as the only PR workflows are not sufficient unless PR write-token and secret sharing settings remain disabled.
 - Job-level minimal `permissions` are strongest when repository default token permission is restricted.
 - Third-party SHA pinning in workflow files is strongest when Actions policy also enforces SHA pinning and allowlists.
 - Release environment usage in workflow YAML is effective only when reviewers and ref restrictions are configured in environment settings.

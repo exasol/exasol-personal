@@ -51,6 +51,14 @@ Runs automatically on every push to `main`:
 
 This ensures multi-platform compatibility is validated on the main branch.
 
+### Native Builds (`build-native.yml`)
+
+Builds the launcher natively on Linux, Windows, and macOS, so that the Taskfile and code generation are exercised on each host platform. Cross-compiling, as the release does, does not run them on Windows or macOS hosts.
+
+Runs on every push to `main`, nightly, and on manual dispatch. On pull requests targeting `main` or a release line it runs only when the pull request changes build tooling: the Taskfile and its included tasks, tools, Go module files, the GoReleaser configuration, workflows and shared actions, or the resource specification that code generation reads. Other pull requests skip the builds, and each platform is a separate job so that skipped builds do not block merging when they are required checks.
+
+The macOS build runs on the self-hosted runner and is skipped for pull requests from forks.
+
 ### Orphaned Deployment Cleanup (`cleanup-orphaned-deployments.yml`)
 
 Runs nightly (and on manual dispatch) to delete cloud resources left behind by failed or interrupted deployment tests, using the [cleanup tool](../tools/cleanup/README.md).
