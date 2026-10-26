@@ -6,6 +6,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"syscall"
@@ -40,7 +41,7 @@ func TestWriteSecretsRoundTrips(t *testing.T) {
 
 	// Then
 	expectNoErr(t, err)
-	if *actual != *expected {
+	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("expected %+v, got %+v", *expected, *actual)
 	}
 	assertOnlySecretsFile(t, deployment.Root())
@@ -93,7 +94,7 @@ func TestWriteSecretsFailureKeepsPreviousFile(t *testing.T) {
 	mustChmod(t, dir, 0o700)
 	actual, readErr := ReadSecrets(deployment)
 	expectNoErr(t, readErr)
-	if *actual != *previous {
+	if !reflect.DeepEqual(actual, previous) {
 		t.Fatalf("expected previous secrets %+v, got %+v", *previous, *actual)
 	}
 	assertOnlySecretsFile(t, dir)
@@ -147,7 +148,7 @@ func TestWriteSecretsInterruptRemovesTemporaryFile(t *testing.T) {
 	}
 	actual, err := ReadSecrets(deployment)
 	expectNoErr(t, err)
-	if *actual != *previous {
+	if !reflect.DeepEqual(actual, previous) {
 		t.Fatalf("expected previous secrets %+v, got %+v", *previous, *actual)
 	}
 	assertOnlySecretsFile(t, dir)
@@ -192,5 +193,58 @@ func TestWriteSecretsTreatsDirectoryNamesLiterally(t *testing.T) {
 				t.Fatalf("expected the other directory's file to be untouched, got %v", statErr)
 			}
 		})
+	}
+}
+
+func TestBucketFSSecretsRoundTrip(t *testing.T) {
+	t.Parallel()
+	deployment := NewDeploymentDir(t.TempDir())
+	expected := &Secrets{DbPassword: "db", BucketFS: map[string]BucketFSServiceSecrets{
+		"bfsdefault": {Buckets: map[string]BucketSecrets{
+			"default": {
+				Read:  BucketCredential{"r", "read-one"},
+				Write: BucketCredential{"w", "write-one"},
+			},
+			"drivers": {
+				Read:  BucketCredential{"r", "read-two"},
+				Write: BucketCredential{"w", "write-two"},
+			},
+		}},
+		"other": {Buckets: map[string]BucketSecrets{
+			"default": {
+				Read:  BucketCredential{"r", "other-read"},
+				Write: BucketCredential{"w", "other-write"},
+			},
+		}},
+	}}
+	expectNoErr(t, WriteSecrets(deployment.Root(), expected))
+	actual, err := ReadSecrets(deployment)
+	expectNoErr(t, err)
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatal("BucketFS credentials did not round trip")
+	}
+}
+
+func TestSecretsWithoutBucketFS(t *testing.T) {
+	t.Parallel()
+	deployment := NewDeploymentDir(t.TempDir())
+	expectNoErr(
+		t,
+		os.WriteFile(
+			deployment.SecretsPath(),
+			[]byte(`{"dbPassword":"existing"}`),
+			secretsFileMode,
+		),
+	)
+	secrets, err := ReadSecrets(deployment)
+	expectNoErr(t, err)
+	if secrets.DbPassword != "existing" || secrets.BucketFS != nil {
+		t.Fatal("expected database credentials without BucketFS")
+	}
+	expectNoErr(t, WriteSecrets(deployment.Root(), secrets))
+	data, err := os.ReadFile(deployment.SecretsPath())
+	expectNoErr(t, err)
+	if strings.Contains(string(data), "bucketfs") {
+		t.Fatal("absent BucketFS credentials should remain omitted")
 	}
 }

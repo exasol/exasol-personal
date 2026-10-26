@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sync/atomic"
 	"syscall"
@@ -295,7 +296,7 @@ func TestWriteLocalDeploymentArtifacts_PreservesStoredSecretsAndRefreshesEndpoin
 	if err != nil {
 		t.Fatalf("expected secrets to be readable, got %v", err)
 	}
-	if *secrets != *stored {
+	if !reflect.DeepEqual(secrets, stored) {
 		t.Fatalf("expected stored secrets %#v, got %#v", *stored, *secrets)
 	}
 	info, err := config.ReadDeploymentInfo(deployment)
@@ -382,7 +383,7 @@ func TestStartPreparedLocalRuntime_PreservesStoredSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected secrets to be readable, got %v", err)
 	}
-	if *secrets != *stored {
+	if !reflect.DeepEqual(secrets, stored) {
 		t.Fatalf("expected stored secrets %#v, got %#v", *stored, *secrets)
 	}
 }
