@@ -6,6 +6,9 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- New built-in cloud deployments store read and write credentials for the default BucketFS bucket
+  in `secrets.json`, ready for HTTPS file uploads after installation.
+
 - `exasol connect` now creates a table from a local Parquet file, with columns taken from the file:
 
   ```bash
