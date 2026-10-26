@@ -212,6 +212,29 @@ func TestImagePolicyDefaults(t *testing.T) {
 	}
 }
 
+func TestHostIPDefaultsToItsCanonicalForm(t *testing.T) {
+	t.Parallel()
+	for _, fixture := range []struct{ hostIP, want string }{
+		{"0:0:0:0:0:0:0:1", "::1"},
+		{"::0001", "::1"},
+		{"0000:0000:0000:0000:0000:0000:0000:0001", "::1"},
+		{"127.0.0.1", "127.0.0.1"},
+		{"loopback", "loopback"},
+	} {
+		t.Run(fixture.hostIP, func(t *testing.T) {
+			t.Parallel()
+			// Given
+			container := sidecar.Container{Image: "caddy:2", Ports: []sidecar.Port{
+				{ContainerPort: 8080, HostPort: 18080, HostIP: fixture.hostIP},
+			}}
+			// When
+			actual := container.Defaults()
+			// Then
+			require.Equal(t, fixture.want, actual.Ports[0].HostIP)
+		})
+	}
+}
+
 func TestSidecarLoopbackPublicationValidation(t *testing.T) {
 	t.Parallel()
 	for _, address := range []string{"0.0.0.0", "::", "192.0.2.1", "localhost"} {

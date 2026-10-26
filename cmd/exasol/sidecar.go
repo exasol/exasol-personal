@@ -180,10 +180,11 @@ func formatSidecarResult(result deploy.SidecarResult) string {
 		"Reconciliation: " + result.Reconciliation,
 	}
 	for _, endpoint := range result.Endpoints {
-		lines = append(
-			lines,
-			"Endpoint: "+net.JoinHostPort(endpoint.IP, strconv.Itoa(endpoint.Port)),
-		)
+		address := endpoint.URL
+		if address == "" {
+			address = net.JoinHostPort(endpoint.IP, strconv.Itoa(endpoint.Port))
+		}
+		lines = append(lines, "Endpoint: "+address)
 	}
 	if result.State == "exited" {
 		lines = append(lines, fmt.Sprintf("Exit code: %d", result.ExitCode))

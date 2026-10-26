@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
+	"net/url"
 	"os"
 	"runtime"
 	"slices"
@@ -26,6 +28,8 @@ import (
 type SidecarEndpoint struct {
 	IP   string `json:"ip"`
 	Port int    `json:"port"`
+	// Empty unless the port declares an application protocol.
+	URL string `json:"url,omitempty"`
 }
 
 const (
@@ -471,7 +475,7 @@ func (sidecars *deploymentSidecars) describe(
 	if err != nil || initialized {
 		return err
 	}
-	inspection, err := sidecars.inspectSidecars(ctx, document.Containers())
+	inspection, err := sidecars.inspectSidecars(ctx, document)
 	if err != nil || !inspection.Available {
 		return err
 	}
@@ -521,14 +525,14 @@ func reconciliation(
 }
 
 func endpointsMatch(definition sidecar.Container, endpoints []SidecarEndpoint) bool {
-	declared := map[SidecarEndpoint]int{}
+	declared := map[string]int{}
 	for _, port := range definition.Defaults().Ports {
 		if port.HostPort > 0 {
-			declared[SidecarEndpoint{IP: port.HostIP, Port: port.HostPort}]++
+			declared[hostAddress(port.HostIP, port.HostPort)]++
 		}
 	}
 	for _, endpoint := range endpoints {
-		declared[endpoint]--
+		declared[hostAddress(endpoint.IP, endpoint.Port)]--
 	}
 	for _, count := range declared {
 		if count != 0 {
@@ -682,7 +686,7 @@ func (sidecars *deploymentSidecars) applySidecars(
 }
 
 func (sidecars *deploymentSidecars) inspectSidecars(
-	ctx context.Context, desired []sidecar.Container,
+	ctx context.Context, document sidecar.Document,
 ) (SidecarInspection, error) {
 	available, err := sidecars.runtime.SidecarHostRunning(ctx)
 	if err != nil || !available {
@@ -715,7 +719,7 @@ func (sidecars *deploymentSidecars) inspectSidecars(
 		return SidecarInspection{}, err
 	}
 	for _, container := range containers {
-		observation, err := observeSidecar(manager, container, desired, opened, secrets)
+		observation, err := observeSidecar(manager, container, document, opened, secrets)
 		if err != nil {
 			return SidecarInspection{}, err
 		}
@@ -728,7 +732,7 @@ func (sidecars *deploymentSidecars) inspectSidecars(
 func observeSidecar(
 	manager *localinstall.SidecarRuntime,
 	container localinstall.ContainerListing,
-	desired []sidecar.Container,
+	document sidecar.Document,
 	opened []sidecar.PublishedPort,
 	secrets sidecar.Secrets,
 ) (SidecarObservation, error) {
@@ -740,14 +744,16 @@ func observeSidecar(
 		ExitCode:  container.ExitCode,
 		Endpoints: []SidecarEndpoint{},
 	}
+	definition, saved := document.Sidecars[name]
 	if observation.Running {
-		observation.Endpoints = sidecarEndpoints(container, openedFor(opened, name))
+		observation.Endpoints = sidecarEndpoints(
+			container, openedFor(opened, name), declarationsFor(definition),
+		)
 	}
-	index := slices.IndexFunc(desired, func(c sidecar.Container) bool { return c.Name == name })
-	if index < 0 {
+	if !saved {
 		return observation, nil
 	}
-	matches, err := manager.Matches(container, desired[index], secrets)
+	matches, err := manager.Matches(container, definition.Container, secrets)
 	observation.Matches = matches
 
 	return observation, err
@@ -845,22 +851,64 @@ func boundContainerPorts(containers []localinstall.ContainerListing) map[sidecar
 	return bound
 }
 
+func hostAddress(hostIP string, hostPort int) string {
+	return net.JoinHostPort(hostIP, strconv.Itoa(hostPort))
+}
+
+// A direct binding and a forwarded one both report the host address. A port
+// the sidecar keeps internal has none.
+type endpointDeclarations map[string]sidecar.Endpoint
+
+// Defaults supply the host IP the observed binding reports.
+func declarationsFor(definition sidecar.Definition) endpointDeclarations {
+	declarations := make(endpointDeclarations, len(definition.Endpoints))
+	container := definition.Container.Defaults()
+	for _, endpoint := range definition.Endpoints {
+		for _, port := range container.Ports {
+			if port.Name == endpoint.Port && port.HostPort > 0 {
+				declarations[hostAddress(port.HostIP, port.HostPort)] = endpoint
+			}
+		}
+	}
+
+	return declarations
+}
+
+// A virtual machine forwards a declared host port to one it assigns itself, so
+// the observed address is the reachable one.
+func (declarations endpointDeclarations) endpoint(hostIP string, hostPort int) SidecarEndpoint {
+	address := hostAddress(hostIP, hostPort)
+	endpoint := SidecarEndpoint{IP: hostIP, Port: hostPort}
+	declaration, declared := declarations[address]
+	if !declared {
+		return endpoint
+	}
+	endpoint.URL = (&url.URL{
+		Scheme: declaration.Scheme,
+		Host:   address,
+		Path:   declaration.Path,
+	}).String()
+
+	return endpoint
+}
+
 func sidecarEndpoints(
 	container localinstall.ContainerListing,
 	published []sidecar.PublishedPort,
+	declarations endpointDeclarations,
 ) []SidecarEndpoint {
 	// Opened endpoints replace the bindings that stay behind the boundary.
 	endpoints := []SidecarEndpoint{}
 	if len(published) > 0 {
 		for _, port := range published {
-			endpoints = append(endpoints, SidecarEndpoint{IP: port.HostIP, Port: port.HostPort})
+			endpoints = append(endpoints, declarations.endpoint(port.HostIP, port.HostPort))
 		}
 
 		return endpoints
 	}
 	for _, port := range container.Ports {
 		if port.HostPort > 0 {
-			endpoints = append(endpoints, SidecarEndpoint{IP: port.HostIP, Port: port.HostPort})
+			endpoints = append(endpoints, declarations.endpoint(port.HostIP, port.HostPort))
 		}
 	}
 

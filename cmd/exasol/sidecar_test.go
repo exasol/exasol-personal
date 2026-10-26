@@ -182,6 +182,25 @@ func TestSidecarTextIncludesEndpointsAndFailure(t *testing.T) {
 	}
 }
 
+func TestSidecarTextPrefersTheEndpointURL(t *testing.T) {
+	t.Parallel()
+	// Given
+	result := deploy.SidecarResult{
+		Name: "mcp", Enabled: true, Running: true,
+		State: "running", Reconciliation: "complete",
+		Endpoints: []deploy.SidecarEndpoint{
+			{IP: "127.0.0.1", Port: 4896, URL: "http://127.0.0.1:4896/mcp"},
+			{IP: "127.0.0.1", Port: 9090},
+		},
+	}
+	// When
+	text := formatSidecarResult(result)
+	// Then
+	require.Contains(t, text, "Endpoint: http://127.0.0.1:4896/mcp")
+	require.Contains(t, text, "Endpoint: 127.0.0.1:9090")
+	require.NotContains(t, text, "Endpoint: 127.0.0.1:4896\n")
+}
+
 func TestSidecarTextReportsNothingToRemove(t *testing.T) {
 	t.Parallel()
 	// Given
