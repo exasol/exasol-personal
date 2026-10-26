@@ -75,12 +75,21 @@ class SidecarDeployment:
         )
 
     def save(self, *containers: dict[str, Any]) -> None:
-        sidecars = {
-            container["name"]: {"container": container} for container in containers
+        """Replace the saved sidecars, keeping the declarations they still need."""
+        path = self.directory / "sidecars.yaml"
+        saved = (
+            yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None
+        )
+        declared = (saved or {}).get("sidecars") or {}
+        sidecars: dict[str, Any] = {
+            container["name"]: {
+                **(declared.get(container["name"]) or {}),
+                "container": container,
+            }
+            for container in containers
         }
-        (self.directory / "sidecars.yaml").write_text(
-            yaml.safe_dump({"version": 1, "sidecars": sidecars}),
-            encoding="utf-8",
+        path.write_text(
+            yaml.safe_dump({"version": 1, "sidecars": sidecars}), encoding="utf-8"
         )
 
     def _state_path(self) -> Path:

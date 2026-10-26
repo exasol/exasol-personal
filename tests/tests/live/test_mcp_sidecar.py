@@ -8,6 +8,7 @@ import time
 from collections.abc import Iterator
 from http import HTTPStatus
 from typing import Any
+from urllib.parse import urljoin
 
 import pytest
 import requests
@@ -65,7 +66,7 @@ def wait_until_healthy(endpoint: str) -> dict[str, Any]:
         session.trust_env = False
         while time.monotonic() < deadline:
             try:
-                response = session.get(f"{endpoint}/health", timeout=2)
+                response = session.get(urljoin(endpoint, "/health"), timeout=2)
                 response.raise_for_status()
                 health = dict(response.json())
                 last_observation = json.dumps(health, sort_keys=True)
@@ -95,7 +96,7 @@ def set_host_port(service: SidecarDeployment, port: int) -> None:
 async def exercise_mcp(
     endpoint: str,
 ) -> tuple[set[str], CallToolResult, CallToolResult, CallToolResult]:
-    async with Client(f"{endpoint}/mcp") as client:
+    async with Client(endpoint) as client:
         tools = await client.list_tools()
         metadata_result = await client.call_tool(
             MCP_METADATA_TOOL, {"schema_name": MCP_TEST_SCHEMA}
@@ -121,12 +122,18 @@ def result_text(result: CallToolResult) -> str:
 
 
 def running_endpoint(status: dict[str, Any], host_port: int) -> str:
+    """Return the URL status reports, so callers connect to the reported value."""
     assert status["enabled"] is True
     assert status["running"] is True
     assert status["reconciliation"] == "complete"
-    assert status["endpoints"] == [{"ip": "127.0.0.1", "port": host_port}]
-    endpoint = dict(status["endpoints"][0])
-    return f"http://{endpoint['ip']}:{endpoint['port']}"
+    assert status["endpoints"] == [
+        {
+            "ip": "127.0.0.1",
+            "port": host_port,
+            "url": f"http://127.0.0.1:{host_port}/mcp",
+        }
+    ]
+    return str(status["endpoints"][0]["url"])
 
 
 def assert_mcp_interaction(endpoint: str) -> None:
@@ -158,7 +165,7 @@ def assert_mcp_unreachable(endpoint: str) -> None:
     with requests.Session() as session:
         session.trust_env = False
         try:
-            response = session.get(f"{endpoint}/health", timeout=2)
+            response = session.get(urljoin(endpoint, "/health"), timeout=2)
         except requests.RequestException:
             return
     pytest.fail(
@@ -218,7 +225,7 @@ def test_mcp_sidecar_rejects_rebound_requests(
     mcp_deployment.sidecar("enable")
     set_host_port(mcp_deployment, host_port)
     mcp_deployment.deployment.deploy()
-    endpoint = running_endpoint(mcp_deployment.sidecar("status"), host_port) + "/mcp"
+    endpoint = running_endpoint(mcp_deployment.sidecar("status"), host_port)
     body = {
         "jsonrpc": "2.0",
         "id": 1,
