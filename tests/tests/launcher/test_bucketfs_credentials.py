@@ -53,125 +53,147 @@ def test_cloud_bucketfs_credentials_contract(provider: str) -> None:
     )
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Ubuntu installer requires bash")
-@pytest.mark.parametrize("public", [True, False])
-@pytest.mark.parametrize("failure", ["none", "info", "modify", "config", "missing"])
-def test_bucketfs_installer_preserves_policy_and_hides_secrets(
-    tmp_path: Path,
-    *,
-    public: bool,
-    failure: str,
-) -> None:
+READ_PASSWORD = "r\"'\\$()\nü"  # noqa: S105
+WRITE_PASSWORD = "w\"'\\`$\n!"  # noqa: S105
+PRIVATE_RESPONSE = "PRIVATE-CONFD-RESPONSE"
+
+
+@pytest.fixture
+def bucketfs_installer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    if os.name == "nt":
+        pytest.skip("Ubuntu installer requires bash")
     for name in ("configureBucketFS.sh", "logging.sh"):
         shutil.copyfile(SCRIPTS / name, tmp_path / name)
-    (tmp_path / "config.sh").write_text('infra_jq() { jq "$@" "$TEST_INFRA"; }\n')
-    (tmp_path / "shared_post_install.sh").write_text('C4_PATH="$TEST_BIN/c4"\n')
-    binary = tmp_path / "bin"
-    binary.mkdir()
-    read_password = "Read" * 8
-    write_password = "Write" * 8
-    infra = tmp_path / "infrastructure.json"
-    infra.write_text(
+    (tmp_path / "config.sh").write_text(
+        'infra_jq() { jq "$@" "$TEST_DIR/infra.json"; }\n'
+    )
+    (tmp_path / "shared_post_install.sh").write_text('C4_PATH="$TEST_DIR/c4"\n')
+    (tmp_path / "infra.json").write_text(
         json.dumps(
             {
                 "bucketfsReadPasswordB64": base64.b64encode(
-                    read_password.encode()
+                    READ_PASSWORD.encode()
                 ).decode(),
                 "bucketfsWritePasswordB64": base64.b64encode(
-                    write_password.encode()
+                    WRITE_PASSWORD.encode()
                 ).decode(),
             }
-            if failure != "missing"
-            else {}
         )
     )
-    state = tmp_path / "state.json"
-    state.write_text(json.dumps({"public": public, "updates": []}))
-    c4 = binary / "c4"
-    c4.write_text("""#!/usr/bin/env python3
-import os, subprocess, sys
-if sys.argv[1] == "config":
-    if os.environ["TEST_FAILURE"] == "config":
-        print("PRIVATE-CONFD-RESPONSE", file=sys.stderr)
-        sys.exit(1)
-    print("play-id")
-else:
-    script = sys.stdin.read()
-    print(script)
-    print("PRIVATE-CONFD-RESPONSE", file=sys.stderr)
-    sys.exit(subprocess.run(["bash"], input=script, text=True).returncode)
-""")
-    confd = binary / "confd_client"
-    confd.write_text("""#!/usr/bin/env python3
-import json, os, pathlib, sys
-assert sys.argv[1] == "--json" and sys.argv[3:] == ["-a", "-"]
-params = json.load(sys.stdin)
-assert params["bucketfs_name"] == "bfsdefault"
-path = pathlib.Path(os.environ["TEST_STATE"])
-state = json.loads(path.read_text())
-command = sys.argv[2]
-operation = command.removeprefix("bucketfs_").removeprefix("bucket_")
-if os.environ["TEST_FAILURE"] == operation:
-    print("PRIVATE-CONFD-RESPONSE", file=sys.stderr)
-    sys.exit(1)
-if command == "bucketfs_info":
-    bucket = dict(state, read_passwd="PRIVATE-CONFD-RESPONSE")
-    print(json.dumps({"buckets": {"default": bucket}}))
-else:
-    assert command == "bucket_modify" and params["bucket_name"] == "default"
-    assert params["public"] == state["public"]
-    state["updates"].append(params)
-    path.write_text(json.dumps(state))
-    print("PRIVATE-CONFD-RESPONSE", file=sys.stderr)
-""")
-    c4.chmod(0o700)
-    confd.chmod(0o700)
-    environment = dict(
-        os.environ,
-        TEST_BIN=str(binary),
-        TEST_INFRA=str(infra),
-        TEST_STATE=str(state),
-        TEST_FAILURE=failure,
-        PATH=f"{binary}{os.pathsep}{os.environ['PATH']}",
+    (tmp_path / "info.json").write_text(
+        json.dumps(
+            {
+                "buckets": {
+                    "default": {"public": True, "read_passwd": PRIVATE_RESPONSE}
+                },
+            }
+        )
     )
+    (tmp_path / "c4").write_text("""#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == config ]]; then
+    [[ "${TEST_FAILURE:-}" != config ]] || exit 1
+    echo play-id
+else
+    [[ "${TEST_FAILURE:-}" != connect ]] || exit 1
+    tee /dev/stderr | bash
+fi
+""")
+    (tmp_path / "confd_client").write_text("""#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == --json && "$3" == -a && "$4" == - ]]
+request=$(cat)
+printf '%s\\n' "$request" >&2
+echo PRIVATE-CONFD-RESPONSE >&2
+if [[ "$2" == bucketfs_info ]]; then
+    cat "$TEST_DIR/info.json"
+else
+    [[ "$2" == bucket_modify ]]
+    printf '%s\\n' "$request" > "$TEST_DIR/request.json"
+fi
+[[ "${TEST_FAILURE:-}" != "$2" ]]
+""")
+    for name in ("c4", "confd_client"):
+        (tmp_path / name).chmod(0o700)
+    monkeypatch.setenv("TEST_DIR", str(tmp_path))
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    return tmp_path
+
+
+def _run_installer(directory: Path) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
-        [shutil.which("bash") or "bash", "-x", str(tmp_path / "configureBucketFS.sh")],
-        env=environment,
+        [shutil.which("bash") or "bash", "-x", str(directory / "configureBucketFS.sh")],
         capture_output=True,
         text=True,
         check=False,
     )
-    assert (result.returncode == 0) == (failure == "none")
-    if failure != "none":
-        assert (
-            "Failed to configure BucketFS credentials for bfsdefault/default"
-            in result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    for secret in (READ_PASSWORD, WRITE_PASSWORD, PRIVATE_RESPONSE):
+        assert secret not in output
+        assert base64.b64encode(secret.encode()).decode() not in output
+    return result
+
+
+@pytest.mark.parametrize("public", [True, False])
+def test_bucketfs_installer_preserves_public_policy(
+    bucketfs_installer: Path,
+    *,
+    public: bool,
+) -> None:
+    (bucketfs_installer / "info.json").write_text(
+        json.dumps(
+            {
+                "buckets": {
+                    "default": {"public": public, "read_passwd": PRIVATE_RESPONSE}
+                },
+            }
         )
-    environment["TEST_FAILURE"] = "none"
-    if failure != "missing":
-        retry = subprocess.run(
-            [
-                shutil.which("bash") or "bash",
-                "-x",
-                str(tmp_path / "configureBucketFS.sh"),
-            ],
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=False,
+    )
+    result = _run_installer(bucketfs_installer)
+    assert result.returncode == 0
+    assert json.loads((bucketfs_installer / "request.json").read_text()) == {
+        "bucketfs_name": "bfsdefault",
+        "bucket_name": "default",
+        "public": public,
+        "read_password": READ_PASSWORD,
+        "write_password": WRITE_PASSWORD,
+    }
+
+
+@pytest.mark.parametrize(
+    "failure", ["config", "connect", "bucketfs_info", "bucket_modify"]
+)
+def test_bucketfs_installer_sanitizes_command_failure(
+    bucketfs_installer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    monkeypatch.setenv("TEST_FAILURE", failure)
+    result = _run_installer(bucketfs_installer)
+    assert result.returncode != 0
+    assert (
+        "Failed to configure BucketFS credentials for bfsdefault/default"
+        in result.stderr
+    )
+    if failure != "bucket_modify":
+        assert not (bucketfs_installer / "request.json").exists()
+
+
+@pytest.mark.parametrize("invalid", ["policy", "response", "password"])
+def test_bucketfs_installer_rejects_invalid_values(
+    bucketfs_installer: Path,
+    invalid: str,
+) -> None:
+    if invalid == "policy":
+        (bucketfs_installer / "info.json").write_text(
+            '{"buckets":{"default":{"public":"false"}}}'
         )
-        assert retry.returncode == 0
-        result_output = result.stdout + result.stderr + retry.stdout + retry.stderr
-        updates = json.loads(state.read_text())["updates"]
-        assert len(updates) == (2 if failure == "none" else 1)
-        for update in updates:
-            assert update["read_password"] == read_password
-            assert update["write_password"] == write_password
-            assert update["public"] == public
+    elif invalid == "response":
+        (bucketfs_installer / "info.json").write_text("{broken")
     else:
-        result_output = result.stdout + result.stderr
-        assert json.loads(state.read_text())["updates"] == []
-    for secret in (read_password, write_password, "PRIVATE-CONFD-RESPONSE"):
-        assert secret not in result_output
-    for encoded in json.loads(infra.read_text()).values():
-        assert encoded not in result_output
+        (bucketfs_installer / "infra.json").write_text(
+            '{"bucketfsReadPasswordB64":null}'
+        )
+    result = _run_installer(bucketfs_installer)
+    assert result.returncode != 0
+    assert not (bucketfs_installer / "request.json").exists()

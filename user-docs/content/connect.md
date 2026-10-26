@@ -85,8 +85,8 @@ Exasol Admin is not available for local deployments.
 New deployments initialized with the current built-in cloud presets store credentials for service
 `bfsdefault`, bucket `default`, in `secrets.json`. The optional `bucketfs` object is keyed by service
 name; each service's `buckets` object is keyed by bucket name. Each bucket contains `read` and `write`
-objects with `username` and `password` fields. The default usernames are `r` and `w`; the write
-credential permits both reading and writing.
+objects with `username` and `password` fields. Use username `r` for downloads and `w` for uploads
+and deletions. Downloads accept either password; uploads and deletions require the write password.
 
 Use `exasol info` to find the deployment directory and the node address. From a source permitted by
 `allowed_cidr`, upload a file to `https://<node-address>:2581/default/<path>`:
@@ -106,7 +106,8 @@ deployment. Pass the same deployment selector to `info` when using a named deplo
 
 The launcher establishes these credentials during installation and retains them across stop/start.
 Older deployment directories retain their extracted presets; a launcher upgrade does not add these
-credentials. Changes made outside the launcher are not synchronized back to `secrets.json`.
+credentials. Changes made outside the launcher, including additional buckets and password changes,
+are not synchronized back to `secrets.json`.
 
 For additional buckets and access policy, see the
 [BucketFS overview](https://docs.exasol.com/db/latest/administration/on-premise/bucketfs/bucketfs_overview.htm).
