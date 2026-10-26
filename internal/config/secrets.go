@@ -17,8 +17,23 @@ const (
 )
 
 type Secrets struct {
-	DbPassword      string `json:"dbPassword"`
-	AdminUiPassword string `json:"adminUiPassword,omitempty"`
+	DbPassword      string                            `json:"dbPassword"`
+	AdminUiPassword string                            `json:"adminUiPassword,omitempty"`
+	BucketFS        map[string]BucketFSServiceSecrets `json:"bucketfs,omitempty"`
+}
+
+type BucketFSServiceSecrets struct {
+	Buckets map[string]BucketSecrets `json:"buckets"`
+}
+
+type BucketSecrets struct {
+	Read  BucketCredential `json:"read"`
+	Write BucketCredential `json:"write"`
+}
+
+type BucketCredential struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 func SecretsFilePath(deployment DeploymentDir) (string, error) {

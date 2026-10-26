@@ -91,6 +91,7 @@ def test_full_local_deployment_lifecycle(local_deployment: Deployment) -> None:
 
 def _stored_db_password(deployment_dir: Path) -> str:
     secrets_data = json.loads((deployment_dir / "secrets.json").read_text())
+    assert "bucketfs" not in secrets_data
     return str(secrets_data["dbPassword"])
 
 
