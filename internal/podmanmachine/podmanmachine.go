@@ -9,7 +9,7 @@
 //
 // The machine is used in whatever mode podman defaults to; the launcher
 // never converts between rootless and rootful. Rootless works because
-// PodmanInstall publishes the database port on 127.0.0.1 explicitly,
+// NanoInstall publishes the database port on 127.0.0.1 explicitly,
 // which keeps WSL's localhost relay off the broken IPv6 path.
 package podmanmachine
 

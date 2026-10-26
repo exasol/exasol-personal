@@ -12,7 +12,7 @@ from typing import Final
 
 import pytest
 
-from .helpers import record_running_local_deployment, run_command
+from .helpers import container_engine_args, record_running_local_deployment, run_command
 
 pytestmark = pytest.mark.openspec("deployment-status-timeout")
 
@@ -26,6 +26,7 @@ def _init_local_deployment(exasol_path: str, deployment_dir: Path) -> None:
             exasol_path,
             "init",
             "local",
+            *container_engine_args("podman"),
             "--deployment-dir",
             str(deployment_dir),
             "--no-launcher-version-check",

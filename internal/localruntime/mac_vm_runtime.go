@@ -483,9 +483,14 @@ func (runtime *MacVMRuntime) Sidecars(ctx context.Context) (*localinstall.Sideca
 	if err != nil {
 		return nil, err
 	}
-	containers, err := localinstall.NewSidecarRuntime(
-		newRunnerExecutionEnvironment(runnerPath, runtime.paths.WorkDir), owner, envDir,
+	client, err := localinstall.NewContainerRuntime(
+		localinstall.EnginePodman,
+		newRunnerExecutionEnvironment(runnerPath, runtime.paths.WorkDir),
 	)
+	if err != nil {
+		return nil, err
+	}
+	containers, err := localinstall.NewSidecarRuntime(client, owner, envDir)
 	if err != nil {
 		return nil, err
 	}
@@ -641,12 +646,19 @@ func (runtime *MacVMRuntime) install(
 		return mapper.Map(hostPath)
 	}
 
-	return localinstall.NewPodmanInstallWithEnvironment(
+	environment := newRunnerExecutionEnvironment(runnerPath, runtime.paths.WorkDir)
+	client, err := localinstall.NewContainerRuntime(localinstall.EnginePodman, environment)
+	if err != nil {
+		return nil, err
+	}
+
+	return localinstall.NewNanoInstall(
 		runtime.deployment,
-		newRunnerExecutionEnvironment(runnerPath, runtime.paths.WorkDir),
+		environment,
 		resolveImage,
 		slcStagingDir,
 		slcStatusPath,
+		client,
 	), nil
 }
 

@@ -25,8 +25,8 @@ const (
 	cloudDeployFailureResourceHint = "Deployment may have created cloud resources " +
 		"that can incur costs. " +
 		"Fix the problem and run `deploy` again, or run `destroy` to clean up."
-	localDeployFailureResourceHint = "Deployment may have created local VM runtime files. " +
-		"Fix the problem and run `deploy` again, or run `destroy` to clean up."
+	localDeployFailureResourceHint = "Deployment may have created local runtime files and " +
+		"containers. Fix the problem and run `deploy` again, or run `destroy` to clean up."
 )
 
 func appendDeployFailureHint(

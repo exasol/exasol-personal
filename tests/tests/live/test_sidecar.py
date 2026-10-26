@@ -20,6 +20,10 @@ from framework.sidecars import (
     concurrent_sidecar_deployments,
     sidecar_deployment,
 )
+from tests.testcase_helpers import container_engine
+
+# The network every container joins unless told otherwise.
+DEFAULT_NETWORKS = {"docker": "bridge", "podman": "podman"}
 
 pytestmark = [
     pytest.mark.openspec(
@@ -213,12 +217,15 @@ def test_sidecar_start_removes_deleted_definition(service: SidecarDeployment) ->
     )
     assert not any(status["name"] == "caddy" for status in statuses)
     assert (
-        json.loads(
-            service.podman(
-                "ps", "-a", "--filter", f"name={service.container}", "--format", "json"
-            )
-        )
-        == []
+        service.podman(
+            "ps",
+            "-a",
+            "--filter",
+            f"name={service.container}",
+            "--format",
+            "{{.Names}}",
+        ).strip()
+        == ""
     )
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 18080))
@@ -609,7 +616,12 @@ def test_sidecar_bidirectional_service_dns(service: SidecarDeployment) -> None:
 
 def test_sidecar_existing_database_network(service: SidecarDeployment) -> None:
     # Given
-    service.podman("network", "connect", "podman", service.database)
+    service.podman(
+        "network",
+        "connect",
+        DEFAULT_NETWORKS[container_engine(service.directory)],
+        service.database,
+    )
     service.podman("network", "disconnect", service.network, service.database)
     original = service.inspect(service.database)["State"]["StartedAt"]
     assert "42" in service.sql()
@@ -709,33 +721,41 @@ def test_sidecar_destroy_cleanup(service: SidecarDeployment) -> None:
     # Given
     service.sidecar("enable")
     service.response()
+    # Destroy removes the engine record, so read it first.
+    engine = shutil.which(container_engine(service.directory))
     # When
     service.deployment.destroy("--auto-approve")
     # Then
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 18080))
     if sys.platform != "darwin":
-        podman = shutil.which("podman")
-        assert podman is not None
+        assert engine is not None
         for arguments in (
-            ["ps", "-a", "--filter", f"name={service.container}", "--format", "json"],
+            [
+                "ps",
+                "-a",
+                "--filter",
+                f"name={service.container}",
+                "--format",
+                "{{.Names}}",
+            ],
             [
                 "network",
                 "ls",
                 "--filter",
                 f"name={service.network}",
                 "--format",
-                "json",
+                "{{.Name}}",
             ],
         ):
             result = subprocess.run(
-                [podman, *arguments],
+                [engine, *arguments],
                 check=True,
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
-            assert json.loads(result.stdout) == []
+            assert result.stdout.strip() == ""
     assert service.deployment.has_no_deployment()
 
 

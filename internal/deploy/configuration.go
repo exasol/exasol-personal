@@ -111,6 +111,15 @@ func SetDeploymentConfiguration(
 				return err
 			}
 			if err := WorkflowStatePermitsConfigure(exasolState, backendKind); err != nil {
+				// Stopping is not enough to change the engine, so that refusal comes first.
+				if backendKind == backendTypeLocal {
+					if engineErr := rejectRecordedContainerEngineChange(
+						deployment, infraVars,
+					); engineErr != nil {
+						return engineErr
+					}
+				}
+
 				return err
 			}
 			applyCommand, err = configurationApplyCommand(exasolState)

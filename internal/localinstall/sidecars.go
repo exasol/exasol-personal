@@ -46,16 +46,16 @@ func (container ContainerListing) SidecarName() string {
 }
 
 func NewSidecarRuntime(
-	environment CommandRunner, owner string, envDir RuntimePath,
+	client ContainerRuntime, owner string, envDir RuntimePath,
 ) (*SidecarRuntime, error) {
-	if environment == nil || !runtimeNamePattern.MatchString(owner) {
+	if client == nil || !runtimeNamePattern.MatchString(owner) {
 		return nil, errors.New(
-			"sidecar runtime requires an environment and a valid deployment owner",
+			"sidecar runtime requires a container runtime and a valid deployment owner",
 		)
 	}
 
 	return &SidecarRuntime{
-		client: newPodmanRuntime(environment), owner: owner, EnvDir: envDir,
+		client: client, owner: owner, EnvDir: envDir,
 	}, nil
 }
 

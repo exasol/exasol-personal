@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
@@ -139,17 +140,42 @@ func classifyLocalReachability(ctx context.Context, runtime localruntime.Runtime
 	return &localReachabilityError{message: localReachabilityMessageForRuntime(runtime)}
 }
 
+const linuxDockerReachabilityMessage = "could not reach the local database endpoint " +
+	"published by the Linux Docker container.\n\n" +
+	"Inspect the deployment container with `docker ps -a` and `docker logs`, then check for " +
+	"a host firewall rule or another process using the configured database port."
+
+const windowsDockerReachabilityMessage = "could not reach the local database endpoint " +
+	"published by Docker.\n\n" +
+	"Likely causes, in decreasing order of frequency:\n" +
+	"  1. Windows Firewall or a third-party security product is blocking loopback traffic to " +
+	"the forwarded port. Temporarily allow the port and retry.\n" +
+	"  2. Another process (a running server, an older Exasol container) is already bound to " +
+	"the configured port. Use `netstat -ano | findstr <port>` to check.\n" +
+	"  3. Docker stopped between start and health-check. Run `docker info` and start Docker " +
+	"if needed.\n\n" +
+	"Diagnostic commands: `docker ps -a`, `docker logs <container>`."
+
 // Both direct-host platforms share one runtime type, so the guidance is
-// selected on the reported platform rather than on a concrete Go type.
+// selected on the reported platform and engine rather than on a concrete Go type.
 func localReachabilityMessageForRuntime(runtime localruntime.Runtime) string {
 	hostRuntime, isHostRuntime := runtime.(*localruntime.HostRuntime)
 	if !isHostRuntime {
 		return localReachabilityMessage
 	}
+	docker := hostRuntime.ContainerEngine() == localinstall.EngineDocker
 	switch hostRuntime.Platform() {
 	case localruntime.HostPlatformLinux:
+		if docker {
+			return linuxDockerReachabilityMessage
+		}
+
 		return linuxHostReachabilityMessage
 	case localruntime.HostPlatformWindows:
+		if docker {
+			return windowsDockerReachabilityMessage
+		}
+
 		return windowsHostReachabilityMessage
 	default:
 		return localReachabilityMessage

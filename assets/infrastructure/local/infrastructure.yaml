@@ -1,5 +1,5 @@
 name: Exasol Local
-description: Exasol Local deployment using a macOS VM or Linux Podman.
+description: Exasol Local deployment using a macOS VM, or Docker or Podman on Linux and Windows.
 backend: local
 
 local:

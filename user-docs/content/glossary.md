@@ -18,6 +18,11 @@ The database's file store, used to stage files such as adapter and driver JARs w
 can reach them under `/buckets`. See
 [Virtual schemas](virtual-schemas.md#where-local-deployments-keep-database-files).
 
+## Container engine
+
+The software that runs a local deployment's containers on Linux and Windows: Docker or Podman. See
+[Container engine](local-deployment.md#container-engine).
+
 ## Deployment
 
 One launcher-managed Exasol database and the resources that run it. A local deployment runs on your

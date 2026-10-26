@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
@@ -226,7 +227,9 @@ func TestLocalReachabilityMessageForLinuxHostDoesNotUseMacOSGuidance(t *testing.
 	t.Parallel()
 
 	// Given
-	localRuntime := localruntime.NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	localRuntime := localruntime.NewHostLinuxRuntime(
+		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+	)
 
 	// When
 	message := localReachabilityMessageForRuntime(localRuntime)
@@ -243,7 +246,9 @@ func TestLocalReachabilityMessageForLinuxHostDoesNotUseMacOSGuidance(t *testing.
 func TestLocalReachabilityMessageForWindowsHostDoesNotUseMacOSGuidance(t *testing.T) {
 	t.Parallel()
 
-	localRuntime := localruntime.NewHostWindowsRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	localRuntime := localruntime.NewHostWindowsRuntime(
+		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+	)
 
 	message := localReachabilityMessageForRuntime(localRuntime)
 
@@ -263,6 +268,45 @@ func TestLocalReachabilityMessageForWindowsHostDoesNotUseMacOSGuidance(t *testin
 	}
 }
 
+func TestLocalReachabilityMessageForDockerNamesDockerCommands(t *testing.T) {
+	t.Parallel()
+	deployment := config.NewDeploymentDir(t.TempDir())
+
+	for _, test := range []struct {
+		name     string
+		runtime  localruntime.Runtime
+		expected string
+	}{
+		{
+			name: "linux",
+			runtime: localruntime.NewHostLinuxRuntime(
+				deployment, nil, localinstall.EngineDocker,
+			),
+			expected: linuxDockerReachabilityMessage,
+		},
+		{
+			name: "windows",
+			runtime: localruntime.NewHostWindowsRuntime(
+				deployment, nil, localinstall.EngineDocker,
+			),
+			expected: windowsDockerReachabilityMessage,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			message := localReachabilityMessageForRuntime(test.runtime)
+
+			if message != test.expected {
+				t.Fatalf("expected Docker guidance, got %q", message)
+			}
+			if strings.Contains(strings.ToLower(message), "podman") {
+				t.Fatalf("Docker guidance must not name Podman: %q", message)
+			}
+		})
+	}
+}
+
 func skipOnWindows(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -277,10 +321,13 @@ func newLocalTestDeployment(t *testing.T) config.DeploymentDir {
 	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o700); err != nil {
 		t.Fatalf("create infrastructure dir failed: %v", err)
 	}
+	// Pinned, because the tests fake Podman and auto would detect a real Docker.
 	writeTestFile(t, deployment.InfrastructureManifestPath(), `
 name: Test Infrastructure
 description: test infrastructure
 backend: local
+local:
+  containerEngine: podman
 `)
 	state := &config.ExasolPersonalState{DeploymentId: "local-test"}
 	if err := state.SetWorkflowStateAndWrite(

@@ -13,6 +13,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localports"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/util"
 )
 
@@ -190,8 +191,8 @@ func (err *LocalRetryableFailureError) Unwrap() error { return err.Cause }
 // A local deployment always ends up in a state it can retry from, on every
 // platform and whether or not the cause could be identified: stopped is the
 // only post-deploy state that permits `exasol config set`, so anything else
-// blocks the very recovery the failure calls for. Interrupted is left to the
-// signal handlers, which is the only situation that name describes.
+// blocks the very recovery the failure calls for. It stays interrupted only
+// when its runtime cannot be brought to a known state.
 func recordLifecycleFailure(
 	ctx context.Context,
 	exasolState *config.ExasolPersonalState,
@@ -226,7 +227,8 @@ func recordLifecycleFailure(
 // restoreLocalStateAfterFailure returns a failed local deployment to priorState.
 // A runtime still running after the failure is stopped first, so the recorded
 // state and the machine agree before the user retries. Only a runtime that
-// cannot be brought to a known state stays interrupted.
+// cannot be brought to a known state stays interrupted, including one whose
+// container engine stopped answering: the engine may still restart it.
 func restoreLocalStateAfterFailure(
 	ctx context.Context,
 	exasolState *config.ExasolPersonalState,
@@ -235,7 +237,14 @@ func restoreLocalStateAfterFailure(
 	priorState any,
 	operationErr error,
 ) error {
-	if probeLocalRuntimeLiveness(ctx, deployment) == localRuntimeRunning {
+	liveness, probeErr := probeLocalRuntimeLivenessWithCause(ctx, deployment)
+	if errors.Is(probeErr, localruntime.ErrContainerHostUnreachable) {
+		slog.Warn("could not confirm the local runtime state after a failed operation",
+			"operation", operation, "error", probeErr)
+
+		return markOperationInterrupted(exasolState, deployment, operation, operationErr)
+	}
+	if liveness == localRuntimeRunning {
 		if err := stopLocalRuntimeAfterFailure(ctx, deployment); err != nil {
 			slog.Warn("could not stop the local runtime after a failed operation",
 				"operation", operation, "error", err)
