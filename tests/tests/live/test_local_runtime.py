@@ -497,7 +497,7 @@ def _create_legacy_guest_data(
         f"podman pause {container_name}\n"
         "rm -rf /var/lib/exa /var/lib/exa.migrated-backup\n"
         "mkdir -p /var/lib/exa\n"
-        "cp -a --sparse=always /mnt/host/exa/. /var/lib/exa/\n"
+        "cp -a --sparse=always --no-preserve=context /mnt/host/exa/. /var/lib/exa/\n"
         f"podman unpause {container_name}\n"
         "sync\n",
     )
