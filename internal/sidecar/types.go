@@ -45,9 +45,16 @@ type Catalog struct {
 }
 
 type Entry struct {
-	Description   string    `yaml:"description"`
-	Architectures []string  `yaml:"architectures"`
-	Container     Container `yaml:"container"`
+	Definition `yaml:",inline"`
+
+	Description   string   `yaml:"description"`
+	Architectures []string `yaml:"architectures"`
+}
+
+// Definition is what the catalog offers and what enabling saves, so both files
+// describe a sidecar the same way.
+type Definition struct {
+	Container Container `yaml:"container"`
 }
 
 type Container struct {
@@ -133,9 +140,15 @@ func Parse(data []byte) (Document, error) {
 
 func (entry Entry) Clone() Entry {
 	entry.Architectures = slices.Clone(entry.Architectures)
-	entry.Container = entry.Container.Clone()
+	entry.Definition = entry.Definition.Clone()
 
 	return entry
+}
+
+func (definition Definition) Clone() Definition {
+	definition.Container = definition.Container.Clone()
+
+	return definition
 }
 
 func (container Container) Clone() Container {
