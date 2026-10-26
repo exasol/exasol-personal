@@ -123,6 +123,8 @@ func (migration *macDataMigration) copyAndPublish(
 		"cp",
 		"-a",
 		"--sparse=always",
+		// Unit tests run this copy on Linux hosts where SELinux can deny setting labels.
+		"--no-preserve=context",
 		migration.sourceDir+"/.",
 		migration.stagingDir+"/",
 	); err != nil {
