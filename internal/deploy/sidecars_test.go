@@ -188,6 +188,34 @@ sidecars:
 	return catalog
 }
 
+const sidecarEndpointCatalogYAML = `version: 1
+sidecars:
+  example:
+    description: Test service
+    architectures: [amd64, arm64]
+    container:
+      image: docker.io/library/caddy:2-alpine
+      ports:
+        - name: api
+          containerPort: 8080
+          hostPort: 18080
+          hostIP: 127.0.0.1
+    endpoints:
+      - port: api
+        scheme: http
+        path: /v1
+`
+
+// Declares an endpoint on a published port, so tests can observe the URL a
+// user would paste into a client.
+func sidecarTestEndpointCatalog(t *testing.T) *sidecar.Catalog {
+	t.Helper()
+	catalog, err := sidecar.LoadCatalog([]byte(sidecarEndpointCatalogYAML))
+	require.NoError(t, err)
+
+	return catalog
+}
+
 func materializeTestSidecar(
 	t *testing.T,
 	deployment config.DeploymentDir,
@@ -205,11 +233,11 @@ func materializeTestSidecar(
 			if containsSidecar(document, "example") {
 				return nil
 			}
-			container, err := catalog.Resolve("example", goruntime.GOARCH)
+			entry, err := catalog.Resolve("example", goruntime.GOARCH)
 			if err != nil {
 				return err
 			}
-			document.Sidecars["example"] = sidecar.Definition{Container: container}
+			document.Sidecars["example"] = entry.Definition
 
 			return config.WriteSidecars(directory, document)
 		},
@@ -269,6 +297,24 @@ func TestSidecarEnablePreservesEdits(t *testing.T) {
 	if string(actual) != string(edited) {
 		t.Fatalf("definition changed: %s", actual)
 	}
+}
+
+func TestSidecarEnableSavesEndpointDeclarations(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, _ := newSidecarOperationsFixture(t)
+	operations.templates = sidecarTestEndpointCatalog(t)
+	// When
+	_, err := operations.enable(t.Context(), "example")
+	// Then
+	require.NoError(t, err)
+	document, err := config.ReadSidecars(operations.deployment)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		[]sidecar.Endpoint{{Port: "api", Scheme: "http", Path: "/v1"}},
+		document.Sidecars["example"].Endpoints,
+	)
 }
 
 func TestSidecarEnableStoresConnectionReferences(t *testing.T) {

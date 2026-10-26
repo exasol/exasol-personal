@@ -15,7 +15,7 @@ type Resolver interface {
 	// Embedded documents and runtime entries answer this the same way, so a
 	// selection resolves the same way whatever produced it.
 	Entries() map[string]Entry
-	Resolve(name, architecture string) (Container, error)
+	Resolve(name, architecture string) (Entry, error)
 }
 
 // Catalogs resolves a name against its members in order, so entries assembled
@@ -70,7 +70,7 @@ func NewCatalog(entries map[string]Entry) (*Catalog, error) {
 
 func (catalog *Catalog) Entries() map[string]Entry { return catalog.Sidecars }
 
-func (catalog *Catalog) Resolve(name, architecture string) (Container, error) {
+func (catalog *Catalog) Resolve(name, architecture string) (Entry, error) {
 	return resolveEntry(catalog.Sidecars, name, architecture)
 }
 
@@ -83,23 +83,23 @@ func (catalogs Catalogs) Entries() map[string]Entry {
 	return entries
 }
 
-func (catalogs Catalogs) Resolve(name, architecture string) (Container, error) {
+func (catalogs Catalogs) Resolve(name, architecture string) (Entry, error) {
 	// Precedence is per name and architecture, so an earlier catalog that
 	// carries the name for other architectures does not shadow a later one.
 	for _, catalog := range catalogs {
-		if container, err := catalog.Resolve(name, architecture); err == nil {
-			return container, nil
+		if entry, err := catalog.Resolve(name, architecture); err == nil {
+			return entry, nil
 		}
 	}
 	// No member supplies it, so report the choices all of them offer together.
 	return resolveEntry(catalogs.Entries(), name, architecture)
 }
 
-func resolveEntry(entries map[string]Entry, name, architecture string) (Container, error) {
+func resolveEntry(entries map[string]Entry, name, architecture string) (Entry, error) {
 	entry, exists := entries[name]
 	if exists && slices.Contains(entry.Architectures, architecture) {
 		// Callers may edit a selected template without changing subsequent selections.
-		return entry.Container.Clone(), nil
+		return entry.Clone(), nil
 	}
 	choices := make([]string, 0, len(entries))
 	for key, candidate := range entries {
@@ -110,10 +110,10 @@ func resolveEntry(entries map[string]Entry, name, architecture string) (Containe
 	slices.Sort(choices)
 
 	if !exists {
-		return Container{}, fmt.Errorf("sidecar %q is not in the catalog; supported choices: %s",
+		return Entry{}, fmt.Errorf("sidecar %q is not in the catalog; supported choices: %s",
 			name, strings.Join(choices, ", "))
 	}
 
-	return Container{}, fmt.Errorf("sidecar %q is not available for %s; supported choices: %s",
+	return Entry{}, fmt.Errorf("sidecar %q is not available for %s; supported choices: %s",
 		name, architecture, strings.Join(choices, ", "))
 }

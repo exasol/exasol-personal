@@ -304,11 +304,11 @@ func (sidecars *deploymentSidecars) enable(
 		if err != nil {
 			return SidecarResult{}, err
 		}
-		container, err := catalog.Resolve(name, runtime.GOARCH)
+		entry, err := catalog.Resolve(name, runtime.GOARCH)
 		if err != nil {
 			return SidecarResult{}, err
 		}
-		document.Sidecars[name] = sidecar.Definition{Container: container}
+		document.Sidecars[name] = entry.Definition
 		if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
 			return SidecarResult{}, err
 		}

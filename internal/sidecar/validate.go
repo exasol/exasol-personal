@@ -15,6 +15,9 @@ import (
 
 var dnsLabel = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
+// RFC 3986 scheme grammar. Lowercase only, so a reported URL is normalized.
+var urlScheme = regexp.MustCompile(`^[a-z][a-z0-9+.-]*$`)
+
 // named fills an absent container name from the key, which already names the
 // sidecar, and rejects a name that contradicts it.
 func (definition Definition) named(name string) (Definition, error) {
@@ -29,7 +32,14 @@ func (definition Definition) named(name string) (Definition, error) {
 }
 
 func (definition Definition) validate(name string) error {
-	return definition.Container.Validate("sidecars." + name + ".container")
+	location := "sidecars." + name
+	if err := definition.Container.Validate(location + ".container"); err != nil {
+		return err
+	}
+
+	return validateEndpoints(
+		definition.Endpoints, definition.Container.Ports, location+".endpoints",
+	)
 }
 
 func (container Container) Validate(path string) error {
@@ -118,6 +128,33 @@ func validatePorts(ports []Port, path string) error {
 		}
 		if err := port.Validate(location); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+// A declaration for an unpublished port reports nothing, so removing a
+// hostPort leaves the document valid.
+func validateEndpoints(endpoints []Endpoint, ports []Port, path string) error {
+	declared := make(map[string]bool)
+	for index, endpoint := range endpoints {
+		location := fmt.Sprintf("%s[%d]", path, index)
+		named := slices.ContainsFunc(ports, func(port Port) bool {
+			return port.Name != "" && port.Name == endpoint.Port
+		})
+		if !named {
+			return fmt.Errorf("%s.port: expected the name of a container port", location)
+		}
+		if declared[endpoint.Port] {
+			return fmt.Errorf("%s.port: expected a unique container port name", location)
+		}
+		declared[endpoint.Port] = true
+		if !urlScheme.MatchString(endpoint.Scheme) {
+			return fmt.Errorf("%s.scheme: expected an application protocol such as http", location)
+		}
+		if endpoint.Path != "" && !strings.HasPrefix(endpoint.Path, "/") {
+			return fmt.Errorf("%s.path: expected a path beginning with /", location)
 		}
 	}
 
