@@ -92,7 +92,7 @@ func readEnvFileArgument(command []string) (map[string]string, os.FileMode) {
 func newTestSidecarRuntime(t *testing.T, environment *sidecarEnvironment) *SidecarRuntime {
 	t.Helper()
 	runtime, err := NewSidecarRuntime(
-		environment, "exasol-db-test", IdentityRuntimePath(t.TempDir()),
+		newPodmanRuntime(environment), "exasol-db-test", IdentityRuntimePath(t.TempDir()),
 	)
 	require.NoError(t, err)
 
@@ -281,7 +281,7 @@ func TestSidecarGuestPublicationPreservesDesiredDefinition(t *testing.T) {
 func TestSidecarImageAndPolicyDefaults(t *testing.T) {
 	t.Parallel()
 	for _, fixture := range []struct{ policy, want string }{
-		{"", "on-failure"},
+		{"", "always"},
 		{sidecar.OnFailure, "on-failure"},
 		{sidecar.Always, "always"},
 		{sidecar.Never, "no"},

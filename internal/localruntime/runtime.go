@@ -132,6 +132,9 @@ var (
 	ErrContainerShellUnsupported = errors.New(
 		"container shell is not supported by this local runtime",
 	)
+	// ErrContainerHostUnreachable reports a container host that does not
+	// answer, so whether the deployment runs is unknown.
+	ErrContainerHostUnreachable = errors.New("the container engine is not answering")
 )
 
 type PortPublisher interface {

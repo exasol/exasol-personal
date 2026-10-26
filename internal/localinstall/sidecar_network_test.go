@@ -58,7 +58,7 @@ func newNetworkFixture(t *testing.T) (*SidecarRuntime, *networkEnvironment) {
 		Labels: map[string]string{sidecarOwnerLabel: "exasol-db-test"},
 	}}}
 	runtime, err := NewSidecarRuntime(
-		environment, "exasol-db-test", IdentityRuntimePath(t.TempDir()),
+		newPodmanRuntime(environment), "exasol-db-test", IdentityRuntimePath(t.TempDir()),
 	)
 	require.NoError(t, err)
 

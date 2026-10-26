@@ -31,6 +31,17 @@ const (
 
 var nanoInitParams = []string{"maxConnectionsLicenseLimit=20"}
 
+// dockerDataDirMode lets the unprivileged UDF sandbox traverse the data
+// directory under a rootful engine.
+const dockerDataDirMode = 0o755
+
+// userStagingDirs are the data directory paths user documentation directs
+// users to write: BucketFS content and JDBC drivers.
+var userStagingDirs = []string{
+	filepath.Join("bucketfs", "bfsdefault", "default"),
+	"jdbc",
+}
+
 // hostRuntimeEnvironmentPreparer supplies everything that differs between
 // direct-host platforms, so the container lifecycle below stays free of
 // platform branching. Each platform contributes three things:
@@ -41,7 +52,7 @@ var nanoInitParams = []string{"maxConnectionsLicenseLimit=20"}
 //     can lapse between Prepare and Start.
 //   - ContainerHostRunning: report whether whatever hosts the containers is
 //     running, reading state only and never starting anything.
-//   - NewExecutionEnvironment: build the environment PodmanInstall runs
+//   - NewExecutionEnvironment: build the environment NanoInstall runs
 //     through, which is where a platform redirects individual commands.
 type hostRuntimeEnvironmentPreparer interface {
 	Platform() HostPlatform
@@ -96,6 +107,7 @@ type HostRuntime struct {
 	endpoint    *RuntimeEndpoint
 	runtimeExec []string
 	dialContext func(context.Context, string, string) (net.Conn, error)
+	engine      localinstall.ContainerEngine
 }
 
 // NewHostLinuxRuntime creates a Linux host runtime. The manager may be nil for operations
@@ -103,20 +115,41 @@ type HostRuntime struct {
 func NewHostLinuxRuntime(
 	deployment config.DeploymentDir,
 	manager *runtimeartifacts.Manager,
+	containerEngine localinstall.ContainerEngine,
 ) *HostRuntime {
-	return newHostRuntime(deployment, manager, linuxHostEnvironmentPreparer{})
+	return newHostRuntime(
+		deployment, manager,
+		hostPreparerForEngine(HostPlatformLinux, containerEngine, linuxHostEnvironmentPreparer{}),
+		containerEngine,
+	)
+}
+
+// hostPreparerForEngine keeps a platform's Podman preparation for Podman and
+// uses the read-only Docker checks for Docker.
+func hostPreparerForEngine(
+	platform HostPlatform,
+	engine localinstall.ContainerEngine,
+	podman hostRuntimeEnvironmentPreparer,
+) hostRuntimeEnvironmentPreparer {
+	if engine == localinstall.EngineDocker {
+		return dockerHostEnvironmentPreparer{platform: platform}
+	}
+
+	return podman
 }
 
 func newHostRuntime(
 	deployment config.DeploymentDir,
 	manager *runtimeartifacts.Manager,
 	preparer hostRuntimeEnvironmentPreparer,
+	containerEngine localinstall.ContainerEngine,
 ) *HostRuntime {
 	return &HostRuntime{
 		deployment: deployment,
 		paths:      newRuntimePaths(deployment),
 		manager:    manager,
 		preparer:   preparer,
+		engine:     containerEngine,
 	}
 }
 
@@ -128,6 +161,11 @@ func (runtime *HostRuntime) Deployment() config.DeploymentDir {
 // callers can select platform-specific user guidance.
 func (runtime *HostRuntime) Platform() HostPlatform {
 	return runtime.preparer.Platform()
+}
+
+// ContainerEngine reports the engine this runtime drives containers through.
+func (runtime *HostRuntime) ContainerEngine() localinstall.ContainerEngine {
+	return runtime.engine
 }
 
 // Prepare satisfies the platform's prerequisites and creates the runtime
@@ -149,7 +187,7 @@ func (runtime *HostRuntime) Prepare(
 		return fmt.Errorf("failed to create local runtime directory: %w", err)
 	}
 
-	return nil
+	return recordContainerEngine(runtime.paths, runtime.engine)
 }
 
 func (runtime *HostRuntime) Start(
@@ -167,7 +205,16 @@ func (runtime *HostRuntime) Start(
 	if err != nil {
 		return err
 	}
-	if err := runtime.install().Start(ctx, out, outErr, startConfig); err != nil {
+	if runtime.engine == localinstall.EngineDocker {
+		startConfig.PrepareDataDir = func(_ context.Context, dataDir string) error {
+			return prepareDockerDataDir(dataDir)
+		}
+	}
+	install, err := runtime.install()
+	if err != nil {
+		return err
+	}
+	if err := install.Start(ctx, out, outErr, startConfig); err != nil {
 		return err
 	}
 	runtime.endpoint = &RuntimeEndpoint{DBPort: startConfig.ContainerDBPort}
@@ -176,20 +223,32 @@ func (runtime *HostRuntime) Start(
 }
 
 func (runtime *HostRuntime) Stop(ctx context.Context, out, outErr io.Writer) error {
-	return runtime.install().Stop(ctx, out, outErr)
+	install, err := runtime.install()
+	if err != nil {
+		return err
+	}
+
+	return install.Stop(ctx, out, outErr)
 }
 
 // Status answers without starting anything, so observing a deployment causes no
 // side effects on the host - `exasol status` above all, which is bounded by a
 // short timeout a container host would not start within.
 func (runtime *HostRuntime) Status(ctx context.Context) (*RuntimeStatus, error) {
-	status, err := runtime.install().Status(ctx, nil, nil)
+	install, err := runtime.install()
+	if err != nil {
+		return nil, err
+	}
+	status, err := install.Status(ctx, nil, nil)
 	if err != nil {
 		// A probe that could not reach the container host answers nothing about
 		// the container, but a stopped host settles it: nothing runs inside one.
 		hostRunning, hostErr := runtime.preparer.ContainerHostRunning(ctx)
 		if hostErr == nil && !hostRunning {
 			return &RuntimeStatus{Running: false}, nil
+		}
+		if errors.Is(hostErr, ErrContainerHostUnreachable) {
+			return nil, hostErr
 		}
 
 		return nil, err
@@ -210,12 +269,133 @@ func (runtime *HostRuntime) EnsureQueryable(
 }
 
 func (runtime *HostRuntime) Destroy(ctx context.Context, out, outErr io.Writer) error {
-	if err := runtime.install().Destroy(ctx, out, outErr); err != nil {
+	install, err := runtime.install()
+	if err != nil {
 		return fmt.Errorf("failed to remove deployment: %w", err)
 	}
-
-	if err := os.RemoveAll(runtime.paths.Root); err != nil {
+	if err := install.Destroy(ctx, out, outErr); err != nil {
+		return fmt.Errorf("failed to remove deployment: %w", err)
+	}
+	dataDir := filepath.Join(runtime.paths.WorkDir, nanoDataDirName)
+	if err := removeNanoData(ctx, install, dataDir, out, outErr); err != nil {
 		return fmt.Errorf("failed to remove local runtime files %s: %w", runtime.paths.Root, err)
+	}
+	if err := removeRuntimeFiles(runtime.paths); err != nil {
+		return fmt.Errorf("failed to remove local runtime files %s: %w", runtime.paths.Root, err)
+	}
+
+	return nil
+}
+
+// removeNanoData deletes the database's data and the data recovery set aside.
+// A rootful engine leaves files there that only a container can delete.
+func removeNanoData(
+	ctx context.Context,
+	install *localinstall.NanoInstall,
+	dataDir string,
+	out, outErr io.Writer,
+) error {
+	quarantined, err := localinstall.HostQuarantinedDataDirs(dataDir)
+	if err != nil {
+		return err
+	}
+	for _, dir := range append([]string{dataDir}, quarantined...) {
+		err := os.RemoveAll(dir)
+		if errors.Is(err, os.ErrPermission) {
+			if clearErr := install.ClearDataDir(ctx, out, outErr, dir); clearErr != nil {
+				return errors.Join(err, clearErr)
+			}
+			err = os.RemoveAll(dir)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// removeRuntimeFiles deletes the runtime directory and the container engine
+// record last, so a failed or interrupted removal leaves the deployment on its
+// engine for the retry.
+func removeRuntimeFiles(paths runtimePaths) error {
+	if err := removeAllExcept(paths.Root, containerEngineMarkerPath(paths)); err != nil {
+		return err
+	}
+
+	return os.RemoveAll(paths.Root)
+}
+
+func removeAllExcept(dir, keep string) error {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+		switch {
+		case path == keep:
+		case strings.HasPrefix(keep, path+string(filepath.Separator)):
+			if err := removeAllExcept(path, keep); err != nil {
+				return err
+			}
+		default:
+			if err := os.RemoveAll(path); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// prepareDockerDataDir makes the data directory usable when a rootful engine
+// runs Nano as root. The unprivileged UDF sandbox must be able to enter it,
+// which the parent work directory's permissions keep private, and the
+// directories users stage files in are created as the launcher user before
+// Nano can create them as root.
+func prepareDockerDataDir(dataDir string) error {
+	if err := os.MkdirAll(dataDir, dockerDataDirMode); err != nil {
+		return fmt.Errorf("failed to create Nano data directory %s: %w", dataDir, err)
+	}
+	if err := os.Chmod(dataDir, dockerDataDirMode); err != nil {
+		return fmt.Errorf("failed to set permissions on Nano data directory %s: %w", dataDir, err)
+	}
+	for _, stagingDir := range userStagingDirs {
+		if err := createUserStagingDir(dataDir, stagingDir); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// createUserStagingDir creates the missing components of relativePath below
+// dataDir. Existing components are left as they are, because Nano may already
+// own them in a deployment it initialized first.
+func createUserStagingDir(dataDir, relativePath string) error {
+	path := dataDir
+	for component := range strings.SplitSeq(relativePath, string(filepath.Separator)) {
+		path = filepath.Join(path, component)
+		err := os.Mkdir(path, dockerDataDirMode)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if errors.Is(err, os.ErrPermission) {
+			slog.Warn("cannot create a user staging directory inside a directory the "+
+				"database owns; staging files there needs elevated rights", "path", path)
+
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("failed to create staging directory %s: %w", path, err)
+		}
+		if err := os.Chmod(path, dockerDataDirMode); err != nil {
+			return fmt.Errorf("failed to set permissions on staging directory %s: %w", path, err)
+		}
 	}
 
 	return nil
@@ -362,9 +542,14 @@ func (runtime *HostRuntime) Sidecars(_ context.Context) (*localinstall.SidecarRu
 	if err != nil {
 		return nil, err
 	}
+	client, err := localinstall.NewContainerRuntime(
+		runtime.engine, runtime.preparer.NewExecutionEnvironment(runtime.runCmd()),
+	)
+	if err != nil {
+		return nil, err
+	}
 	manager, err := localinstall.NewSidecarRuntime(
-		runtime.preparer.NewExecutionEnvironment(runtime.runCmd()), owner,
-		localinstall.IdentityRuntimePath(SidecarEnvDir(runtime.deployment)),
+		client, owner, localinstall.IdentityRuntimePath(SidecarEnvDir(runtime.deployment)),
 	)
 	if err != nil {
 		return nil, err
@@ -387,7 +572,7 @@ func (*HostRuntime) OpenedPorts(context.Context) ([]sidecar.PublishedPort, error
 	return nil, nil
 }
 
-func (runtime *HostRuntime) install() *localinstall.PodmanInstall {
+func (runtime *HostRuntime) install() (*localinstall.NanoInstall, error) {
 	resolveImage := func(ctx context.Context) (localinstall.RuntimePath, error) {
 		path, err := localinstall.ResolveNanoImage(ctx, runtime.manager)
 		if err != nil {
@@ -397,13 +582,20 @@ func (runtime *HostRuntime) install() *localinstall.PodmanInstall {
 		return localinstall.IdentityRuntimePath(path), nil
 	}
 
-	return localinstall.NewPodmanInstallWithEnvironment(
+	environment := runtime.preparer.NewExecutionEnvironment(runtime.runCmd())
+	client, err := localinstall.NewContainerRuntime(runtime.engine, environment)
+	if err != nil {
+		return nil, err
+	}
+
+	return localinstall.NewNanoInstall(
 		runtime.Deployment(),
-		runtime.preparer.NewExecutionEnvironment(runtime.runCmd()),
+		environment,
 		resolveImage,
 		localinstall.IdentityRuntimePath(SLCStagingDir(runtime.Deployment())),
 		localinstall.IdentityRuntimePath(SLCStatusPath(runtime.Deployment())),
-	)
+		client,
+	), nil
 }
 
 func (runtime *HostRuntime) runCmd() []string {

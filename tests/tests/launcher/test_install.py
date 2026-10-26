@@ -16,6 +16,7 @@ from tests.testcase_helpers import windows_podman_path
 
 from .helpers import (
     compatible_preset_pair_or_skip,
+    container_engine_args,
     export_preset,
     first_infrastructure_preset_id_or_skip,
     preset_description_or_skip,
@@ -317,9 +318,9 @@ def test_init_local_host_configuration_omits_vm_sizing(
         ]
     )
 
-    # Then only the host-relevant local option is reported
+    # Then only the host-relevant local options are reported
     options = json.loads(result.stdout)["infrastructure"]["options"]
-    assert set(options) == {"ports"}
+    assert set(options) == {"container-engine", "ports"}
     service, separator, raw_port = options["ports"].partition(":")
     assert service == "db"
     assert separator == ":"
@@ -519,7 +520,8 @@ def test_install_local_without_terminal_refuses_host_preparation(
     exasol_path: str, tmp_path: Path
 ) -> None:
     """A run with no terminal and no --auto-approve must not install Podman."""
-    # Given a Windows host where Podman is absent and winget could install it
+    # Given a Windows host where Podman is absent and winget could install it,
+    # with Podman selected so an installed Docker is not chosen instead
     if shutil.which("podman") is not None or windows_podman_path().is_file():
         pytest.skip("Podman is already installed, so no host preparation is needed")
     if shutil.which("winget") is None:
@@ -532,6 +534,7 @@ def test_install_local_without_terminal_refuses_host_preparation(
             exasol_path,
             "install",
             "local",
+            *container_engine_args("podman"),
             "--deployment-dir",
             str(deployment_dir),
             "--no-launcher-version-check",

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 )
@@ -574,7 +575,7 @@ func TestLocalBackendDescribesMacOSRuntimeDisk(t *testing.T) {
 	}
 }
 
-func TestLocalBackendReadConfiguration_LinuxExposesOnlyPorts(t *testing.T) {
+func TestLocalBackendReadConfiguration_LinuxExposesPortsAndContainerEngine(t *testing.T) {
 	t.Parallel()
 
 	manifest := &presets.InfrastructureManifest{Local: &presets.InfrastructureLocal{
@@ -588,17 +589,266 @@ func TestLocalBackendReadConfiguration_LinuxExposesOnlyPorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected Linux configuration, got %v", err)
 	}
-	if len(values) != 1 || values[0].Name != localPortsConfigName ||
+	if len(values) != 2 || values[0].Name != localPortsConfigName ||
 		values[0].Value != testLocalDBPortConfig {
-		t.Fatalf("expected only the port configuration, got %#v", values)
+		t.Fatalf("expected the port and container engine configuration, got %#v", values)
 	}
+	assertContainerEngineValue(t, values, "auto", "auto")
 	definitions, err := backend.ReadDeploymentConfigVariables()
 	if err != nil {
 		t.Fatalf("expected Linux configuration definitions, got %v", err)
 	}
-	if len(definitions) != 1 || definitions[localPortsConfigName].Name != localPortsConfigName {
-		t.Fatalf("expected only the port definition, got %#v", definitions)
+	if len(definitions) != 2 || definitions[localPortsConfigName].Name != localPortsConfigName ||
+		definitions[localContainerEngineConfigName].Name != localContainerEngineConfigName {
+		t.Fatalf("expected the port and container engine definitions, got %#v", definitions)
 	}
+}
+
+func TestLocalContainerEngineOption_FollowsPlatformEngines(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		goos, goarch string
+		offered      bool
+	}{
+		{name: "linux amd64", goos: localLinuxOS, goarch: localLinuxAMD64, offered: true},
+		{name: "linux arm64", goos: localLinuxOS, goarch: localLinuxARM64, offered: true},
+		{name: "windows amd64", goos: localWindowsOS, goarch: localWindowsAMD64, offered: true},
+		{name: "macos", goos: localMacOS, goarch: localMacArch, offered: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// When
+			definitions := localConfigVariableDefinitionsForPlatform(
+				context.Background(), &presets.InfrastructureManifest{}, test.goos, test.goarch,
+			)
+			definition, offered := definitions[localContainerEngineConfigName]
+
+			// Then
+			if offered != test.offered {
+				t.Fatalf("expected container engine offered=%t, got %#v", test.offered, definitions)
+			}
+			if !offered {
+				return
+			}
+			if definition.DefaultDisplay != "auto" ||
+				!strings.Contains(definition.Description, "auto, podman, docker") {
+				t.Fatalf("unexpected container engine definition: %#v", definition)
+			}
+		})
+	}
+}
+
+func TestLocalBackendConfigure_StoresSupportedContainerEngine(t *testing.T) {
+	t.Parallel()
+
+	for _, engine := range []string{"auto", "podman", "docker", "Docker"} {
+		t.Run(engine, func(t *testing.T) {
+			t.Parallel()
+
+			// Given
+			deployment := config.NewDeploymentDir(t.TempDir())
+			manifest := newLocalTestManifestForConfigure(t, deployment)
+			backend := newLocalBackendForPlatform(
+				deployment, manifest, nil, localLinuxOS, localLinuxAMD64,
+			)
+
+			// When
+			err := backend.Configure(
+				context.Background(),
+				map[string]string{localContainerEngineConfigName: engine},
+				DeploymentMetadata{}, DeploymentLayout{},
+			)
+			// Then
+			if err != nil {
+				t.Fatalf("expected %q to be accepted, got %v", engine, err)
+			}
+			if manifest.Local.ContainerEngine != strings.ToLower(engine) {
+				t.Fatalf("expected stored engine %q, got %q",
+					strings.ToLower(engine), manifest.Local.ContainerEngine)
+			}
+		})
+	}
+}
+
+// An empty value is rejected too, so an unset script variable cannot reset the
+// engine to auto.
+func TestLocalBackendConfigure_RejectsUnsupportedContainerEngine(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{"containerd", "", " "} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+
+			// Given
+			deployment := config.NewDeploymentDir(t.TempDir())
+			manifest := newLocalTestManifestForConfigure(t, deployment)
+			backend := newLocalBackendForPlatform(
+				deployment, manifest, nil, localWindowsOS, localWindowsAMD64,
+			)
+
+			// When
+			err := backend.Configure(
+				context.Background(),
+				map[string]string{localContainerEngineConfigName: value},
+				DeploymentMetadata{}, DeploymentLayout{},
+			)
+
+			// Then
+			if err == nil ||
+				!strings.Contains(err.Error(), "must be one of auto, podman, docker") {
+				t.Fatalf("expected an error naming the supported engines, got %v", err)
+			}
+			if manifest.Local.ContainerEngine != "" {
+				t.Fatalf("expected no stored engine, got %q", manifest.Local.ContainerEngine)
+			}
+		})
+	}
+}
+
+func TestLocalBackendConfigure_MacOSIgnoresContainerEngine(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := config.NewDeploymentDir(t.TempDir())
+	manifest := newLocalTestManifestForConfigure(t, deployment)
+	backend := newLocalBackendForPlatform(deployment, manifest, nil, localMacOS, localMacArch)
+
+	// When
+	err := backend.Configure(
+		context.Background(),
+		map[string]string{localContainerEngineConfigName: "docker"},
+		DeploymentMetadata{}, DeploymentLayout{},
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("expected macOS to ignore the container engine, got %v", err)
+	}
+	if manifest.Local.ContainerEngine != "" {
+		t.Fatalf("expected no stored engine on macOS, got %q", manifest.Local.ContainerEngine)
+	}
+}
+
+func TestLocalBackendReadConfiguration_ReportsStoredContainerEngine(t *testing.T) {
+	t.Parallel()
+
+	manifest := &presets.InfrastructureManifest{Local: &presets.InfrastructureLocal{
+		ContainerEngine: "docker",
+	}}
+	backend := newLocalBackendForPlatform(
+		config.NewDeploymentDir(t.TempDir()), manifest, nil, localLinuxOS, localLinuxAMD64,
+	)
+
+	values, err := backend.ReadConfiguration()
+	if err != nil {
+		t.Fatalf("expected Linux configuration, got %v", err)
+	}
+	assertContainerEngineValue(t, values, "docker", "auto")
+}
+
+func TestLocalBackendConfigure_KeepsTheRecordedContainerEngine(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		record  string
+		value   string
+		wantErr bool
+	}{
+		{name: "same engine", record: `{"engine":"docker"}`, value: "docker"},
+		{name: "auto", record: `{"engine":"docker"}`, value: "auto"},
+		{name: "other engine", record: `{"engine":"docker"}`, value: "podman", wantErr: true},
+		{name: "pre-record deployment", value: "docker", wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			deployment := config.NewDeploymentDir(t.TempDir())
+			manifest := newLocalTestManifestForConfigure(t, deployment)
+			writeContainerEngineRecord(t, deployment, test.record)
+			backend := newLocalBackendForPlatform(
+				deployment, manifest, nil, localLinuxOS, localLinuxAMD64,
+			)
+
+			err := backend.Configure(
+				context.Background(),
+				map[string]string{localContainerEngineConfigName: test.value},
+				DeploymentMetadata{}, DeploymentLayout{},
+			)
+
+			if !test.wantErr {
+				if err != nil {
+					t.Fatalf("expected %q to be accepted, got %v", test.value, err)
+				}
+
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "run `exasol destroy` before") {
+				t.Fatalf("expected the change to be refused with guidance, got %v", err)
+			}
+			if manifest.Local.ContainerEngine != "" {
+				t.Fatalf("expected the configuration unchanged, got %q",
+					manifest.Local.ContainerEngine)
+			}
+		})
+	}
+}
+
+func TestLocalBackendConfigure_AcceptsAnyEngineBeforeFirstStart(t *testing.T) {
+	t.Parallel()
+	deployment := config.NewDeploymentDir(t.TempDir())
+	manifest := newLocalTestManifestForConfigure(t, deployment)
+	backend := newLocalBackendForPlatform(deployment, manifest, nil, localLinuxOS, localLinuxAMD64)
+
+	for _, value := range []string{"docker", "podman", "auto"} {
+		err := backend.Configure(
+			context.Background(),
+			map[string]string{localContainerEngineConfigName: value},
+			DeploymentMetadata{}, DeploymentLayout{},
+		)
+		if err != nil {
+			t.Fatalf("expected %q to be accepted before the first start, got %v", value, err)
+		}
+	}
+}
+
+func newLocalTestManifestForConfigure(
+	t *testing.T,
+	deployment config.DeploymentDir,
+) *presets.InfrastructureManifest {
+	t.Helper()
+	if err := os.MkdirAll(deployment.InfrastructureDir(), 0o750); err != nil {
+		t.Fatalf("failed to create infrastructure dir: %v", err)
+	}
+
+	return &presets.InfrastructureManifest{
+		Name: "Local", Backend: backendTypeLocal, Local: &presets.InfrastructureLocal{},
+	}
+}
+
+func assertContainerEngineValue(
+	t *testing.T,
+	values []DeploymentConfigValue,
+	expectedValue, expectedDefault string,
+) {
+	t.Helper()
+
+	for _, value := range values {
+		if value.Name != localContainerEngineConfigName {
+			continue
+		}
+		if value.Value != expectedValue || value.RawValue != expectedValue ||
+			value.Default != expectedDefault || value.RawDefault != expectedDefault {
+			t.Fatalf("expected container engine %q with default %q, got %#v",
+				expectedValue, expectedDefault, value)
+		}
+
+		return
+	}
+	t.Fatalf("expected a container engine value in %#v", values)
 }
 
 func TestLocalBackendConfigure_WritesSizingValuesToManifest(t *testing.T) {
@@ -858,7 +1108,7 @@ func TestLocalBackend_LinuxShellsAreUnsupported(t *testing.T) {
 	backend := newLocalBackendForPlatform(
 		deployment,
 		&presets.InfrastructureManifest{},
-		localruntime.NewHostLinuxRuntime(deployment, nil),
+		localruntime.NewHostLinuxRuntime(deployment, nil, localinstall.EnginePodman),
 		localLinuxOS, localLinuxAMD64,
 	)
 	if err := backend.OpenHostShell(

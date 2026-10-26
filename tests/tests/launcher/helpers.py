@@ -6,11 +6,23 @@
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Any
 
 import pytest
+
+
+def container_engine_args(engine: str) -> list[str]:
+    """Return init flags that pin a local deployment's container engine.
+
+    Tests that fake an engine must pin it, or `auto` selects a real installed engine.
+    macOS offers no choice, so it gets no flag.
+    """
+    if sys.platform == "darwin":
+        return []
+    return ["--container-engine", engine]
 
 
 def run_command(

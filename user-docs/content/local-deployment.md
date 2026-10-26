@@ -4,10 +4,11 @@ Local deployments run on supported macOS, Linux, and Windows computers.
 
 - On macOS, the launcher manages a virtual machine containing Podman and the database. An Apple
   Silicon Mac with at least 8 GB of memory is required.
-- On Linux, the database runs directly in Podman on the host. Install Podman and make sure it is
-  available in `PATH`.
-- On Windows, the database runs through Podman's default machine. Windows Package Manager
-  (`winget`) and the prerequisites for a Podman machine are required.
+- On Linux, the database runs directly on the host in Docker or Podman. See
+  [Container engine](#container-engine).
+- On Windows, the database runs in Docker Desktop with Linux containers, or in Podman's default
+  machine, which requires Windows Package Manager (`winget`) and the prerequisites for a Podman
+  machine.
 
 After [installing the launcher](getting-started.md), run:
 
@@ -51,9 +52,60 @@ remains the port saved in the deployment configuration. Existing containers
 adopt the deployment network after an explicit `exasol stop` followed by
 `exasol start`. Destroying the deployment removes its network.
 
+## Container engine
+
+On Linux and Windows, a local deployment runs on Docker or Podman. The `container_engine` option
+chooses which:
+
+- `auto` (the default) uses Podman when it is installed, and otherwise Docker when it is installed
+  and runs Linux containers. With neither, it uses Podman, which the launcher offers to install on
+  Windows. A Podman command installed under the name `docker` counts as Podman.
+- `docker` or `podman` uses that engine. The launcher never installs or starts Docker; if Docker
+  cannot be used, the command fails and explains what to check.
+
+```bash
+exasol install local --container-engine podman
+exasol config set --container-engine docker   # before the first start
+```
+
+A deployment keeps the engine it first started on, even if Docker is installed or removed later.
+Deployments created by earlier launcher versions keep using Podman. To change the engine of a
+started deployment, destroy it first, which deletes its data. `exasol diag local` reports the
+engine a deployment uses; `exasol config get` reports the configured choice.
+
+A Docker deployment uses your current Docker context. Keep using the same context for the
+deployment, because a different one points the launcher at a daemon without its containers.
+
+### Docker behaviour
+
+- **Reboots:** Docker restarts a running deployment's database and sidecars when its daemon starts
+  again, for example after a reboot. This applies once the deployment has been stopped and started
+  again with `exasol stop` and `exasol start` after `install` or `deploy`. A sidecar whose
+  `restartPolicy` is `OnFailure` or `Never` stays stopped until the next `exasol start`. A
+  deployment you stopped stays stopped. While the daemon does not answer, `exasol status` reports
+  that the container engine is not answering, and `exasol start` and `exasol stop` fail until it
+  answers. With Podman, a deployment that was running is reported as stopped after a reboot until
+  you run `exasol start`.
+- **File ownership:** when Docker runs containers as root, the database's files below
+  `local/runtime/exa` belong to root. They stay readable, the BucketFS and JDBC directories you
+  copy files into stay writable, and `exasol destroy` removes everything without `sudo`. The first
+  such destroy downloads a small helper image.
+- **Permissions:** membership of the `docker` group grants root-equivalent access to the host.
+  Rootless Docker avoids this.
+- **Isolation:** UDFs need Docker to run the database container without its default seccomp and
+  AppArmor profiles and with the system paths below `/proc` and `/sys` unmasked. On hosts where
+  AppArmor restricts unprivileged user namespaces, such as Ubuntu 24.04, rootful Docker also gives
+  the database container the `SYS_ADMIN` capability. A compromised database or UDF therefore has
+  more access to the host than under Podman, and under rootful Docker that access is root's.
+  Rootless Docker limits it to your user.
+- **Custom SLCs:** Docker cannot give a script language container a writable overlay, so a
+  [custom SLC](udfs.md#install-a-custom-container) must include the directories the UDF sandbox
+  mounts into, as official SLCs do.
+
 ## Windows host preparation
 
-If Podman is missing, the launcher can offer to install it. It also creates or starts Podman's
+This section applies to deployments that use Podman. If Podman is missing, the launcher can offer
+to install it. It also creates or starts Podman's
 default machine when necessary, without changing the configuration of an existing machine. Because
 installing Podman changes shared host state, the launcher displays the exact command and asks for
 approval.

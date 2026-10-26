@@ -21,6 +21,10 @@ type StartConfig struct {
 	BootstrapDir string
 	// InitialPassword is called only when the data directory is fresh.
 	InitialPassword func(context.Context) (string, error)
+	// PrepareDataDir, when set, adapts the data directory to the container
+	// engine. It runs once the directory's final location is settled, after any
+	// recovery or migration has replaced it, and before the container is created.
+	PrepareDataDir func(ctx context.Context, dataDir string) error
 }
 
 type VersionCheckConfig struct {
@@ -38,6 +42,8 @@ type SLCConfig struct {
 }
 
 type InstallStatus struct {
+	// Running includes a container its engine is restarting or has paused,
+	// because the engine brings it back without the launcher.
 	Running bool
 }
 

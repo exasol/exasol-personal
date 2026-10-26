@@ -136,16 +136,26 @@ func probeLocalRuntimeLiveness(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 ) localRuntimeLiveness {
+	liveness, _ := probeLocalRuntimeLivenessWithCause(ctx, deployment)
+
+	return liveness
+}
+
+// probeLocalRuntimeLivenessWithCause also returns why the liveness is unknown.
+func probeLocalRuntimeLivenessWithCause(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+) (localRuntimeLiveness, error) {
 	if !isLocalDeployment(deployment) {
-		return localRuntimeLivenessUnknown
+		return localRuntimeLivenessUnknown, nil
 	}
 
 	manager := runtimeartifacts.FromContext(ctx)
 
-	selectedRuntime, err := newLocalRuntime(deployment, manager)
+	selectedRuntime, err := newLocalRuntime(ctx, deployment, manager)
 	if err != nil {
 		slog.Warn("could not select local runtime to probe its status", "error", err)
-		return localRuntimeLivenessUnknown
+		return localRuntimeLivenessUnknown, err
 	}
 	// Make the runtime observable first. A Podman machine stopped outside the
 	// launcher leaves Status unable to answer, and a swallowed status error
@@ -159,14 +169,14 @@ func probeLocalRuntimeLiveness(
 	runtimeStatus, err := selectedRuntime.Status(ctx)
 	if err != nil {
 		slog.Warn("could not determine local runtime status", "error", err)
-		return localRuntimeLivenessUnknown
+		return localRuntimeLivenessUnknown, err
 	}
 
 	if runtimeStatus.Running {
-		return localRuntimeRunning
+		return localRuntimeRunning, nil
 	}
 
-	return localRuntimeStopped
+	return localRuntimeStopped, nil
 }
 
 // stopLocalRuntimeAfterFailure stops a local runtime left running by a failed
@@ -176,7 +186,7 @@ func stopLocalRuntimeAfterFailure(
 	ctx context.Context,
 	deployment config.DeploymentDir,
 ) error {
-	selectedRuntime, err := newLocalRuntime(deployment, runtimeartifacts.FromContext(ctx))
+	selectedRuntime, err := newLocalRuntime(ctx, deployment, runtimeartifacts.FromContext(ctx))
 	if err != nil {
 		return err
 	}
@@ -198,7 +208,9 @@ func stopLocalRuntimeAfterFailure(
 // that should surface as an error rather than be silently accepted.
 //
 // Errors from the runtime status check are logged and swallowed; reconciliation is
-// best-effort and must not block the caller's primary operation.
+// best-effort and must not block the caller's primary operation. The exception is
+// an unreachable container host: the deployment may still run there, and no
+// lifecycle operation can succeed until it answers.
 // The caller must already hold the exclusive deployment lock.
 func reconcileLocalVMState(
 	ctx context.Context,
@@ -219,7 +231,11 @@ func reconcileLocalVMState(
 		return nil
 	}
 
-	if probeLocalRuntimeLiveness(ctx, deployment) != localRuntimeStopped {
+	liveness, err := probeLocalRuntimeLivenessWithCause(ctx, deployment)
+	if errors.Is(err, localruntime.ErrContainerHostUnreachable) {
+		return err
+	}
+	if liveness != localRuntimeStopped {
 		return nil
 	}
 

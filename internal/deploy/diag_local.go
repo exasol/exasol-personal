@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
@@ -20,6 +21,7 @@ import (
 type LocalDiagnostics struct {
 	Platform          string            `json:"platform"`
 	PlatformSupported bool              `json:"platformSupported"`
+	ContainerEngine   string            `json:"containerEngine,omitempty"`
 	VMRunning         *bool             `json:"vmRunning,omitempty"`
 	Ports             map[string]int    `json:"ports,omitempty"`
 	PortHealth        map[string]string `json:"portHealth,omitempty"`
@@ -37,7 +39,7 @@ func DiagnoseLocal(
 	err := withDeploymentSharedLock(ctx, deployment, func(deployment config.DeploymentDir) error {
 		manager := runtimeartifacts.FromContext(ctx)
 
-		selectedRuntime, err := newLocalRuntime(deployment, manager)
+		selectedRuntime, err := newLocalRuntime(ctx, deployment, manager)
 		if err != nil {
 			return err
 		}
@@ -65,6 +67,9 @@ func diagnoseLocalUnsafe(
 		return diagnostics
 	}
 	diagnostics.PlatformSupported = true
+	if hostRuntime, isHostRuntime := localRuntime.(*localruntime.HostRuntime); isHostRuntime {
+		diagnostics.ContainerEngine = string(hostRuntime.ContainerEngine())
+	}
 
 	deployment := localRuntime.Deployment()
 	if !isLocalDeployment(deployment) {
@@ -75,8 +80,11 @@ func diagnoseLocalUnsafe(
 	runtimeStatus, err := localRuntime.Status(ctx)
 	if err != nil {
 		runtimeName := "VM"
-		if _, isHostRuntime := localRuntime.(*localruntime.HostRuntime); isHostRuntime {
+		if hostRuntime, isHostRuntime := localRuntime.(*localruntime.HostRuntime); isHostRuntime {
 			runtimeName = "Podman container"
+			if hostRuntime.ContainerEngine() == localinstall.EngineDocker {
+				runtimeName = "Docker container"
+			}
 		}
 		diagnostics.Message = fmt.Sprintf(
 			"could not determine local %s status: %s", runtimeName, err,

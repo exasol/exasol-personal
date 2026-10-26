@@ -21,6 +21,8 @@ from framework.deployment import Deployment, DeploymentManager, StatusInitialize
 from tests.testcase_helpers import (
     IS_MACOS_ARM,
     assert_lifecycle_json_signal,
+    container_engine,
+    container_engine_args,
     run_command,
     run_in_local_vm,
     windows_podman_path,
@@ -77,6 +79,8 @@ def test_full_local_deployment_lifecycle(local_deployment: Deployment) -> None:
     proc = local_deployment.connect(input="SELECT * FROM Dual", capture_output=True)
     assert "DUMMY" in proc.stdout
 
+    # Destroy removes the engine record, so read it first.
+    engine = container_engine(deployment_dir)
     local_deployment.destroy("--auto-approve")
     assert local_deployment.has_status(StatusInitialized)
     assert local_deployment.has_no_deployment()
@@ -84,7 +88,7 @@ def test_full_local_deployment_lifecycle(local_deployment: Deployment) -> None:
     # Then no database container is left behind on a direct-host runtime
     if sys.platform.startswith("linux"):
         containers = run_command(
-            ["podman", "ps", "-a", "--format", "{{.Names}}"]
+            [engine, "ps", "-a", "--format", "{{.Names}}"]
         ).stdout.split()
         assert f"exasol-db-{deployment_data['deploymentId']}" not in containers
 
@@ -229,6 +233,7 @@ def test_install_local_windows_lifecycle(
                 exasol_path,
                 "install",
                 "local",
+                *container_engine_args("podman"),
                 "--deployment-dir",
                 str(deployment_dir),
                 "--auto-approve",
@@ -420,6 +425,7 @@ def test_install_local_windows_keeps_existing_machine_configuration(
                 exasol_path,
                 "install",
                 "local",
+                *container_engine_args("podman"),
                 *base,
                 "--auto-approve",
                 "--no-launcher-version-check",

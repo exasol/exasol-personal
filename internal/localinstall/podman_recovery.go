@@ -5,14 +5,18 @@ package localinstall
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 const (
 	initialCreateMarkerName = ".exanano-initial-create-in-progress"
+	quarantineSuffix        = ".failed-"
 	quarantineTimeFormat    = "20060102150405"
 )
 
@@ -21,7 +25,7 @@ var nanoTLSFiles = []string{
 	filepath.Join("certificates", "privkey.pem"),
 }
 
-func (install *PodmanInstall) recoverIncompleteInitialCreate(
+func (install *NanoInstall) recoverIncompleteInitialCreate(
 	ctx context.Context,
 	out, outErr io.Writer,
 	containerName, dataDir string,
@@ -67,12 +71,34 @@ func (install *PodmanInstall) recoverIncompleteInitialCreate(
 	return true, nil
 }
 
-func (install *PodmanInstall) nextQuarantinePath(
+// HostQuarantinedDataDirs lists the data that recovery set aside next to
+// dataDir, reading the host filesystem directly.
+func HostQuarantinedDataDirs(dataDir string) ([]string, error) {
+	parent := filepath.Dir(dataDir)
+	entries, err := os.ReadDir(parent)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to list quarantined Nano data in %s: %w", parent, err)
+	}
+	prefix := filepath.Base(dataDir) + quarantineSuffix
+	var quarantined []string
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), prefix) {
+			quarantined = append(quarantined, filepath.Join(parent, entry.Name()))
+		}
+	}
+
+	return quarantined, nil
+}
+
+func (install *NanoInstall) nextQuarantinePath(
 	ctx context.Context,
 	dataDir string,
 	now time.Time,
 ) (string, error) {
-	base := dataDir + ".failed-" + now.Format(quarantineTimeFormat)
+	base := dataDir + quarantineSuffix + now.Format(quarantineTimeFormat)
 	candidate := base
 	for suffix := 1; ; suffix++ {
 		exists, err := install.environment.PathExists(ctx, candidate)
@@ -86,7 +112,7 @@ func (install *PodmanInstall) nextQuarantinePath(
 	}
 }
 
-func (install *PodmanInstall) removeStaleNanoTLSFiles(
+func (install *NanoInstall) removeStaleNanoTLSFiles(
 	ctx context.Context,
 	dataDir string,
 ) error {

@@ -251,7 +251,7 @@ func TestPodmanInstallStart_ReportsLegacyRemovalFailureAfterDataInstall(t *testi
 	assertNoMigrationStagingDirs(t, startConfig.DataDir)
 }
 
-func newLegacyOverlayFixture(t *testing.T) (*PodmanInstall, StartConfig, podmanInstallFixture) {
+func newLegacyOverlayFixture(t *testing.T) (*NanoInstall, StartConfig, podmanInstallFixture) {
 	t.Helper()
 
 	install, startConfig, fixture := newPodmanInstallFixture(t)

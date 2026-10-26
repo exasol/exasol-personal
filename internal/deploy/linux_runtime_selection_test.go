@@ -4,12 +4,14 @@
 package deploy
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 )
 
 //nolint:paralleltest // The fake Podman executable requires a process-wide PATH override.
@@ -113,6 +115,57 @@ func installFakePodmanStatus(t *testing.T, state fakePodmanContainerState) {
 	//nolint:gosec // This test fixture must be executable.
 	if err := os.WriteFile(podmanPath, []byte(script), 0o700); err != nil {
 		t.Fatalf("failed to write fake podman: %v", err)
+	}
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// Regression: an unanswering Docker daemon read as a stopped deployment, so
+// `exasol stop` recorded it as stopped although Docker restarted it later.
+//
+//nolint:paralleltest // The fake Docker executable requires a process-wide PATH override.
+func TestLocalStateKeepsRunningWhileDockerIsUnreachable(t *testing.T) {
+	requireLinuxLocalPlatform(t)
+	deployment, state := newLinuxLocalWorkflowTestDeployment(t)
+	writeTestFile(t, deployment.InfrastructureManifestPath(), `
+name: Test Infrastructure
+description: test infrastructure
+backend: local
+local:
+  containerEngine: docker
+`)
+	installFakeExecutable(t, "docker",
+		"#!/bin/sh\necho 'Cannot connect to the Docker daemon' >&2\nexit 1\n")
+	ctx := testManagerContext(t)
+
+	status := localVMStoppedStatus(ctx, deployment)
+	if status == nil || status.Status != StatusDatabaseConnectionFailed ||
+		status.Message != containerHostUnreachableMessage {
+		t.Fatalf("expected the status to report an unreachable engine, got %#v", status)
+	}
+
+	err := reconcileLocalVMState(ctx, state, deployment)
+	if !errors.Is(err, localruntime.ErrContainerHostUnreachable) {
+		t.Fatalf("expected reconciliation to report the unreachable engine, got %v", err)
+	}
+	written, err := config.ReadExasolPersonalState(deployment)
+	if err != nil {
+		t.Fatalf("failed to read state: %v", err)
+	}
+	workflowState, err := written.GetWorkflowState()
+	if err != nil {
+		t.Fatalf("failed to decode state: %v", err)
+	}
+	if _, ok := workflowState.(*config.WorkflowStateRunning); !ok {
+		t.Fatalf("expected the running workflow state to stay, got %T", workflowState)
+	}
+}
+
+func installFakeExecutable(t *testing.T, name, script string) {
+	t.Helper()
+	directory := t.TempDir()
+	//nolint:gosec // This test fixture must be executable.
+	if err := os.WriteFile(filepath.Join(directory, name), []byte(script), 0o700); err != nil {
+		t.Fatalf("failed to write fake %s: %v", name, err)
 	}
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
