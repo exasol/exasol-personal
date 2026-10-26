@@ -77,36 +77,41 @@ edits, and catalog upgrades affect newly enabled entries.
 
 ```yaml
 version: 1
-containers:
-  - name: example
-    image: registry.example.org/service:1
-    imagePullPolicy: IfNotPresent
-    restartPolicy: OnFailure
-    ports:
-      - containerPort: 8080
-        hostPort: 18080
-        hostIP: 127.0.0.1
-    env:
-      - name: EXASOL_DB_HOST
-        valueFrom:
-          secretKeyRef:
-            name: exasol-database
-            key: host
-      - name: EXASOL_DB_PASSWORD
-        valueFrom:
-          secretKeyRef:
-            name: exasol-database
-            key: password
+sidecars:
+  example:
+    container:
+      image: registry.example.org/service:1
+      imagePullPolicy: IfNotPresent
+      restartPolicy: OnFailure
+      ports:
+        - containerPort: 8080
+          hostPort: 18080
+          hostIP: 127.0.0.1
+      env:
+        - name: EXASOL_DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: exasol-database
+              key: host
+        - name: EXASOL_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: exasol-database
+              key: password
 ```
 
 The example illustrates the schema. Use the concrete image supplied by a
 catalog template for your service, then apply edits with `exasol start`.
 
+The key under `sidecars` names the sidecar and its container. A `name` inside
+`container` is accepted when it repeats that key, and reported as an error
+when it differs.
+
 Supported fields follow the Kubernetes Container shape:
 
 | Field | Supported values |
 | --- | --- |
-| `name` | Unique DNS label; `database` is reserved |
+| `name` | The sidecar's key; a DNS label, with `database` reserved |
 | `image` | Concrete image reference |
 | `imagePullPolicy` | `Always`, `IfNotPresent`, `Never` |
 | `command`, `args` | Entrypoint and argument arrays |
