@@ -29,8 +29,8 @@ every saved sidecar with its enablement and endpoints, read from the saved
 definitions without inspecting containers; its JSON output carries them as a
 `sidecars` array of `name`, `enabled`, and `endpoints`.
 
-Sidecars use host Podman on Linux, Podman machine on Windows, and the local VM
-on macOS. macOS publication requires a runner with live-forwarding support.
+Sidecars use the deployment's [container engine](local-deployment.md#container-engine)
+on Linux and Windows, and the local VM on macOS. macOS publication requires a runner with live-forwarding support.
 
 ## Enablement and lifecycle
 
@@ -97,7 +97,7 @@ sidecars:
     container:
       image: registry.example.org/service:1
       imagePullPolicy: IfNotPresent
-      restartPolicy: OnFailure
+      restartPolicy: Always
       ports:
         - containerPort: 8080
           hostPort: 18080
@@ -140,7 +140,7 @@ Supported fields follow the Kubernetes Container shape:
 | `restartPolicy` | `Always`, `OnFailure`, `Never` |
 | `readinessProbe` | See [Readiness and health](#readiness-and-health) |
 
-The default restart policy is `OnFailure`. Explicit stop and disable take
+The default restart policy is `Always`. Explicit stop and disable take
 precedence over process restart. Individual Container restart policies require
 compatible Kubernetes feature support if these definitions are later used
 with Kubernetes.

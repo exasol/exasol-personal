@@ -7,8 +7,9 @@ The launcher runs on macOS, Linux, and Windows.
 
 Choose where the database will run:
 
-- For a local deployment, use a supported macOS, Linux, or Windows computer. Linux requires Podman.
-  Windows requires Windows Package Manager and the prerequisites for a Podman machine. See
+- For a local deployment, use a supported macOS, Linux, or Windows computer. Linux requires Docker
+  or Podman. Windows requires Docker Desktop, or Windows Package Manager and the prerequisites for
+  a Podman machine. See
   [System requirements](system-requirements.md) for platform-specific details.
 - For a cloud deployment, prepare an account with permission to provision compute resources. See
   the account setup guide for [AWS](cloud/aws.md), [Azure](cloud/azure.md),

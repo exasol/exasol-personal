@@ -34,7 +34,7 @@ type slcStatusReport struct {
 	SLC []slcImageStatus `json:"slc"`
 }
 
-func (install *PodmanInstall) materializeSLCs(
+func (install *NanoInstall) materializeSLCs(
 	ctx context.Context,
 	out, outErr io.Writer,
 	containerName string,
@@ -73,7 +73,7 @@ func (install *PodmanInstall) materializeSLCs(
 	return available, nil
 }
 
-func (install *PodmanInstall) materializeSLC(
+func (install *NanoInstall) materializeSLC(
 	ctx context.Context,
 	out, outErr io.Writer,
 	containerName string,
@@ -126,7 +126,7 @@ func (install *PodmanInstall) materializeSLC(
 	return true, slcStatusImported, nil
 }
 
-func (install *PodmanInstall) imageExists(
+func (install *NanoInstall) imageExists(
 	ctx context.Context,
 	outErr io.Writer,
 	image string,
@@ -139,7 +139,7 @@ func (install *PodmanInstall) imageExists(
 	return exists, nil
 }
 
-func (install *PodmanInstall) slcPackagePath(packageName string) (RuntimePath, bool) {
+func (install *NanoInstall) slcPackagePath(packageName string) (RuntimePath, bool) {
 	if packageName == "" || packageName != filepath.Base(packageName) || packageName == "." {
 		return RuntimePath{}, false
 	}
@@ -150,7 +150,7 @@ func (install *PodmanInstall) slcPackagePath(packageName string) (RuntimePath, b
 	}, true
 }
 
-func (install *PodmanInstall) writeSLCStatusAtomically(
+func (install *NanoInstall) writeSLCStatusAtomically(
 	ctx context.Context,
 	path string,
 	statuses []slcImageStatus,
@@ -169,7 +169,7 @@ func (install *PodmanInstall) writeSLCStatusAtomically(
 	return nil
 }
 
-func (install *PodmanInstall) pruneUnreferencedSLCImages(
+func (install *NanoInstall) pruneUnreferencedSLCImages(
 	ctx context.Context,
 	outErr io.Writer,
 	desiredSLCs []SLCConfig,

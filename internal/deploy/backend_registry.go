@@ -22,6 +22,7 @@ type backendDescriptor struct {
 	deployOptions []DeployOptionDefinition
 
 	newBackend func(
+		ctx context.Context,
 		deployment config.DeploymentDir,
 		manifest *presets.InfrastructureManifest,
 		manager *runtimeartifacts.Manager,

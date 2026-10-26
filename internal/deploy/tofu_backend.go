@@ -69,6 +69,7 @@ var tofuBackendDescriptor = backendDescriptor{
 		},
 	},
 	newBackend: func(
+		_ context.Context,
 		deployment config.DeploymentDir,
 		manifest *presets.InfrastructureManifest,
 		manager *runtimeartifacts.Manager,

@@ -34,8 +34,15 @@ type windowsHostEnvironmentPreparer struct{}
 func NewHostWindowsRuntime(
 	deployment config.DeploymentDir,
 	manager *runtimeartifacts.Manager,
+	containerEngine localinstall.ContainerEngine,
 ) *HostRuntime {
-	return newHostRuntime(deployment, manager, windowsHostEnvironmentPreparer{})
+	return newHostRuntime(
+		deployment, manager,
+		hostPreparerForEngine(
+			HostPlatformWindows, containerEngine, windowsHostEnvironmentPreparer{},
+		),
+		containerEngine,
+	)
 }
 
 func (windowsHostEnvironmentPreparer) Platform() HostPlatform { return HostPlatformWindows }

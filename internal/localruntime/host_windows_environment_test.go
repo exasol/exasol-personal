@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/winget"
 )
 
@@ -91,7 +92,7 @@ func TestWindowsPrepare_PodmanAlreadyPresentSkipsWinget(t *testing.T) {
 	dropShim(t, dir, "podman", `exit 0`)
 
 	deployment := config.NewDeploymentDir(t.TempDir())
-	hostRuntime := NewHostWindowsRuntime(deployment, nil)
+	hostRuntime := NewHostWindowsRuntime(deployment, nil, localinstall.EnginePodman)
 	approver := &recordingApprover{approve: true}
 
 	if err := hostRuntime.Prepare(
@@ -121,7 +122,7 @@ func TestWindowsPrepare_RegistryRefreshRecoversStalePath(t *testing.T) {
 	t.Setenv("EXASOL_WINGET_TEST_PODMAN_PATH_ADDITIONS", podmanDir)
 
 	deployment := config.NewDeploymentDir(t.TempDir())
-	hostRuntime := NewHostWindowsRuntime(deployment, nil)
+	hostRuntime := NewHostWindowsRuntime(deployment, nil, localinstall.EnginePodman)
 	approver := &recordingApprover{approve: true}
 
 	if err := hostRuntime.Prepare(
@@ -149,7 +150,7 @@ func TestWindowsPrepare_ApprovedInstallInvokesWinget(t *testing.T) {
 	wingetLog := dropShim(t, dir, "winget", `exit 0`)
 
 	deployment := config.NewDeploymentDir(t.TempDir())
-	hostRuntime := NewHostWindowsRuntime(deployment, nil)
+	hostRuntime := NewHostWindowsRuntime(deployment, nil, localinstall.EnginePodman)
 	approver := &recordingApprover{approve: true}
 
 	err := hostRuntime.Prepare(context.Background(), nil, nil, approver.options())
@@ -187,7 +188,7 @@ func TestWindowsPrepare_DeclinedInstallDoesNotRunWinget(t *testing.T) {
 	wingetLog := dropShim(t, dir, "winget", `exit 0`)
 
 	deployment := config.NewDeploymentDir(t.TempDir())
-	hostRuntime := NewHostWindowsRuntime(deployment, nil)
+	hostRuntime := NewHostWindowsRuntime(deployment, nil, localinstall.EnginePodman)
 	approver := &recordingApprover{approve: false}
 
 	err := hostRuntime.Prepare(context.Background(), nil, nil, approver.options())
@@ -214,7 +215,7 @@ func TestWindowsPrepare_MissingApproverDeniesInstall(t *testing.T) {
 	wingetLog := dropShim(t, dir, "winget", `exit 0`)
 
 	deployment := config.NewDeploymentDir(t.TempDir())
-	hostRuntime := NewHostWindowsRuntime(deployment, nil)
+	hostRuntime := NewHostWindowsRuntime(deployment, nil, localinstall.EnginePodman)
 
 	var progress bytes.Buffer
 	err := hostRuntime.Prepare(context.Background(), nil, nil, PrepareOptions{
@@ -237,7 +238,7 @@ func TestWindowsPrepare_WingetMissingProducesHelpfulError(t *testing.T) {
 	newIsolatedShimDir(t)
 
 	deployment := config.NewDeploymentDir(t.TempDir())
-	hostRuntime := NewHostWindowsRuntime(deployment, nil)
+	hostRuntime := NewHostWindowsRuntime(deployment, nil, localinstall.EnginePodman)
 	approver := &recordingApprover{approve: true}
 
 	err := hostRuntime.Prepare(context.Background(), nil, nil, approver.options())
@@ -263,7 +264,7 @@ func TestWindowsPrepare_WingetFailureExplainsManualFallback(t *testing.T) {
 	dropShim(t, dir, "winget", `echo "download failed" >&2; exit 1`)
 
 	deployment := config.NewDeploymentDir(t.TempDir())
-	hostRuntime := NewHostWindowsRuntime(deployment, nil)
+	hostRuntime := NewHostWindowsRuntime(deployment, nil, localinstall.EnginePodman)
 	approver := &recordingApprover{approve: true}
 
 	err := hostRuntime.Prepare(context.Background(), nil, nil, approver.options())
@@ -290,7 +291,9 @@ if [ "$1 $2" = "machine start" ]; then exit 0; fi
 exit 1`
 	logPath := dropShim(t, dir, "podman", shim)
 
-	hostRuntime := NewHostWindowsRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	hostRuntime := NewHostWindowsRuntime(
+		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+	)
 
 	var out, outErr bytes.Buffer
 	if err := hostRuntime.EnsureQueryable(context.Background(), &out, &outErr); err != nil {
@@ -326,7 +329,9 @@ exit 1`
 	logPath := dropShim(t, podmanDir, "podman", shim)
 	t.Setenv("EXASOL_WINGET_TEST_PODMAN_PATH_ADDITIONS", podmanDir)
 
-	hostRuntime := NewHostWindowsRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	hostRuntime := NewHostWindowsRuntime(
+		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+	)
 
 	// When the runtime is asked to become observable
 	if err := hostRuntime.EnsureQueryable(context.Background(), nil, nil); err != nil {
@@ -368,7 +373,9 @@ func TestWindowsExecutionEnvironment_ResolvesPodmanMissingFromProcessPath(t *tes
 func TestWindowsRuntime_ReportsWindowsPlatform(t *testing.T) {
 	t.Parallel()
 
-	hostRuntime := NewHostWindowsRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	hostRuntime := NewHostWindowsRuntime(
+		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+	)
 	if hostRuntime.Platform() != HostPlatformWindows {
 		t.Errorf("expected the Windows platform, got %q", hostRuntime.Platform())
 	}

@@ -110,4 +110,5 @@ also does not remove provisioned resources. If the directory is lost before dest
 remove the remaining resources directly through the target environment.
 
 For local deployments, `exasol destroy` removes the launcher-managed runtime and database data for
-the selected deployment. On Windows, it leaves Podman's shared default machine running.
+the selected deployment. On Windows, it leaves Podman's shared default machine, or Docker Desktop,
+running.

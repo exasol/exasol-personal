@@ -30,6 +30,21 @@ takes effect. Verify with `exasol version`. See [Install the launcher](getting-s
 
 ## Preparing a local host
 
+### `docker is not available`
+
+The deployment uses Docker, but the launcher cannot use it. The message includes Docker's own
+error. Check that the daemon is running with `docker info`, that your user may use it (membership of
+the `docker` group applies only to new login sessions), and that the active context in
+`docker context ls` is the one you expect. If the message says the daemon runs Windows containers,
+switch Docker Desktop to Linux containers. If it names a Docker Engine older than 29, upgrade
+Docker. To use Podman instead on a deployment that has not
+started yet, run `exasol config set --container-engine podman`.
+
+While Docker does not answer, `exasol status` reports `database_connection_failed` with a message
+that the container engine is not answering, and `exasol start` and `exasol stop` fail with this
+error. Once Docker answers again, it restarts a running deployment as described in
+[Docker behaviour](local-deployment.md#docker-behaviour).
+
 ### `'podman' is required to run exasol locally on this platform`
 
 On Linux the database runs directly in Podman on the host. Install Podman with your distribution's

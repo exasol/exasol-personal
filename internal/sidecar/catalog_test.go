@@ -36,7 +36,7 @@ func TestCatalogDefaultsAndIsolatesSelections(t *testing.T) {
 	again, err := catalog.Resolve("example", "amd64")
 	require.NoError(t, err)
 	// Then
-	if again.Container.Name != "example" || again.Container.RestartPolicy != "OnFailure" ||
+	if again.Container.Name != "example" || again.Container.RestartPolicy != "Always" ||
 		again.Container.ImagePullPolicy != "IfNotPresent" ||
 		*again.Container.Env[0].Value != "original" {
 		t.Fatalf("unexpected selection: %+v", again)

@@ -48,6 +48,10 @@ scripts. Install the language required by the adapter before creating it. See
 
 ## Install a custom container
 
+On Docker, a custom SLC must include the directories the UDF sandbox mounts into, such as `/proc`,
+`/dev`, `/buckets`, and `/var/tmp`, because Docker mounts the container read-only. Official SLCs
+include them.
+
 Install a custom SLC when the official catalog does not provide the language or packages you need:
 
 ```bash

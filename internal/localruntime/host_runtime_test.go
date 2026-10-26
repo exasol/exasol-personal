@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -25,7 +26,7 @@ func TestLinuxHostPodmanStartConfig_RequiresConcreteDatabasePort(t *testing.T) {
 
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
-	localRuntime := NewHostLinuxRuntime(deployment, nil)
+	localRuntime := NewHostLinuxRuntime(deployment, nil, localinstall.EnginePodman)
 
 	// When
 	_, err := localRuntime.podmanStartConfig(RuntimeConfig{})
@@ -39,7 +40,9 @@ func TestLinuxHostPodmanStartConfig_UsesOnlyCommonRuntimeConfig(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	localRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	localRuntime := NewHostLinuxRuntime(
+		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+	)
 	vmConfig := VMConfig{
 		Ports: "ssh:20022, db:28563, ui:28443",
 		VersionCheck: localinstall.VersionCheckConfig{
@@ -92,7 +95,9 @@ func TestHostRuntimeRemoveBootstrapPassword_RemovesHostFile(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	localRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	localRuntime := NewHostLinuxRuntime(
+		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+	)
 	path := filepath.Join(localRuntime.paths.BootstrapDir, "sys_password")
 	if err := os.MkdirAll(localRuntime.paths.BootstrapDir, 0o700); err != nil {
 		t.Fatalf("failed to create bootstrap directory: %v", err)
@@ -116,7 +121,9 @@ func TestLinuxHostReadEndpoint_ReturnsPublishedDatabasePort(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	localRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	localRuntime := NewHostLinuxRuntime(
+		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+	)
 	localRuntime.endpoint = &RuntimeEndpoint{DBPort: 28563}
 
 	// When
@@ -137,7 +144,9 @@ func TestLinuxHostReadEndpoint_RejectsReadBeforeStart(t *testing.T) {
 	t.Parallel()
 
 	// Given
-	localRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	localRuntime := NewHostLinuxRuntime(
+		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+	)
 
 	// When
 	_, err := localRuntime.ReadEndpoints()
@@ -175,7 +184,9 @@ func TestLinuxHostShellErrorsPreserveUnsupportedIdentity(t *testing.T) {
 			t.Parallel()
 
 			// Given
-			runtime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+			runtime := NewHostLinuxRuntime(
+				config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+			)
 
 			// When
 			err := test.openShell(runtime)
@@ -207,7 +218,9 @@ printf '%s' "$*" > "$1"
 printf 'sync-out'
 printf 'sync-err' >&2
 `)
-	localRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	localRuntime := NewHostLinuxRuntime(
+		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+	)
 	localRuntime.runtimeExec = []string{"/bin/sh", scriptPath, logPath}
 	var stdout, stderr bytes.Buffer
 
@@ -256,7 +269,7 @@ func TestLinuxHostStatus_MapsExactPodmanContainerStatus(t *testing.T) {
 			}
 			scriptPath := filepath.Join(t.TempDir(), "fake-podman.sh")
 			writeLinuxRuntimeTestFile(t, scriptPath, fakeLinuxRuntimePodmanScript)
-			localRuntime := NewHostLinuxRuntime(deployment, nil)
+			localRuntime := NewHostLinuxRuntime(deployment, nil, localinstall.EnginePodman)
 			localRuntime.runtimeExec = []string{"/bin/sh", scriptPath, scenarioDir}
 
 			// When
@@ -278,7 +291,7 @@ func TestLinuxHostReadEndpoint_RecoversPublishedPortFromDeploymentInfo(t *testin
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	writeLinuxDeploymentInfo(t, deployment, 28563)
-	localRuntime := NewHostLinuxRuntime(deployment, nil)
+	localRuntime := NewHostLinuxRuntime(deployment, nil, localinstall.EnginePodman)
 
 	// When
 	endpoint, err := localRuntime.ReadEndpoints()
@@ -297,7 +310,7 @@ func TestLinuxHostHealthCheck_ProbesRecoveredPublishedPort(t *testing.T) {
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	writeLinuxDeploymentInfo(t, deployment, 28563)
-	localRuntime := NewHostLinuxRuntime(deployment, nil)
+	localRuntime := NewHostLinuxRuntime(deployment, nil, localinstall.EnginePodman)
 	var dialedNetwork, dialedAddress string
 	connection, peer := net.Pipe()
 	t.Cleanup(func() {
@@ -505,7 +518,9 @@ func TestLinuxEnsureQueryable_InvokesNothing(t *testing.T) {
 	dir := newIsolatedShimDir(t)
 	logPath := dropShim(t, dir, "podman", `exit 1`)
 
-	hostRuntime := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil)
+	hostRuntime := NewHostLinuxRuntime(
+		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
+	)
 
 	if err := hostRuntime.EnsureQueryable(context.Background(), nil, nil); err != nil {
 		t.Fatalf("EnsureQueryable() unexpected error: %v", err)
@@ -554,10 +569,12 @@ func TestHostStatus_ResolvesUnreachableContainerProbeAgainstTheContainerHost(t *
 		t.Skip("fake Podman executable is a POSIX shell script")
 	}
 
+	unreachable := fmt.Errorf("%w: daemon gone", ErrContainerHostUnreachable)
 	tests := []struct {
 		name        string
 		preparer    stubContainerHostPreparer
 		wantStopped bool
+		wantErr     error
 	}{
 		{name: "container host is stopped", wantStopped: true},
 		{
@@ -567,6 +584,11 @@ func TestHostStatus_ResolvesUnreachableContainerProbeAgainstTheContainerHost(t *
 		{
 			name:     "container host state is unreadable",
 			preparer: stubContainerHostPreparer{err: errors.New("host state unavailable")},
+		},
+		{
+			name:     "container host is unreachable",
+			preparer: stubContainerHostPreparer{err: unreachable},
+			wantErr:  ErrContainerHostUnreachable,
 		},
 	}
 	for _, test := range tests {
@@ -578,7 +600,9 @@ func TestHostStatus_ResolvesUnreachableContainerProbeAgainstTheContainerHost(t *
 			deployment := newLinuxRuntimeStatusDeployment(t)
 			scriptPath := filepath.Join(t.TempDir(), "unreachable-podman.sh")
 			writeLinuxRuntimeTestFile(t, scriptPath, "#!/bin/sh\nexit 125\n")
-			localRuntime := newHostRuntime(deployment, nil, test.preparer)
+			localRuntime := newHostRuntime(
+				deployment, nil, test.preparer, localinstall.EnginePodman,
+			)
 			localRuntime.runtimeExec = []string{"/bin/sh", scriptPath}
 
 			// When
@@ -587,6 +611,9 @@ func TestHostStatus_ResolvesUnreachableContainerProbeAgainstTheContainerHost(t *
 			if !test.wantStopped {
 				if err == nil {
 					t.Fatalf("expected the probe failure to surface, got %#v", status)
+				}
+				if test.wantErr != nil && !errors.Is(err, test.wantErr) {
+					t.Fatalf("expected %v, got %v", test.wantErr, err)
 				}
 
 				return
