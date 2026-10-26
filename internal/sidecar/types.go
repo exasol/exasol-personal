@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -35,8 +36,8 @@ type Secret map[string]SecretValue
 type Secrets map[string]Secret
 
 type Document struct {
-	Version    int         `yaml:"version"`
-	Containers []Container `yaml:"containers"`
+	Version  int                   `yaml:"version"`
+	Sidecars map[string]Definition `yaml:"sidecars"`
 }
 
 type Catalog struct {
@@ -120,22 +121,35 @@ func Parse(data []byte) (Document, error) {
 	if err := decode(data, &document); err != nil {
 		return Document{}, err
 	}
-	if document.Version != 1 || document.Containers == nil {
-		return Document{}, errors.New("document: version must be 1 and containers must be present")
+	if document.Version != 1 || document.Sidecars == nil {
+		return Document{}, errors.New("document: version must be 1 and sidecars must be present")
 	}
-	names := make(map[string]bool)
-	for index, container := range document.Containers {
-		location := fmt.Sprintf("containers[%d]", index)
-		if names[container.Name] {
-			return Document{}, fmt.Errorf("%s.name: duplicate container name", location)
-		}
-		names[container.Name] = true
-		if err := container.Validate(location); err != nil {
+	for _, name := range document.Names() {
+		definition, err := document.Sidecars[name].named(name)
+		if err != nil {
 			return Document{}, err
 		}
+		if err := definition.validate(name); err != nil {
+			return Document{}, err
+		}
+		document.Sidecars[name] = definition
 	}
 
 	return document, nil
+}
+
+// Names orders the saved sidecars, because the map holding them does not.
+func (document Document) Names() []string {
+	return slices.Sorted(maps.Keys(document.Sidecars))
+}
+
+func (document Document) Containers() []Container {
+	containers := make([]Container, 0, len(document.Sidecars))
+	for _, name := range document.Names() {
+		containers = append(containers, document.Sidecars[name].Container)
+	}
+
+	return containers
 }
 
 func (entry Entry) Clone() Entry {

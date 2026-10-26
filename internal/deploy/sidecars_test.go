@@ -101,7 +101,7 @@ func TestSidecarDestroyRemovesObservedState(t *testing.T) {
 		!errors.Is(stateErr, os.ErrNotExist) {
 		t.Fatalf("destroyed sidecar state: %v, %v", err, stateErr)
 	}
-	if readErr != nil || len(document.Containers) != 1 {
+	if readErr != nil || len(document.Sidecars) != 1 {
 		t.Fatalf("desired configuration after destroy: %+v, %v", document, readErr)
 	}
 }
@@ -209,12 +209,22 @@ func materializeTestSidecar(
 			if err != nil {
 				return err
 			}
-			document.Containers = append(document.Containers, container)
+			document.Sidecars["example"] = sidecar.Definition{Container: container}
 
 			return config.WriteSidecars(directory, document)
 		},
 	)
 	require.NoError(t, err)
+}
+
+// A saved entry is rewritten rather than edited, because a map value cannot be
+// assigned through.
+func editSavedContainer(
+	document *sidecar.Document, name string, edit func(*sidecar.Container),
+) {
+	definition := document.Sidecars[name]
+	edit(&definition.Container)
+	document.Sidecars[name] = definition
 }
 
 func TestSidecarEnableMaterializesTemplate(t *testing.T) {
@@ -227,9 +237,10 @@ func TestSidecarEnableMaterializesTemplate(t *testing.T) {
 	// Then
 	document, err := config.ReadSidecars(deployment)
 	require.NoError(t, err)
-	if len(document.Containers) != 1 || document.Containers[0].Name != "example" ||
-		document.Containers[0].Image != "docker.io/library/caddy:2-alpine" ||
-		document.Containers[0].RestartPolicy != sidecar.OnFailure {
+	saved := document.Sidecars["example"].Container
+	if len(document.Sidecars) != 1 || saved.Name != "example" ||
+		saved.Image != "docker.io/library/caddy:2-alpine" ||
+		saved.RestartPolicy != sidecar.OnFailure {
 		t.Fatalf("unexpected definition: %+v", document)
 	}
 	info, err := os.Stat(deployment.SidecarsPath())
@@ -246,7 +257,8 @@ func TestSidecarEnablePreservesEdits(t *testing.T) {
 	catalog := sidecarTestCatalog(t)
 	materializeTestSidecar(t, deployment, catalog)
 	edited := []byte(
-		"version: 1\ncontainers:\n- name: example\n  image: caddy:edited\n  args: [custom]\n",
+		"version: 1\nsidecars:\n  example:\n    container:\n      image: caddy:edited\n" +
+			"      args: [custom]\n",
 	)
 	require.NoError(t, os.WriteFile(deployment.SidecarsPath(), edited, 0o600))
 	// When
@@ -277,8 +289,8 @@ func TestSidecarEnableStoresConnectionReferences(t *testing.T) {
 	// Then
 	document, err := config.ReadSidecars(deployment)
 	require.NoError(t, err)
-	require.Len(t, document.Containers, 1)
-	saved := document.Containers[0].Env
+	require.Len(t, document.Sidecars, 1)
+	saved := document.Sidecars["example"].Container.Env
 	require.Len(t, saved, 1)
 	require.Nil(t, saved[0].Value)
 	require.Equal(t, sidecar.DatabaseSecret, saved[0].ValueFrom.SecretKeyRef.Name)
@@ -303,7 +315,7 @@ func TestSidecarDisableAbsentNamePreservesOtherDefinitions(t *testing.T) {
 	require.True(t, result.NothingToRemove)
 	document, readErr := config.ReadSidecars(deployment)
 	require.NoError(t, readErr)
-	if len(document.Containers) != 1 {
+	if len(document.Sidecars) != 1 {
 		t.Fatalf("saved definitions changed: %+v", document)
 	}
 }
@@ -435,7 +447,7 @@ func TestSidecarDisableDefersPublicationWhileStopped(t *testing.T) {
 	require.Zero(t, selected.publishCalls)
 	document, err := config.ReadSidecars(operations.deployment)
 	require.NoError(t, err)
-	require.Empty(t, document.Containers)
+	require.Empty(t, document.Sidecars)
 }
 
 func TestSidecarSavedDefinitionSurvivesCatalogChange(t *testing.T) {
@@ -469,7 +481,7 @@ func TestSidecarSavedDefinitionSurvivesCatalogChange(t *testing.T) {
 	require.True(t, selected.running)
 	document, err := config.ReadSidecars(operations.deployment)
 	require.NoError(t, err)
-	require.Empty(t, document.Containers)
+	require.Empty(t, document.Sidecars)
 }
 
 func TestSidecarOperationsDeferredIntent(t *testing.T) {
@@ -564,7 +576,9 @@ func TestSidecarReconciliationUsesSavedDefinitions(t *testing.T) {
 	selected.containers.Add("orphan")
 	document, err := config.ReadSidecars(operations.deployment)
 	require.NoError(t, err)
-	document.Containers[0].Args = []string{"edited"}
+	editSavedContainer(&document, "example", func(container *sidecar.Container) {
+		container.Args = []string{"edited"}
+	})
 	require.NoError(t, config.WriteSidecars(operations.deployment, document))
 	// When
 	err = reconcileForTest(context.Background(), operations, false)
@@ -644,7 +658,9 @@ func TestSidecarStatusRefreshesRecordedFailures(t *testing.T) {
 		{
 			"changed definition", "pending",
 			func(document *sidecar.Document, _ *sidecarRuntimeStub) {
-				document.Containers[0].Args = []string{"edited"}
+				editSavedContainer(document, "example", func(container *sidecar.Container) {
+					container.Args = []string{"edited"}
+				})
 			},
 		},
 		{
@@ -689,13 +705,13 @@ func TestSidecarStatusRefreshesRecordedFailures(t *testing.T) {
 		{
 			"disabled with container", "pending",
 			func(document *sidecar.Document, _ *sidecarRuntimeStub) {
-				document.Containers = nil
+				document.Sidecars = nil
 			},
 		},
 		{
 			"disabled with orphan forward", "pending",
 			func(document *sidecar.Document, runtime *sidecarRuntimeStub) {
-				document.Containers = nil
+				document.Sidecars = nil
 				container := runtime.exampleContainer()
 				container.id = ""
 				container.running = false
@@ -704,7 +720,7 @@ func TestSidecarStatusRefreshesRecordedFailures(t *testing.T) {
 		{
 			"disabled and removed", "complete",
 			func(document *sidecar.Document, runtime *sidecarRuntimeStub) {
-				document.Containers = nil
+				document.Sidecars = nil
 				runtime.containers.Clear()
 			},
 		},
@@ -809,7 +825,9 @@ func TestSidecarDisableUsesEditedNames(t *testing.T) {
 	operations, selected := newSidecarOperationsFixture(t)
 	definition := sidecar.Container{Name: "user-added", Image: "caddy:2"}
 	require.NoError(t, config.WriteSidecars(operations.deployment,
-		sidecar.Document{Version: 1, Containers: []sidecar.Container{definition}}))
+		sidecar.Document{Version: 1, Sidecars: map[string]sidecar.Definition{
+			definition.Name: {Container: definition},
+		}}))
 	selected.containers.Add(definition.Name)
 	selected.containers.Fail("rm", errors.New("container busy"))
 	// When
@@ -820,7 +838,7 @@ func TestSidecarDisableUsesEditedNames(t *testing.T) {
 	require.True(t, result.Running)
 	document, err := config.ReadSidecars(operations.deployment)
 	require.NoError(t, err)
-	require.Empty(t, document.Containers)
+	require.Empty(t, document.Sidecars)
 	// When
 	selected.containers.Fail("rm", nil)
 	result, err = operations.disable(context.Background(), definition.Name)

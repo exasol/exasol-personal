@@ -15,6 +15,23 @@ import (
 
 var dnsLabel = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
+// named fills an absent container name from the key, which already names the
+// sidecar, and rejects a name that contradicts it.
+func (definition Definition) named(name string) (Definition, error) {
+	if definition.Container.Name == "" {
+		definition.Container.Name = name
+	}
+	if definition.Container.Name != name {
+		return Definition{}, fmt.Errorf("sidecars.%s.container.name: must match its key", name)
+	}
+
+	return definition, nil
+}
+
+func (definition Definition) validate(name string) error {
+	return definition.Container.Validate("sidecars." + name + ".container")
+}
+
 func (container Container) Validate(path string) error {
 	if len(container.Name) > 63 || !dnsLabel.MatchString(container.Name) ||
 		container.Name == "database" {

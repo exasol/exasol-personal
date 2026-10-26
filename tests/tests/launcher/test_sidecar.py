@@ -42,7 +42,9 @@ def test_sidecar_unsupported_deployment_type(exasol_path: str, tmp_path: Path) -
             "--no-launcher-version-check",
         ]
     )
-    definition = "version: 1\ncontainers:\n- name: example\n  image: caddy:2\n"
+    definition = (
+        "version: 1\nsidecars:\n  example:\n    container:\n      image: caddy:2\n"
+    )
     (directory / "sidecars.yaml").write_text(definition, encoding="utf-8")
     # When
     with pytest.raises(CalledProcessError) as failure:
@@ -58,7 +60,8 @@ def test_sidecar_saved_definition_commands(
     # Given
     definition = sidecar_directory / "sidecars.yaml"
     definition.write_text(
-        "version: 1\ncontainers:\n- name: saved\n  image: caddy:2\n", encoding="utf-8"
+        "version: 1\nsidecars:\n  saved:\n    container:\n      image: caddy:2\n",
+        encoding="utf-8",
     )
     selection = ["--deployment-dir", str(sidecar_directory), "--json"]
     # When
@@ -103,8 +106,9 @@ def test_sidecar_status_without_a_name_reports_every_enabled_sidecar(
     # Given
     definition = sidecar_directory / "sidecars.yaml"
     definition.write_text(
-        "version: 1\ncontainers:\n- name: second\n  image: caddy:2\n"
-        "- name: first\n  image: caddy:2\n",
+        "version: 1\nsidecars:\n"
+        "  second:\n    container:\n      image: caddy:2\n"
+        "  first:\n    container:\n      image: caddy:2\n",
         encoding="utf-8",
     )
     selection = ["--deployment-dir", str(sidecar_directory), "--json"]

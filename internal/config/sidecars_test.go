@@ -20,7 +20,7 @@ func TestSidecarsMissingAndExplicitEmpty(t *testing.T) {
 	// When
 	missing, err := config.ReadSidecars(deployment)
 	// Then
-	if err != nil || len(missing.Containers) != 0 {
+	if err != nil || len(missing.Sidecars) != 0 {
 		t.Fatalf("missing: %+v, %v", missing, err)
 	}
 	// When
@@ -28,7 +28,7 @@ func TestSidecarsMissingAndExplicitEmpty(t *testing.T) {
 	// Then
 	require.NoError(t, err)
 	empty, err := config.ReadSidecars(deployment)
-	if err != nil || len(empty.Containers) != 0 {
+	if err != nil || len(empty.Sidecars) != 0 {
 		t.Fatalf("empty: %+v, %v", empty, err)
 	}
 }
@@ -69,7 +69,9 @@ func TestSidecarsAreOwnerReadableOnly(t *testing.T) {
 	require.NoError(t, os.WriteFile(deployment.SidecarsPath(), nil, 0o644))
 	// When
 	require.NoError(t, config.WriteSidecars(deployment, sidecar.Document{
-		Version: 1, Containers: []sidecar.Container{{Name: "example", Image: "caddy:2"}},
+		Version: 1, Sidecars: map[string]sidecar.Definition{
+			"example": {Container: sidecar.Container{Image: "caddy:2"}},
+		},
 	}))
 	// Then
 	info, err := os.Stat(deployment.SidecarsPath())

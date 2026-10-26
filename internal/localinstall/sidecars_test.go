@@ -366,7 +366,9 @@ func TestSidecarCredentialProtection(t *testing.T) {
 	}
 	deployment := config.NewDeploymentDir(t.TempDir())
 	require.NoError(t, config.WriteSidecars(deployment, sidecar.Document{
-		Version: 1, Containers: []sidecar.Container{definition},
+		Version: 1, Sidecars: map[string]sidecar.Definition{
+			definition.Name: {Container: definition},
+		},
 	}))
 	// When
 	err := runtime.Ensure(context.Background(), definition, sidecar.Secrets{

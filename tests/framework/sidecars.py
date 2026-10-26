@@ -71,12 +71,15 @@ class SidecarDeployment:
         return dict(
             yaml.safe_load(
                 (self.directory / "sidecars.yaml").read_text(encoding="utf-8")
-            )["containers"][0]
+            )["sidecars"][self.sidecar_name]["container"]
         )
 
     def save(self, *containers: dict[str, Any]) -> None:
+        sidecars = {
+            container["name"]: {"container": container} for container in containers
+        }
         (self.directory / "sidecars.yaml").write_text(
-            yaml.safe_dump({"version": 1, "containers": list(containers)}),
+            yaml.safe_dump({"version": 1, "sidecars": sidecars}),
             encoding="utf-8",
         )
 
