@@ -120,7 +120,7 @@ func TestToLocalRuntimeConfig_PreservesAuthoritativeEmptySLCSet(t *testing.T) {
 	}
 }
 
-func TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets(t *testing.T) {
+func TestWriteLocalDeploymentArtifacts_WritesEndpointConnection(t *testing.T) {
 	t.Parallel()
 
 	// Given
@@ -171,6 +171,21 @@ func TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets(t *tes
 	if info.Connection.SSHPort != "" || info.Connection.SSHCommand != "" {
 		t.Fatalf("expected no SSH transport metadata, got %#v", info.Connection)
 	}
+}
+
+func TestWriteLocalDeploymentArtifacts_WritesSecrets(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	deployment := newTestDeploymentWithState(t)
+	endpoint := &localruntime.VMRuntimeEndpoint{DBPort: localTestDatabasePort}
+
+	// When
+	err := writeLocalDeploymentArtifacts(deployment, endpoint)
+	// Then
+	if err != nil {
+		t.Fatalf("expected artifacts to be written, got %v", err)
+	}
 
 	secrets, err := config.ReadSecrets(deployment)
 	if err != nil {
@@ -181,6 +196,9 @@ func TestWriteLocalDeploymentArtifacts_WritesEndpointConnectionAndSecrets(t *tes
 	}
 	if secrets.AdminUiPassword != "" {
 		t.Fatalf("expected no local Admin UI password, got %q", secrets.AdminUiPassword)
+	}
+	if len(secrets.BucketFS) != 0 {
+		t.Fatalf("expected no local BucketFS credentials, got %#v", secrets.BucketFS)
 	}
 }
 

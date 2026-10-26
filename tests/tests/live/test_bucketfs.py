@@ -44,7 +44,7 @@ def _check_https(deployment: Deployment, credentials: dict[str, Any]) -> None:
             url, data=content, auth=write_auth, verify=verify_ssl, timeout=60
         )
         uploaded.raise_for_status()
-        for auth in (write_auth, read_auth):
+        for auth in (read_auth, (read["username"], write["password"])):
             downloaded = requests.get(url, auth=auth, verify=verify_ssl, timeout=60)
             downloaded.raise_for_status()
             assert downloaded.content == content
