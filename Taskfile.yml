@@ -2,8 +2,7 @@ version: '3'
 
 vars:
   COMMAND_NAME: exasol
-  BINARY_SUFFIX:
-    sh: test "$(go env GOOS)" = "windows" && echo ".exe" || true
+  BINARY_SUFFIX: '{{if eq (env "GOOS" | default OS) "windows"}}.exe{{end}}'
   BINARY_NAME: "{{.COMMAND_NAME}}{{.BINARY_SUFFIX}}"
   MAIN_PATH_REL: "./cmd/exasol"
   BUILD_DIR_NAME: "bin"

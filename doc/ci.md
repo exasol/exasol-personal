@@ -18,7 +18,7 @@ line under `release/`:
 
 A new push to a pull request or to `main` cancels that pull request's or branch's previous run, so only the latest commit is fully tested.
 
-Build and launcher tests run on both `ubuntu-latest` and `windows-latest`, so Windows-only behavior — including Windows local deployments — is covered on every pull request. Unit tests and linting run on Linux only.
+One Linux job cross-compiles the coverage-instrumented test binaries for Linux, Windows, and macOS, and uploads one artifact per platform. Launcher tests run on `ubuntu-latest` and `windows-latest` and download the binary for their platform instead of building it, so Windows-only behavior, including Windows local deployments, is covered on every pull request. The manual launcher and deployment test workflows build the same binaries once per run and reuse them in every test job. Unit tests and linting run on Linux only. Native builds on each host platform are covered by the native builds workflow below.
 
 This is the only workflow that runs contributor code in pull request context. It is intentionally non-privileged and does not use deployment/release credentials.
 All CI jobs declare explicit minimal permissions.
@@ -41,15 +41,6 @@ Dependabot version updates use built-in cooldown periods before PR creation:
 
 The merge delay is separate from Dependabot cooldown: cooldown delays routine PR creation, while the workflow delay defers approval and auto-merge for ungrouped (security) PRs after they exist.
 Auto-merge does not itself rebase Dependabot PRs; branch protection and Dependabot's own update behavior determine whether stale branches are refreshed before merging.
-
-### Merge Workflow (`merge.yml`)
-
-Runs automatically on every push to `main`:
-
-- Builds binaries for Windows and macOS platforms
-- Uploads build artifacts for verification
-
-This ensures multi-platform compatibility is validated on the main branch.
 
 ### Native Builds (`build-native.yml`)
 

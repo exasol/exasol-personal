@@ -27,7 +27,6 @@ General guidance is in [CI Security Best Practices](ci_security_best_practices.m
 
 - Privileged workflows run only on trusted events (`push`, `workflow_dispatch`, or a
   `workflow_call` from a workflow that itself runs on a trusted event):
-  - [`merge.yml`](../.github/workflows/merge.yml)
   - [`release.yml`](../.github/workflows/release.yml)
   - [`docs.yml`](../.github/workflows/docs.yml)
   - [`tests-deployment.yml`](../.github/workflows/tests-deployment.yml)
