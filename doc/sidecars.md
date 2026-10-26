@@ -12,15 +12,19 @@ self-contained entry under `sidecars.<name>` with `description`,
 reserved. Omit `container.name` to inherit the key, or set it to the same name.
 
 A deployment's `sidecars.yaml` uses the same `sidecars.<name>` shape, holding a
-`container` under each key and applying the same naming rule, so enablement
-stores a catalog entry's definition under the name it was resolved by.
-Validation names a field through its key, for example
+`container` and optional `endpoints` under each key and applying the same
+naming rule, so enablement stores a catalog entry's definition under the name
+it was resolved by. Validation names a field through its key, for example
 `sidecars.mcp.container.image`.
 
 Declare the image's supported Linux target architectures (`amd64`, `arm64`),
 including when the launcher runs on a different operating system. Prefer a
 pinned multi-architecture image digest and verify each declared architecture.
 Use the supported Container subset and let the loader apply defaults.
+
+Declare an `endpoints` section beside `container` when a published port speaks
+an application protocol, naming the port it applies to, so status reports a
+complete URL. Enablement saves the declarations with the definition.
 
 Use `env[].valueFrom.secretKeyRef` for runtime database connection values.
 Choose environment names expected by the application. Include only the

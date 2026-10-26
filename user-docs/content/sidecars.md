@@ -19,7 +19,8 @@ that cannot run sidecars, every entry reports `supported: false` and says why.
 `status` rejects a name that is neither saved, in the catalog, nor associated
 with an unresolved operation failure. JSON status includes `name`, `enabled`,
 `running`, `state`, `exitCode`, `restartRequired`, `endpoints`, and an `error`
-when available.
+when available. Each endpoint carries `ip` and `port`, and a `url` when its
+port declares an application protocol.
 Status describes the container process, rather than application readiness.
 Without a name, `status` reports every enabled sidecar, and its JSON output is
 an array of those same entries.
@@ -170,6 +171,32 @@ Status reports the effective IP and port. A sidecar that fails to start names
 the cause and points at `exasol sidecar status <name>`, which reports the full
 diagnosis.
 
+### Connection URLs
+
+A port that speaks an application protocol declares it in an `endpoints` list
+beside the sidecar's `container`, naming one of that container's ports:
+
+```yaml
+version: 1
+sidecars:
+  mcp:
+    container:
+      image: docker.io/exasol/mcp-server:2.2.0
+      ports:
+        - name: mcp
+          containerPort: 4896
+          hostPort: 4896
+    endpoints:
+      - port: mcp
+        scheme: http
+        path: /mcp
+```
+
+Status then reports the complete URL, built from the address the port is
+actually published on. An edited scheme or path takes effect on the next
+`status`, without restarting the sidecar. A port with no declaration reports
+only its host and port.
+
 ## MCP server
 
 For a local deployment, enable the official Exasol MCP server with:
@@ -179,12 +206,11 @@ exasol sidecar enable mcp
 exasol sidecar status mcp
 ```
 
-The default MCP endpoint is `http://127.0.0.1:4896/mcp`. The `Endpoint` line
-that `exasol sidecar status mcp` prints shows only the host address and port,
-for example `127.0.0.1:4896`; MCP clients need the full URL, so prefix it with
-`http://` and append `/mcp`. Use the status output to obtain the effective
-address after changing the saved port mapping. If the default host port is
-occupied, change the mapping as described in [Networking](#networking).
+The `Endpoint` line that `exasol sidecar status mcp` prints is the full URL an
+MCP client needs, `http://127.0.0.1:4896/mcp` by default. Use the status output
+to obtain the effective URL after changing the saved port mapping. If the
+default host port is occupied, change the mapping as described in
+[Networking](#networking).
 
 To verify the complete connection with the official
 [MCP Inspector](https://github.com/modelcontextprotocol/inspector), install
