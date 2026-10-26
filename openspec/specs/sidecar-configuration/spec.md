@@ -41,7 +41,9 @@ resolve a supported catalog name.
 ### Requirement: Saved definitions are authoritative
 
 The launcher SHALL store enabled definitions in a versioned `sidecars.yaml`
-with top-level `containers` using Kubernetes Container field names. It SHALL
+with a top-level `sidecars` map keyed by sidecar name, where each entry holds a
+`container` using Kubernetes Container field names. The entry's key SHALL name
+its container, and a `name` inside `container` SHALL match that key. It SHALL
 accept edits to supported fields and use those values for subsequent
 operations. Enable, status, and disable SHALL report the deployment's
 enablement and operate on saved names. Status without a name SHALL report every
@@ -52,8 +54,18 @@ catalog.
 #### Scenario: First enable materializes the template
 
 - **WHEN** the user enables a catalog entry for the first time
-- **THEN** its resolved named Container definition appears exactly once in
-  `sidecars.yaml`, including its concrete image and default restart policy
+- **THEN** its resolved container appears exactly once in `sidecars.yaml` under
+  that entry's name, including its concrete image and default restart policy
+
+#### Scenario: The entry key names its container
+
+- **WHEN** a saved entry omits `name` inside its `container`
+- **THEN** operations identify that container by the entry's key
+
+#### Scenario: A container name that contradicts its key fails validation
+
+- **WHEN** a saved entry carries a `container.name` that differs from its key
+- **THEN** the operation fails validation and names the offending field
 
 #### Scenario: Repeated enable preserves deployment edits
 
@@ -89,10 +101,10 @@ and `optional`. Ports SHALL support `name`, `containerPort`, `hostPort`,
 `OnFailure`, and `Never`, defaulting to `OnFailure`.
 
 The launcher SHALL reject documents it cannot parse and documents carrying
-unsupported fields. It SHALL report unsupported values, duplicate container or
-environment names, and conflicting environment sources with an error naming the
-offending field. Container names SHALL be unique DNS labels with `database`
-reserved for the database.
+unsupported fields. It SHALL report unsupported values, duplicate environment
+names, and conflicting environment sources with an error naming the offending
+field. Container names SHALL be DNS labels with `database` reserved for the
+database.
 
 #### Scenario: Unsupported configuration is rejected
 
@@ -102,8 +114,8 @@ reserved for the database.
 
 #### Scenario: Invalid values name the offending field
 
-- **WHEN** a sidecar operation reads an unsupported value, a duplicate name, or
-  conflicting environment sources
+- **WHEN** a sidecar operation reads an unsupported value, a duplicate
+  environment name, or conflicting environment sources
 - **THEN** it fails validation and names the offending configuration field
 
 #### Scenario: Broad publication request receives a validation error
