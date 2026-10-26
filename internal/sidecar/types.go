@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/netip"
 	"slices"
 	"strings"
 
@@ -216,6 +217,10 @@ func (container Container) Defaults() Container {
 		}
 		if port.HostPort > 0 && port.HostIP == "" {
 			port.HostIP = "127.0.0.1"
+		}
+		// A host IP serves as a map key, so it is normalized before comparison.
+		if address, err := netip.ParseAddr(port.HostIP); err == nil {
+			port.HostIP = address.String()
 		}
 	}
 

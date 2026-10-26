@@ -206,11 +206,17 @@ sidecars:
         path: /v1
 `
 
-// Declares an endpoint on a published port, so tests can observe the URL a
-// user would paste into a client.
-func sidecarTestEndpointCatalog(t *testing.T) *sidecar.Catalog {
+// Without publication, the declaration lands on a port the sidecar keeps
+// internal.
+func sidecarTestEndpointCatalog(t *testing.T, published bool) *sidecar.Catalog {
 	t.Helper()
-	catalog, err := sidecar.LoadCatalog([]byte(sidecarEndpointCatalogYAML))
+	definition := sidecarEndpointCatalogYAML
+	if !published {
+		definition = strings.Replace(
+			definition, "          hostPort: 18080\n          hostIP: 127.0.0.1\n", "", 1,
+		)
+	}
+	catalog, err := sidecar.LoadCatalog([]byte(definition))
 	require.NoError(t, err)
 
 	return catalog
@@ -247,11 +253,11 @@ func materializeTestSidecar(
 
 // A saved entry is rewritten rather than edited, because a map value cannot be
 // assigned through.
-func editSavedContainer(
-	document *sidecar.Document, name string, edit func(*sidecar.Container),
+func editSavedDefinition(
+	document *sidecar.Document, name string, edit func(*sidecar.Definition),
 ) {
 	definition := document.Sidecars[name]
-	edit(&definition.Container)
+	edit(&definition)
 	document.Sidecars[name] = definition
 }
 
@@ -303,7 +309,7 @@ func TestSidecarEnableSavesEndpointDeclarations(t *testing.T) {
 	t.Parallel()
 	// Given
 	operations, _ := newSidecarOperationsFixture(t)
-	operations.templates = sidecarTestEndpointCatalog(t)
+	operations.templates = sidecarTestEndpointCatalog(t, true)
 	// When
 	_, err := operations.enable(t.Context(), "example")
 	// Then
@@ -622,8 +628,8 @@ func TestSidecarReconciliationUsesSavedDefinitions(t *testing.T) {
 	selected.containers.Add("orphan")
 	document, err := config.ReadSidecars(operations.deployment)
 	require.NoError(t, err)
-	editSavedContainer(&document, "example", func(container *sidecar.Container) {
-		container.Args = []string{"edited"}
+	editSavedDefinition(&document, "example", func(definition *sidecar.Definition) {
+		definition.Container.Args = []string{"edited"}
 	})
 	require.NoError(t, config.WriteSidecars(operations.deployment, document))
 	// When
@@ -704,8 +710,8 @@ func TestSidecarStatusRefreshesRecordedFailures(t *testing.T) {
 		{
 			"changed definition", "pending",
 			func(document *sidecar.Document, _ *sidecarRuntimeStub) {
-				editSavedContainer(document, "example", func(container *sidecar.Container) {
-					container.Args = []string{"edited"}
+				editSavedDefinition(document, "example", func(definition *sidecar.Definition) {
+					definition.Container.Args = []string{"edited"}
 				})
 			},
 		},
@@ -943,6 +949,212 @@ func TestSidecarObservedEndpointsFollowRuntime(t *testing.T) {
 	if err != nil || !result.Running || !slices.Equal(result.Endpoints,
 		[]SidecarEndpoint{{IP: "127.0.0.1", Port: 18080}}) {
 		t.Fatalf("observed status: %+v, %v", result, err)
+	}
+}
+
+func TestSidecarStatusReportsDeclaredEndpointURL(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, _ := newSidecarOperationsFixture(t)
+	operations.templates = sidecarTestEndpointCatalog(t, true)
+	_, err := operations.enable(t.Context(), "example")
+	require.NoError(t, err)
+	// When
+	result, err := operations.status(t.Context(), "example")
+	// Then
+	require.NoError(t, err)
+	require.True(t, result.Running)
+	require.Equal(t, []SidecarEndpoint{
+		{IP: "127.0.0.1", Port: 18080, URL: "http://127.0.0.1:18080/v1"},
+	}, result.Endpoints)
+}
+
+func TestSidecarStatusOmitsURLForInternalPort(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, _ := newSidecarOperationsFixture(t)
+	operations.templates = sidecarTestEndpointCatalog(t, false)
+	_, err := operations.enable(t.Context(), "example")
+	require.NoError(t, err)
+	// When
+	result, err := operations.status(t.Context(), "example")
+	// Then
+	require.NoError(t, err)
+	require.True(t, result.Running)
+	require.Empty(t, result.Endpoints)
+}
+
+func TestSidecarDeclaredEndpointSurvivesCatalogChange(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, _ := newSidecarOperationsFixture(t)
+	operations.templates = sidecarTestEndpointCatalog(t, true)
+	_, err := operations.enable(t.Context(), "example")
+	require.NoError(t, err)
+	delete(operations.templates.Entries(), "example")
+	// When
+	result, err := operations.status(t.Context(), "example")
+	// Then
+	require.NoError(t, err)
+	require.Equal(t, "http://127.0.0.1:18080/v1", result.Endpoints[0].URL)
+}
+
+func TestSidecarEditedDeclarationNeedsNoRecreation(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, _ := newSidecarOperationsFixture(t)
+	operations.templates = sidecarTestEndpointCatalog(t, true)
+	_, err := operations.enable(t.Context(), "example")
+	require.NoError(t, err)
+	document, err := config.ReadSidecars(operations.deployment)
+	require.NoError(t, err)
+	editSavedDefinition(&document, "example", func(definition *sidecar.Definition) {
+		definition.Endpoints[0].Path = "/edited"
+	})
+	require.NoError(t, config.WriteSidecars(operations.deployment, document))
+	// When
+	result, err := operations.status(t.Context(), "example")
+	// Then
+	require.NoError(t, err)
+	require.Equal(t, "http://127.0.0.1:18080/edited", result.Endpoints[0].URL)
+	require.Equal(t, sidecarReconciliationComplete, result.Reconciliation)
+}
+
+func TestSidecarEndpointsResolveAgainstTheObservedAddress(t *testing.T) {
+	t.Parallel()
+	declared := sidecar.Container{Name: "example", Ports: []sidecar.Port{
+		{Name: "api", ContainerPort: 8080, HostPort: 18080, HostIP: "127.0.0.1"},
+		{Name: "api6", ContainerPort: 8080, HostPort: 18080, HostIP: "::1"},
+		{Name: "metrics", ContainerPort: 9090, HostPort: 19090, HostIP: "127.0.0.1"},
+		{Name: "alt", ContainerPort: 8080, HostPort: 18081, HostIP: "127.0.0.1"},
+	}}
+	apiDeclarations := declarationsFor(sidecar.Definition{
+		Container: declared,
+		Endpoints: []sidecar.Endpoint{
+			{Port: "api", Scheme: "http", Path: "/v1"},
+			{Port: "api6", Scheme: "http", Path: "/v1"},
+		},
+	})
+	for _, fixture := range []struct {
+		name string
+		// Defaults to the declaration above.
+		declarations endpointDeclarations
+		container    localinstall.ContainerListing
+		published    []sidecar.PublishedPort
+		want         []SidecarEndpoint
+	}{
+		{
+			name:      "direct binding",
+			container: listingWithPorts(boundPort("127.0.0.1", 18080, 8080)),
+			want: []SidecarEndpoint{
+				{IP: "127.0.0.1", Port: 18080, URL: "http://127.0.0.1:18080/v1"},
+			},
+		},
+		{
+			name:      "forwarded binding",
+			container: listingWithPorts(),
+			published: []sidecar.PublishedPort{
+				{
+					Sidecar: "example", Index: 0, HostIP: "127.0.0.1", HostPort: 18080,
+					RuntimePort: 49153,
+				},
+			},
+			want: []SidecarEndpoint{
+				{IP: "127.0.0.1", Port: 18080, URL: "http://127.0.0.1:18080/v1"},
+			},
+		},
+		{
+			name:      "IPv6 loopback",
+			container: listingWithPorts(boundPort("::1", 18080, 8080)),
+			want: []SidecarEndpoint{
+				{IP: "::1", Port: 18080, URL: "http://[::1]:18080/v1"},
+			},
+		},
+		{
+			name:      "undeclared port",
+			container: listingWithPorts(boundPort("127.0.0.1", 19090, 9090)),
+			want:      []SidecarEndpoint{{IP: "127.0.0.1", Port: 19090}},
+		},
+		{
+			name: "second host port on the same container port",
+			container: listingWithPorts(
+				boundPort("127.0.0.1", 18080, 8080), boundPort("127.0.0.1", 18081, 8080),
+			),
+			want: []SidecarEndpoint{
+				{IP: "127.0.0.1", Port: 18080, URL: "http://127.0.0.1:18080/v1"},
+				{IP: "127.0.0.1", Port: 18081},
+			},
+		},
+		{
+			name:      "forward opened before the definition was reordered",
+			container: listingWithPorts(),
+			published: []sidecar.PublishedPort{
+				{
+					Sidecar: "example", Index: 1, HostIP: "127.0.0.1", HostPort: 18080,
+					RuntimePort: 49153,
+				},
+			},
+			want: []SidecarEndpoint{
+				{IP: "127.0.0.1", Port: 18080, URL: "http://127.0.0.1:18080/v1"},
+			},
+		},
+		{
+			name: "same host port on a second loopback address",
+			declarations: declarationsFor(sidecar.Definition{
+				Container: sidecar.Container{Name: "example", Ports: []sidecar.Port{
+					{Name: "api", ContainerPort: 8080, HostPort: 18080},
+					{
+						Name: "admin", ContainerPort: 8081,
+						HostPort: 18080, HostIP: "127.0.0.2",
+					},
+				}},
+				Endpoints: []sidecar.Endpoint{{Port: "api", Scheme: "http", Path: "/v1"}},
+			}),
+			container: listingWithPorts(
+				boundPort("127.0.0.1", 18080, 8080), boundPort("127.0.0.2", 18080, 8081),
+			),
+			want: []SidecarEndpoint{
+				{IP: "127.0.0.1", Port: 18080, URL: "http://127.0.0.1:18080/v1"},
+				{IP: "127.0.0.2", Port: 18080},
+			},
+		},
+		{
+			name: "non-canonical declared host IP",
+			declarations: declarationsFor(sidecar.Definition{
+				Container: sidecar.Container{Name: "example", Ports: []sidecar.Port{{
+					Name: "api", ContainerPort: 8080,
+					HostPort: 18080, HostIP: "0:0:0:0:0:0:0:1",
+				}}},
+				Endpoints: []sidecar.Endpoint{{Port: "api", Scheme: "http", Path: "/v1"}},
+			}),
+			container: listingWithPorts(boundPort("::1", 18080, 8080)),
+			want: []SidecarEndpoint{
+				{IP: "::1", Port: 18080, URL: "http://[::1]:18080/v1"},
+			},
+		},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			// Given
+			declarations := fixture.declarations
+			if declarations == nil {
+				declarations = apiDeclarations
+			}
+			// When
+			actual := sidecarEndpoints(fixture.container, fixture.published, declarations)
+			// Then
+			require.Equal(t, fixture.want, actual)
+		})
+	}
+}
+
+func listingWithPorts(ports ...localinstall.ContainerPort) localinstall.ContainerListing {
+	return localinstall.ContainerListing{State: "running", Ports: ports}
+}
+
+func boundPort(hostIP string, hostPort, containerPort int) localinstall.ContainerPort {
+	return localinstall.ContainerPort{
+		HostIP: hostIP, HostPort: hostPort, ContainerPort: containerPort,
 	}
 }
 
