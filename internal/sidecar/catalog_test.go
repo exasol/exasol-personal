@@ -32,12 +32,13 @@ func TestCatalogDefaultsAndIsolatesSelections(t *testing.T) {
 	// When
 	selected, err := catalog.Resolve("example", "arm64")
 	require.NoError(t, err)
-	*selected.Env[0].Value = "edited"
+	*selected.Container.Env[0].Value = "edited"
 	again, err := catalog.Resolve("example", "amd64")
 	require.NoError(t, err)
 	// Then
-	if again.Name != "example" || again.RestartPolicy != "OnFailure" ||
-		again.ImagePullPolicy != "IfNotPresent" || *again.Env[0].Value != "original" {
+	if again.Container.Name != "example" || again.Container.RestartPolicy != "OnFailure" ||
+		again.Container.ImagePullPolicy != "IfNotPresent" ||
+		*again.Container.Env[0].Value != "original" {
 		t.Fatalf("unexpected selection: %+v", again)
 	}
 }
@@ -253,8 +254,8 @@ func TestRuntimeEntriesResolveAheadOfTheCatalog(t *testing.T) {
 	selected, err := catalogs.Resolve("example", "amd64")
 	// Then
 	require.NoError(t, err)
-	require.Equal(t, "docker.io/library/redis:8", selected.Image)
-	require.Equal(t, "example", selected.Name)
+	require.Equal(t, "docker.io/library/redis:8", selected.Container.Image)
+	require.Equal(t, "example", selected.Container.Name)
 	require.Equal(t, "Runtime service", catalogs.Entries()["example"].Description)
 }
 
@@ -268,7 +269,7 @@ func TestRuntimeEntriesKeepUnsupportedArchitecturesOnTheCatalog(t *testing.T) {
 	selected, err := catalogs.Resolve("example", "arm64")
 	// Then
 	require.NoError(t, err)
-	require.Equal(t, "docker.io/library/caddy:2-alpine", selected.Image)
+	require.Equal(t, "docker.io/library/caddy:2-alpine", selected.Container.Image)
 }
 
 func TestRuntimeEntriesFollowCatalogValidation(t *testing.T) {
@@ -323,7 +324,7 @@ func TestRuntimeEntriesIsolateTheirSource(t *testing.T) {
 	selected, err := catalog.Resolve("example", "amd64")
 	// Then
 	require.NoError(t, err)
-	require.Equal(t, "caddy:2", selected.Image)
+	require.Equal(t, "caddy:2", selected.Container.Image)
 	require.NotContains(t, catalog.Entries(), "other")
 }
 
@@ -342,4 +343,124 @@ func TestCatalogDistinguishesUnknownNameFromArchitecture(t *testing.T) {
 	if mismatched == nil || !strings.Contains(mismatched.Error(), "not available for s390x") {
 		t.Fatalf("architecture mismatch: %v", mismatched)
 	}
+}
+
+const endpointCatalogYAML = `version: 1
+sidecars:
+  example:
+    description: Example service
+    architectures: [amd64, arm64]
+    container:
+      image: docker.io/library/caddy:2-alpine
+      ports:
+        - name: api
+          containerPort: 8080
+          hostPort: 18080
+    endpoints:
+      - port: api
+        scheme: http
+        path: /v1
+`
+
+func endpointDocument(endpoints string) []byte {
+	return []byte("version: 1\nsidecars:\n  example:\n    container:\n      image: caddy\n" +
+		"      ports:\n        - name: api\n          containerPort: 8080\n" +
+		"          hostPort: 18080\n" + endpoints)
+}
+
+func TestCatalogResolvesEndpointDeclarations(t *testing.T) {
+	t.Parallel()
+	// Given
+	catalog, err := sidecar.LoadCatalog([]byte(endpointCatalogYAML))
+	require.NoError(t, err)
+	// When
+	selected, err := catalog.Resolve("example", "amd64")
+	// Then
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		[]sidecar.Endpoint{{Port: "api", Scheme: "http", Path: "/v1"}},
+		selected.Endpoints,
+	)
+}
+
+func TestSavedDocumentCarriesEndpointDeclarations(t *testing.T) {
+	t.Parallel()
+	// Given
+	data := endpointDocument("    endpoints:\n      - port: api\n        scheme: http\n")
+	// When
+	document, err := sidecar.Parse(data)
+	// Then
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		[]sidecar.Endpoint{{Port: "api", Scheme: "http"}},
+		document.Sidecars["example"].Endpoints,
+	)
+}
+
+func TestSavedDocumentWithoutEndpointDeclarations(t *testing.T) {
+	t.Parallel()
+	// Given
+	data := endpointDocument("")
+	// When
+	document, err := sidecar.Parse(data)
+	// Then
+	require.NoError(t, err)
+	require.Nil(t, document.Sidecars["example"].Endpoints)
+}
+
+func TestEndpointDeclarationNamesTheOffendingField(t *testing.T) {
+	t.Parallel()
+	const declared = "    endpoints:\n      - port: "
+	const unknownPort = ".port: expected the name of a container port"
+	for _, fixture := range []struct{ name, endpoints, message string }{
+		{
+			"unknown port", declared + "other\n        scheme: http\n",
+			"sidecars.example.endpoints[0]" + unknownPort,
+		},
+		{
+			"unnamed port", declared + "''\n        scheme: http\n",
+			"sidecars.example.endpoints[0]" + unknownPort,
+		},
+		{
+			"duplicate port", declared + "api\n        scheme: http\n" +
+				"      - port: api\n        scheme: https\n",
+			"sidecars.example.endpoints[1].port: expected a unique container port name",
+		},
+		{
+			"missing scheme", declared + "api\n",
+			"sidecars.example.endpoints[0].scheme: expected an application protocol such as http",
+		},
+		{
+			"malformed scheme", declared + "api\n        scheme: 'ht tp'\n",
+			"sidecars.example.endpoints[0].scheme: expected an application protocol such as http",
+		},
+		{
+			"relative path", declared + "api\n        scheme: http\n        path: v1\n",
+			"sidecars.example.endpoints[0].path: expected a path beginning with /",
+		},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			// Given
+			data := endpointDocument(fixture.endpoints)
+			// When
+			_, err := sidecar.Parse(data)
+			// Then
+			if err == nil || !strings.Contains(err.Error(), fixture.message) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestCatalogEndpointDeclarationFollowsDocumentValidation(t *testing.T) {
+	t.Parallel()
+	// Given
+	invalid := strings.Replace(endpointCatalogYAML, "port: api", "port: other", 1)
+	// When
+	_, err := sidecar.LoadCatalog([]byte(invalid))
+	// Then
+	require.ErrorContains(t, err, "sidecars.example.endpoints[0].port")
 }

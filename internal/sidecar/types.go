@@ -55,7 +55,16 @@ type Entry struct {
 // Definition is what the catalog offers and what enabling saves, so both files
 // describe a sidecar the same way.
 type Definition struct {
-	Container Container `yaml:"container"`
+	Container Container  `yaml:"container"`
+	Endpoints []Endpoint `yaml:"endpoints,omitempty"`
+}
+
+// Endpoint supplies the scheme and path a container port does not carry, so
+// status can report a URL a user can paste into a client.
+type Endpoint struct {
+	Port   string `yaml:"port"`
+	Scheme string `yaml:"scheme"`
+	Path   string `yaml:"path,omitempty"`
 }
 
 type Container struct {
@@ -161,6 +170,7 @@ func (entry Entry) Clone() Entry {
 
 func (definition Definition) Clone() Definition {
 	definition.Container = definition.Container.Clone()
+	definition.Endpoints = slices.Clone(definition.Endpoints)
 
 	return definition
 }
