@@ -166,7 +166,7 @@ diagnostics SHALL redact database credentials.
 ### Requirement: Status reports sidecar outcomes
 
 `exasol sidecar status <name>` SHALL report the sidecar's enabled state,
-running state, IP and port endpoints, and actionable failure when available.
+running state, endpoints, and actionable failure when available.
 When a saved definition has been removed but cleanup remains unverified,
 status SHALL report its recorded failure.
 Text and JSON output SHALL represent the same domain result.
