@@ -23,3 +23,13 @@ resource "tls_private_key" "tls_key" {
   algorithm   = "ECDSA"
   ecdsa_curve = "P256"
 }
+
+resource "random_password" "bucketfs_read" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "bucketfs_write" {
+  length  = 32
+  special = false
+}

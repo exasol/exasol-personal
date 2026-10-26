@@ -74,14 +74,16 @@ locals {
     numNodes     = length(local.nodes)
     n11Ip        = local.n11_ip
 
-    adminPrivateKey    = tls_private_key.ssh_key.private_key_pem
-    hostAddrs          = local.node_ips_space_sep
-    hostExternalAddrs  = local.node_ips_space_sep
-    dbPasswordB64      = base64encode(local.db_password_final)
-    adminUiPasswordB64 = base64encode(local.adminui_password_final)
-    tlsKey             = tls_private_key.tls_key.private_key_pem
-    tlsCa              = tls_self_signed_cert.tls_ca_cert.cert_pem
-    tlsCert            = tls_locally_signed_cert.tls_cert.cert_pem
+    adminPrivateKey          = tls_private_key.ssh_key.private_key_pem
+    hostAddrs                = local.node_ips_space_sep
+    hostExternalAddrs        = local.node_ips_space_sep
+    bucketfsReadPasswordB64  = base64encode(random_password.bucketfs_read.result)
+    bucketfsWritePasswordB64 = base64encode(random_password.bucketfs_write.result)
+    dbPasswordB64            = base64encode(local.db_password_final)
+    adminUiPasswordB64       = base64encode(local.adminui_password_final)
+    tlsKey                   = tls_private_key.tls_key.private_key_pem
+    tlsCa                    = tls_self_signed_cert.tls_ca_cert.cert_pem
+    tlsCert                  = tls_locally_signed_cert.tls_cert.cert_pem
 
     # Optional infrastructure-specific hook scripts.
     preInstall = {
@@ -156,8 +158,11 @@ data "cloudinit_config" "cloud_config" {
       write_files = concat(
         [
           {
-            path        = local.infrastructure_json_target_path
-            permissions = "0644"
+            path = local.infrastructure_json_target_path
+            # The ubuntu owner does not exist during cloud-init's initial file-write stage.
+            defer       = true
+            owner       = "ubuntu:ubuntu"
+            permissions = "0600"
             content     = jsonencode(local.infrastructure_payload)
           },
           {

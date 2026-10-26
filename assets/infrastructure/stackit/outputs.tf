@@ -33,6 +33,16 @@ locals {
     }
   }
   deployment_secrets = {
+    bucketfs = {
+      bfsdefault = {
+        buckets = {
+          default = {
+            read  = { username = "r", password = random_password.bucketfs_read.result }
+            write = { username = "w", password = random_password.bucketfs_write.result }
+          }
+        }
+      }
+    }
     adminUiUsername = "admin"
     adminUiPassword = local.adminui_password_final
     dbUsername      = "sys"
@@ -70,9 +80,10 @@ resource "local_file" "deployment_info" {
 }
 
 # Save deployment_secrets to a local JSON file (for secure storage)
-resource "local_file" "deployment_secrets" {
-  filename = "${local.infrastructure_artifact_dir}/secrets.json"
-  content  = jsonencode(local.deployment_secrets)
+resource "local_sensitive_file" "deployment_secrets" {
+  file_permission = "0600"
+  filename        = "${local.infrastructure_artifact_dir}/secrets.json"
+  content         = jsonencode(local.deployment_secrets)
 }
 
 # Save the SSH private key to a local PEM file (for SSH access to the nodes)
