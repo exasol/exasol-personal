@@ -172,3 +172,48 @@ def test_sidecar_disabled_entry_reports_disabled(
     assert listed is False
     assert status is False
     assert every == ["mcp"]
+
+
+def test_sidecar_removal_returns_catalog_sidecar_to_template(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    definition = sidecar_directory / "sidecars.yaml"
+    selection = ["--deployment-dir", str(sidecar_directory), "--json"]
+    run_command([exasol_path, "sidecar", "enable", "mcp", *selection])
+    template = yaml.safe_load(definition.read_text(encoding="utf-8"))
+    edited = yaml.safe_load(definition.read_text(encoding="utf-8"))
+    edited["sidecars"]["mcp"]["container"]["ports"][0]["hostPort"] = 14896
+    definition.write_text(yaml.safe_dump(edited), encoding="utf-8")
+    # When
+    run_command([exasol_path, "sidecar", "disable", "mcp", "--remove", *selection])
+    removed = yaml.safe_load(definition.read_text(encoding="utf-8"))
+    run_command([exasol_path, "sidecar", "enable", "mcp", *selection])
+    restored = yaml.safe_load(definition.read_text(encoding="utf-8"))
+    # Then
+    assert "mcp" not in removed["sidecars"]
+    assert restored == template
+
+
+def test_sidecar_repeated_removal_reports_nothing_to_remove(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    (sidecar_directory / "sidecars.yaml").write_text(
+        "version: 1\nsidecars:\n  saved:\n    container:\n      image: caddy:2\n",
+        encoding="utf-8",
+    )
+    command = [
+        exasol_path,
+        "sidecar",
+        "disable",
+        "saved",
+        "--remove",
+        "--deployment-dir",
+        str(sidecar_directory),
+    ]
+    run_command(command)
+    # When
+    repeated = run_command(command)
+    # Then
+    assert "nothing to remove" in repeated.stdout

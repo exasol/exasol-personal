@@ -181,7 +181,22 @@ func DisableSidecar(
 		deployment,
 		nil,
 		func(sidecars *deploymentSidecars) (SidecarResult, error) {
-			return sidecars.disable(ctx, name)
+			return sidecars.disable(ctx, name, false)
+		},
+	)
+}
+
+// RemoveSidecar disables a sidecar and deletes its saved entry, so a later
+// enable starts again from the catalog template.
+func RemoveSidecar(
+	ctx context.Context, deployment config.DeploymentDir, name string,
+) (SidecarResult, error) {
+	return withSidecar(
+		ctx,
+		deployment,
+		nil,
+		func(sidecars *deploymentSidecars) (SidecarResult, error) {
+			return sidecars.disable(ctx, name, true)
 		},
 	)
 }
@@ -327,7 +342,7 @@ func (sidecars *deploymentSidecars) enable(
 }
 
 func (sidecars *deploymentSidecars) disable(
-	ctx context.Context, name string,
+	ctx context.Context, name string, remove bool,
 ) (SidecarResult, error) {
 	deferred, err := sidecars.mutationDeferred()
 	if err != nil {
@@ -337,7 +352,8 @@ func (sidecars *deploymentSidecars) disable(
 	if err != nil {
 		return SidecarResult{}, err
 	}
-	if !enabledSidecar(document, name) {
+	definition, saved := document.Sidecars[name]
+	if !saved || (!remove && !definition.IsEnabled()) {
 		failures, err := config.ReadSidecarState(sidecars.deployment)
 		if err != nil {
 			return SidecarResult{}, err
@@ -349,7 +365,9 @@ func (sidecars *deploymentSidecars) disable(
 			}, nil
 		}
 	}
-	if definition, saved := document.Sidecars[name]; saved {
+	if remove {
+		delete(document.Sidecars, name)
+	} else if saved {
 		definition.Enabled = new(false)
 		document.Sidecars[name] = definition
 	}

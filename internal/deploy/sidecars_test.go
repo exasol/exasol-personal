@@ -493,7 +493,7 @@ func TestSidecarDisableDefersPublicationWhileStopped(t *testing.T) {
 	))
 	selected.publishCalls = 0
 	// When
-	_, err = operations.disable(t.Context(), "example")
+	_, err = operations.disable(t.Context(), "example", false)
 	// Then
 	require.NoError(t, err)
 	require.Zero(t, selected.publishCalls)
@@ -531,7 +531,7 @@ func TestSidecarSavedDefinitionSurvivesCatalogChange(t *testing.T) {
 		selected.exampleContainer().labels["com.exasol.launcher.sidecar-definition"],
 	)
 	// When
-	status, err = operations.disable(ctx, "example")
+	status, err = operations.disable(ctx, "example", false)
 	// Then
 	require.NoError(t, err)
 	require.False(t, status.Enabled)
@@ -887,7 +887,7 @@ func TestSidecarDisableUsesEditedNames(t *testing.T) {
 	selected.containers.Add(definition.Name)
 	selected.containers.Fail("rm", errors.New("container busy"))
 	// When
-	result, err := operations.disable(context.Background(), definition.Name)
+	result, err := operations.disable(context.Background(), definition.Name, false)
 	// Then
 	require.ErrorContains(t, err, "container busy")
 	require.False(t, result.Enabled)
@@ -895,7 +895,7 @@ func TestSidecarDisableUsesEditedNames(t *testing.T) {
 	requireSavedDisabled(t, operations.deployment, definition.Name)
 	// When
 	selected.containers.Fail("rm", nil)
-	result, err = operations.disable(context.Background(), definition.Name)
+	result, err = operations.disable(context.Background(), definition.Name, false)
 	// Then
 	require.NoError(t, err)
 	require.False(t, result.Enabled)
@@ -949,7 +949,7 @@ func TestSidecarReenableUsesTheDisabledDefinition(t *testing.T) {
 	document.Sidecars["example"] = edited
 	require.NoError(t, config.WriteSidecars(operations.deployment, document))
 	// When
-	disabled, disableErr := operations.disable(t.Context(), "example")
+	disabled, disableErr := operations.disable(t.Context(), "example", false)
 	stopped := selected.exampleContainer()
 	enabled, enableErr := operations.enable(t.Context(), "example")
 	// Then
@@ -970,11 +970,11 @@ func TestSidecarDisableAlreadyDisabledIsNoOp(t *testing.T) {
 	operations, runtime := newSidecarOperationsFixture(t)
 	_, err := operations.enable(t.Context(), "example")
 	require.NoError(t, err)
-	_, err = operations.disable(t.Context(), "example")
+	_, err = operations.disable(t.Context(), "example", false)
 	require.NoError(t, err)
 	removals := len(runtime.removals())
 	// When
-	result, err := operations.disable(t.Context(), "example")
+	result, err := operations.disable(t.Context(), "example", false)
 	// Then
 	require.NoError(t, err)
 	require.True(t, result.NothingToRemove)
@@ -1003,12 +1003,42 @@ func TestSidecarReconciliationRemovesDisabledSidecar(t *testing.T) {
 	requireSavedDisabled(t, operations.deployment, "example")
 }
 
+func TestSidecarRemoveDeletesTheSavedEntry(t *testing.T) {
+	t.Parallel()
+	for name, disabledFirst := range map[string]bool{"enabled": false, "disabled": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			// Given
+			operations, selected := newSidecarOperationsFixture(t)
+			_, err := operations.enable(t.Context(), "example")
+			require.NoError(t, err)
+			if disabledFirst {
+				_, err = operations.disable(t.Context(), "example", false)
+				require.NoError(t, err)
+			}
+			// When
+			removed, removeErr := operations.disable(t.Context(), "example", true)
+			repeated, repeatErr := operations.disable(t.Context(), "example", true)
+			// Then
+			require.NoError(t, removeErr)
+			require.False(t, removed.NothingToRemove)
+			require.False(t, removed.Enabled)
+			require.Empty(t, selected.containers.Sidecars())
+			require.NoError(t, repeatErr)
+			require.True(t, repeated.NothingToRemove)
+			document, err := config.ReadSidecars(operations.deployment)
+			require.NoError(t, err)
+			require.NotContains(t, document.Sidecars, "example")
+		})
+	}
+}
+
 func TestSidecarDisableAlreadyAbsentIsNoOp(t *testing.T) {
 	t.Parallel()
 	// Given
 	operations, runtime := newSidecarOperationsFixture(t)
 	// When
-	result, err := operations.disable(t.Context(), "custom")
+	result, err := operations.disable(t.Context(), "custom", false)
 	// Then
 	require.NoError(t, err)
 	require.True(t, result.NothingToRemove)
@@ -1026,7 +1056,7 @@ func TestSidecarDisableRecordsUnverifiedCleanup(t *testing.T) {
 	require.NoError(t, err)
 	runtime.available = false
 	// When
-	result, err := operations.disable(t.Context(), "example")
+	result, err := operations.disable(t.Context(), "example", false)
 	failures, readErr := config.ReadSidecarState(operations.deployment)
 	// Then
 	require.ErrorContains(t, err, "cleanup could not be verified")
