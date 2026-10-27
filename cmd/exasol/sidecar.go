@@ -48,12 +48,7 @@ func newSidecarCommand(flags *CommonFlags) *cobra.Command {
 		flags, "enable", "Enable a catalog sidecar", deploy.EnableSidecar,
 	)
 	status := newSidecarStatusCommand(flags)
-	disable := newSidecarActionCommand(
-		flags,
-		"disable",
-		"Disable a sidecar and remove its runtime resources",
-		deploy.DisableSidecar,
-	)
+	disable := newSidecarDisableCommand(flags)
 	for _, child := range []*cobra.Command{list, enable, status, disable} {
 		child.SilenceUsage = true
 		requireDefaultDeploymentCompatibility(child)
@@ -66,6 +61,30 @@ func newSidecarCommand(flags *CommonFlags) *cobra.Command {
 		registerOutputFlags(child, flags)
 		command.AddCommand(child)
 	}
+
+	return command
+}
+
+func newSidecarDisableCommand(flags *CommonFlags) *cobra.Command {
+	var remove bool
+	command := newSidecarActionCommand(
+		flags,
+		"disable",
+		"Disable a sidecar and remove its runtime resources",
+		func(
+			ctx context.Context, deployment config.DeploymentDir, name string,
+		) (deploy.SidecarResult, error) {
+			if remove {
+				return deploy.RemoveSidecar(ctx, deployment, name)
+			}
+
+			return deploy.DisableSidecar(ctx, deployment, name)
+		},
+	)
+	command.Flags().BoolVar(
+		&remove, "remove", false,
+		"Also delete the saved definition",
+	)
 
 	return command
 }

@@ -980,6 +980,7 @@ Flags:
   -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
+      --remove                     Also delete the saved definition
 ```
 
 #### `exasol sidecar enable` { data-toc-label="sidecar enable" }
