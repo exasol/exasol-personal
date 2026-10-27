@@ -84,6 +84,7 @@ type Container struct {
 	Env             []EnvVar `yaml:"env,omitempty"`
 	Ports           []Port   `yaml:"ports,omitempty"`
 	RestartPolicy   string   `yaml:"restartPolicy,omitempty"`
+	ReadinessProbe  *Probe   `yaml:"readinessProbe,omitempty"`
 }
 
 type EnvVar struct {
@@ -194,6 +195,7 @@ func (container Container) Clone() Container {
 	container.Args = slices.Clone(container.Args)
 	container.Ports = slices.Clone(container.Ports)
 	container.Env = slices.Clone(container.Env)
+	container.ReadinessProbe = container.ReadinessProbe.clone()
 	for index, env := range container.Env {
 		if env.Value != nil {
 			value := *env.Value
@@ -213,6 +215,7 @@ func (container Container) Defaults() Container {
 	if container.RestartPolicy == "" {
 		container.RestartPolicy = OnFailure
 	}
+	container.ReadinessProbe.defaults()
 	if container.ImagePullPolicy == "" {
 		container.ImagePullPolicy = IfNotPresent
 		image := container.Image

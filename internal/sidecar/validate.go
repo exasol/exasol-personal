@@ -66,7 +66,11 @@ func (container Container) Validate(path string) error {
 		return err
 	}
 
-	return validatePorts(container.Ports, path)
+	if err := validatePorts(container.Ports, path); err != nil {
+		return err
+	}
+
+	return container.ReadinessProbe.validate(container.Ports, path+".readinessProbe")
 }
 
 func validateEntrypoint(container Container, path string) error {
