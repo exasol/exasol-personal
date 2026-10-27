@@ -2,14 +2,14 @@
 
 Sidecars run alongside the database on a local deployment's host.
 The built-in catalog
-provides templates; each deployment owns its enabled definitions. Use the
+provides templates; each deployment owns its saved definitions. Use the
 catalog names reported by your launcher:
 
 ```bash
 exasol sidecar list
 exasol sidecar enable <name>
 exasol sidecar status [name]
-exasol sidecar disable <name>
+exasol sidecar disable <name> [--remove]
 ```
 
 Each command accepts `--deployment <name>` or `--deployment-dir <path>` and
@@ -22,16 +22,25 @@ with an unresolved operation failure. JSON status includes `name`, `enabled`,
 when available. Each endpoint carries `ip` and `port`, and a `url` when its
 port declares an application protocol.
 Status describes the container process, rather than application readiness.
-Without a name, `status` reports every enabled sidecar, and its JSON output is
-an array of those same entries.
+Without a name, `status` reports every saved sidecar, enabled or disabled, and
+its JSON output is an array of those same entries.
 
 Sidecars use host Podman on Linux, Podman machine on Windows, and the local VM
 on macOS. macOS publication requires a runner with live-forwarding support.
 
 ## Enablement and lifecycle
 
-Enable and disable are idempotent. Disabling a sidecar that is already absent
-reports that there is nothing to remove (`nothingToRemove: true` in JSON).
+Disabling a sidecar stops it and keeps its saved definition with
+`enabled: false`, so enabling it again restores your edits, such as a changed
+host port. To return a catalog sidecar to its template, remove the definition:
+
+```bash
+exasol sidecar disable <name> --remove
+exasol sidecar enable <name>
+```
+
+Enable and both forms of disable are idempotent. Repeating a disable reports
+that there is nothing to remove (`nothingToRemove: true` in JSON).
 Enable on an initialized or stopped
 deployment records intent for the next deploy or start. Enable on a running
 deployment starts the selected sidecar on each host. Some existing local
@@ -40,8 +49,8 @@ deployments report `restartRequired: true`; run `exasol stop` followed by
 
 `exasol start` reconciles saved definitions even when the database is already
 running. It keeps unchanged running sidecars, recreates changed or missing
-containers, and removes containers whose definitions were deleted. Services
-handle their own connection retries while the database starts.
+containers, and removes containers whose definitions were deleted or disabled.
+Services handle their own connection retries while the database starts.
 
 `exasol stop` removes disposable sidecar containers while retaining definitions.
 `exasol destroy` removes owned containers and the deployment network. Failures
@@ -80,6 +89,7 @@ edits, and catalog upgrades affect newly enabled entries.
 version: 1
 sidecars:
   example:
+    enabled: true
     container:
       image: registry.example.org/service:1
       imagePullPolicy: IfNotPresent
@@ -107,6 +117,10 @@ catalog template for your service, then apply edits with `exasol start`.
 The key under `sidecars` names the sidecar and its container. A `name` inside
 `container` is accepted when it repeats that key, and reported as an error
 when it differs.
+
+`enabled` beside `container` records whether the sidecar runs. Enable writes
+`enabled: true` and disable writes `enabled: false`. An entry without the field
+is enabled. Set it by hand and run `exasol start` to apply the change.
 
 Supported fields follow the Kubernetes Container shape:
 
