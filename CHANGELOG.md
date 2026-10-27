@@ -13,11 +13,15 @@ Notable user-facing changes to Exasol Personal are documented here.
   ```
 
 - Added `exasol sidecar list`, `enable <name>`, `status [name]`, and
-  `disable <name>` with JSON output. The launcher keeps enabled definitions in
+  `disable <name>` with JSON output. The launcher keeps sidecar definitions in
   a deployment-owned `sidecars.yaml`, under a `sidecars` map keyed by sidecar
   name, accepts edits to them, and uses the saved values for later operations.
-  Status without a name reports every enabled sidecar, and disabling one that
-  is not enabled fails and lists those that are. Enabled sidecars follow local
+  Disable keeps the saved definition with `enabled: false`, so enabling it
+  again restores edits such as a changed host port, and
+  `exasol sidecar disable <name> --remove` deletes the definition so the next
+  enable starts from the catalog template. Repeating either form reports that
+  there is nothing to remove. Status without a name reports every saved
+  sidecar. Enabled sidecars follow local
   deployment start, stop, and destroy, reporting runtime and reconciliation
   status. Status clears recorded failures when live inspection verifies the
   desired outcome. Start reconciles edited definitions and reports sidecar
