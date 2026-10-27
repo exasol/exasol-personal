@@ -164,6 +164,16 @@ func (fake *containerRuntimeFake) LastEnvironment() string {
 	return fake.lastEnv
 }
 
+// Restart reports every container as started again now, as a restart policy
+// would after the process exits.
+func (fake *containerRuntimeFake) Restart() {
+	fake.mutex.Lock()
+	defer fake.mutex.Unlock()
+	for _, container := range fake.containers {
+		container.started = time.Now()
+	}
+}
+
 // Execs reports the commands run inside containers, each led by its container.
 func (fake *containerRuntimeFake) Execs() [][]string {
 	fake.mutex.Lock()

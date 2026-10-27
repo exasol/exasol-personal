@@ -963,7 +963,7 @@ Usage:
 
 Additional Commands:
 	disable                       Disable a sidecar and remove its runtime resources
-	enable                        Enable a catalog sidecar
+	enable                        Enable a catalog sidecar and wait until it serves
 	list                          List catalog sidecars and deployment enablement
 	status                        Show sidecar state and published endpoints
 ```
@@ -986,7 +986,7 @@ Flags:
 #### `exasol sidecar enable` { data-toc-label="sidecar enable" }
 
 ```text
-Enable a catalog sidecar
+Enable a catalog sidecar and wait until it serves
 
 Usage:
 	exasol sidecar enable <name> [flags]
@@ -995,6 +995,7 @@ Flags:
   -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
+      --no-wait                    Return without waiting for a starting sidecar to serve
 ```
 
 #### `exasol sidecar list` { data-toc-label="sidecar list" }

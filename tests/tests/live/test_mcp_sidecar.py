@@ -216,6 +216,12 @@ def test_mcp_sidecar_complete_local_lifecycle(
     assert disabled_status["endpoints"] == []
     assert MCP_TEST_VALUE in preserved_data
 
+    # When
+    reenabled_status = mcp_deployment.sidecar("enable")
+    # Then
+    assert reenabled_status["health"] == "serving"
+    assert_mcp_interaction(running_endpoint(reenabled_status, host_port))
+
 
 def test_mcp_sidecar_rejects_rebound_requests(
     mcp_deployment: SidecarDeployment,

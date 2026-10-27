@@ -88,6 +88,42 @@ func TestSidecarStartupFailureOffersStatus(t *testing.T) {
 	}
 }
 
+func TestSidecarEnableOffersNoWait(t *testing.T) {
+	t.Parallel()
+	// Given
+	command := newSidecarCommand(&CommonFlags{})
+	// When
+	enable, _, err := command.Find([]string{"enable"})
+	// Then
+	require.NoError(t, err)
+	require.NotNil(t, enable.Flags().Lookup("no-wait"))
+}
+
+//nolint:paralleltest // Terminal queues are process-global.
+func TestSidecarHealthCallToAction(t *testing.T) {
+	for _, fixture := range []struct{ health, want string }{
+		{"starting", "Sidecar mcp is still starting. Run `exasol sidecar status mcp`"},
+		{"failing", "Sidecar mcp is not serving. Address the probe failure"},
+		{"serving", ""},
+		{"", ""},
+	} {
+		// Given
+		resetTerminalMessages()
+		result := deploy.SidecarResult{Name: "mcp", Health: fixture.health}
+		// When
+		addSidecarHealthCallToAction(result)
+		var stderr bytes.Buffer
+		writeTerminalCallsToAction(&stderr, callsToActionVisible(false))
+		// Then
+		if fixture.want == "" {
+			require.Empty(t, stderr.String())
+		} else {
+			require.Contains(t, stderr.String(), fixture.want)
+		}
+	}
+	resetTerminalMessages()
+}
+
 //nolint:paralleltest // Terminal queues are process-global.
 func TestSidecarRestartGuidanceFollowsOutputMode(t *testing.T) {
 	for _, jsonOutput := range []bool{false, true} {
@@ -341,7 +377,7 @@ func TestSidecarEnableReportsSupportedChoices(t *testing.T) {
 		directory := writeInitializedDeployment(t, "backend: local\nlocal: {}\n")
 		deployment := config.NewDeploymentDir(directory)
 		// When
-		_, err := deploy.EnableSidecar(testManagerContext(t), deployment, name)
+		_, err := deploy.EnableSidecar(testManagerContext(t), deployment, name, true)
 		// Then
 		require.ErrorContains(t, err, "supported choices:")
 		require.ErrorContains(t, err, name)
