@@ -226,8 +226,11 @@ func (runtime *SidecarRuntime) createSpec(
 	return spec
 }
 
+// Probes leave the container itself unchanged, so editing one keeps it running.
 func (*SidecarRuntime) fingerprint(resolved sidecar.Container) (string, error) {
-	data, err := yaml.Marshal(resolved.Defaults())
+	identity := resolved.Defaults()
+	identity.ReadinessProbe = nil
+	data, err := yaml.Marshal(identity)
 	if err != nil {
 		return "", err
 	}

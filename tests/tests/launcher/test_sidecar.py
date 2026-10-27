@@ -217,3 +217,49 @@ def test_sidecar_repeated_removal_reports_nothing_to_remove(
     repeated = run_command(command)
     # Then
     assert "nothing to remove" in repeated.stdout
+
+
+def test_sidecar_enable_saves_declared_probes_with_defaults(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    selection = ["--deployment-dir", str(sidecar_directory), "--json"]
+    # When
+    run_command([exasol_path, "sidecar", "enable", "mcp", *selection])
+    # Then
+    saved = yaml.safe_load(
+        (sidecar_directory / "sidecars.yaml").read_text(encoding="utf-8")
+    )
+    assert saved["sidecars"]["mcp"]["container"]["readinessProbe"] == {
+        "httpGet": {"path": "/health", "port": "mcp", "scheme": "HTTP"},
+        "periodSeconds": 10,
+        "timeoutSeconds": 1,
+        "failureThreshold": 6,
+    }
+
+
+def test_sidecar_invalid_probe_names_the_offending_field(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    (sidecar_directory / "sidecars.yaml").write_text(
+        "version: 1\nsidecars:\n  saved:\n    container:\n      image: caddy:2\n"
+        "      readinessProbe: {httpGet: {port: 8080}}\n",
+        encoding="utf-8",
+    )
+    # When
+    with pytest.raises(CalledProcessError) as failure:
+        run_command(
+            [
+                exasol_path,
+                "sidecar",
+                "status",
+                "saved",
+                "--deployment-dir",
+                str(sidecar_directory),
+            ]
+        )
+    # Then
+    assert "sidecars.saved.container.readinessProbe.httpGet.port" in (
+        failure.value.stderr
+    )

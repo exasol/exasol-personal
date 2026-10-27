@@ -352,6 +352,22 @@ func TestSidecarReconciliationKeepsOrReplacesOwnedContainer(t *testing.T) {
 	}
 }
 
+func TestSidecarProbeEditKeepsTheFingerprint(t *testing.T) {
+	t.Parallel()
+	// Given
+	runtime := newTestSidecarRuntime(t, &sidecarEnvironment{})
+	definition := sidecar.Container{Name: "example", Image: "caddy:2"}
+	probed := definition
+	probed.ReadinessProbe = &sidecar.Probe{
+		Exec: &sidecar.ExecAction{Command: []string{"true"}}, PeriodSeconds: 2,
+	}
+	// When
+	original := testFingerprint(t, runtime, definition)
+	edited := testFingerprint(t, runtime, probed)
+	// Then
+	require.Equal(t, original, edited)
+}
+
 func TestSidecarCredentialProtection(t *testing.T) {
 	t.Parallel()
 	// Given

@@ -45,6 +45,12 @@ sidecars:
           containerPort: 4896
           hostPort: 4896
           hostIP: 127.0.0.1
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: mcp
+        periodSeconds: 10
+        failureThreshold: 6
     endpoints:
       - port: mcp
         scheme: http
