@@ -43,6 +43,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
+- `--tofu-update-lockfile` is now offered only by deployments whose infrastructure preset uses the OpenTofu backend. It stays available for OpenTofu-backed `exasol install` and `exasol deploy`, is no longer listed in the help of a local preset or deployment, and is rejected with an error naming the preset when passed to one.
+
+  Example: `exasol install local --tofu-update-lockfile` reports `unsupported deployment option: infrastructure preset "local" does not support --tofu-update-lockfile`.
+
 - New local database containers use a deployment-specific bridge network with
   the `database` DNS alias. Existing containers adopt it on their next explicit
   `exasol stop` and `exasol start`.
@@ -69,6 +73,13 @@ Notable user-facing changes to Exasol Personal are documented here.
   Error messages for missing or misconfigured script language containers are also clearer.
 
 ### Fixed
+
+- Terminal messages queued during startup now appear before command execution, so the selected
+  default or named deployment directory is visible before an interactive `exasol connect` session
+  opens. Remaining committed notices and results appear after completion, even on failure, with
+  recovery guidance after the error. Automatic update guidance is checked only after success,
+  and `install` displays the EULA only after deployment succeeds. Notices stay on stderr and JSON
+  stdout remains machine-readable.
 
 - Fixed STACKIT deployments failing during Object Storage setup and server creation. The
   provider now retries concurrent storage initialization, bootstrap bucket policies use supported
@@ -141,23 +152,12 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol install local --help` reports "Infrastructure preset `local`" with `Compatible installation presets: local`, and suggests `exasol install local local`.
 
-- `--tofu-update-lockfile` is now offered only by deployments whose infrastructure preset uses the OpenTofu backend. It stays available for OpenTofu-backed `exasol install` and `exasol deploy`, is no longer listed in the help of a local preset or deployment, and is rejected with an error naming the preset when passed to one.
-
-  Example: `exasol install local --tofu-update-lockfile` reports `unsupported deployment option: infrastructure preset "local" does not support --tofu-update-lockfile`.
-
 - Local deployments now select and persist a concrete database port during initialization, keep it stable across restarts, allow port changes while stopped, and provide actionable recovery commands when the configured port is unavailable.
 - Documented named deployments, the `exasol slc` command group, and `exasol diag local` in the README, and made clear which features apply to local versus cloud deployments. Named deployments now have their own README section (they apply to both deployment types, not just cloud), a new section covers UDFs and script language containers, and the Limitations section no longer states that UDFs are unavailable on local deployments.
 - macOS local deployments now run the same Podman installation used on Linux inside a managed VM. The VM launcher is responsible only for VM lifecycle, port forwarding, shared files, and command execution; deployment state no longer exposes its SSH transport.
 - Cloud deployments now provision Ubuntu 24.04 LTS instances instead of Ubuntu 22.04 LTS on all supported cloud providers (AWS, Azure, Exoscale, STACKIT). Ubuntu 22.04 only offers a Podman version that predates the Quadlet systemd generator, which Data Lakehouse Turbo requires.
 
 ### Fixed
-
-- Terminal messages queued during startup now appear before command execution, so the selected
-  default or named deployment directory is visible before an interactive `exasol connect` session
-  opens. Remaining committed notices and results appear after completion, even on failure, with
-  recovery guidance after the error. Automatic update guidance is checked only after success,
-  and `install` displays the EULA only after deployment succeeds. Notices stay on stderr and JSON
-  stdout remains machine-readable.
 
 - `exasol status` now explains what to do when it reports `database_connection_failed`, which
   previously printed no message at all.
