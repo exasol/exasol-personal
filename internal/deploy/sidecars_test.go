@@ -497,9 +497,15 @@ func TestSidecarDisableDefersPublicationWhileStopped(t *testing.T) {
 	// Then
 	require.NoError(t, err)
 	require.Zero(t, selected.publishCalls)
-	document, err := config.ReadSidecars(operations.deployment)
+	requireSavedDisabled(t, operations.deployment, "example")
+}
+
+func requireSavedDisabled(t *testing.T, deployment config.DeploymentDir, name string) {
+	t.Helper()
+	document, err := config.ReadSidecars(deployment)
 	require.NoError(t, err)
-	require.Empty(t, document.Sidecars)
+	require.Contains(t, document.Sidecars, name)
+	require.Equal(t, new(false), document.Sidecars[name].Enabled)
 }
 
 func TestSidecarSavedDefinitionSurvivesCatalogChange(t *testing.T) {
@@ -531,9 +537,7 @@ func TestSidecarSavedDefinitionSurvivesCatalogChange(t *testing.T) {
 	require.False(t, status.Enabled)
 	require.Empty(t, selected.containers.Sidecars())
 	require.True(t, selected.running)
-	document, err := config.ReadSidecars(operations.deployment)
-	require.NoError(t, err)
-	require.Empty(t, document.Sidecars)
+	requireSavedDisabled(t, operations.deployment, "example")
 }
 
 func TestSidecarOperationsDeferredIntent(t *testing.T) {
@@ -888,9 +892,7 @@ func TestSidecarDisableUsesEditedNames(t *testing.T) {
 	require.ErrorContains(t, err, "container busy")
 	require.False(t, result.Enabled)
 	require.True(t, result.Running)
-	document, err := config.ReadSidecars(operations.deployment)
-	require.NoError(t, err)
-	require.Empty(t, document.Sidecars)
+	requireSavedDisabled(t, operations.deployment, definition.Name)
 	// When
 	selected.containers.Fail("rm", nil)
 	result, err = operations.disable(context.Background(), definition.Name)
@@ -900,6 +902,105 @@ func TestSidecarDisableUsesEditedNames(t *testing.T) {
 	require.False(t, result.Running)
 	require.Empty(t, result.LastOperationError)
 	require.True(t, selected.running)
+}
+
+func TestSidecarEnableSavesEnabledState(t *testing.T) {
+	t.Parallel()
+	edited := sidecar.Container{Name: "example", Image: "caddy:edited"}
+	for name, saved := range map[string]*sidecar.Definition{
+		"new":        nil,
+		"field-less": {Container: edited},
+		"disabled":   {Enabled: new(false), Container: edited},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			// Given
+			operations, _ := newSidecarOperationsFixture(t)
+			if saved != nil {
+				require.NoError(t, config.WriteSidecars(operations.deployment, sidecar.Document{
+					Version: 1, Sidecars: map[string]sidecar.Definition{"example": *saved},
+				}))
+			}
+			// When
+			result, err := operations.enable(t.Context(), "example")
+			// Then
+			require.NoError(t, err)
+			require.True(t, result.Enabled)
+			document, err := config.ReadSidecars(operations.deployment)
+			require.NoError(t, err)
+			require.Equal(t, new(true), document.Sidecars["example"].Enabled)
+			if saved != nil {
+				require.Equal(t, edited.Image, document.Sidecars["example"].Container.Image)
+			}
+		})
+	}
+}
+
+func TestSidecarReenableUsesTheDisabledDefinition(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, selected := newSidecarOperationsFixture(t)
+	_, err := operations.enable(t.Context(), "example")
+	require.NoError(t, err)
+	document, err := config.ReadSidecars(operations.deployment)
+	require.NoError(t, err)
+	edited := document.Sidecars["example"]
+	edited.Container.Args = []string{"edited"}
+	document.Sidecars["example"] = edited
+	require.NoError(t, config.WriteSidecars(operations.deployment, document))
+	// When
+	disabled, disableErr := operations.disable(t.Context(), "example")
+	stopped := selected.exampleContainer()
+	enabled, enableErr := operations.enable(t.Context(), "example")
+	// Then
+	require.NoError(t, disableErr)
+	require.False(t, disabled.Enabled)
+	require.Nil(t, stopped)
+	require.NoError(t, enableErr)
+	require.True(t, enabled.Running)
+	require.Equal(t, sidecarReconciliationComplete, enabled.Reconciliation)
+	document, err = config.ReadSidecars(operations.deployment)
+	require.NoError(t, err)
+	require.Equal(t, []string{"edited"}, document.Sidecars["example"].Container.Args)
+}
+
+func TestSidecarDisableAlreadyDisabledIsNoOp(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, runtime := newSidecarOperationsFixture(t)
+	_, err := operations.enable(t.Context(), "example")
+	require.NoError(t, err)
+	_, err = operations.disable(t.Context(), "example")
+	require.NoError(t, err)
+	removals := len(runtime.removals())
+	// When
+	result, err := operations.disable(t.Context(), "example")
+	// Then
+	require.NoError(t, err)
+	require.True(t, result.NothingToRemove)
+	require.False(t, result.Enabled)
+	require.Len(t, runtime.removals(), removals)
+	requireSavedDisabled(t, operations.deployment, "example")
+}
+
+func TestSidecarReconciliationRemovesDisabledSidecar(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, selected := newSidecarOperationsFixture(t)
+	_, err := operations.enable(t.Context(), "example")
+	require.NoError(t, err)
+	document, err := config.ReadSidecars(operations.deployment)
+	require.NoError(t, err)
+	disabled := document.Sidecars["example"]
+	disabled.Enabled = new(false)
+	document.Sidecars["example"] = disabled
+	require.NoError(t, config.WriteSidecars(operations.deployment, document))
+	// When
+	err = reconcileForTest(t.Context(), operations, false)
+	// Then
+	require.NoError(t, err)
+	require.Empty(t, selected.containers.Sidecars())
+	requireSavedDisabled(t, operations.deployment, "example")
 }
 
 func TestSidecarDisableAlreadyAbsentIsNoOp(t *testing.T) {
