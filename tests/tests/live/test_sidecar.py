@@ -9,6 +9,7 @@ import sys
 import time
 from collections.abc import Iterator
 from subprocess import CalledProcessError
+from typing import Any
 
 import pytest
 import yaml
@@ -429,6 +430,89 @@ def test_sidecar_process_restart_policy(
         assert observed["State"]["ExitCode"] == exit_code
         time.sleep(2)
         assert not service.inspect()["State"]["Running"]
+
+
+def _save_probe(service: SidecarDeployment, probe: dict[str, Any]) -> None:
+    definition = service.definition()
+    definition["readinessProbe"] = probe
+    service.save(definition)
+
+
+def _status_until(
+    service: SidecarDeployment, health: str, *, timeout: float = 60
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    while True:
+        status = service.sidecar("status")
+        if status["health"] == health or time.monotonic() >= deadline:
+            return status
+        time.sleep(1)
+
+
+def test_sidecar_health_serving(service: SidecarDeployment) -> None:
+    # Given
+    _save_probe(service, {"httpGet": {"port": "http", "path": "/"}})
+    service.sidecar("enable")
+    # When
+    status = _status_until(service, "serving")
+    text = service.deployment.launcher.run_command(
+        "sidecar", str(service.directory), "status", "caddy", capture_output=True
+    ).stdout
+    # Then
+    assert status["health"] == "serving"
+    assert "healthError" not in status
+    assert "Health: serving" in text
+
+
+def test_sidecar_health_starting(service: SidecarDeployment) -> None:
+    # Given
+    _save_probe(service, {"exec": {"command": ["false"]}, "periodSeconds": 600})
+    service.sidecar("enable")
+    # When
+    status = service.sidecar("status")
+    # Then
+    assert status["health"] == "starting"
+    assert status["healthError"]
+
+
+def test_sidecar_health_failing(service: SidecarDeployment) -> None:
+    # Given
+    _save_probe(
+        service,
+        {"exec": {"command": ["false"]}, "periodSeconds": 1, "failureThreshold": 1},
+    )
+    service.sidecar("enable")
+    # When
+    status = _status_until(service, "failing", timeout=30)
+    # Then
+    assert status["health"] == "failing"
+    assert status["healthError"]
+    assert status["state"] == "running"
+    assert service.inspect()["State"]["Running"]
+
+
+def test_sidecar_without_probes_reports_no_health(service: SidecarDeployment) -> None:
+    # Given
+    service.sidecar("enable")
+    # When
+    status = service.sidecar("status")
+    # Then
+    assert status["running"]
+    assert status["health"] == ""
+    assert "healthError" not in status
+
+
+def test_sidecar_edited_probe_keeps_container(service: SidecarDeployment) -> None:
+    # Given
+    service.sidecar("enable")
+    original = service.inspect()["Id"]
+    # When
+    _save_probe(service, {"tcpSocket": {"port": 8080}})
+    status = _status_until(service, "serving")
+    # Then
+    assert status["health"] == "serving"
+    assert status["reconciliation"] == "complete"
+    assert service.inspect()["Id"] == original
 
 
 def test_sidecar_internal_port(service: SidecarDeployment) -> None:

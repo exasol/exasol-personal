@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/exasol/exasol-personal/assets/resources"
 	"github.com/exasol/exasol-personal/internal/config"
@@ -47,6 +48,8 @@ type SidecarResult struct {
 	State              string            `json:"state"`
 	Reconciliation     string            `json:"reconciliation"`
 	ExitCode           int               `json:"exitCode"`
+	Health             string            `json:"health"`
+	HealthError        string            `json:"healthError,omitempty"`
 	Error              string            `json:"error,omitempty"`
 	LastOperationError string            `json:"lastOperationError,omitempty"`
 	Endpoints          []SidecarEndpoint `json:"endpoints"`
@@ -511,6 +514,8 @@ func (sidecars *deploymentSidecars) describe(
 		result.State, result.ExitCode = observation.State, observation.ExitCode
 		if observation.Running {
 			result.Endpoints = observation.Endpoints
+			result.Health = observation.Health.State
+			result.HealthError = observation.Health.Failure
 		}
 	}
 	result.RestartRequired = inspection.RestartRequired
@@ -653,6 +658,7 @@ type SidecarObservation struct {
 	ExitCode  int
 	Matches   bool
 	Endpoints []SidecarEndpoint
+	Health    sidecarHealth
 }
 
 type SidecarInspection struct {
@@ -746,12 +752,15 @@ func (sidecars *deploymentSidecars) inspectSidecars(
 		return SidecarInspection{}, err
 	}
 	inspection.DatabaseRunning = status.Running
+	now := time.Now()
 	secrets, err := sidecarSecrets(sidecars.deployment)
 	if err != nil {
 		return SidecarInspection{}, err
 	}
 	for _, container := range containers {
-		observation, err := observeSidecar(manager, container, document, opened, secrets)
+		observation, err := observeSidecar(
+			ctx, manager, container, document, opened, secrets, now,
+		)
 		if err != nil {
 			return SidecarInspection{}, err
 		}
@@ -762,11 +771,13 @@ func (sidecars *deploymentSidecars) inspectSidecars(
 }
 
 func observeSidecar(
+	ctx context.Context,
 	manager *localinstall.SidecarRuntime,
 	container localinstall.ContainerListing,
 	document sidecar.Document,
 	opened []sidecar.PublishedPort,
 	secrets sidecar.Secrets,
+	now time.Time,
 ) (SidecarObservation, error) {
 	name := container.SidecarName()
 	observation := SidecarObservation{
@@ -784,6 +795,9 @@ func observeSidecar(
 	}
 	if !saved {
 		return observation, nil
+	}
+	if observation.Running {
+		observation.Health = probeSidecar(ctx, manager, container, definition.Container, now)
 	}
 	matches, err := manager.Matches(container, definition.Container, secrets)
 	observation.Matches = matches

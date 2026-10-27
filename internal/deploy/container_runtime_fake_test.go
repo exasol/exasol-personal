@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Answering the runtime's commands lets these tests drive the real driver,
@@ -30,6 +31,9 @@ type containerRuntimeFake struct {
 	lastEnv string
 	// A database that predates the per-deployment service network.
 	databaseOffNetwork bool
+	// Containers created from now on report having started this long ago.
+	age   time.Duration
+	execs [][]string
 }
 
 type fakeContainer struct {
@@ -39,6 +43,7 @@ type fakeContainer struct {
 	ports   []fakePort
 	running bool
 	env     string
+	started time.Time
 }
 
 func newContainerRuntimeFake(database string) *containerRuntimeFake {
@@ -68,6 +73,8 @@ func (fake *containerRuntimeFake) Run(
 		}
 	case "rm":
 		fake.removed = append(fake.removed, args[len(args)-1])
+	case "exec":
+		fake.execs = append(fake.execs, slices.Clone(args[1:]))
 	default:
 	}
 	if err := fake.failures[args[0]]; err != nil {
@@ -84,6 +91,8 @@ func (fake *containerRuntimeFake) Run(
 		return fake.network(stdout, args)
 	case "container":
 		return fake.inspect(stdout, args)
+	case "exec":
+		return nil
 	default:
 		return fmt.Errorf("unexpected container command: %q", command)
 	}
@@ -153,6 +162,14 @@ func (fake *containerRuntimeFake) LastEnvironment() string {
 	defer fake.mutex.Unlock()
 
 	return fake.lastEnv
+}
+
+// Execs reports the commands run inside containers, each led by its container.
+func (fake *containerRuntimeFake) Execs() [][]string {
+	fake.mutex.Lock()
+	defer fake.mutex.Unlock()
+
+	return slices.Clone(fake.execs)
 }
 
 func (fake *containerRuntimeFake) Fail(subcommand string, err error) {
@@ -264,6 +281,7 @@ func (fake *containerRuntimeFake) list(stdout io.Writer, args []string) error {
 		listings = append(listings, map[string]any{
 			"id": container.id, "names": []string{name}, "labels": container.labels,
 			"state": state, "ports": container.ports,
+			"startedAt": container.started.Unix(),
 		})
 	}
 
@@ -274,6 +292,7 @@ func (fake *containerRuntimeFake) create(args []string) error {
 	name := flagValue(args, "--name")
 	container := &fakeContainer{
 		name: name, id: name, labels: map[string]string{}, running: true, env: fake.lastEnv,
+		started: time.Now().Add(-fake.age),
 	}
 	for _, label := range flagValues(args, "--label") {
 		key, value, _ := strings.Cut(label, "=")

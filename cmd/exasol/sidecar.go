@@ -198,6 +198,12 @@ func formatSidecarResult(result deploy.SidecarResult) string {
 		"State: " + result.State,
 		"Reconciliation: " + result.Reconciliation,
 	}
+	if result.Health != "" {
+		lines = append(lines, "Health: "+result.Health)
+	}
+	if result.HealthError != "" {
+		lines = append(lines, "Probe failure: "+result.HealthError)
+	}
 	for _, endpoint := range result.Endpoints {
 		address := endpoint.URL
 		if address == "" {
