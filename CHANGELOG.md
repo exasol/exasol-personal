@@ -35,10 +35,15 @@ Notable user-facing changes to Exasol Personal are documented here.
   declared host port through the local runner's live forwarding. Cloud
   deployments report that sidecars are unsupported for their type. Status
   reports a complete URL for a published port that declares an application
-  protocol. The catalog includes the official Exasol MCP server for local
-  deployments with read-oriented query tools, reported by status as
-  `http://127.0.0.1:4896/mcp`. Examples: `exasol sidecar enable <name>` and
-  `exasol sidecar enable mcp`.
+  protocol. Containers accept a Kubernetes `readinessProbe` with an `exec`,
+  `httpGet`, or `tcpSocket` handler; status reports `health` as `starting`,
+  `serving`, or `failing` with the probe failure, and enable waits while a
+  sidecar starts unless `--no-wait` is given. The catalog includes the official
+  Exasol MCP server for local deployments with read-oriented query tools,
+  reported by status as
+  `http://127.0.0.1:4896/mcp` and serving once its `/health` probe succeeds.
+  Examples: `exasol sidecar enable <name>`, `exasol sidecar enable mcp`, and
+  `exasol sidecar enable mcp --no-wait`.
 
 - Added a **CLI reference** page to the user documentation, listing every command and option of the
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each

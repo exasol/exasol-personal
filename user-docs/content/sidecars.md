@@ -7,7 +7,7 @@ catalog names reported by your launcher:
 
 ```bash
 exasol sidecar list
-exasol sidecar enable <name>
+exasol sidecar enable <name> [--no-wait]
 exasol sidecar status [name]
 exasol sidecar disable <name> [--remove]
 ```
@@ -18,10 +18,11 @@ the architecture support of the machine you run it on. Against a deployment
 that cannot run sidecars, every entry reports `supported: false` and says why.
 `status` rejects a name that is neither saved, in the catalog, nor associated
 with an unresolved operation failure. JSON status includes `name`, `enabled`,
-`running`, `state`, `exitCode`, `restartRequired`, `endpoints`, and an `error`
-when available. Each endpoint carries `ip` and `port`, and a `url` when its
-port declares an application protocol.
-Status describes the container process, rather than application readiness.
+`running`, `state`, `exitCode`, `health`, `restartRequired`, `endpoints`, and
+`healthError` and `error` when available. Each endpoint carries `ip` and
+`port`, and a `url` when its port declares an application protocol. `state`
+describes the container process; `health` describes whether the service inside
+it is serving, as described in [Readiness and health](#readiness-and-health).
 Without a name, `status` reports every saved sidecar, enabled or disabled, and
 its JSON output is an array of those same entries.
 
@@ -134,6 +135,7 @@ Supported fields follow the Kubernetes Container shape:
 | `env` | `name`, literal `value`, or `valueFrom.secretKeyRef` |
 | `ports` | `name`, `containerPort`, `hostPort`, `hostIP`, `protocol: TCP` |
 | `restartPolicy` | `Always`, `OnFailure`, `Never` |
+| `readinessProbe` | See [Readiness and health](#readiness-and-health) |
 
 The default restart policy is `OnFailure`. Explicit stop and disable take
 precedence over process restart. Individual Container restart policies require
@@ -143,6 +145,53 @@ with Kubernetes.
 An untagged image or `latest` tag defaults to `Always`; other tags and digests
 default to `IfNotPresent`. Omitted command and arguments retain image defaults.
 Unsupported fields and invalid values produce an error with their location.
+
+## Readiness and health
+
+A container's `readinessProbe` tells the launcher how to check that its service
+works. The probe declares one handler:
+
+| Handler | Succeeds when |
+| --- | --- |
+| `exec.command` | The command, run inside the container, exits with status 0 |
+| `httpGet` with `port`, `path`, `scheme` | `GET` answers with a status from 200 through 399 |
+| `tcpSocket` with `port` | A TCP connection is accepted |
+
+An `httpGet` or `tcpSocket` port is a container port number or port name with
+a `hostPort`, because the launcher connects to its published loopback address.
+`path` defaults to `/` and `scheme` to `HTTP`; `HTTPS` skips certificate
+verification. An `exec` command can check any port from inside the container.
+
+```yaml
+      readinessProbe:
+        httpGet:
+          port: http
+          path: /health
+        periodSeconds: 10
+        failureThreshold: 6
+```
+
+The launcher runs the probe whenever status or enable inspects a running
+sidecar. `timeoutSeconds` (default 1) limits each attempt. Status reports the
+result as `health`:
+
+- `starting` until `initialDelaySeconds` (default 0) has passed since the
+  container started, and while the probe fails within its startup window of
+  `initialDelaySeconds + periodSeconds × failureThreshold` (`periodSeconds`
+  defaults to 10 and `failureThreshold` to 3).
+- `serving` when the probe succeeds.
+- `failing` when the probe fails after its startup window.
+
+`healthError` reports the cause of the latest probe failure. `health` is empty
+for a stopped sidecar or one without a probe. A failing probe leaves the
+container running; `restartPolicy` governs process exit. Editing the probe
+applies on the next status and keeps the container.
+
+`exasol sidecar enable` waits while a sidecar is `starting`, up to its probe's
+startup window, then reports the result. A sidecar that is still starting or
+failing gets a call to action to check `exasol sidecar status <name>`. Use
+`--no-wait` to return as soon as the container runs. The MCP catalog entry
+declares a readiness probe on its `/health` path.
 
 ## Database connection values
 
