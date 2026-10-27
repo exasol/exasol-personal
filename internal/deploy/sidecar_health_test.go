@@ -4,6 +4,7 @@
 package deploy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -224,4 +226,101 @@ func TestSidecarEditedProbeNeedsNoRecreation(t *testing.T) {
 	require.Equal(t, sidecarReconciliationComplete, result.Reconciliation)
 	recreated, _ := selected.containers.Calls()
 	require.Equal(t, created, recreated)
+}
+
+// waitingFixture enables a sidecar whose exec readiness probe fails.
+func waitingFixture(
+	t *testing.T, port int, probe string,
+) (*deploymentSidecars, *sidecarRuntimeStub, SidecarResult) {
+	t.Helper()
+	operations, selected := newSidecarOperationsFixture(t)
+	operations.templates = probedCatalog(t, port, probe)
+	selected.containers.Fail("exec", errors.New("not ready"))
+	result, err := operations.enable(t.Context(), "example")
+	require.NoError(t, err)
+	require.Equal(t, sidecarHealthStarting, result.Health)
+
+	return operations, selected, result
+}
+
+func TestSidecarEnableWaitsUntilServing(t *testing.T) {
+	t.Parallel()
+	port := closedPort(t)
+	synctest.Test(t, func(t *testing.T) {
+		// Given
+		started := time.Now()
+		operations, selected, first := waitingFixture(t, port,
+			"      readinessProbe: {exec: {command: [check]}}\n")
+		go func() {
+			time.Sleep(3500 * time.Millisecond)
+			selected.containers.Fail("exec", nil)
+		}()
+		// When
+		result, err := operations.awaitHealth(t.Context(), "example", first)
+		// Then
+		require.NoError(t, err)
+		require.Equal(t, sidecarHealthServing, result.Health)
+		require.Equal(t, 4*time.Second, time.Since(started))
+	})
+}
+
+func TestSidecarEnableReportsFailingAfterTheProbeWindow(t *testing.T) {
+	t.Parallel()
+	port := closedPort(t)
+	synctest.Test(t, func(t *testing.T) {
+		// Given
+		started := time.Now()
+		operations, _, first := waitingFixture(t, port,
+			"      readinessProbe: {exec: {command: [check]}, periodSeconds: 2}\n")
+		// When
+		result, err := operations.awaitHealth(t.Context(), "example", first)
+		// Then
+		require.NoError(t, err)
+		require.Equal(t, sidecarHealthFailing, result.Health)
+		require.Equal(t, "not ready", result.HealthError)
+		require.Equal(t, 6*time.Second, time.Since(started))
+	})
+}
+
+func TestSidecarEnableWaitEndsWhileRestartsKeepItStarting(t *testing.T) {
+	t.Parallel()
+	port := closedPort(t)
+	synctest.Test(t, func(t *testing.T) {
+		// Given
+		started := time.Now()
+		operations, selected, first := waitingFixture(t, port,
+			"      readinessProbe: {exec: {command: [check]}, periodSeconds: 2}\n")
+		done := make(chan struct{})
+		// Restarts fall between polls, so every poll sees a fresh container.
+		go func() {
+			for wait := 500 * time.Millisecond; ; wait = time.Second {
+				select {
+				case <-done:
+					return
+				case <-time.After(wait):
+					selected.containers.Restart()
+				}
+			}
+		}()
+		// When
+		result, err := operations.awaitHealth(t.Context(), "example", first)
+		close(done)
+		// Then
+		require.NoError(t, err)
+		require.Equal(t, sidecarHealthStarting, result.Health)
+		require.Equal(t, 6*time.Second, time.Since(started))
+	})
+}
+
+func TestSidecarEnableWaitStopsWhenCancelled(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, _, first := waitingFixture(t, closedPort(t),
+		"      readinessProbe: {exec: {command: [check]}}\n")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	// When
+	_, err := operations.awaitHealth(ctx, "example", first)
+	// Then
+	require.ErrorIs(t, err, context.Canceled)
 }

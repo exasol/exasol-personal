@@ -44,9 +44,7 @@ func newSidecarCommand(flags *CommonFlags) *cobra.Command {
 			return nil
 		},
 	}
-	enable := newSidecarActionCommand(
-		flags, "enable", "Enable a catalog sidecar", deploy.EnableSidecar,
-	)
+	enable := newSidecarEnableCommand(flags)
 	status := newSidecarStatusCommand(flags)
 	disable := newSidecarDisableCommand(flags)
 	for _, child := range []*cobra.Command{list, enable, status, disable} {
@@ -63,6 +61,48 @@ func newSidecarCommand(flags *CommonFlags) *cobra.Command {
 	}
 
 	return command
+}
+
+func newSidecarEnableCommand(flags *CommonFlags) *cobra.Command {
+	var noWait bool
+	command := newSidecarActionCommand(
+		flags,
+		"enable",
+		"Enable a catalog sidecar and wait until it serves",
+		func(
+			ctx context.Context, deployment config.DeploymentDir, name string,
+		) (deploy.SidecarResult, error) {
+			result, err := deploy.EnableSidecar(ctx, deployment, name, !noWait)
+			if err == nil {
+				addSidecarHealthCallToAction(result)
+			}
+
+			return result, err
+		},
+	)
+	command.Flags().BoolVar(
+		&noWait, "no-wait", false,
+		"Return without waiting for a starting sidecar to serve",
+	)
+
+	return command
+}
+
+const (
+	sidecarStartingGuidance = "Sidecar %[1]s is still starting. " +
+		"Run `exasol sidecar status %[1]s` to check whether it is serving."
+	sidecarFailingGuidance = "Sidecar %[1]s is not serving. Address the probe failure, " +
+		"then run `exasol sidecar status %[1]s` to check it again."
+)
+
+func addSidecarHealthCallToAction(result deploy.SidecarResult) {
+	switch result.Health {
+	case "starting":
+		addTerminalCallToAction(fmt.Sprintf(sidecarStartingGuidance, result.Name))
+	case "failing":
+		addTerminalCallToAction(fmt.Sprintf(sidecarFailingGuidance, result.Name))
+	default:
+	}
 }
 
 func newSidecarDisableCommand(flags *CommonFlags) *cobra.Command {

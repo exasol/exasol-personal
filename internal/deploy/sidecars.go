@@ -155,15 +155,17 @@ func catalogAvailability(
 	return result, nil
 }
 
+// EnableSidecar with wait reports the sidecar once it is no longer starting,
+// or once its probes' window has passed.
 func EnableSidecar(
-	ctx context.Context, deployment config.DeploymentDir, name string,
+	ctx context.Context, deployment config.DeploymentDir, name string, wait bool,
 ) (SidecarResult, error) {
-	return enableSidecarTemplate(ctx, deployment, nil, name)
+	return enableSidecarTemplate(ctx, deployment, nil, name, wait)
 }
 
 func enableSidecarTemplate(
 	ctx context.Context, deployment config.DeploymentDir, templates sidecar.Resolver,
-	name string,
+	name string, wait bool,
 ) (SidecarResult, error) {
 	// Templates first, so a command can enable what the catalog does not carry.
 	return withSidecar(
@@ -171,7 +173,12 @@ func enableSidecarTemplate(
 		deployment,
 		templates,
 		func(sidecars *deploymentSidecars) (SidecarResult, error) {
-			return sidecars.enable(ctx, name)
+			result, err := sidecars.enable(ctx, name)
+			if err != nil || !wait {
+				return result, err
+			}
+
+			return sidecars.awaitHealth(ctx, name, result)
 		},
 	)
 }

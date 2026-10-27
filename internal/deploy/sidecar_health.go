@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/sidecar"
 )
@@ -51,6 +52,48 @@ func probeSidecar(
 		return sidecarHealth{State: sidecarHealthStarting, Failure: err.Error()}
 	default:
 		return sidecarHealth{State: sidecarHealthFailing, Failure: err.Error()}
+	}
+}
+
+const sidecarHealthPollInterval = time.Second
+
+// The deadline runs from the first evaluation rather than the container start,
+// so a sidecar that keeps restarting cannot extend the wait.
+func (sidecars *deploymentSidecars) awaitHealth(
+	ctx context.Context, name string, result SidecarResult,
+) (SidecarResult, error) {
+	if result.Health != sidecarHealthStarting {
+		return result, nil
+	}
+	document, err := config.ReadSidecars(sidecars.deployment)
+	if err != nil {
+		return result, err
+	}
+	probe := document.Sidecars[name].Container.Defaults().ReadinessProbe
+	if probe == nil {
+		return result, nil
+	}
+	deadline := time.Now().Add(seconds(probe.Window()))
+	for result.Health == sidecarHealthStarting && time.Now().Before(deadline) {
+		if err := pause(ctx, sidecarHealthPollInterval); err != nil {
+			return result, err
+		}
+		if result, err = sidecars.status(ctx, name); err != nil {
+			return result, err
+		}
+	}
+
+	return result, nil
+}
+
+func pause(ctx context.Context, duration time.Duration) error {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 

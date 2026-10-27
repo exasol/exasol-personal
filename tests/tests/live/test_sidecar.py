@@ -467,7 +467,7 @@ def test_sidecar_health_serving(service: SidecarDeployment) -> None:
 def test_sidecar_health_starting(service: SidecarDeployment) -> None:
     # Given
     _save_probe(service, {"exec": {"command": ["false"]}, "periodSeconds": 600})
-    service.sidecar("enable")
+    service.sidecar("enable", "--no-wait")
     # When
     status = service.sidecar("status")
     # Then
@@ -513,6 +513,64 @@ def test_sidecar_edited_probe_keeps_container(service: SidecarDeployment) -> Non
     assert status["health"] == "serving"
     assert status["reconciliation"] == "complete"
     assert service.inspect()["Id"] == original
+
+
+def _enable_text(service: SidecarDeployment, *args: str) -> str:
+    return str(
+        service.deployment.launcher.run_command(
+            "sidecar",
+            str(service.directory),
+            "enable",
+            "caddy",
+            *args,
+            capture_output=True,
+        ).stderr
+    )
+
+
+def test_sidecar_enable_returns_once_serving(service: SidecarDeployment) -> None:
+    # Given
+    _save_probe(service, {"httpGet": {"port": "http"}, "initialDelaySeconds": 5})
+    # When
+    enabled = service.sidecar("enable")
+    # Then
+    assert enabled["health"] == "serving"
+
+
+def test_sidecar_enable_reports_never_serving(service: SidecarDeployment) -> None:
+    # Given
+    window = 3
+    _save_probe(
+        service,
+        {
+            "exec": {"command": ["false"]},
+            "periodSeconds": 1,
+            "failureThreshold": window,
+        },
+    )
+    # When
+    started = time.monotonic()
+    enabled = service.sidecar("enable")
+    waited = time.monotonic() - started
+    guidance = _enable_text(service)
+    # Then
+    assert enabled["health"] == "failing"
+    assert enabled["healthError"]
+    # The container starts before enable first evaluates it.
+    assert waited >= window - 1
+    assert "exasol sidecar status caddy" in guidance
+
+
+def test_sidecar_enable_no_wait_reports_starting(service: SidecarDeployment) -> None:
+    # Given
+    _save_probe(service, {"exec": {"command": ["false"]}, "periodSeconds": 600})
+    # When
+    enabled = service.sidecar("enable", "--no-wait")
+    guidance = _enable_text(service, "--no-wait")
+    # Then
+    assert enabled["health"] == "starting"
+    assert "Sidecar caddy is still starting" in guidance
+    assert "exasol sidecar status caddy" in guidance
 
 
 def test_sidecar_internal_port(service: SidecarDeployment) -> None:
