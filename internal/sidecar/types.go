@@ -56,8 +56,14 @@ type Entry struct {
 // Definition is what the catalog offers and what enabling saves, so both files
 // describe a sidecar the same way.
 type Definition struct {
+	// Absent counts as enabled, so a hand-written entry runs without it.
+	Enabled   *bool      `yaml:"enabled,omitempty"`
 	Container Container  `yaml:"container"`
 	Endpoints []Endpoint `yaml:"endpoints,omitempty"`
+}
+
+func (definition Definition) IsEnabled() bool {
+	return definition.Enabled == nil || *definition.Enabled
 }
 
 // Endpoint supplies the scheme and path a container port does not carry, so
@@ -153,10 +159,13 @@ func (document Document) Names() []string {
 	return slices.Sorted(maps.Keys(document.Sidecars))
 }
 
+// Containers lists the enabled sidecars, which are the ones that should run.
 func (document Document) Containers() []Container {
 	containers := make([]Container, 0, len(document.Sidecars))
 	for _, name := range document.Names() {
-		containers = append(containers, document.Sidecars[name].Container)
+		if definition := document.Sidecars[name]; definition.IsEnabled() {
+			containers = append(containers, definition.Container)
+		}
 	}
 
 	return containers
@@ -170,6 +179,10 @@ func (entry Entry) Clone() Entry {
 }
 
 func (definition Definition) Clone() Definition {
+	if definition.Enabled != nil {
+		enabled := *definition.Enabled
+		definition.Enabled = &enabled
+	}
 	definition.Container = definition.Container.Clone()
 	definition.Endpoints = slices.Clone(definition.Endpoints)
 

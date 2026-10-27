@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from subprocess import CalledProcessError
 
 import pytest
+import yaml
 
 from framework.deployment import DeploymentManager, StatusDatabaseReady
 from framework.sidecars import (
@@ -253,6 +254,66 @@ def test_sidecar_disable_idempotent(service: SidecarDeployment) -> None:
     assert not second["running"]
     assert service.inspect(service.database)["Id"] == database
     assert "42" in service.sql("SELECT N FROM SIDECAR_TEST.T;")
+
+
+def _owned_containers(service: SidecarDeployment) -> list[object]:
+    return list(
+        json.loads(
+            service.podman(
+                "ps", "-a", "--filter", f"name={service.container}", "--format", "json"
+            )
+        )
+    )
+
+
+def _saved_entry(service: SidecarDeployment) -> dict[str, object]:
+    path = service.directory / "sidecars.yaml"
+    return dict(yaml.safe_load(path.read_text(encoding="utf-8"))["sidecars"]["caddy"])
+
+
+def test_sidecar_reenable_restores_edited_definition(
+    service: SidecarDeployment,
+) -> None:
+    # Given
+    service.sidecar("enable")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        edited_port = int(probe.getsockname()[1])
+    definition = service.definition()
+    definition["ports"][0]["hostPort"] = edited_port
+    service.save(definition)
+    # When
+    disabled = service.sidecar("disable")
+    remaining = _owned_containers(service)
+    saved = _saved_entry(service)
+    enabled = service.sidecar("enable")
+    # Then
+    assert not disabled["running"]
+    assert remaining == []
+    assert saved["enabled"] is False
+    assert saved["container"]["ports"][0]["hostPort"] == edited_port  # type: ignore[index]
+    assert enabled["endpoints"] == [{"ip": "127.0.0.1", "port": edited_port}]
+    assert service.response().endswith("|initial-marker")
+
+
+def test_sidecar_start_removes_disabled_definition(service: SidecarDeployment) -> None:
+    # Given
+    service.sidecar("enable")
+    path = service.directory / "sidecars.yaml"
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    document["sidecars"]["caddy"]["enabled"] = False
+    path.write_text(yaml.safe_dump(document), encoding="utf-8")
+    # When
+    service.deployment.start()
+    status = service.sidecar("status")
+    # Then
+    assert not status["enabled"]
+    assert not status["running"]
+    assert status["reconciliation"] == "complete"
+    assert _owned_containers(service) == []
+    assert "container" in _saved_entry(service)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 18080))
 
 
 def test_sidecar_status_lifecycle(service: SidecarDeployment) -> None:

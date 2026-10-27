@@ -46,17 +46,8 @@ func NewCatalog(entries map[string]Entry) (*Catalog, error) {
 			return nil, err
 		}
 		entry.Definition = definition
-		if strings.TrimSpace(entry.Description) == "" || len(entry.Architectures) == 0 {
-			return nil, fmt.Errorf("%s: description and architectures are required", location)
-		}
-		for _, arch := range entry.Architectures {
-			if arch != "amd64" && arch != "arm64" {
-				return nil, fmt.Errorf(
-					"%s.architectures: unsupported architecture %q",
-					location,
-					arch,
-				)
-			}
+		if err := entry.validateMetadata(location); err != nil {
+			return nil, err
 		}
 		if err := entry.validate(name); err != nil {
 			return nil, err
@@ -66,6 +57,22 @@ func NewCatalog(entries map[string]Entry) (*Catalog, error) {
 	}
 
 	return &catalog, nil
+}
+
+func (entry Entry) validateMetadata(location string) error {
+	if entry.Enabled != nil {
+		return fmt.Errorf("%s.enabled: only a deployment's saved entry is enabled", location)
+	}
+	if strings.TrimSpace(entry.Description) == "" || len(entry.Architectures) == 0 {
+		return fmt.Errorf("%s: description and architectures are required", location)
+	}
+	for _, arch := range entry.Architectures {
+		if arch != "amd64" && arch != "arm64" {
+			return fmt.Errorf("%s.architectures: unsupported architecture %q", location, arch)
+		}
+	}
+
+	return nil
 }
 
 func (catalog *Catalog) Entries() map[string]Entry { return catalog.Sidecars }

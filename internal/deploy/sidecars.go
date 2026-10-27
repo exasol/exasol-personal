@@ -145,7 +145,7 @@ func catalogAvailability(
 			Description:   entry.Description,
 			Architectures: slices.Clone(entry.Architectures),
 			Supported:     slices.Contains(entry.Architectures, architecture),
-			Enabled:       containsSidecar(document, name),
+			Enabled:       enabledSidecar(document, name),
 		})
 	}
 
@@ -303,7 +303,8 @@ func (sidecars *deploymentSidecars) enable(
 	if err != nil {
 		return SidecarResult{}, err
 	}
-	if !containsSidecar(document, name) {
+	definition, saved := document.Sidecars[name]
+	if !saved {
 		catalog, err := sidecarCatalog(sidecars.templates)
 		if err != nil {
 			return SidecarResult{}, err
@@ -312,7 +313,11 @@ func (sidecars *deploymentSidecars) enable(
 		if err != nil {
 			return SidecarResult{}, err
 		}
-		document.Sidecars[name] = entry.Definition
+		definition = entry.Definition
+	}
+	if definition.Enabled == nil || !*definition.Enabled {
+		definition.Enabled = new(true)
+		document.Sidecars[name] = definition
 		if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
 			return SidecarResult{}, err
 		}
@@ -332,7 +337,7 @@ func (sidecars *deploymentSidecars) disable(
 	if err != nil {
 		return SidecarResult{}, err
 	}
-	if !containsSidecar(document, name) {
+	if !enabledSidecar(document, name) {
 		failures, err := config.ReadSidecarState(sidecars.deployment)
 		if err != nil {
 			return SidecarResult{}, err
@@ -344,7 +349,10 @@ func (sidecars *deploymentSidecars) disable(
 			}, nil
 		}
 	}
-	delete(document.Sidecars, name)
+	if definition, saved := document.Sidecars[name]; saved {
+		definition.Enabled = new(false)
+		document.Sidecars[name] = definition
+	}
 	if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
 		return SidecarResult{}, err
 	}
@@ -447,7 +455,7 @@ func (sidecars *deploymentSidecars) status(
 	if err != nil {
 		return result, err
 	}
-	result.Enabled = containsSidecar(document, name)
+	result.Enabled = enabledSidecar(document, name)
 	failures, err := config.ReadSidecarState(sidecars.deployment)
 	if err != nil {
 		return result, err
@@ -503,8 +511,8 @@ func reconciliation(
 	databaseRunning bool,
 ) string {
 	// Reconciled once nothing of an unwanted sidecar remains.
-	definition, wanted := document.Sidecars[name]
-	if !wanted || !databaseRunning {
+	definition := document.Sidecars[name]
+	if !enabledSidecar(document, name) || !databaseRunning {
 		if len(observed) == 0 && len(result.Endpoints) == 0 {
 			return sidecarReconciliationComplete
 		}
@@ -602,6 +610,12 @@ func containsSidecar(document sidecar.Document, name string) bool {
 	_, saved := document.Sidecars[name]
 
 	return saved
+}
+
+func enabledSidecar(document sidecar.Document, name string) bool {
+	definition, saved := document.Sidecars[name]
+
+	return saved && definition.IsEnabled()
 }
 
 // Status keeps the full account; the command prints only the short cause.
@@ -1026,13 +1040,13 @@ func (sidecars *deploymentSidecars) recordDefinitionFailures(
 	document sidecar.Document,
 	failure error,
 ) (map[string]error, error) {
-	names := document.Names()
-	if len(names) == 0 {
+	desired := document.Containers()
+	if len(desired) == 0 {
 		return nil, failure
 	}
-	perSidecar := make(map[string]error, len(names))
-	for _, name := range names {
-		perSidecar[name] = failure
+	perSidecar := make(map[string]error, len(desired))
+	for _, container := range desired {
+		perSidecar[container.Name] = failure
 	}
 
 	return perSidecar, sidecars.recordFailures(perSidecar)

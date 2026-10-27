@@ -75,6 +75,10 @@ func TestCatalogRejectsInvalidMetadata(t *testing.T) {
 		{"mismatch", "image:", "name: another\n      image:", "container.name"},
 		{"architecture", "[amd64, arm64]", "[s390x]", "architectures"},
 		{"description", "Example service", "''", "sidecars.example"},
+		{
+			"enabled", "    container:", "    enabled: true\n    container:",
+			"sidecars.example.enabled",
+		},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			t.Parallel()
@@ -420,6 +424,31 @@ func TestSavedDocumentCarriesEndpointDeclarations(t *testing.T) {
 		[]sidecar.Endpoint{{Port: "api", Scheme: "http"}},
 		document.Sidecars["example"].Endpoints,
 	)
+}
+
+func TestSavedDocumentCarriesEnabledState(t *testing.T) {
+	t.Parallel()
+	for _, fixture := range []struct {
+		name, field string
+		enabled     bool
+	}{
+		{"disabled", "    enabled: false\n", false},
+		{"enabled", "    enabled: true\n", true},
+		{"field-less", "", true},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			// Given
+			data := []byte("version: 1\nsidecars:\n  example:\n" + fixture.field +
+				"    container:\n      image: caddy:2\n")
+			// When
+			document, err := sidecar.Parse(data)
+			// Then
+			require.NoError(t, err)
+			require.Equal(t, fixture.enabled, document.Sidecars["example"].IsEnabled())
+			require.Len(t, document.Containers(), map[bool]int{true: 1, false: 0}[fixture.enabled])
+		})
+	}
 }
 
 func TestSavedDocumentWithoutEndpointDeclarations(t *testing.T) {

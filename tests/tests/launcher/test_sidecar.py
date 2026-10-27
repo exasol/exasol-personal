@@ -6,6 +6,7 @@ from pathlib import Path
 from subprocess import CalledProcessError
 
 import pytest
+import yaml
 
 from .helpers import run_command
 
@@ -86,6 +87,9 @@ def test_sidecar_saved_definition_commands(
     assert not disabled["running"]
     assert repeated["nothingToRemove"] is True
     assert not repeated["enabled"]
+    saved = yaml.safe_load(definition.read_text(encoding="utf-8"))["sidecars"]
+    assert saved["saved"]["enabled"] is False
+    assert saved["saved"]["container"]["image"] == "caddy:2"
     log = (sidecar_directory / "deployment.log").read_text(encoding="utf-8")
     for operation in ["enable", "status", "disable"]:
         assert f"command={operation}" in log
@@ -119,3 +123,52 @@ def test_sidecar_status_without_a_name_reports_every_enabled_sidecar(
     # Then
     assert [entry["name"] for entry in reported] == ["first", "second"]
     assert all(entry["enabled"] for entry in reported)
+
+
+def _reported_enablement(
+    exasol_path: str, directory: Path
+) -> tuple[bool, bool, list[str]]:
+    selection = ["--deployment-dir", str(directory), "--json"]
+    listed = json.loads(
+        run_command([exasol_path, "sidecar", "list", *selection]).stdout
+    )
+    status = json.loads(
+        run_command([exasol_path, "sidecar", "status", "mcp", *selection]).stdout
+    )
+    every = json.loads(
+        run_command([exasol_path, "sidecar", "status", *selection]).stdout
+    )
+    mcp = next(entry for entry in listed if entry["name"] == "mcp")
+    return mcp["enabled"], status["enabled"], [entry["name"] for entry in every]
+
+
+def test_sidecar_entry_without_enabled_field_is_enabled(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    (sidecar_directory / "sidecars.yaml").write_text(
+        "version: 1\nsidecars:\n  mcp:\n    container:\n      image: caddy:2\n",
+        encoding="utf-8",
+    )
+    # When
+    listed, status, _ = _reported_enablement(exasol_path, sidecar_directory)
+    # Then
+    assert listed is True
+    assert status is True
+
+
+def test_sidecar_disabled_entry_reports_disabled(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    (sidecar_directory / "sidecars.yaml").write_text(
+        "version: 1\nsidecars:\n"
+        "  mcp:\n    enabled: false\n    container:\n      image: caddy:2\n",
+        encoding="utf-8",
+    )
+    # When
+    listed, status, every = _reported_enablement(exasol_path, sidecar_directory)
+    # Then
+    assert listed is False
+    assert status is False
+    assert every == ["mcp"]
