@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -74,6 +75,12 @@ func (runtime podmanRuntime) CopyFrom(
 	ctx context.Context, container, path, destination string, out, outErr io.Writer,
 ) error {
 	return runtime.run(ctx, out, outErr, "cp", container+":"+path, destination)
+}
+
+func (runtime podmanRuntime) Exec(
+	ctx context.Context, container string, command []string, out, outErr io.Writer,
+) error {
+	return runtime.run(ctx, out, outErr, append([]string{"exec", container}, command...)...)
 }
 
 func (runtime podmanRuntime) List(
@@ -480,6 +487,8 @@ type podmanListing struct {
 	State    string            `json:"state"`
 	ExitCode int               `json:"exitCode"`
 	Ports    []podmanPort      `json:"ports"`
+	// Unix seconds; zero for a container that never started.
+	StartedAt int64 `json:"startedAt"`
 }
 
 //nolint:tagliatelle // Podman's container-list schema uses snake_case.
@@ -528,7 +537,7 @@ func (listing podmanListing) container() ContainerListing {
 		ports = append(ports, ContainerPort(port))
 	}
 
-	return ContainerListing{
+	container := ContainerListing{
 		ID:       listing.ID,
 		Names:    listing.Names,
 		Labels:   listing.Labels,
@@ -536,6 +545,11 @@ func (listing podmanListing) container() ContainerListing {
 		ExitCode: listing.ExitCode,
 		Ports:    ports,
 	}
+	if listing.StartedAt > 0 {
+		container.StartedAt = time.Unix(listing.StartedAt, 0)
+	}
+
+	return container
 }
 
 func (network podmanNetwork) network() ContainerNetwork {

@@ -201,6 +201,53 @@ func TestSidecarTextPrefersTheEndpointURL(t *testing.T) {
 	require.NotContains(t, text, "Endpoint: 127.0.0.1:4896\n")
 }
 
+func TestSidecarTextReportsHealth(t *testing.T) {
+	t.Parallel()
+	for _, fixture := range []struct {
+		name   string
+		result deploy.SidecarResult
+		want   []string
+		absent []string
+	}{
+		{
+			"failing",
+			deploy.SidecarResult{
+				Name: "mcp", State: "running", Health: "failing",
+				HealthError: "connection refused",
+			},
+			[]string{"Health: failing", "Probe failure: connection refused"},
+			nil,
+		},
+		{
+			"serving",
+			deploy.SidecarResult{Name: "mcp", State: "running", Health: "serving"},
+			[]string{"Health: serving"},
+			[]string{"Probe failure"},
+		},
+		{
+			"without probes",
+			deploy.SidecarResult{Name: "mcp", State: "running"},
+			nil,
+			[]string{"Health", "Probe failure"},
+		},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			// Given
+			result := fixture.result
+			// When
+			text := formatSidecarResult(result)
+			// Then
+			for _, want := range fixture.want {
+				require.Contains(t, text, want)
+			}
+			for _, absent := range fixture.absent {
+				require.NotContains(t, text, absent)
+			}
+		})
+	}
+}
+
 func TestSidecarTextReportsNothingToRemove(t *testing.T) {
 	t.Parallel()
 	// Given

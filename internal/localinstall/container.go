@@ -6,6 +6,7 @@ package localinstall
 import (
 	"context"
 	"io"
+	"time"
 )
 
 // ContainerRuntime holds every container operation the launcher performs, so
@@ -18,6 +19,7 @@ type ContainerRuntime interface {
 	Stop(ctx context.Context, name string, out, outErr io.Writer) error
 	Rename(ctx context.Context, from, to string, out, outErr io.Writer) error
 	CopyFrom(ctx context.Context, container, path, destination string, out, outErr io.Writer) error
+	Exec(ctx context.Context, container string, command []string, out, outErr io.Writer) error
 	List(ctx context.Context, outErr io.Writer, filters ...ContainerFilter) (
 		[]ContainerListing, error,
 	)
@@ -51,12 +53,13 @@ type ContainerFilter struct {
 }
 
 type ContainerListing struct {
-	ID       string
-	Names    []string
-	Labels   map[string]string
-	State    string
-	ExitCode int
-	Ports    []ContainerPort
+	ID        string
+	Names     []string
+	Labels    map[string]string
+	State     string
+	ExitCode  int
+	Ports     []ContainerPort
+	StartedAt time.Time
 }
 
 func (container ContainerListing) Running() bool { return container.State == "running" }

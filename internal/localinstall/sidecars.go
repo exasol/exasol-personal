@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os/exec"
 	"regexp"
 	"slices"
 
@@ -133,6 +134,17 @@ func (runtime *SidecarRuntime) Ensure(
 	}
 
 	return nil
+}
+
+func (runtime *SidecarRuntime) Exec(
+	ctx context.Context, container ContainerListing, command []string,
+) error {
+	err := runtime.client.Exec(ctx, container.ID, command, io.Discard, io.Discard)
+	if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
+		return fmt.Errorf("command exited with status %d", exitError.ExitCode())
+	}
+
+	return err
 }
 
 func (runtime *SidecarRuntime) Remove(ctx context.Context, name string) error {
