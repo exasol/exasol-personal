@@ -25,6 +25,18 @@ func TestStartupErrorNamesTheReportedCause(t *testing.T) {
 			"address already in use",
 		},
 		{
+			"docker run error precedes its help hint",
+			"docker: Error response from daemon: driver failed programming external " +
+				"connectivity: Bind for 127.0.0.1:8563 failed: port is already allocated\n\n" +
+				"Run 'docker run --help' for more information",
+			"port is already allocated",
+		},
+		{
+			"docker daemon error without the CLI prefix",
+			"Error response from daemon: network with name exasol-services already exists",
+			"already exists",
+		},
+		{
 			"no error prefix falls back to the last line",
 			"first line\nlast line",
 			"last line",

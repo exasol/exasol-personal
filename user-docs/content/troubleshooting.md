@@ -85,6 +85,34 @@ exasol start
 
 See [Run Exasol locally](local-deployment.md) for how the launcher selects and keeps the port.
 
+### `netavark: nftables error` on WSL
+
+A local deployment fails to start with:
+
+```text
+exit status 126: Error: netavark: nftables error: "nft" did not return successfully while applying ruleset
+```
+
+Older WSL kernels, including the one shipped with WSL 2.6, lack the nftables support that Podman
+needs to set up the deployment network.
+
+Update WSL from a Windows terminal, then run the command again:
+
+```bash
+wsl --update
+```
+
+If you cannot update WSL and run the Linux launcher inside a WSL distribution, install `iptables` in
+that distribution, switch Podman to it in `~/.config/containers/containers.conf`, and run the
+command again:
+
+```toml
+[network]
+firewall_driver = "iptables"
+```
+
+The setting applies to all of your Podman containers.
+
 ### Connection details differ from the last session
 
 Node addresses can change whenever a deployment restarts. Run `exasol info` to display the current

@@ -248,6 +248,7 @@ func restoreLocalStateAfterFailure(
 	// identify stays visible in deployment.log rather than only on stderr.
 	slog.Error("local operation failed; returning the deployment to a retryable state",
 		"operation", operation, "error", operationErr.Error())
+	logRuntimeOutput(operationErr)
 
 	if err := exasolState.SetWorkflowStateAndWrite(priorState, deployment); err != nil {
 		return errors.Join(
@@ -286,6 +287,7 @@ func restoreStateAfterUnavailableLocalPort(
 	if !ok {
 		return operationErr
 	}
+	logRuntimeOutput(operationErr)
 	if err := exasolState.SetWorkflowStateAndWrite(workflowState, deployment); err != nil {
 		return errors.Join(
 			operationErr,

@@ -61,9 +61,17 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol install local --tofu-update-lockfile` reports `unsupported deployment option: infrastructure preset "local" does not support --tofu-update-lockfile`.
 
+- Failed Podman commands now report Podman's own error alongside the exit status, without
+  `--verbose`, and a failed deployment records Podman's error output in `deployment.log`.
+
+  Example: `failed to start Nano container exasol-db-<id>: exit status 126: Error: netavark:
+  nftables error: "nft" did not return successfully while applying ruleset`.
+
 - New local database containers use a deployment-specific bridge network with
   the `database` DNS alias. Existing containers adopt it on their next explicit
-  `exasol stop` and `exasol start`.
+  `exasol stop` and `exasol start`. On older WSL kernels, including WSL 2.6,
+  Podman cannot set up this network; update WSL or see Troubleshooting for a
+  workaround.
 
 - `exasol shell host -- <command>` now runs a command directly on the deployment host while the
   command without arguments continues to open an interactive shell.
