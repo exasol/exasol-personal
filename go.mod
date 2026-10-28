@@ -7,11 +7,11 @@ require (
 	github.com/chzyer/readline v1.5.1
 	github.com/distribution/reference v0.6.0
 	github.com/exasol/exasol-driver-go v1.2.0
-	github.com/go-git/go-git/v5 v5.19.2
+	github.com/go-git/go-git/v5 v5.19.3
 	github.com/gobwas/glob v0.2.3
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/hcl/v2 v2.25.0
-	github.com/lmittmann/tint v1.2.0
+	github.com/lmittmann/tint v1.2.1
 	github.com/olekukonko/tablewriter v1.1.5
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/spf13/cobra v1.10.2
@@ -59,7 +59,7 @@ require (
 	github.com/go-git/go-billy/v5 v5.9.2 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.5 // indirect
 	github.com/go-test/deep v1.1.1 // indirect
-	github.com/goccy/go-json v0.10.6 // indirect
+	github.com/goccy/go-json v0.11.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-containerregistry v0.22.1 // indirect
@@ -70,13 +70,12 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/klauspost/compress v1.20.3 // indirect
-	github.com/klauspost/cpuid/v2 v2.4.1 // indirect
 	github.com/klauspost/pgzip v1.2.7 // indirect
 	github.com/mattn/go-colorable v0.1.16 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mattn/go-runewidth v0.0.31 // indirect
 	github.com/mattn/go-sqlite3 v1.14.52 // indirect
-	github.com/maxbrunsfeld/counterfeiter/v6 v6.13.0 // indirect
+	github.com/maxbrunsfeld/counterfeiter/v6 v6.14.0 // indirect
 	github.com/miekg/pkcs11 v1.1.2 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/moby/moby/client v0.6.2 // indirect
@@ -87,14 +86,14 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/olekukonko/cat v0.0.0-20250911104152-50322a0618f6 // indirect
 	github.com/olekukonko/errors v1.3.0 // indirect
-	github.com/olekukonko/ll v0.1.8 // indirect
+	github.com/olekukonko/ll v0.1.9 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/runtime-spec v1.3.0 // indirect
 	github.com/parquet-go/bitpack v1.1.0 // indirect
 	github.com/parquet-go/jsonlite v1.5.5 // indirect
 	github.com/parquet-go/parquet-go v0.32.0 // indirect
-	github.com/pierrec/lz4/v4 v4.1.31 // indirect
-	github.com/pjbgf/sha1cd v0.6.0 // indirect
+	github.com/pierrec/lz4/v4 v4.1.33 // indirect
+	github.com/pjbgf/sha1cd v0.7.0 // indirect
 	github.com/proglottis/gpgme v0.1.6 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.11.1 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
