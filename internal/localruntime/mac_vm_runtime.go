@@ -526,6 +526,9 @@ func (runtime *MacVMRuntime) OpenPorts(
 			if err != nil {
 				return err
 			}
+			if err := runtime.requireRunningVMFromRunner(ctx, runnerPath); err != nil {
+				return err
+			}
 
 			return runtime.runnerCommand(
 				ctx, runnerPath, append([]string{"forward"}, args...), nil, nil,
@@ -795,6 +798,33 @@ func (runtime *MacVMRuntime) stopVMBeforeGuestReplacement(
 	}
 
 	return runtime.stopVM(ctx, runnerPath, out, outErr)
+}
+
+// Live forwards are served by the VM daemon, which keeps running the runner
+// that started it until the next start replaces it.
+func (runtime *MacVMRuntime) requireRunningVMFromRunner(
+	ctx context.Context,
+	runnerPath string,
+) error {
+	resolvedVersion, err := readRunnerVersion(ctx, runnerPath)
+	if err != nil {
+		return fmt.Errorf("resolved local runner does not report a valid version: %w", err)
+	}
+	recordedVersion, recorded := runtime.recordedRunnerVersion()
+	if recorded && recordedVersion.EQ(resolvedVersion) {
+		return nil
+	}
+	started := "an unknown local runner"
+	if recorded {
+		started = "local runner " + recordedVersion.String()
+	}
+
+	return fmt.Errorf(
+		"the running local VM was started by %s and cannot publish ports "+
+			"through local runner %s; restart the deployment with "+
+			"'exasol stop' and 'exasol start', then retry",
+		started, resolvedVersion,
+	)
 }
 
 // runnerReconciliation reports what the version check learned, so the guest can
