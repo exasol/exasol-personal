@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localports"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/remote"
@@ -281,6 +282,8 @@ func recordDeployFailure(
 	deployment config.DeploymentDir,
 	err error,
 ) error {
+	slog.Debug("deployment failed", "error", err.Error())
+	logRuntimeOutput(err)
 	deployErr := appendDeployFailureHint(deployment, err)
 	if stateErr := exasolState.SetWorkflowStateAndWrite(
 		&config.WorkflowStateDeploymentFailed{
@@ -292,6 +295,12 @@ func recordDeployFailure(
 	}
 
 	return deployErr
+}
+
+func logRuntimeOutput(err error) {
+	if stderr := localinstall.CommandStderr(err); stderr != "" {
+		slog.Debug("container runtime command output", "stderr", stderr)
+	}
 }
 
 // finalizeSuccessfulDeploy commits the running workflow state and writes the

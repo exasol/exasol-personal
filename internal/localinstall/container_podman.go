@@ -316,9 +316,13 @@ func (runtime podmanRuntime) exists(
 func (runtime podmanRuntime) run(
 	ctx context.Context, out, outErr io.Writer, args ...string,
 ) error {
-	return runtime.environment.Run(
-		ctx, nil, out, outErr, append([]string{runtime.binary}, args...)...,
+	tail := &stderrTail{}
+	streams := newCommandStreams(out, outErr, tail)
+	err := runtime.environment.Run(
+		ctx, nil, streams.stdout, streams.stderr, append([]string{runtime.binary}, args...)...,
 	)
+
+	return newCommandError(err, tail)
 }
 
 func (runtime podmanRuntime) output(
@@ -330,11 +334,13 @@ func (runtime podmanRuntime) output(
 	} else {
 		out = io.MultiWriter(out, &captured)
 	}
+	tail := &stderrTail{}
+	streams := newCommandStreams(out, outErr, tail)
 	err := runtime.environment.Run(
-		ctx, nil, out, outErr, append([]string{runtime.binary}, args...)...,
+		ctx, nil, streams.stdout, streams.stderr, append([]string{runtime.binary}, args...)...,
 	)
 
-	return captured.String(), err
+	return captured.String(), newCommandError(err, tail)
 }
 
 // succeeded reports a query that answers through its exit status, where exit

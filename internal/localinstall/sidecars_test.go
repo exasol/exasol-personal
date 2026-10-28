@@ -130,6 +130,7 @@ func TestSidecarStartupFailureCarriesCauseAndDiagnostic(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "example", startup.Sidecar)
 	require.Contains(t, startup.Cause, "18080")
+	require.Equal(t, 1, strings.Count(startup.Cause, "address already in use"))
 	require.Contains(t, startup.Diagnostic, "address already in use")
 	require.Contains(t, err.Error(), "sidecar example")
 }

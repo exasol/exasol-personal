@@ -126,6 +126,10 @@ func (runtime *SidecarRuntime) Ensure(
 	spec := runtime.createSpec(resolved.Container, fingerprint, envPath.RuntimePath)
 	var diagnostic bytes.Buffer
 	if err := runtime.client.Create(ctx, spec, io.Discard, &diagnostic); err != nil {
+		if commandErr, ok := errors.AsType[*CommandError](err); ok {
+			err = commandErr.Err
+		}
+
 		return sidecar.NewStartupError(
 			definition.Name,
 			resolved.Redact(diagnostic.String()),
