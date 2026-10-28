@@ -564,6 +564,21 @@ func TestMacRuntimeReportsNoEndpointsBeforeTheVMStarts(t *testing.T) {
 	require.NoError(t, publishErr)
 }
 
+//nolint:paralleltest // test runner scripts fork executable fixtures.
+func TestMacRuntimeRejectsPublishingThroughVMOfDifferentRunner(t *testing.T) {
+	requirePOSIXRunnerTest(t)
+
+	// Given a VM started by an older runner than the resolved one
+	eventsPath := filepath.Join(t.TempDir(), "events")
+	runtime := newPreparedGuestRuntime(t, eventsPath, "2.1.1", "2.0.0")
+	// When
+	err := runtime.OpenPorts(t.Context(), []sidecar.PublishedPort{caddyEndpoint()})
+	// Then
+	require.ErrorContains(t, err, "started by local runner 2.0.0")
+	require.ErrorContains(t, err, "'exasol stop' and 'exasol start'")
+	assertRunnerEvents(t, eventsPath)
+}
+
 func TestMacForwardsSkipUnboundEndpoints(t *testing.T) {
 	t.Parallel()
 	// Given
