@@ -40,7 +40,7 @@ Notable user-facing changes to Exasol Personal are documented here.
   `serving`, or `failing` with the probe failure, and enable waits while a
   sidecar starts unless `--no-wait` is given. The catalog includes the official
   Exasol MCP server for local deployments with read-oriented query tools,
-  reported by status as
+  restarted whenever its process exits, reported by status as
   `http://127.0.0.1:4896/mcp` and serving once its `/health` probe succeeds.
   Examples: `exasol sidecar enable <name>`, `exasol sidecar enable mcp`, and
   `exasol sidecar enable mcp --no-wait`.
