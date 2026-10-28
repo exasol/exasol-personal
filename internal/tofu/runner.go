@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"os/exec"
 	"strings"
+
+	"github.com/exasol/exasol-personal/internal/util"
 )
 
 var execCommandContext = exec.CommandContext
@@ -156,5 +158,5 @@ func (s *tofuRunnerImpl) exec(ctx context.Context, args []string) error {
 	cmd.Stdout = s.out
 	cmd.Stderr = s.outErr
 
-	return cmd.Run()
+	return util.RunInterruptible(cmd)
 }

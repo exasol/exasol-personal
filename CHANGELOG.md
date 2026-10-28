@@ -96,6 +96,12 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- Interrupting `exasol deploy` or `exasol destroy` with Ctrl+C, `kill`, or SIGTERM now stops
+  OpenTofu gracefully and waits for it to save its state before the launcher exits and reports
+  the deployment as interrupted. Previously the launcher exited at once, so resources being
+  created could be missing from the state and survive a later `exasol destroy`, and OpenTofu
+  kept running in the background when only the launcher received the signal.
+
 - Terminal messages queued during startup now appear before command execution, so the selected
   default or named deployment directory is visible before an interactive `exasol connect` session
   opens. Remaining committed notices and results appear after completion, even on failure, with
