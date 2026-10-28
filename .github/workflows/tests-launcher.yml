@@ -32,8 +32,8 @@ jobs:
           fi
 
           full_plan_json='[
-            {"os": "ubuntu-latest"},
-            {"os": "windows-latest"}
+            {"os": "ubuntu-latest", "platform": "linux-amd64"},
+            {"os": "windows-latest", "platform": "windows-amd64"}
           ]'
 
           filtered_plan_json="$(jq -c --arg os "${selected_os}" '
@@ -42,8 +42,20 @@ jobs:
 
           echo "matrix=${filtered_plan_json}" >> "${GITHUB_OUTPUT}"
 
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/build-test-binaries
+
   tests-launcher:
-    needs: plan-tests-launcher
+    needs:
+      - plan-tests-launcher
+      - build
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -55,5 +67,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/build
+      - name: Download test binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: exasol-${{ matrix.platform }}
+          path: bin/
+      - name: Make executable
+        if: runner.os != 'Windows'
+        run: chmod +x bin/exasol
       - uses: ./.github/actions/tests-launcher

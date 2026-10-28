@@ -57,15 +57,15 @@ jobs:
 
           # CI owns target selection; test metadata remains on the tests themselves.
           cloud_plan_json='[
-            {"enabled": true,   "infra": "aws",      "os": "ubuntu-latest",  "task": "tests-deployment"},
-            {"enabled": false,  "infra": "aws",      "os": "windows-latest", "task": "tests-deployment"},
-            {"enabled": false,  "infra": "aws",      "os": "macos-latest",   "task": "tests-deployment"},
-            {"enabled": false,  "infra": "azure",    "os": "ubuntu-latest",  "task": "tests-deployment-smoke"},
-            {"enabled": true,   "infra": "azure",    "os": "windows-latest", "task": "tests-deployment-smoke"},
-            {"enabled": false,  "infra": "azure",    "os": "macos-latest",   "task": "tests-deployment-smoke"},
-            {"enabled": false,  "infra": "exoscale", "os": "ubuntu-latest",  "task": "tests-deployment-smoke"},
-            {"enabled": false,  "infra": "exoscale", "os": "windows-latest", "task": "tests-deployment-smoke"},
-            {"enabled": true,   "infra": "exoscale", "os": "macos-latest",   "task": "tests-deployment-smoke"}
+            {"enabled": true,  "infra": "aws",      "os": "ubuntu-latest",  "platform": "linux-amd64",   "task": "tests-deployment"},
+            {"enabled": false, "infra": "aws",      "os": "windows-latest", "platform": "windows-amd64", "task": "tests-deployment"},
+            {"enabled": false, "infra": "aws",      "os": "macos-latest",   "platform": "macos-arm64",   "task": "tests-deployment"},
+            {"enabled": false, "infra": "azure",    "os": "ubuntu-latest",  "platform": "linux-amd64",   "task": "tests-deployment-smoke"},
+            {"enabled": true,  "infra": "azure",    "os": "windows-latest", "platform": "windows-amd64", "task": "tests-deployment-smoke"},
+            {"enabled": false, "infra": "azure",    "os": "macos-latest",   "platform": "macos-arm64",   "task": "tests-deployment-smoke"},
+            {"enabled": false, "infra": "exoscale", "os": "ubuntu-latest",  "platform": "linux-amd64",   "task": "tests-deployment-smoke"},
+            {"enabled": false, "infra": "exoscale", "os": "windows-latest", "platform": "windows-amd64", "task": "tests-deployment-smoke"},
+            {"enabled": true,  "infra": "exoscale", "os": "macos-latest",   "platform": "macos-arm64",   "task": "tests-deployment-smoke"}
           ]'
 
           # Runner values are arrays so hosted and multi-label self-hosted runners
@@ -153,9 +153,23 @@ jobs:
             echo "local_has_rows=$([ "${local_count}" -gt 0 ] && echo true || echo false)"
           } >> "${GITHUB_OUTPUT}"
 
+  build:
+    needs: plan-tests-deployment
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # this is need because we use "git describe" to get the latest version from git
+          fetch-depth: 0
+      - uses: ./.github/actions/build-test-binaries
+
   tests-deployment:
     if: ${{ needs.plan-tests-deployment.outputs.cloud_has_rows == 'true' }}
-    needs: plan-tests-deployment
+    needs:
+      - plan-tests-deployment
+      - build
     timeout-minutes: 90
     environment:
       name: deployment-tests
@@ -228,11 +242,14 @@ jobs:
           echo "AWS_ACCESS_KEY_ID=${SECRET_EXOSCALE_API_KEY}" >> "$GITHUB_ENV"
           echo "AWS_SECRET_ACCESS_KEY=${SECRET_EXOSCALE_API_SECRET}" >> "$GITHUB_ENV"
 
-      # Doing a second build here again. In theory, we could
-      # upload the build artifact from the ci.yml workflow
-      # and fetch it here. However, for now the build run time
-      # is short and we can afford building it a second time.
-      - uses: ./.github/actions/build
+      - name: Download test binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: exasol-${{ matrix.platform }}
+          path: bin/
+      - name: Make executable
+        if: runner.os != 'Windows'
+        run: chmod +x bin/exasol
       - uses: ./.github/actions/tests-deployment
         env:
           ARM_USE_OIDC: ${{ matrix.infra == 'azure' && 'true' || '' }}
@@ -253,7 +270,9 @@ jobs:
 
   tests-deployment-local:
     if: ${{ needs.plan-tests-deployment.outputs.local_has_rows == 'true' }}
-    needs: plan-tests-deployment
+    needs:
+      - plan-tests-deployment
+      - build
     environment:
       name: deployment-tests
     strategy:
@@ -275,7 +294,14 @@ jobs:
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-      - uses: ./.github/actions/build
+      - name: Download test binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: exasol-${{ matrix.platform }}
+          path: bin/
+      - name: Make executable
+        if: runner.os != 'Windows'
+        run: chmod +x bin/exasol
       - uses: ./.github/actions/tests-deployment
         with:
           infra: local
