@@ -19,6 +19,10 @@ type cliSilentError interface {
 
 func main() {
 	util.StartSignalHandler(func(_ os.Signal) {
+		// OpenTofu saves its state only while stopping; exiting first leaves
+		// resources missing from it and orphans its provider plugins.
+		util.InterruptChildProcesses()
+		util.WaitForChildProcesses()
 		os.Exit(1)
 	})
 

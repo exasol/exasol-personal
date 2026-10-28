@@ -9,6 +9,9 @@ import (
 	"os/exec"
 	"reflect"
 	"testing"
+	"time"
+
+	"github.com/exasol/exasol-personal/internal/util"
 )
 
 // nolint: paralleltest
@@ -52,5 +55,39 @@ func testTofuRunnerInitArgs(t *testing.T, lockfileMode LockfileMode, wantArgs []
 
 	if !reflect.DeepEqual(gotArgs, wantArgs) {
 		t.Fatalf("unexpected args.\nwant: %v\ngot:  %v", wantArgs, gotArgs)
+	}
+}
+
+// nolint: paralleltest
+func TestTofuRunnerIsWaitedForUntilItExits(t *testing.T) {
+	// Given: a tofu command that takes a while to stop.
+	ctx := context.Background()
+
+	orig := execCommandContext
+	execCommandContext = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "sleep", "0.5")
+	}
+	defer func() { execCommandContext = orig }()
+
+	runner, err := NewTofuRunner(
+		ctx,
+		&Config{workDir: "/tmp", tofuBinaryPath: "/bin/tofu"},
+		io.Discard,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("NewTofuRunner() returned error: %v", err)
+	}
+
+	started := time.Now()
+	go func() { _ = runner.Init(ctx, LockfileReadonly) }()
+	time.Sleep(100 * time.Millisecond)
+
+	// When: waiting for child processes, as on an interrupt.
+	util.WaitForChildProcesses()
+
+	// Then: the wait returns only after tofu exited.
+	if elapsed := time.Since(started); elapsed < 450*time.Millisecond {
+		t.Fatalf("wait returned after %v, while tofu was still running", elapsed)
 	}
 }
