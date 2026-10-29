@@ -35,6 +35,7 @@ _EXECUTION_BOUNDARIES = (
     "reusable-live",
     "isolated-live",
 )
+_CONTAINER_ENGINES = ("docker", "podman")
 _SPECIALIZED_SUITES = ("smoke", "chaos", "stress")
 _LIVE_FIXTURES = (
     "local_deployment",
@@ -79,6 +80,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=_host_platform(),
         help="Host platform used to select platform-restricted tests",
     )
+    parser.addoption(
+        "--container-engine",
+        choices=_CONTAINER_ENGINES,
+        default=None,
+        help="Container engine for local deployments on Linux and Windows hosts; "
+        "the launcher's automatic choice when omitted",
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -107,7 +115,11 @@ def deployment_manager(
     request: pytest.FixtureRequest, exasol_path: str, infra: str
 ) -> Generator[DeploymentManager]:
     cluster_size = 2 if infra == "aws" else 1
-    config = DeploymentConfig(infra=infra, cluster_size=cluster_size)
+    config = DeploymentConfig(
+        infra=infra,
+        cluster_size=cluster_size,
+        container_engine=request.config.getoption("--container-engine"),
+    )
     manager = DeploymentManager(Launcher(exasol_path), config)
     try:
         yield manager
@@ -131,7 +143,11 @@ def reusable_deployment_manager(
     reusable_runtime_cache: Path,
 ) -> Generator[DeploymentManager]:
     cluster_size = 2 if infra == "aws" else 1
-    config = DeploymentConfig(infra=infra, cluster_size=cluster_size)
+    config = DeploymentConfig(
+        infra=infra,
+        cluster_size=cluster_size,
+        container_engine=request.config.getoption("--container-engine"),
+    )
     manager = DeploymentManager(Launcher(exasol_path), config)
     try:
         yield manager
@@ -379,10 +395,12 @@ def pytest_terminal_summary(
 
 
 def pytest_report_header(config: pytest.Config) -> list[str]:
+    engine = config.getoption("--container-engine") or "auto"
     return [
         (
             f"test target: provider={config.getoption('--infra')}, "
-            f"platform={config.getoption('--platform')}"
+            f"platform={config.getoption('--platform')}, "
+            f"container engine={engine}"
         ),
         "provider coverage: STACKIT omitted because its deployment path is unavailable",
     ]

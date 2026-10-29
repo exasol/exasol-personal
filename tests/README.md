@@ -157,6 +157,9 @@ EXASOL_RUN_CLOUD_DEPLOY_CASES=1 uv run --locked --no-build pytest -n 2 --dist lo
 
 # Run local evidence; pytest detects the host platform
 uv run --locked --no-build pytest -n 2 --dist loadgroup -rP --infra=local --exasol-path=../bin/exasol tests/live
+
+# Run local evidence on Docker; without the option the launcher chooses the engine
+uv run --locked --no-build pytest -n 2 --dist loadgroup -rP --infra=local --container-engine=docker --exasol-path=../bin/exasol tests/live
 ```
 
 Cloud tasks create billable resources. STACKIT live evidence is omitted until its

@@ -166,12 +166,12 @@ Workflow input:
   - Azure runs the smoke path
   - Exoscale runs the smoke path
 - Current enabled local rows:
-  - Linux AMD64 runs `tests-deployment-local` on `ubuntu-latest`
-  - Windows AMD64 runs `tests-deployment-local` on `windows-latest`
+  - Linux AMD64 runs `tests-deployment-local` on `ubuntu-latest` twice, once on Podman and once on Docker, each with its own status. The Docker row first upgrades the runner to Docker Engine 29, the minimum local deployments accept
+  - Windows AMD64 runs `tests-deployment-local` on `windows-latest` on Podman, because the hosted runner's Docker runs only Windows containers
   - macOS ARM64 runs `tests-deployment-local` on the self-hosted virtualization runner
   - Linux ARM64 coverage is deferred.
   - The Windows row runs most of the local suite. Two pseudo-terminal cases remain POSIX-only, and the VM sizing cases remain macOS-only, so Windows covers 22 of the 27 selected tests.
-- After pushing a branch, dispatch one local row with `task github:trigger-deployment-tests SUITE=local OS=ubuntu-latest` (or `OS=windows-latest`, `OS=macos-latest`), then verify deployment, tests, cleanup, and the final commit status.
+- After pushing a branch, dispatch local rows with `task github:trigger-deployment-tests SUITE=local OS=ubuntu-latest`, which runs both Linux engines (or `OS=windows-latest`, `OS=macos-latest`), then verify deployment, tests, cleanup, and the final commit status.
 - The plan and pytest job summaries identify selected and omitted boundaries, providers, platforms, and specialized suites. STACKIT is reported as omitted until its deployment path works correctly.
 - Credential bootstrap:
   - AWS via OIDC role assumption

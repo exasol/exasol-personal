@@ -299,12 +299,13 @@ tasks:
     dir: '{{.TESTS_DIR}}'
     vars:
       PLATFORM: '{{default "" .PLATFORM}}'
+      ENGINE: '{{default "" .ENGINE}}'
       GOCOVERDIR_PATH: '{{.ROOT_PATH}}{{.SEP}}covdata-deployment'
     env:
       GOCOVERDIR: '{{.GOCOVERDIR_PATH}}'
     cmds:
       - rm -rf {{.GOCOVERDIR_PATH}} && mkdir -p {{.GOCOVERDIR_PATH}}
-      - uv run --locked --no-build pytest -n 2 --dist loadgroup -rP -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra=local {{if .PLATFORM}}--platform={{.PLATFORM}}{{end}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}live
+      - uv run --locked --no-build pytest -n 2 --dist loadgroup -rP -vv --exasol-path={{.BUILD_DIR}}{{.SEP}}{{.BINARY_NAME}} --infra=local {{if .PLATFORM}}--platform={{.PLATFORM}}{{end}} {{if .ENGINE}}--container-engine={{.ENGINE}}{{end}} {{.TESTS_DIR}}{{.SEP}}tests{{.SEP}}live
 
   lint-ruff:
     desc: Run ruff check
