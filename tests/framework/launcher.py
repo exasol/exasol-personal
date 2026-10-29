@@ -26,6 +26,7 @@ class DeploymentConfig:
     adminui_password: str | None = None
     stackit_project_id: str | None = None
     location: str | None = None
+    container_engine: str | None = None
 
 
 class Launcher:
@@ -105,12 +106,10 @@ class Launcher:
             init_args.extend(["--adminui-password", config.adminui_password])
         if config.stackit_project_id is not None:
             init_args.extend(["--project-id", config.stackit_project_id])
-        if config.infra == "azure":
-            location = config.location
-            if location is None:
-                location = os.getenv("TF_VAR_LOCATION") or os.getenv("AZURE_LOCATION")
-            if location is not None and location.strip() != "":
-                init_args.extend(["--location", location])
+        if config.infra == "local" and config.container_engine is not None:
+            init_args.extend(["--container-engine", config.container_engine])
+        if (location := _azure_location(config)) is not None:
+            init_args.extend(["--location", location])
         return init_args
 
     def init(
@@ -297,3 +296,14 @@ class Launcher:
 
         logging.info("Verified no deployment exists")
         return True
+
+
+def _azure_location(config: DeploymentConfig) -> str | None:
+    if config.infra != "azure":
+        return None
+    location = config.location
+    if location is None:
+        location = os.getenv("TF_VAR_LOCATION") or os.getenv("AZURE_LOCATION")
+    if location is None or location.strip() == "":
+        return None
+    return location
