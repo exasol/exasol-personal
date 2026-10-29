@@ -184,6 +184,10 @@ def test_manager_owns_each_deployment_boundary() -> None:
             TimeoutExpired("deploy", DeploymentManager.DEPLOY_TIMEOUT_SECONDS),
             "Deploy command timed out",
         ),
+        (
+            CalledProcessError(1, ("deploy",)),
+            r"Deploy command failed(.|\n)*deployment\.log tail",
+        ),
     ],
 )
 def test_provisioning_failure_cleans_up_owned_deployment(
@@ -260,6 +264,45 @@ def test_local_manager_keeps_only_one_live_deployment() -> None:
     ]
     manager.close()
     assert launcher.destroy_calls[-1] == isolated.deployment_dir.name
+
+
+def test_local_deployments_use_the_selected_container_engine() -> None:
+    # Given a manager for a suite run on Docker
+    launcher = FakeLauncher()
+    manager = DeploymentManager(
+        cast("Launcher", launcher),
+        DeploymentConfig(infra="local", container_engine="docker"),
+    )
+
+    # When local deployments are created with and without their own config
+    default = manager.local(deploy=False)
+    custom = manager.local(deploy=False, config=DeploymentConfig(infra="local"))
+
+    # Then both are initialized for Docker
+    for instance in (default, custom):
+        config = launcher.configs[instance.deployment_dir.name]
+        assert config.container_engine == "docker"
+    manager.close()
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        (
+            DeploymentConfig(infra="local", container_engine="docker"),
+            ["local", "--container-engine", "docker"],
+        ),
+        (DeploymentConfig(infra="local"), ["local"]),
+        (
+            DeploymentConfig(infra="aws", container_engine="docker"),
+            ["aws", "--cluster-size", "1"],
+        ),
+    ],
+)
+def test_init_selects_the_container_engine_only_for_local_deployments(
+    config: DeploymentConfig, expected: list[str]
+) -> None:
+    assert Launcher("exasol")._build_init_args(config) == expected  # noqa: SLF001
 
 
 def test_failed_custom_cleanup_preserves_owned_deployment() -> None:

@@ -264,14 +264,10 @@ def test_sidecar_disable_idempotent(service: SidecarDeployment) -> None:
     assert "42" in service.sql("SELECT N FROM SIDECAR_TEST.T;")
 
 
-def _owned_containers(service: SidecarDeployment) -> list[object]:
-    return list(
-        json.loads(
-            service.podman(
-                "ps", "-a", "--filter", f"name={service.container}", "--format", "json"
-            )
-        )
-    )
+def _owned_containers(service: SidecarDeployment) -> list[str]:
+    return service.podman(
+        "ps", "-a", "--filter", f"name={service.container}", "--format", "{{.Names}}"
+    ).split()
 
 
 def _saved_entry(service: SidecarDeployment) -> dict[str, object]:
