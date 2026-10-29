@@ -45,6 +45,24 @@ Notable user-facing changes to Exasol Personal are documented here.
   Examples: `exasol sidecar enable <name>`, `exasol sidecar enable mcp`, and
   `exasol sidecar enable mcp --no-wait`.
 
+- Added `exasol mcp` for local deployments. `exasol mcp enable`, `status`, and
+  `disable` manage the MCP server sidecar like the matching `exasol sidecar`
+  commands, and `exasol mcp instructions <client>` prints the command or
+  configuration entry that registers its endpoint with Claude Code, Claude
+  Desktop, Codex, Cursor, VS Code, Gemini CLI, OpenCode, or Continue.
+  The connection instructions that `install` and `start` print gain an
+  `=== MCP Server for AI Agents ===` section with the endpoint or how to enable
+  it, and `exasol info` lists every saved sidecar with its endpoints, in text
+  and as a `sidecars` array in JSON. The next steps of `exasol info` for a
+  running deployment suggest enabling the MCP server or showing client setup
+  instructions. A new "Connect an AI agent" documentation page covers the
+  workflow.
+
+  ```bash
+  exasol mcp enable
+  exasol mcp instructions claude-code
+  ```
+
 - Added a **CLI reference** page to the user documentation, listing every command and option of the
   launcher, including the preset-specific flags that `exasol install` and `exasol init` add for each
   preset.

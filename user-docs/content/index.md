@@ -44,6 +44,7 @@ full syntax.
 - [Install the launcher](getting-started.md), then [run Exasol locally](local-deployment.md) or
   [deploy it to the cloud](cloud-deployment.md).
 - [Connect to the database](connect.md) and [load the sample data](load-data.md).
+- [Connect an AI agent](ai-agents.md) to a local database through the Exasol MCP server.
 - Learn how to [manage one or more deployments](manage-deployments.md).
 - Check the [system requirements](system-requirements.md) and [product limitations](limitations.md).
 - Look up a term in the [glossary](glossary.md).

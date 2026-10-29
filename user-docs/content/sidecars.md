@@ -24,7 +24,10 @@ with an unresolved operation failure. JSON status includes `name`, `enabled`,
 describes the container process; `health` describes whether the service inside
 it is serving, as described in [Readiness and health](#readiness-and-health).
 Without a name, `status` reports every saved sidecar, enabled or disabled, and
-its JSON output is an array of those same entries.
+its JSON output is an array of those same entries. `exasol info` also lists
+every saved sidecar with its enablement and endpoints, read from the saved
+definitions without inspecting containers; its JSON output carries them as a
+`sidecars` array of `name`, `enabled`, and `endpoints`.
 
 Sidecars use host Podman on Linux, Podman machine on Windows, and the local VM
 on macOS. macOS publication requires a runner with live-forwarding support.
@@ -262,50 +265,5 @@ only its host and port.
 
 ## MCP server
 
-For a local deployment, enable the official Exasol MCP server with:
-
-```bash
-exasol sidecar enable mcp
-exasol sidecar status mcp
-```
-
-The `Endpoint` line that `exasol sidecar status mcp` prints is the full URL an
-MCP client needs, `http://127.0.0.1:4896/mcp` by default. Use the status output
-to obtain the effective URL after changing the saved port mapping. If the
-default host port is occupied, change the mapping as described in
-[Networking](#networking).
-
-To verify the complete connection with the official
-[MCP Inspector](https://github.com/modelcontextprotocol/inspector), install
-Node.js, set the endpoint (adjust the port if you changed the mapping), and run
-the following commands:
-
-```bash
-MCP_URL=http://127.0.0.1:4896/mcp
-npx @modelcontextprotocol/inspector --cli --transport http --server-url "$MCP_URL" --method initialize
-npx @modelcontextprotocol/inspector --cli --transport http --server-url "$MCP_URL" --method tools/list
-npx @modelcontextprotocol/inspector --cli --transport http --server-url "$MCP_URL" --method tools/call --tool-name execute_exasol_query --tool-args-json '{"query":"SELECT USER_NAME FROM EXA_ALL_USERS WHERE USER_NAME = CURRENT_USER"}'
-```
-
-The first command verifies the MCP connection, the second lists the available
-tools, and the third reads an existing database system view. A successful
-result contains the `USER_NAME` column and the current database user (`SYS` for
-a default local deployment).
-
-To use the server from your own MCP client, register the same URL in that
-client as a Streamable HTTP server; the exact steps depend on the client. Then
-ask the client to run a query, for example:
-
-> Use `execute_exasol_query` to run
-> `SELECT USER_NAME FROM EXA_ALL_USERS WHERE USER_NAME = CURRENT_USER`.
-
-The client returns the current database user (`SYS` for a default local
-deployment).
-
-The endpoint has no authentication and uses the deployment's saved database
-credentials. Only connect trusted local MCP clients. The catalog enables
-read-oriented query tools and disables write-query, BucketFS, and preprocessor
-tools. Queries that do not specify `row_limit` return at most 1000 rows by
-default; clients can request a different limit. These controls limit the
-exposed MCP tools; they do not change the database privileges of the saved
-user.
+The catalog includes the official Exasol MCP server for local deployments. Manage it with
+`exasol mcp`, as described in [Connect an AI agent](ai-agents.md).
