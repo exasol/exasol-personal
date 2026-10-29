@@ -217,6 +217,42 @@ func TestRenderDeploymentInfoTextIncludesInitializedOverview(t *testing.T) {
 	}
 }
 
+func TestRenderDeploymentInfoTextListsSavedSidecars(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	report := &deploy.DeploymentInfoReport{
+		DeploymentDir:   "/deployment",
+		DeploymentState: deploy.StatusInitialized,
+		Sidecars: []deploy.SidecarSummary{
+			{Name: "internal", Endpoints: []deploy.SidecarEndpoint{
+				{IP: "127.0.0.1", Port: 19090, URL: "http://127.0.0.1:19090/"},
+			}},
+			{Name: "mcp", Enabled: true, Endpoints: []deploy.SidecarEndpoint{
+				{IP: "127.0.0.1", Port: 4896, URL: "http://127.0.0.1:4896/mcp"},
+			}},
+			{Name: "plain", Enabled: true, Endpoints: []deploy.SidecarEndpoint{
+				{IP: "127.0.0.1", Port: 18080},
+			}},
+		},
+	}
+	var output bytes.Buffer
+
+	// When
+	err := renderDeploymentInfoText(&output, report)
+	// Then
+	if err != nil {
+		t.Fatalf("expected deployment info text to render: %v", err)
+	}
+	expected := "Sidecars:\n" +
+		"  internal: disabled\n" +
+		"  mcp: enabled http://127.0.0.1:4896/mcp\n" +
+		"  plain: enabled"
+	if !strings.Contains(output.String(), expected) {
+		t.Fatalf("expected text output to contain %q, got:\n%s", expected, output.String())
+	}
+}
+
 func TestRenderDeploymentInfoTextExplainsActiveOperation(t *testing.T) {
 	t.Parallel()
 
