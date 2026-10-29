@@ -866,6 +866,7 @@ act on that sidecar like the matching "exasol sidecar" commands.
 Example usage:
     exasol mcp enable
     exasol mcp status
+    exasol mcp instructions claude-code
 
 Usage:
 	exasol mcp [command] [flags]
@@ -873,6 +874,7 @@ Usage:
 Additional Commands:
 	disable                       Disable the MCP server and remove its runtime resources
 	enable                        Enable the MCP server and wait until it serves
+	instructions                  Show client setup instructions
 	status                        Show the MCP server's state and endpoint
 ```
 
@@ -904,6 +906,28 @@ Flags:
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --no-wait                    Return without waiting for a starting sidecar to serve
+```
+
+#### `exasol mcp instructions` { data-toc-label="mcp instructions" }
+
+```text
+Show client setup instructions
+
+Without a client, list the clients with setup instructions. With one, print
+the command or configuration file entry that registers the MCP server's
+endpoint with it. The launcher does not change the client's configuration.
+Other MCP clients that support Streamable HTTP can use the endpoint that
+"exasol mcp status" reports.
+
+Instructions are available for: claude-code, claude-desktop, codex, cursor, vscode, gemini, opencode, continue
+
+Usage:
+	exasol mcp instructions [client] [flags]
+
+Flags:
+  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+      --deployment-dir file-path   Override the deployment directory selected automatically
+  -j, --json                       Output in JSON format
 ```
 
 #### `exasol mcp status` { data-toc-label="mcp status" }
