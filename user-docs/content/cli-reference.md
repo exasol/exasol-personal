@@ -67,6 +67,7 @@ Additional Commands:
 	deployments Manage launcher-managed deployment directories
 	diag        Diagnostic tools for an active deployment
 	info        Prints information about your Exasol deployment.
+	mcp         Connect AI agents to the database through the Exasol MCP server
 	presets     Manage embedded presets
 	shell       Shell access to deployment host and container
 	sidecar     Manage deployment sidecars from the built-in catalog
@@ -847,6 +848,71 @@ Example usage:
 
 Usage:
 	exasol info [flags]
+
+Flags:
+  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+      --deployment-dir file-path   Override the deployment directory selected automatically
+  -j, --json                       Output in JSON format
+```
+
+### `exasol mcp` { data-toc-label="mcp" }
+
+```text
+Connect AI agents to the database through the Exasol MCP server
+
+The MCP server runs as the "mcp" sidecar of a local deployment. These commands
+act on that sidecar like the matching "exasol sidecar" commands.
+
+Example usage:
+    exasol mcp enable
+    exasol mcp status
+
+Usage:
+	exasol mcp [command] [flags]
+
+Additional Commands:
+	disable                       Disable the MCP server and remove its runtime resources
+	enable                        Enable the MCP server and wait until it serves
+	status                        Show the MCP server's state and endpoint
+```
+
+#### `exasol mcp disable` { data-toc-label="mcp disable" }
+
+```text
+Disable the MCP server and remove its runtime resources
+
+Usage:
+	exasol mcp disable [flags]
+
+Flags:
+  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+      --deployment-dir file-path   Override the deployment directory selected automatically
+  -j, --json                       Output in JSON format
+      --remove                     Also delete the saved definition
+```
+
+#### `exasol mcp enable` { data-toc-label="mcp enable" }
+
+```text
+Enable the MCP server and wait until it serves
+
+Usage:
+	exasol mcp enable [flags]
+
+Flags:
+  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+      --deployment-dir file-path   Override the deployment directory selected automatically
+  -j, --json                       Output in JSON format
+      --no-wait                    Return without waiting for a starting sidecar to serve
+```
+
+#### `exasol mcp status` { data-toc-label="mcp status" }
+
+```text
+Show the MCP server's state and endpoint
+
+Usage:
+	exasol mcp status [flags]
 
 Flags:
   -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory

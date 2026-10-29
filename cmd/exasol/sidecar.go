@@ -44,29 +44,40 @@ func newSidecarCommand(flags *CommonFlags) *cobra.Command {
 			return nil
 		},
 	}
-	enable := newSidecarEnableCommand(flags)
-	status := newSidecarStatusCommand(flags)
-	disable := newSidecarDisableCommand(flags)
-	for _, child := range []*cobra.Command{list, enable, status, disable} {
-		child.SilenceUsage = true
-		requireDefaultDeploymentCompatibility(child)
-		// Listing serves the catalog itself, so it answers before a deployment exists.
-		if child != list {
-			requireInitializedDeploymentDir(child)
-			requireDeploymentFileLogging(child)
-		}
-		registerDeploymentDirFlag(child, flags)
-		registerOutputFlags(child, flags)
-		command.AddCommand(child)
+	// Listing serves the catalog itself, so it answers before a deployment exists.
+	addSidecarSubcommand(command, list, flags, false)
+	for _, child := range []*cobra.Command{
+		newSidecarEnableCommand(flags, ""),
+		newSidecarStatusCommand(flags, ""),
+		newSidecarDisableCommand(flags, ""),
+	} {
+		addSidecarSubcommand(command, child, flags, true)
 	}
 
 	return command
 }
 
-func newSidecarEnableCommand(flags *CommonFlags) *cobra.Command {
+func addSidecarSubcommand(
+	parent, child *cobra.Command, flags *CommonFlags, needsDeployment bool,
+) {
+	child.SilenceUsage = true
+	requireDefaultDeploymentCompatibility(child)
+	if needsDeployment {
+		requireInitializedDeploymentDir(child)
+		requireDeploymentFileLogging(child)
+	}
+	registerDeploymentDirFlag(child, flags)
+	registerOutputFlags(child, flags)
+	parent.AddCommand(child)
+}
+
+// A non-empty fixed name binds the command to that sidecar and drops the name
+// argument.
+func newSidecarEnableCommand(flags *CommonFlags, fixed string) *cobra.Command {
 	var noWait bool
 	command := newSidecarActionCommand(
 		flags,
+		fixed,
 		"enable",
 		"Enable a catalog sidecar and wait until it serves",
 		func(
@@ -105,10 +116,11 @@ func addSidecarHealthCallToAction(result deploy.SidecarResult) {
 	}
 }
 
-func newSidecarDisableCommand(flags *CommonFlags) *cobra.Command {
+func newSidecarDisableCommand(flags *CommonFlags, fixed string) *cobra.Command {
 	var remove bool
 	command := newSidecarActionCommand(
 		flags,
+		fixed,
 		"disable",
 		"Disable a sidecar and remove its runtime resources",
 		func(
@@ -130,12 +142,20 @@ func newSidecarDisableCommand(flags *CommonFlags) *cobra.Command {
 }
 
 // newSidecarStatusCommand reports one sidecar, or every enabled one.
-func newSidecarStatusCommand(flags *CommonFlags) *cobra.Command {
+func newSidecarStatusCommand(flags *CommonFlags, fixed string) *cobra.Command {
+	use, arguments := "status [name]", cobra.MaximumNArgs(1)
+	if fixed != "" {
+		use, arguments = "status", cobra.NoArgs
+	}
+
 	return &cobra.Command{
-		Use:   "status [name]",
+		Use:   use,
 		Short: "Show sidecar state and published endpoints",
-		Args:  cobra.MaximumNArgs(1),
+		Args:  arguments,
 		RunE: func(command *cobra.Command, args []string) error {
+			if fixed != "" {
+				args = []string{fixed}
+			}
 			if len(args) == 1 {
 				result, err := deploy.GetSidecarStatus(
 					command.Context(), flags.Deployment(), args[0],
@@ -184,13 +204,22 @@ func renderSidecarResults(results []deploy.SidecarResult, jsonOutput bool) error
 
 func newSidecarActionCommand(
 	flags *CommonFlags,
-	name, description string,
+	fixed, name, description string,
 	action func(context.Context, config.DeploymentDir, string) (deploy.SidecarResult, error),
 ) *cobra.Command {
+	use, arguments := name+" <name>", cobra.ExactArgs(1)
+	if fixed != "" {
+		use, arguments = name, cobra.NoArgs
+	}
+
 	return &cobra.Command{
-		Use: name + " <name>", Short: description, Args: cobra.ExactArgs(1),
+		Use: use, Short: description, Args: arguments,
 		RunE: func(command *cobra.Command, args []string) error {
-			result, err := action(command.Context(), flags.Deployment(), args[0])
+			target := fixed
+			if target == "" {
+				target = args[0]
+			}
+			result, err := action(command.Context(), flags.Deployment(), target)
 			if err != nil {
 				addDeploymentRecoveryCallToActionFor(err, flags.Selection())
 				return err
