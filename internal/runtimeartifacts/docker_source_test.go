@@ -6,10 +6,12 @@ package runtimeartifacts
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -266,7 +268,34 @@ func TestDockerSource_Fetch_LocalOCIImages(t *testing.T) {
 			if output != "local-oci-image\n" {
 				t.Fatalf("expected loaded image label, got %q", output)
 			}
+			assertDockerArchiveManifest(t, dstPath, parsedReference.destinationImage)
 		})
+	}
+}
+
+// assertDockerArchiveManifest checks that an archive names its image for Docker's
+// classic image store and refers to blobs the archive contains.
+func assertDockerArchiveManifest(t *testing.T, archivePath, imageName string) {
+	t.Helper()
+
+	data, err := readTarFile(archivePath, dockerArchiveManifestName)
+	if err != nil {
+		t.Fatalf("read Docker archive manifest: %v", err)
+	}
+	var entries []dockerArchiveManifestEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		t.Fatalf("parse Docker archive manifest: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("Docker archive manifest entries = %d, want 1", len(entries))
+	}
+	if want := []string{dockerRepoTag(imageName)}; !slices.Equal(entries[0].RepoTags, want) {
+		t.Errorf("Docker archive repo tags = %q, want %q", entries[0].RepoTags, want)
+	}
+	for _, blob := range append([]string{entries[0].Config}, entries[0].Layers...) {
+		if _, err := readTarFile(archivePath, blob); err != nil {
+			t.Errorf("Docker archive manifest refers to %s: %v", blob, err)
+		}
 	}
 }
 
