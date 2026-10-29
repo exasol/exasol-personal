@@ -16,3 +16,9 @@ Cluster Size: {{ .ClusterSize }}
 Cluster State: {{ .ClusterState }}
 {{- end }}
 {{- end }}
+{{- with .Sidecars }}
+Sidecars:
+{{- range . }}
+  {{ .Name }}: {{ if .Enabled }}enabled{{ range .Endpoints }}{{ if .URL }} {{ .URL }}{{ end }}{{ end }}{{ else }}disabled{{ end }}
+{{- end }}
+{{- end }}

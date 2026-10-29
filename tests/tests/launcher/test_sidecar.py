@@ -263,3 +263,48 @@ def test_sidecar_invalid_probe_names_the_offending_field(
     assert "sidecars.saved.container.readinessProbe.httpGet.port" in (
         failure.value.stderr
     )
+
+
+@pytest.mark.openspec("deployment-info-reporting")
+def test_info_reports_saved_sidecars(exasol_path: str, sidecar_directory: Path) -> None:
+    # Given
+    (sidecar_directory / "sidecars.yaml").write_text(
+        "version: 1\nsidecars:\n"
+        "  api:\n    container:\n      image: caddy:2\n"
+        "      ports:\n        - name: http\n          containerPort: 8080\n"
+        "          hostPort: 18080\n"
+        "    endpoints:\n      - port: http\n        scheme: http\n        path: /v1\n"
+        "  idle:\n    enabled: false\n    container:\n      image: caddy:2\n",
+        encoding="utf-8",
+    )
+    selection = ["--deployment-dir", str(sidecar_directory)]
+    # When
+    text = run_command([exasol_path, "info", *selection]).stdout
+    data = json.loads(run_command([exasol_path, "info", *selection, "--json"]).stdout)
+    # Then
+    assert "  api: enabled http://127.0.0.1:18080/v1" in text
+    assert "  idle: disabled" in text
+    assert data["sidecars"] == [
+        {
+            "name": "api",
+            "enabled": True,
+            "endpoints": [
+                {"ip": "127.0.0.1", "port": 18080, "url": "http://127.0.0.1:18080/v1"}
+            ],
+        },
+        {"name": "idle", "enabled": False, "endpoints": []},
+    ]
+
+
+@pytest.mark.openspec("deployment-info-reporting")
+def test_info_reports_no_saved_sidecars(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # When
+    data = json.loads(
+        run_command(
+            [exasol_path, "info", "--deployment-dir", str(sidecar_directory), "--json"]
+        ).stdout
+    )
+    # Then
+    assert data["sidecars"] == []

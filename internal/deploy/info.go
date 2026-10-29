@@ -6,8 +6,11 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/sidecar"
 )
 
 type ConnectionDetails struct {
@@ -34,6 +37,14 @@ type DeploymentInfoReport struct {
 	Presets         *DeploymentPresetSummary `json:"presets,omitempty"`
 	Deployment      *config.DeploymentInfo   `json:"deployment,omitempty"`
 	Connection      *ConnectionDetails       `json:"connection,omitempty"`
+	// Nil for a deployment that cannot run sidecars.
+	Sidecars []SidecarSummary `json:"sidecars,omitzero"`
+}
+
+type SidecarSummary struct {
+	Name      string            `json:"name"`
+	Enabled   bool              `json:"enabled"`
+	Endpoints []SidecarEndpoint `json:"endpoints"`
 }
 
 type DeploymentPresetSummary struct {
@@ -157,6 +168,7 @@ func deploymentInfoReportFromState(
 		return report, nil
 	}
 	addDeploymentAttributes(deployment, report)
+	report.Sidecars = savedSidecarSummaries(deployment)
 
 	switch deploymentState {
 	case StatusRunning:
@@ -214,6 +226,51 @@ func addDeploymentAttributes(
 		}
 		report.Deployment = deploymentInfo
 	}
+}
+
+// Info reports what the saved definitions declare without inspecting
+// containers; the sidecar status commands report what is running.
+func savedSidecarSummaries(deployment config.DeploymentDir) []SidecarSummary {
+	if !supportsSidecars(deployment) {
+		return nil
+	}
+	document, err := config.ReadSidecars(deployment)
+	if err != nil {
+		return nil
+	}
+	summaries := []SidecarSummary{}
+	for _, name := range slices.Sorted(maps.Keys(document.Sidecars)) {
+		definition := document.Sidecars[name]
+		summaries = append(summaries, SidecarSummary{
+			Name:      name,
+			Enabled:   definition.IsEnabled(),
+			Endpoints: savedSidecarEndpoints(definition),
+		})
+	}
+
+	return summaries
+}
+
+func savedSidecarEndpoints(definition sidecar.Definition) []SidecarEndpoint {
+	declarations := declarationsFor(definition)
+	endpoints := []SidecarEndpoint{}
+	for _, port := range definition.Container.Defaults().Ports {
+		if port.HostPort > 0 {
+			endpoints = append(endpoints, declarations.endpoint(port.HostIP, port.HostPort))
+		}
+	}
+
+	return endpoints
+}
+
+func supportsSidecars(deployment config.DeploymentDir) bool {
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return false
+	}
+	kind, err := resolveBackendKind(manifest)
+
+	return err == nil && kind == backendTypeLocal
 }
 
 func displayHostname(connectionDetails *ConnectionDetails) string {
