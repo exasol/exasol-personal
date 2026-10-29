@@ -63,6 +63,16 @@ full syntax.
 For next steps or instructions on how to install Exasol Personal on your cloud infrastructure,
 read the [user documentation](https://exasol.github.io/exasol-personal/latest/).
 
+A local deployment can also serve an MCP server for AI agents:
+
+```bash
+exasol mcp enable
+exasol mcp instructions claude-code
+```
+
+See [Connect an AI agent](https://exasol.github.io/exasol-personal/latest/ai-agents/) for the
+clients with setup instructions.
+
 If you work with AI coding agents, the
 [Exasol Personal Local Starter Kit](https://github.com/exasol-labs/exasol-personal-local-starterkit)
 bundles an MCP server, agent skills, and other components that let your agent work with Exasol
