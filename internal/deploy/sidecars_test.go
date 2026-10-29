@@ -1339,3 +1339,12 @@ func TestSidecarListReportsCloudDeploymentsUnsupported(t *testing.T) {
 		}
 	}
 }
+
+func TestCatalogSupportsFollowsEntryArchitectures(t *testing.T) {
+	t.Parallel()
+	// When / Then
+	require.True(t, catalogSupportsArchitecture(MCPSidecarName, "amd64"))
+	require.True(t, catalogSupportsArchitecture(MCPSidecarName, "arm64"))
+	require.False(t, catalogSupportsArchitecture(MCPSidecarName, "s390x"))
+	require.False(t, catalogSupportsArchitecture("absent", "amd64"))
+}

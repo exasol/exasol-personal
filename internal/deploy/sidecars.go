@@ -305,6 +305,25 @@ func newDeploymentSidecars(
 	}, nil
 }
 
+// MCPSidecarName is the catalog entry of the official Exasol MCP server.
+const MCPSidecarName = "mcp"
+
+// CatalogSupports reports whether the embedded catalog offers name on the
+// architecture the launcher runs on.
+func CatalogSupports(name string) bool {
+	return catalogSupportsArchitecture(name, runtime.GOARCH)
+}
+
+func catalogSupportsArchitecture(name, architecture string) bool {
+	catalog, err := sidecar.LoadCatalog(resources.SidecarCatalogYAML)
+	if err != nil {
+		return false
+	}
+	entry, found := catalog.Sidecars[name]
+
+	return found && slices.Contains(entry.Architectures, architecture)
+}
+
 func sidecarCatalog(templates sidecar.Resolver) (sidecar.Resolver, error) {
 	embedded, err := sidecar.LoadCatalog(resources.SidecarCatalogYAML)
 	if err != nil {
