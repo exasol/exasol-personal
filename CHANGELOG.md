@@ -114,6 +114,11 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- The connection instructions that `install` and `start` print and the next steps of
+  `exasol info` now select the deployment in every command they show, for example
+  `exasol connect -d dev` for a named deployment or `exasol stop --deployment-dir <path>` for
+  one outside the launcher's deployments directory, so the commands work from any directory.
+
 - Terminal messages queued during startup now appear before command execution, so the selected
   default or named deployment directory is visible before an interactive `exasol connect` session
   opens. Remaining committed notices and results appear after completion, even on failure, with

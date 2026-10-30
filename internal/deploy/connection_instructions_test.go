@@ -314,3 +314,33 @@ func TestRenderConnectionInstructionsTextIncludesTheMCPServer(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderConnectionInstructionsTextSelectsTheDeployment(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	report := &DeploymentInfoReport{
+		DeploymentDir:   "/work/exasol",
+		DeploymentState: StatusRunning,
+		Connection: &ConnectionDetails{
+			Backend: localDeploymentBackend, DisplayHost: "localhost", DBPort: 8563,
+			ShellSupported: true,
+		},
+	}
+
+	// When
+	content, err := RenderConnectionInstructionsText(report)
+	// Then
+	if err != nil {
+		t.Fatalf("expected instructions to render: %v", err)
+	}
+	for _, expected := range []string{
+		"  exasol connect --deployment-dir /work/exasol\n",
+		"Host shell (VM OS): exasol shell host --deployment-dir /work/exasol\n",
+		"Note: exasol destroy --deployment-dir /work/exasol deletes",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("expected instructions to contain %q, got %q", expected, content)
+		}
+	}
+}

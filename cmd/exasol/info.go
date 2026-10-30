@@ -7,6 +7,7 @@ import (
 	"bytes"
 	_ "embed" // required for the go:embed directive below
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 	"text/template"
@@ -37,8 +38,26 @@ var deploymentInfoTextTemplate = template.Must(
 )
 
 var deploymentInfoNoticeTemplate = template.Must(
-	template.New("deployment-info-notice").Parse(deploymentInfoNoticeTemplateSource),
+	template.New("deployment-info-notice").
+		Funcs(template.FuncMap{"nextSteps": formatNextSteps}).
+		Parse(deploymentInfoNoticeTemplateSource),
 )
+
+// formatNextSteps takes command and comment pairs and aligns the comments, so
+// a long deployment selection keeps the block readable.
+func formatNextSteps(pairs ...string) string {
+	const pairSize = 2
+	width := 0
+	for index := 0; index < len(pairs); index += pairSize {
+		width = max(width, len(pairs[index]))
+	}
+	lines := make([]string, 0, len(pairs)/pairSize)
+	for index := 0; index+1 < len(pairs); index += pairSize {
+		lines = append(lines, fmt.Sprintf("  %-*s   // %s", width, pairs[index], pairs[index+1]))
+	}
+
+	return strings.Join(lines, "\n")
+}
 
 func renderDeploymentInfoJSON(
 	writer io.Writer,
