@@ -62,11 +62,9 @@ func resolveDeploymentDirForCommand(cmd *cobra.Command, state *CommonFlags) erro
 }
 
 // addResolvedDeploymentDirNotice makes an implicit deployment-directory
-// selection visible to the user. Explicit (--deployment-dir) and current
-// (cwd auto-detected) selections are already visible to the user without a
-// notice: they either typed the flag or are sitting in the directory.
-// Notices go through addTerminalNotice, which is stderr-only, so JSON stdout
-// output is never affected.
+// selection visible to the user. An explicit --deployment-dir needs no notice
+// because the user typed the path. Notices go through addTerminalNotice, which
+// is stderr-only, so JSON stdout output is never affected.
 func addResolvedDeploymentDirNotice(
 	deployment config.DeploymentDir,
 	source deploymentDirSource,
@@ -74,8 +72,9 @@ func addResolvedDeploymentDirNotice(
 ) {
 	switch source {
 	case deploymentDirSourceNone,
-		deploymentDirSourceExplicit,
-		deploymentDirSourceCurrent:
+		deploymentDirSourceExplicit:
+	case deploymentDirSourceCurrent:
+		addTerminalNotice("Using deployment in current directory: " + deployment.Root())
 	case deploymentDirSourceDefault:
 		addTerminalNotice("Using default deployment directory: " + deployment.Root())
 	case deploymentDirSourceNamed:
