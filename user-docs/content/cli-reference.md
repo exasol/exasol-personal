@@ -267,7 +267,8 @@ Installation variable flags of preset `ubuntu`:
 
 ```text
 Infrastructure variable flags of preset `local`:
-      --ports string   Database port override for the local deployment
+      --container-engine string   Container engine for the local deployment: auto, podman, docker. auto uses the first of them that is installed (default: auto)
+      --ports string              Database port override for the local deployment
 ```
 
 #### `exasol init stackit` { data-toc-label="stackit" }
@@ -399,7 +400,8 @@ Installation variable flags of preset `ubuntu`:
 
 ```text
 Infrastructure variable flags of preset `local`:
-      --ports string   Database port override for the local deployment
+      --container-engine string   Container engine for the local deployment: auto, podman, docker. auto uses the first of them that is installed (default: auto)
+      --ports string              Database port override for the local deployment
 ```
 
 #### `exasol install stackit` { data-toc-label="stackit" }

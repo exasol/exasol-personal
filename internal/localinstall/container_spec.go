@@ -73,5 +73,9 @@ type ContainerSpec struct {
 	// The database image depends on both.
 	SharedMemorySize string
 	ProcessLimit     string
-	SecurityOptions  []string
+	// NestedSandbox lets processes in the container create the nested
+	// namespaces the UDF sandbox runs in.
+	NestedSandbox   bool
+	SecurityOptions []string
+	Capabilities    []string
 }

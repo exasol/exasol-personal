@@ -62,7 +62,13 @@ func (*DockerSource) Fetch(ctx context.Context, url, dstPath string) (string, er
 
 		return "", fmt.Errorf("copy image to OCI archive: %w", err)
 	}
-	if err := repackTarDeterministically(rawArchivePath, dstPath); err != nil {
+	dockerManifest, err := dockerArchiveManifest(rawArchivePath)
+	if err != nil {
+		return "", fmt.Errorf("describe OCI archive for Docker: %w", err)
+	}
+	if err := repackTarDeterministically(
+		rawArchivePath, dstPath, tarFile{name: dockerArchiveManifestName, data: dockerManifest},
+	); err != nil {
 		_ = os.Remove(dstPath)
 
 		return "", fmt.Errorf("repack OCI archive deterministically: %w", err)

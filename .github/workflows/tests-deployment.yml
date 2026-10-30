@@ -74,13 +74,23 @@ jobs:
             {
               "os": "ubuntu-latest",
               "platform": "linux-amd64",
+              "container_engine": "podman",
               "runner": ["ubuntu-latest"],
               "system_python": "false",
               "status_context": "tests-deployment-local-linux-amd64"
             },
             {
+              "os": "ubuntu-latest",
+              "platform": "linux-amd64",
+              "container_engine": "docker",
+              "runner": ["ubuntu-latest"],
+              "system_python": "false",
+              "status_context": "tests-deployment-local-linux-amd64-docker"
+            },
+            {
               "os": "windows-latest",
               "platform": "windows-amd64",
+              "container_engine": "podman",
               "runner": ["windows-latest"],
               "system_python": "false",
               "status_context": "tests-deployment-local-windows-amd64"
@@ -88,6 +98,7 @@ jobs:
             {
               "os": "macos-latest",
               "platform": "macos-arm64",
+              "container_engine": "",
               "runner": ["self-hosted", "macOS", "ARM64", "virtualization","osx06"],
               "system_python": "true",
               "status_context": "tests-deployment-local-self-hosted"
@@ -275,12 +286,31 @@ jobs:
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
+      # The runner image ships an older Docker Engine than local deployments need.
+      - name: Install Docker Engine 29
+        if: ${{ matrix.container_engine == 'docker' && runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -rqs download.docker.com /etc/apt/sources.list /etc/apt/sources.list.d/; then
+            sudo install -m 0755 -d /etc/apt/keyrings
+            sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc]" \
+              "https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+              | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          fi
+          sudo apt-get update
+          version=$(apt-cache madison docker-ce | awk '$3 ~ /^5:29\./ { print $3; exit }')
+          sudo apt-get install -y "docker-ce=${version}" "docker-ce-cli=${version}"
+          docker version --format 'Docker Engine {{.Server.Version}}'
+
       - uses: ./.github/actions/build
       - uses: ./.github/actions/tests-deployment
         with:
           infra: local
           task: tests-deployment-local
           platform: ${{ matrix.platform }}
+          container-engine: ${{ matrix.container_engine }}
           system-python: ${{ matrix.system_python }}
 
       - uses: ./.github/actions/status-set

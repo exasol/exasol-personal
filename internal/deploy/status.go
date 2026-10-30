@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
 )
 
@@ -34,6 +35,10 @@ const notInitializedMessage = "No Exasol Personal deployment exists in this " +
 const databaseUnreachableMessage = "The deployment is running but the database is not " +
 	"accepting connections. It may still be starting up, so run `status` again in a moment. " +
 	"If it stays unreachable, run `stop` and then `start` to restart the deployment."
+
+const containerHostUnreachableMessage = "The deployment's container engine is not " +
+	"answering, so whether the database runs is unknown. Make the container engine " +
+	"available again, then run `status`."
 
 type StatusOutput struct {
 	DeploymentDir string `json:"deploymentDir"`
@@ -240,12 +245,19 @@ func localVMStoppedStatus(ctx context.Context, deployment config.DeploymentDir) 
 
 	manager := runtimeartifacts.FromContext(ctx)
 
-	selectedRuntime, err := newLocalRuntime(deployment, manager)
+	selectedRuntime, err := newLocalRuntime(ctx, deployment, manager)
 	if err != nil {
 		slog.Debug("failed to select local runtime for status check", "error", err)
 		return nil
 	}
 	runtimeStatus, err := selectedRuntime.Status(ctx)
+	if errors.Is(err, localruntime.ErrContainerHostUnreachable) {
+		return &StatusOutput{
+			Status:  StatusDatabaseConnectionFailed,
+			Message: containerHostUnreachableMessage,
+			Error:   err.Error(),
+		}
+	}
 	if err != nil {
 		slog.Debug("local runtime status check failed", "error", err)
 		return nil

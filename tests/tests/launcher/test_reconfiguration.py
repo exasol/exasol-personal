@@ -13,6 +13,7 @@ from subprocess import CalledProcessError
 import pytest
 
 from .helpers import (
+    container_engine_args,
     first_infrastructure_preset_id_or_skip,
     run_command,
 )
@@ -101,6 +102,7 @@ def _init_stopped_local_deployment(
             exasol_path,
             "init",
             "local",
+            *container_engine_args("podman"),
             "--ports",
             f"db:{port}",
             "--deployment-dir",

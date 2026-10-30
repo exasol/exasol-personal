@@ -274,7 +274,7 @@ func TestSidecarEnableMaterializesTemplate(t *testing.T) {
 	saved := document.Sidecars["example"].Container
 	if len(document.Sidecars) != 1 || saved.Name != "example" ||
 		saved.Image != "docker.io/library/caddy:2-alpine" ||
-		saved.RestartPolicy != sidecar.OnFailure {
+		saved.RestartPolicy != sidecar.Always {
 		t.Fatalf("unexpected definition: %+v", document)
 	}
 	info, err := os.Stat(deployment.SidecarsPath())
@@ -456,8 +456,10 @@ func newSidecarOperationsFixture(t *testing.T) (*deploymentSidecars, *sidecarRun
 	t.Helper()
 	deployment := newTestDeploymentWithState(t)
 	fake := newContainerRuntimeFake(sidecarTestOwner)
+	client, err := localinstall.NewContainerRuntime(localinstall.EnginePodman, fake)
+	require.NoError(t, err)
 	manager, err := localinstall.NewSidecarRuntime(
-		fake, sidecarTestOwner, localinstall.IdentityRuntimePath(t.TempDir()),
+		client, sidecarTestOwner, localinstall.IdentityRuntimePath(t.TempDir()),
 	)
 	require.NoError(t, err)
 	selected := &sidecarRuntimeStub{
@@ -1280,7 +1282,9 @@ func TestSidecarEndpointsResolveAgainstTheObservedAddress(t *testing.T) {
 }
 
 func listingWithPorts(ports ...localinstall.ContainerPort) localinstall.ContainerListing {
-	return localinstall.ContainerListing{State: "running", Ports: ports}
+	return localinstall.ContainerListing{
+		State: "running", Lifecycle: localinstall.ContainerLifecycleRunning, Ports: ports,
+	}
 }
 
 func boundPort(hostIP string, hostPort, containerPort int) localinstall.ContainerPort {

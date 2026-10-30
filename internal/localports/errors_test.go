@@ -25,6 +25,14 @@ func TestClassifyBindFailureUsesDiagnostics(t *testing.T) {
 		{name: "bind address in use", diagnostic: "bind: address in use", wantTyped: true},
 		{name: "port is allocated", diagnostic: "Port is already allocated", wantTyped: true},
 		{name: "port already in use", diagnostic: "port already in use", wantTyped: true},
+		{
+			name: "docker desktop on windows",
+			diagnostic: "docker: Error response from daemon: ports are not available: " +
+				"exposing port TCP 127.0.0.1:9702 -> 127.0.0.1:0: listen tcp4 127.0.0.1:9702: " +
+				"bind: Only one usage of each socket address (protocol/network address/port) " +
+				"is normally permitted.",
+			wantTyped: true,
+		},
 		{name: "broad bind failure", diagnostic: "failed to bind socket"},
 		{name: "unrelated", diagnostic: "image is corrupt"},
 	}

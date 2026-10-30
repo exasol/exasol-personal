@@ -42,6 +42,7 @@ RUST_ALIAS: Final = "RUST"
 RUST_ASSET_PATTERN: Final = re.compile(
     r"/lc-rust-[0-9][0-9A-Za-z.+-]*?(-aarch64)?\.tar\.gz$"
 )
+RUST_LOADER_ERROR: Final = "F-UDF-CL-RUST-9001"
 ARM64_MACHINES: Final = {"arm64", "aarch64"}
 
 
@@ -123,6 +124,28 @@ def _run_scalar_udf(deployment: Deployment, alias: str, schema: str) -> str:
         """
     )
     return deployment.connect(input=script, capture_output=True).stdout
+
+
+def _run_rust_script_without_udf_object(deployment: Deployment, schema: str) -> str:
+    """Run a Rust scalar script whose UDF object does not exist; return all output.
+
+    A Rust UDF needs a shared object built with the container's exact toolchain,
+    so the script points at a missing one. Only a client that started inside the
+    UDF sandbox can report it missing.
+    """
+    script = textwrap.dedent(
+        f"""\
+        DROP SCHEMA IF EXISTS {schema} CASCADE;
+        CREATE SCHEMA {schema};
+        OPEN SCHEMA {schema};
+        CREATE OR REPLACE {RUST_ALIAS} SCALAR SCRIPT probe() RETURNS VARCHAR(10) AS
+        %udf_object /buckets/bfsdefault/default/{schema}/missing.so;
+        /
+        SELECT probe();
+        """
+    )
+    result = deployment.connect(input=script, capture_output=True)
+    return result.stdout + result.stderr
 
 
 def _assert_database_responds(deployment: Deployment) -> None:
@@ -493,6 +516,12 @@ def test_rust_slc_install_update_remove_and_pinned_install(
     match = RUST_ASSET_PATTERN.search(source)
     assert match is not None, source
     assert (match.group(1) or "") == _expected_rust_arch_suffix()
+
+    # And: a Rust script starts the container's client, which reports the
+    # script's missing UDF object itself instead of the VM crashing.
+    output = _run_rust_script_without_udf_object(slc_deployment, "slc_e2e_rust")
+    assert RUST_LOADER_ERROR in output, output
+    assert "VM crashed" not in output
 
     # When / Then: installing or updating again without a new release is a no-op.
     reinstall = _slc(slc_deployment, "install", "rust", "--auto-approve", capture=True)

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -62,6 +63,92 @@ func TestRepackTarDeterministically_RemovesIncompleteOutput(t *testing.T) {
 	}
 	if _, statErr := os.Stat(dstPath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected incomplete output to be removed, got %v", statErr)
+	}
+}
+
+func TestRepackTarDeterministically_AppendsFiles(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	srcPath := filepath.Join(t.TempDir(), "source.tar")
+	dstPath := filepath.Join(t.TempDir(), "repacked.tar")
+	writeTarFixture(t, srcPath, 0o644, time.Unix(1, 0).UTC())
+
+	// When
+	err := repackTarDeterministically(
+		srcPath, dstPath, tarFile{name: "manifest.json", data: []byte("[]")},
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("repack archive: %v", err)
+	}
+	reader := tar.NewReader(openFile(t, dstPath))
+	var names []string
+	for {
+		header, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read repacked archive: %v", err)
+		}
+		names = append(names, header.Name)
+		if header.Name == "manifest.json" {
+			assertTarFileContents(t, reader, header, "[]")
+		}
+	}
+	if want := []string{"blobs/", "blobs/image", "manifest.json"}; !slices.Equal(names, want) {
+		t.Fatalf("repacked entries = %q, want %q", names, want)
+	}
+}
+
+func TestRepackTarDeterministically_RejectsAppendedFileAlreadyInArchive(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	srcPath := filepath.Join(t.TempDir(), "source.tar")
+	dstPath := filepath.Join(t.TempDir(), "repacked.tar")
+	writeTarFixture(t, srcPath, 0o644, time.Unix(1, 0).UTC())
+
+	// When
+	err := repackTarDeterministically(srcPath, dstPath, tarFile{name: "blobs/image"})
+
+	// Then
+	if err == nil {
+		t.Fatal("expected an appended file that the archive already contains to fail")
+	}
+	if _, statErr := os.Stat(dstPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected incomplete output to be removed, got %v", statErr)
+	}
+}
+
+func openFile(t *testing.T, path string) *os.File {
+	t.Helper()
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	t.Cleanup(func() { _ = file.Close() })
+
+	return file
+}
+
+func assertTarFileContents(t *testing.T, reader io.Reader, header *tar.Header, want string) {
+	t.Helper()
+
+	if header.Mode != deterministicTarMode || !header.ModTime.Equal(deterministicTarTimestamp) {
+		t.Errorf(
+			"entry %q has host metadata: mode %o, time %s",
+			header.Name, header.Mode, header.ModTime,
+		)
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read %s: %v", header.Name, err)
+	}
+	if string(data) != want {
+		t.Errorf("entry %q = %q, want %q", header.Name, data, want)
 	}
 }
 

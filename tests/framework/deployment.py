@@ -502,11 +502,13 @@ class DeploymentManager:
         config: DeploymentConfig | None = None,
         deploy: bool = True,
     ) -> Deployment:
+        config = config or self.config
         config = replace(
-            config or self.config,
+            config,
             infra="local",
             cluster_size=1,
             stackit_project_id=None,
+            container_engine=config.container_engine or self.config.container_engine,
         )
         return self._create_live(config, *args, deploy=deploy)
 
@@ -590,6 +592,13 @@ class DeploymentManager:
         except (TimeoutError, TimeoutExpired) as error:
             message = (
                 f"Deploy command timed out after {self.DEPLOY_TIMEOUT_SECONDS}s\n"
+                f"deployment.log tail:\n{deployment.deployment_log_tail()}"
+            )
+            self.release(deployment)
+            raise RuntimeError(message) from error
+        except CalledProcessError as error:
+            message = (
+                f"Deploy command failed: {error}\n"
                 f"deployment.log tail:\n{deployment.deployment_log_tail()}"
             )
             self.release(deployment)

@@ -115,7 +115,7 @@ def _container_runtime(deployment: Deployment) -> PodmanRunner:
     try:
         run(["--version"], None)
     except (subprocess.CalledProcessError, FileNotFoundError):
-        pytest.skip("podman is required for the Virtual Schema smoke test")
+        pytest.skip("a container engine is required for the Virtual Schema smoke test")
 
     return run
 

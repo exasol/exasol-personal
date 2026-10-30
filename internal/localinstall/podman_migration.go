@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 )
 
-func (install *PodmanInstall) migrateOverlayDataIfNeeded(
+func (install *NanoInstall) migrateOverlayDataIfNeeded(
 	ctx context.Context,
 	out, outErr io.Writer,
 	containerName, dataDir string,
@@ -138,7 +138,7 @@ func (install *PodmanInstall) migrateOverlayDataIfNeeded(
 // A source that differs from the current data directory is not a problem
 // either way: the container is recreated against the configured directory on
 // every start, so the mount is corrected without copying anything.
-func (install *PodmanInstall) containerHasPersistentExaMount(
+func (install *NanoInstall) containerHasPersistentExaMount(
 	ctx context.Context,
 	outErr io.Writer,
 	containerName string,
@@ -161,7 +161,7 @@ func (install *PodmanInstall) containerHasPersistentExaMount(
 	return false, nil
 }
 
-func (install *PodmanInstall) directoryHasEntries(
+func (install *NanoInstall) directoryHasEntries(
 	ctx context.Context,
 	path string,
 ) (bool, error) {
@@ -173,7 +173,7 @@ func (install *PodmanInstall) directoryHasEntries(
 	return populated, nil
 }
 
-func (install *PodmanInstall) installOverlayDataAtomically(
+func (install *NanoInstall) installOverlayDataAtomically(
 	ctx context.Context,
 	dataDir, stagingDir string,
 ) error {

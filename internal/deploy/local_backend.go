@@ -11,10 +11,12 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
@@ -37,16 +39,18 @@ const (
 	localInfraMemThresholdMB   = 8192
 	localInfraMemoryNoticeText = "Info: For medium to heavy local workloads, " +
 		"consider increasing VM memory to 8-16 GB."
-	localDefaultDataSizeGB    = 100
-	localDeploymentBackend    = "local"
-	localDeploymentPublicHost = "127.0.0.1"
-	localDBUser               = "sys"
-	localDBPassword           = "exasol"
-	localManifestFileMode     = 0o600
-	localCPUCountConfigName   = "cpu_count"
-	localMemoryMBConfigName   = "memory_mb"
-	localDataSizeGBConfigName = "data_size_gb"
-	localPortsConfigName      = "ports"
+	localDefaultDataSizeGB         = 100
+	localDeploymentBackend         = "local"
+	localDeploymentPublicHost      = "127.0.0.1"
+	localDBUser                    = "sys"
+	localDBPassword                = "exasol"
+	localManifestFileMode          = 0o600
+	localCPUCountConfigName        = "cpu_count"
+	localMemoryMBConfigName        = "memory_mb"
+	localDataSizeGBConfigName      = "data_size_gb"
+	localPortsConfigName           = "ports"
+	localContainerEngineConfigName = "container_engine"
+	localContainerEngineAuto       = "auto"
 )
 
 var errUnsupportedLocalPlatform = errors.New(
@@ -59,11 +63,15 @@ var errUnsupportedLocalPlatform = errors.New(
 var localBackendDescriptor = backendDescriptor{
 	kind: backendTypeLocal,
 	newBackend: func(
+		ctx context.Context,
 		deployment config.DeploymentDir,
 		manifest *presets.InfrastructureManifest,
 		manager *runtimeartifacts.Manager,
 	) (deploymentBackend, error) {
-		localRuntime, err := newLocalRuntime(deployment, manager)
+		localRuntime, err := newLocalRuntimeForPlatform(
+			ctx, deployment, manifest, manager, runtime.GOOS, runtime.GOARCH,
+			localruntime.DetectContainerEngine,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -115,7 +123,8 @@ type localBackend struct {
 }
 
 type localPlatformCapabilities struct {
-	vmSizing bool
+	vmSizing         bool
+	containerEngines []localinstall.ContainerEngine
 }
 
 // Prepare validates the platform, then satisfies the runtime's host
@@ -173,6 +182,11 @@ func (b *localBackend) Configure(
 	}
 
 	capabilities := localCapabilitiesForPlatform(b.goos, b.goarch)
+	if len(capabilities.containerEngines) > 0 {
+		if err := rejectRecordedContainerEngineChange(b.deployment, overrides); err != nil {
+			return err
+		}
+	}
 	local := ensureLocalManifestConfig(ctx, b.manifest, capabilities)
 	if err := applyLocalConfigOverrides(local, overrides, capabilities); err != nil {
 		return err
@@ -252,6 +266,12 @@ func applyLocalConfigOverrides(
 				return err
 			}
 			local.DataSizeGB = parsed
+		case canonical == canonicalLocalConfigName(localContainerEngineConfigName):
+			if err := applyLocalContainerEngineOverride(
+				local, name, rawValue, capabilities.containerEngines,
+			); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unknown local infrastructure configuration option %q", name)
 		}
@@ -308,7 +328,8 @@ func validateLocalInitMemoryForPlatform(
 
 func (b *localBackend) ReadConfiguration() ([]DeploymentConfigValue, error) {
 	detectedHostMemoryMB := 0
-	if localPlatformSupportsVMSizing(b.goos, b.goarch) {
+	capabilities := localCapabilitiesForPlatform(b.goos, b.goarch)
+	if capabilities.vmSizing {
 		detectedHostMemoryMB = detectLocalHostMemoryMB(context.Background())
 	}
 	runtimeConfig, err := resolveLocalRuntimeConfigForPlatform(
@@ -328,27 +349,38 @@ func (b *localBackend) ReadConfiguration() ([]DeploymentConfigValue, error) {
 		RawValue:   runtimeConfig.ports,
 		RawDefault: "",
 	}}
-	if !localPlatformSupportsVMSizing(b.goos, b.goarch) {
-		return values, nil
+
+	if capabilities.vmSizing {
+		values = append(values,
+			localIntConfigValue(
+				localCPUCountConfigName,
+				runtimeConfig.cpuCount,
+				defaults.cpuCount,
+			),
+			localIntConfigValue(
+				localMemoryMBConfigName,
+				runtimeConfig.memoryMB,
+				defaults.memoryMB,
+			),
+			localIntConfigValue(
+				localDataSizeGBConfigName,
+				runtimeConfig.dataSizeGB,
+				defaults.dataSizeGB,
+			),
+		)
 	}
 
-	return append(values,
-		localIntConfigValue(
-			localCPUCountConfigName,
-			runtimeConfig.cpuCount,
-			defaults.cpuCount,
-		),
-		localIntConfigValue(
-			localMemoryMBConfigName,
-			runtimeConfig.memoryMB,
-			defaults.memoryMB,
-		),
-		localIntConfigValue(
-			localDataSizeGBConfigName,
-			runtimeConfig.dataSizeGB,
-			defaults.dataSizeGB,
-		),
-	), nil
+	if len(capabilities.containerEngines) > 0 {
+		stored := ""
+		if b.manifest != nil && b.manifest.Local != nil {
+			stored = b.manifest.Local.ContainerEngine
+		}
+		values = append(values,
+			localContainerEngineConfigValue(stored),
+		)
+	}
+
+	return values, nil
 }
 
 func (b *localBackend) ReadDeploymentConfigVariables() (
@@ -370,13 +402,37 @@ func validateLocalPlatform(goos, goarch string) error {
 	return fmt.Errorf("%w (current platform: %s/%s)", errUnsupportedLocalPlatform, goos, goarch)
 }
 
+// localContainerEnginesForPlatform lists the engines a deployment may select,
+// most preferred first: `auto` selects the first one installed. The macOS VM
+// ships its own engine, so it offers no choice.
+func localContainerEnginesForPlatform(goos, goarch string) []localinstall.ContainerEngine {
+	switch {
+	case goos == localMacOS && goarch == localMacArch:
+		return nil
+	case goos == localWindowsOS:
+		return []localinstall.ContainerEngine{localinstall.EnginePodman, localinstall.EngineDocker}
+	default:
+		return []localinstall.ContainerEngine{localinstall.EnginePodman, localinstall.EngineDocker}
+	}
+}
+
+func formatContainerEngines(engines []localinstall.ContainerEngine) string {
+	names := make([]string, 0, len(engines))
+	for _, engine := range engines {
+		names = append(names, string(engine))
+	}
+
+	return strings.Join(names, ", ")
+}
+
 func localPlatformSupportsVMSizing(goos, goarch string) bool {
 	return goos == localMacOS && goarch == localMacArch
 }
 
 func localCapabilitiesForPlatform(goos, goarch string) localPlatformCapabilities {
 	return localPlatformCapabilities{
-		vmSizing: localPlatformSupportsVMSizing(goos, goarch),
+		vmSizing:         localPlatformSupportsVMSizing(goos, goarch),
+		containerEngines: localContainerEnginesForPlatform(goos, goarch),
 	}
 }
 
@@ -385,6 +441,140 @@ func canonicalLocalConfigName(name string) string {
 	name = strings.ReplaceAll(name, "_", "")
 
 	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// containerEngineDetector resolves `auto` to an engine on the current host,
+// given the platform's engines in order of preference.
+type containerEngineDetector func(
+	context.Context, []localinstall.ContainerEngine,
+) localinstall.ContainerEngine
+
+// localContainerEngine returns the engine a deployment runs on. A deployment
+// keeps the engine it was first prepared with; before that, an explicit choice
+// is used as given and `auto` is resolved on the current host.
+func localContainerEngine(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	manifest *presets.InfrastructureManifest,
+	goos, goarch string,
+	detect containerEngineDetector,
+) (localinstall.ContainerEngine, error) {
+	engines := localContainerEnginesForPlatform(goos, goarch)
+	if len(engines) == 0 {
+		return "", fmt.Errorf(
+			"%w (current platform: %s/%s)", errUnsupportedLocalPlatform, goos, goarch,
+		)
+	}
+	recorded, isRecorded, err := localruntime.RecordedContainerEngine(deployment)
+	if err != nil {
+		return "", err
+	}
+	if isRecorded {
+		if !slices.Contains(engines, recorded) {
+			return "", fmt.Errorf(
+				"the deployment runs on %q, which this platform does not support", recorded,
+			)
+		}
+
+		return recorded, nil
+	}
+	configured := ""
+	if manifest != nil && manifest.Local != nil {
+		configured = manifest.Local.ContainerEngine
+	}
+	choice, err := parseLocalContainerEngineChoice(
+		localContainerEngineConfigName, configured, engines,
+	)
+	if err != nil {
+		return "", err
+	}
+	if choice == localContainerEngineAuto {
+		return detect(ctx, engines), nil
+	}
+
+	return localinstall.ContainerEngine(choice), nil
+}
+
+// applyLocalContainerEngineOverride stores a given engine choice. Only a
+// manifest without the option means auto, so a given value must name one.
+func applyLocalContainerEngineOverride(
+	local *presets.InfrastructureLocal,
+	name, rawValue string,
+	supported []localinstall.ContainerEngine,
+) error {
+	if len(supported) == 0 {
+		return nil
+	}
+	if rawValue == "" {
+		return containerEngineChoiceError(name, rawValue, supported)
+	}
+	choice, err := parseLocalContainerEngineChoice(name, rawValue, supported)
+	if err != nil {
+		return err
+	}
+	local.ContainerEngine = choice
+
+	return nil
+}
+
+// parseLocalContainerEngineChoice accepts `auto` or an engine the platform
+// supports. An empty value is `auto`, which is what manifests without the
+// option mean.
+func parseLocalContainerEngineChoice(
+	name, rawValue string,
+	supported []localinstall.ContainerEngine,
+) (string, error) {
+	choice := strings.ToLower(strings.TrimSpace(rawValue))
+	if choice == "" || choice == localContainerEngineAuto {
+		return localContainerEngineAuto, nil
+	}
+	if !slices.Contains(supported, localinstall.ContainerEngine(choice)) {
+		return "", containerEngineChoiceError(name, rawValue, supported)
+	}
+
+	return choice, nil
+}
+
+func containerEngineChoiceError(
+	name, rawValue string,
+	supported []localinstall.ContainerEngine,
+) error {
+	return fmt.Errorf(
+		"local infrastructure configuration option %q must be one of %s, %s, got %q",
+		name, localContainerEngineAuto, formatContainerEngines(supported), rawValue,
+	)
+}
+
+// rejectRecordedContainerEngineChange refuses to switch a prepared deployment
+// to another engine: its data and images live with the engine it started on.
+func rejectRecordedContainerEngineChange(
+	deployment config.DeploymentDir,
+	overrides map[string]string,
+) error {
+	for name, rawValue := range overrides {
+		if canonicalLocalConfigName(name) !=
+			canonicalLocalConfigName(localContainerEngineConfigName) {
+			continue
+		}
+		choice := strings.ToLower(strings.TrimSpace(rawValue))
+		if choice == "" || choice == localContainerEngineAuto {
+			continue
+		}
+		recorded, isRecorded, err := localruntime.RecordedContainerEngine(deployment)
+		if err != nil {
+			return err
+		}
+		if isRecorded && string(recorded) != choice {
+			return fmt.Errorf(
+				"the deployment runs on %s; run `exasol destroy` before changing its "+
+					"container engine to %s. Destroying deletes the database and its data; "+
+					"then run `exasol config set --container-engine %s` and `exasol deploy`",
+				recorded, choice, choice,
+			)
+		}
+	}
+
+	return nil
 }
 
 func parseLocalPositiveIntConfig(name, rawValue string) (int, error) {
@@ -407,6 +597,24 @@ func parseLocalPositiveIntConfig(name, rawValue string) (int, error) {
 	}
 
 	return parsed, nil
+}
+
+// localContainerEngineConfigValue reports an unset engine as `auto`, which is
+// what manifests without the option mean.
+func localContainerEngineConfigValue(stored string) DeploymentConfigValue {
+	value := stored
+	if value == "" {
+		value = localContainerEngineAuto
+	}
+
+	return DeploymentConfigValue{
+		Name:       localContainerEngineConfigName,
+		Type:       ConfigVariableTypeString,
+		Value:      value,
+		Default:    localContainerEngineAuto,
+		RawValue:   value,
+		RawDefault: localContainerEngineAuto,
+	}
 }
 
 func localIntConfigValue(name string, value, defaultValue int) DeploymentConfigValue {
@@ -440,6 +648,18 @@ func localConfigVariableDefinitionsForPlatform(
 			Description: "Database port override for the local deployment",
 			Type:        ConfigVariableTypeString,
 		},
+	}
+	if engines := localCapabilitiesForPlatform(goos, goarch).containerEngines; len(engines) > 0 {
+		definitions[localContainerEngineConfigName] = ConfigVariableDefinition{
+			Name: localContainerEngineConfigName,
+			Description: "Container engine for the local deployment: " +
+				localContainerEngineAuto + ", " + formatContainerEngines(engines) +
+				". " + localContainerEngineAuto + " uses the first of them that is installed",
+			Type: ConfigVariableTypeString,
+			// Definitions cannot enumerate allowed values, so the description
+			// lists them.
+			DefaultDisplay: localContainerEngineAuto,
+		}
 	}
 	if !localPlatformSupportsVMSizing(goos, goarch) {
 		return definitions

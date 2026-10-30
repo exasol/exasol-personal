@@ -55,6 +55,9 @@ func bindConflictDiagnostic(diagnostic string) bool {
 		"bind: address in use",
 		"port is already allocated",
 		"port already in use",
+		// Docker Desktop on Windows
+		"ports are not available",
+		"only one usage of each socket address",
 	} {
 		if strings.Contains(diagnostic, marker) {
 			return true

@@ -18,6 +18,7 @@ import pytest
 # same command-invocation conventions as the rest of the suite. Executed
 # commands need no wrapper here: the root conftest logs every command at DEBUG.
 from tests.launcher.helpers import (
+    container_engine_args,
     export_preset,
     first_infrastructure_preset_id_or_skip,
     first_installation_preset_id_or_skip,
@@ -30,6 +31,8 @@ __all__ = [
     "IS_MACOS_ARM",
     "assert_lifecycle_json_signal",
     "container_command",
+    "container_engine",
+    "container_engine_args",
     "export_preset",
     "first_infrastructure_preset_id_or_skip",
     "first_installation_preset_id_or_skip",
@@ -118,6 +121,20 @@ def host_command(
     )
 
 
+def container_engine(deployment_dir: str | Path, node: str | None = None) -> str:
+    """Return the container engine a deployment's containers run on.
+
+    Direct-host deployments record their engine at first start; the macOS VM
+    and cloud nodes always run Podman.
+    """
+    if node is not None or sys.platform == "darwin":
+        return "podman"
+    record = Path(deployment_dir) / "local" / "runtime" / "container-engine.json"
+    if record.is_file():
+        return str(json.loads(record.read_text())["engine"])
+    return "podman"
+
+
 def container_command(
     exasol_path: str,
     deployment_dir: str | Path,
@@ -129,7 +146,7 @@ def container_command(
     return host_command(
         exasol_path,
         deployment_dir,
-        "podman",
+        container_engine(deployment_dir, node),
         *args,
         node=node,
         input_text=input_text,

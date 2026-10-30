@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Defines the minimal persistent lifecycle for running an Exasol Nano database directly through Podman on a Linux host.
+Defines the minimal persistent lifecycle for running an Exasol Nano database directly on a Linux host through the deployment's container engine.
 
 ## Requirements
 
 ### Requirement: Linux host runtime starts a persistent Nano container
-The system SHALL start an Exasol Nano container through Podman when a local deployment uses the Linux host runtime, and SHALL keep the database data in the deployment's local runtime directory.
+The system SHALL start an Exasol Nano container through the deployment's container engine when a local deployment uses the Linux host runtime, and SHALL keep the database data in the deployment's local runtime directory.
 
 #### Scenario: Start a fresh deployment
 - **WHEN** the deployment data directory does not contain an initialized database
@@ -34,28 +34,28 @@ The system SHALL publish the deployment's configured host database port to the N
 
 #### Scenario: Reject an invalid database port mapping
 - **WHEN** the configured database port mapping cannot be represented as a single host port and container port
-- **THEN** the start operation fails before Podman is invoked
+- **THEN** the start operation fails before the container engine is invoked
 
 ### Requirement: Linux host containers remain unlimited by VM sizing
-The system SHALL NOT apply VM CPU, memory, or data-size settings as Podman container resource limits when using the Linux host runtime.
+The system SHALL NOT apply VM CPU, memory, or data-size settings as container resource limits when using the Linux host runtime.
 
 #### Scenario: VM sizing fields are present
 - **WHEN** VM CPU, memory, or data-size values exist in shared configuration state and the Linux host runtime starts the container
-- **THEN** the Podman invocation contains no limits derived from those values
+- **THEN** the container engine invocation contains no limits derived from those values
 
-### Requirement: Podman lifecycle failures are reported
-The system SHALL stop the start sequence at the failing Podman operation and return an error that identifies the failed lifecycle step.
+### Requirement: Container engine lifecycle failures are reported
+The system SHALL stop the start sequence at the failing container engine operation and return an error that identifies the failed lifecycle step.
 
 #### Scenario: Image loading fails
-- **WHEN** Podman fails to load the Nano image
+- **WHEN** the container engine fails to load the Nano image
 - **THEN** the start operation returns an image-loading error and does not attempt to run the image
 
 #### Scenario: Loaded image cannot be identified
-- **WHEN** Podman reports a successful load but its documented output does not identify the loaded image
+- **WHEN** the container engine reports a successful load but its documented output does not identify the loaded image
 - **THEN** the start operation fails before running a container
 
 ### Requirement: Linux host container cleanup is idempotent
-The system SHALL tolerate cleanup when the deployment's Podman container is absent.
+The system SHALL tolerate cleanup when the deployment's container is absent.
 
 #### Scenario: Stop a deployment
 - **WHEN** the deployment is stopped whether or not its named container exists
@@ -76,8 +76,8 @@ The system SHALL report whether the deployment-specific Nano container is runnin
 - **WHEN** the exact deployment container is absent or is not running
 - **THEN** installation status is stopped
 
-### Requirement: Podman startup failures include best-effort diagnostics
-The system SHALL emit Podman environment, container-list, deployment-container inspection, and deployment-container log diagnostics when image materialization, container recreation, or startup fails, without replacing the original failure.
+### Requirement: Container startup failures include best-effort diagnostics
+The system SHALL emit container engine environment, container-list, deployment-container inspection, and deployment-container log diagnostics when image materialization, container recreation, or startup fails, without replacing the original failure.
 
 #### Scenario: Startup fails and diagnostics partly fail
 - **WHEN** startup fails and one or more diagnostic commands also fail
@@ -173,26 +173,26 @@ The system SHALL migrate a legacy deployment container whose `/exa` is not persi
 - **WHEN** the legacy `/exa` copy completes into a sibling staging directory and can be atomically installed
 - **THEN** the persistent destination becomes active before the old container is removed
 
-### Requirement: Podman image loading uses runtime artifact paths
-The system SHALL load a Nano image using `podman load -i` with the runtime path supplied for the materialized image and SHALL run the exact image reference reported by the load without creating a deployment-specific image tag.
+### Requirement: Nano image loading uses runtime artifact paths
+The system SHALL load a Nano image using the container engine's `load -i` with the runtime path supplied for the materialized image and SHALL run the exact image reference reported by the load without creating a deployment-specific image tag.
 
 #### Scenario: Linux host loads Nano image
 - **WHEN** the Linux runtime materializes the embedded Nano image
-- **THEN** the runtime path equals the host path and Podman reads that path through `-i`
+- **THEN** the runtime path equals the host path and the container engine reads that path through `-i`
 
 #### Scenario: VM-backed runtime loads Nano image
 - **WHEN** a VM-backed runtime materializes the embedded Nano image in its shared directory
 - **THEN** Podman reads the mapped guest path through `-i` without installation code selecting a transport
 
 #### Scenario: Loaded image is identified by name
-- **WHEN** Podman reports the loaded Nano image as a named image reference
+- **WHEN** the container engine reports the loaded Nano image as a named image reference
 - **THEN** the system runs that exact reference without creating another image tag
 
 #### Scenario: Loaded image is identified by ID
-- **WHEN** Podman reports the loaded Nano image as an image ID
+- **WHEN** the container engine reports the loaded Nano image as an image ID
 - **THEN** the system runs that exact ID without creating an image tag
 
-### Requirement: Podman installation uses its execution environment
+### Requirement: Nano installation uses its execution environment
 The system SHALL perform command execution and installation-owned filesystem operations through the selected runtime execution environment.
 
 #### Scenario: Linux host installation executes

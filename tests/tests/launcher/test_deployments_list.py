@@ -11,6 +11,7 @@ from typing import Final
 import pytest
 
 from .helpers import (
+    container_engine_args,
     first_infrastructure_preset_id_or_skip,
     record_running_local_deployment,
     run_command,
@@ -173,6 +174,7 @@ def test_deployments_list_bounds_status_checks_and_runs_them_concurrently(
                 launcher,
                 "init",
                 "local",
+                *container_engine_args("podman"),
                 "--deployment",
                 name,
                 "--no-launcher-version-check",

@@ -95,3 +95,39 @@ func TestPodmanInstallStart_RemovesStaleTLSOnlyForFreshDeployment(t *testing.T) 
 		}
 	}
 }
+
+// Regression: Docker's data directory preparation ran before recovery replaced
+// the directory, so the recovered deployment lost it.
+func TestPodmanInstallStart_PreparesTheRecoveredDataDirectory(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given an interrupted first start
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	writeTestFile(t, filepath.Join(startConfig.DataDir, initialCreateMarkerName), "incomplete")
+	writeTestFile(t, filepath.Join(startConfig.DataDir, "partial-data"), "recoverable")
+	var prepared []string
+	startConfig.PrepareDataDir = func(_ context.Context, dataDir string) error {
+		prepared = append(prepared, dataDir)
+		if _, err := os.Stat(filepath.Join(dataDir, "partial-data")); !os.IsNotExist(err) {
+			t.Errorf("expected the recovered directory, found the quarantined data (%v)", err)
+		}
+		for _, command := range readCommandLog(t, fixture.logPath) {
+			if strings.Contains(command, "<podman><run>") {
+				t.Errorf("expected preparation before the container is created: %q", command)
+			}
+		}
+
+		return nil
+	}
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected interrupted create recovery to succeed: %v", err)
+	}
+	if len(prepared) != 1 || prepared[0] != startConfig.DataDir {
+		t.Fatalf("expected one preparation of %s, got %#v", startConfig.DataDir, prepared)
+	}
+}

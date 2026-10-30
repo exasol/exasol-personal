@@ -150,7 +150,7 @@ func newDeploymentBackend(
 		return nil, err
 	}
 
-	return descriptor.newBackend(deployment, manifest, runtimeartifacts.FromContext(ctx))
+	return descriptor.newBackend(ctx, deployment, manifest, runtimeartifacts.FromContext(ctx))
 }
 
 // readInfrastructurePresetConfigVariables exposes a preset's configurable
@@ -171,25 +171,51 @@ func readInfrastructurePresetConfigVariables(
 	return descriptor.presetConfigVariables(ctx, preset, manifest)
 }
 
+// newLocalRuntime selects the runtime of an existing deployment from its
+// stored manifest.
 func newLocalRuntime(
+	ctx context.Context,
 	deployment config.DeploymentDir,
 	manager *runtimeartifacts.Manager,
 ) (localruntime.Runtime, error) {
-	return newLocalRuntimeForPlatform(deployment, manager, runtime.GOOS, runtime.GOARCH)
+	manifest, err := config.ReadInfrastructureManifest(deployment)
+	if err != nil {
+		return nil, err
+	}
+
+	return newLocalRuntimeForPlatform(
+		ctx, deployment, manifest, manager, runtime.GOOS, runtime.GOARCH,
+		localruntime.DetectContainerEngine,
+	)
 }
 
+// newLocalRuntimeForPlatform takes the manifest rather than reading it, because
+// init selects a runtime before the deployment directory holds one.
 func newLocalRuntimeForPlatform(
+	ctx context.Context,
 	deployment config.DeploymentDir,
+	manifest *presets.InfrastructureManifest,
 	manager *runtimeartifacts.Manager,
 	goos, goarch string,
+	detect containerEngineDetector,
 ) (localruntime.Runtime, error) {
 	switch {
 	case goos == localMacOS && goarch == localMacArch:
 		return localruntime.NewMacVMRuntime(deployment, manager), nil
 	case goos == localLinuxOS && (goarch == localLinuxAMD64 || goarch == localLinuxARM64):
-		return localruntime.NewHostLinuxRuntime(deployment, manager), nil
+		engine, err := localContainerEngine(ctx, deployment, manifest, goos, goarch, detect)
+		if err != nil {
+			return nil, err
+		}
+
+		return localruntime.NewHostLinuxRuntime(deployment, manager, engine), nil
 	case goos == localWindowsOS && goarch == localWindowsAMD64:
-		return localruntime.NewHostWindowsRuntime(deployment, manager), nil
+		engine, err := localContainerEngine(ctx, deployment, manifest, goos, goarch, detect)
+		if err != nil {
+			return nil, err
+		}
+
+		return localruntime.NewHostWindowsRuntime(deployment, manager, engine), nil
 	default:
 		return nil, fmt.Errorf(
 			"%w (current platform: %s/%s)", errUnsupportedLocalPlatform, goos, goarch,
