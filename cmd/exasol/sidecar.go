@@ -85,7 +85,7 @@ func newSidecarEnableCommand(flags *CommonFlags, fixed string) *cobra.Command {
 		) (deploy.SidecarResult, error) {
 			result, err := deploy.EnableSidecar(ctx, deployment, name, !noWait)
 			if err == nil {
-				addSidecarHealthCallToAction(result)
+				addSidecarHealthCallToAction(result, deployment.CLISelection())
 			}
 
 			return result, err
@@ -100,20 +100,39 @@ func newSidecarEnableCommand(flags *CommonFlags, fixed string) *cobra.Command {
 }
 
 const (
-	sidecarStartingGuidance = "Sidecar %[1]s is still starting. " +
-		"Run `exasol sidecar status %[1]s` to check whether it is serving."
-	sidecarFailingGuidance = "Sidecar %[1]s is not serving. Address the probe failure, " +
-		"then run `exasol sidecar status %[1]s` to check it again."
+	sidecarStartingGuidance = "Sidecar %s is still starting. " +
+		"Run `%s` to check whether it is serving."
+	sidecarFailingGuidance = "Sidecar %s is not serving. Address the probe failure, " +
+		"then run `%s` to check it again."
+	mcpServingGuidance = "Run `exasol mcp instructions%s` " +
+		"to show setup instructions for your AI client."
 )
 
-func addSidecarHealthCallToAction(result deploy.SidecarResult) {
+func addSidecarHealthCallToAction(result deploy.SidecarResult, selection string) {
+	status := sidecarStatusCommand(result.Name) + selection
 	switch result.Health {
 	case "starting":
-		addTerminalCallToAction(fmt.Sprintf(sidecarStartingGuidance, result.Name))
+		addTerminalCallToAction(fmt.Sprintf(sidecarStartingGuidance, result.Name, status))
 	case "failing":
-		addTerminalCallToAction(fmt.Sprintf(sidecarFailingGuidance, result.Name))
+		addTerminalCallToAction(fmt.Sprintf(sidecarFailingGuidance, result.Name, status))
+	case "serving":
+		if isMCPCommandTarget(result.Name) {
+			addTerminalCallToAction(fmt.Sprintf(mcpServingGuidance, selection))
+		}
 	default:
 	}
+}
+
+func isMCPCommandTarget(name string) bool {
+	return name == deploy.MCPSidecarName && deploy.CatalogSupports(deploy.MCPSidecarName)
+}
+
+func sidecarStatusCommand(name string) string {
+	if isMCPCommandTarget(name) {
+		return "exasol mcp status"
+	}
+
+	return "exasol sidecar status " + name
 }
 
 func newSidecarDisableCommand(flags *CommonFlags, fixed string) *cobra.Command {

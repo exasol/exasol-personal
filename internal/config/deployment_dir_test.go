@@ -70,3 +70,19 @@ func TestDeploymentDir_Resolve(t *testing.T) {
 	require.Equal(t, filepath.Join(root, relPath), deployment.Resolve(relPath))
 	require.Equal(t, absPath, deployment.Resolve(absPath))
 }
+
+//nolint:paralleltest // overrides HOME to place the launcher-managed directory.
+func TestDeploymentDir_CLISelectionFollowsTheDirectoryLocation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	deployments := filepath.Join(LauncherDirPath(home), deploymentsDirName)
+	outside := filepath.Join(home, "work", "exasol")
+
+	require.Empty(t, NewDeploymentDir(filepath.Join(deployments, "default")).CLISelection())
+	require.Equal(t, " -d dev", NewDeploymentDir(filepath.Join(deployments, "dev")).CLISelection())
+	require.Equal(t, " --deployment-dir "+outside, NewDeploymentDir(outside).CLISelection())
+	require.Equal(t,
+		" --deployment-dir '"+filepath.Join(home, "my deployment")+"'",
+		NewDeploymentDir(filepath.Join(home, "my deployment")).CLISelection())
+}

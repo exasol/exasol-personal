@@ -255,3 +255,62 @@ func TestRenderConnectionInstructionsText_IncludesSSHAlternativeWhenAvailable(t 
 		}
 	}
 }
+
+func TestRenderConnectionInstructionsTextIncludesTheMCPServer(t *testing.T) {
+	t.Parallel()
+
+	for name, fixture := range map[string]struct {
+		sidecars []SidecarSummary
+		suggest  bool
+		want     string
+	}{
+		"enabled": {
+			sidecars: []SidecarSummary{{
+				Name:    MCPSidecarName,
+				Enabled: true,
+				Endpoints: []SidecarEndpoint{
+					{IP: "127.0.0.1", Port: 4896, URL: "http://127.0.0.1:4896/mcp"},
+				},
+			}},
+			want: "=== MCP Server for AI Agents ===\n" +
+				"  Endpoint: http://127.0.0.1:4896/mcp\n" +
+				"  Show client setup instructions: " +
+				"exasol mcp instructions --deployment-dir /work/exasol\n",
+		},
+		"suggested": {
+			suggest: true,
+			want: "=== MCP Server for AI Agents ===\n" +
+				"  Serve the database to AI agents: " +
+				"exasol mcp enable --deployment-dir /work/exasol\n",
+		},
+		"unavailable": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			// Given
+			report := &DeploymentInfoReport{
+				DeploymentDir:   "/work/exasol",
+				DeploymentState: StatusRunning,
+				Connection:      &ConnectionDetails{DisplayHost: "localhost", DBPort: 8563},
+				Sidecars:        fixture.sidecars,
+				SuggestMCP:      fixture.suggest,
+			}
+			// When
+			content, err := RenderConnectionInstructionsText(report)
+			// Then
+			if err != nil {
+				t.Fatalf("expected instructions to render: %v", err)
+			}
+			if fixture.want == "" {
+				if strings.Contains(content, "MCP Server") {
+					t.Fatalf("expected no MCP section, got %q", content)
+				}
+
+				return
+			}
+			if !strings.Contains(content, fixture.want) {
+				t.Fatalf("expected instructions to contain %q, got %q", fixture.want, content)
+			}
+		})
+	}
+}

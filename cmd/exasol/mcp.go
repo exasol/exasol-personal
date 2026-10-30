@@ -56,9 +56,12 @@ func newMCPCommand(flags *CommonFlags) *cobra.Command {
 }
 
 const (
-	mcpEnableGuidance       = "Run `exasol mcp enable` to enable the MCP server."
-	mcpInstructionsGuidance = "Run `exasol mcp instructions <client>` " +
+	mcpEnableGuidance = "Run `exasol mcp enable%s` " +
+		"to serve the database to AI agents over MCP."
+	mcpInstructionsGuidance = "Run `exasol mcp instructions <client>%s` " +
 		"to show its setup instructions."
+	mcpOtherClientGuidance = "Other MCP clients that support Streamable HTTP can use " +
+		"the endpoint that `exasol mcp status%s` reports."
 	mcpInstallGuidance = "Run `exasol install local` to create a new local deployment."
 	mcpSelectGuidance  = "Run `exasol mcp instructions %s -d NAME` " +
 		"to use an existing deployment."
@@ -78,10 +81,14 @@ func newMCPInstructionsCommand(flags *CommonFlags) *cobra.Command {
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				return renderMCPClients(flags.OutputJson)
+				return renderMCPClients(flags.OutputJson, flags.Deployment().CLISelection())
 			}
 			client, found := mcpclient.Lookup(args[0])
 			if !found {
+				addTerminalCallToAction(fmt.Sprintf(
+					mcpOtherClientGuidance, flags.Deployment().CLISelection(),
+				))
+
 				return fmt.Errorf(
 					"no setup instructions for MCP client %q; instructions are available for: %s",
 					args[0], strings.Join(mcpclient.IDs(), ", "))
@@ -91,7 +98,9 @@ func newMCPInstructionsCommand(flags *CommonFlags) *cobra.Command {
 			}
 			endpoint, err := deploy.MCPServerURL(command.Context(), flags.Deployment())
 			if errors.Is(err, deploy.ErrMCPServerNotEnabled) {
-				addTerminalCallToAction(mcpEnableGuidance)
+				addTerminalCallToAction(fmt.Sprintf(
+					mcpEnableGuidance, flags.Deployment().CLISelection(),
+				))
 			}
 			if err != nil {
 				return err
@@ -124,7 +133,7 @@ func requireMCPDeployment(deployment config.DeploymentDir, client string) error 
 	)
 }
 
-func renderMCPClients(jsonOutput bool) error {
+func renderMCPClients(jsonOutput bool, selection string) error {
 	clients := mcpclient.Clients()
 	if jsonOutput {
 		return addJSONTerminalOutput(clients)
@@ -134,7 +143,7 @@ func renderMCPClients(jsonOutput bool) error {
 		lines = append(lines, fmt.Sprintf("  %-16s %s", client.ID, client.Name))
 	}
 	addTerminalOutput(strings.Join(lines, "\n"))
-	addTerminalCallToAction(mcpInstructionsGuidance)
+	addTerminalCallToAction(fmt.Sprintf(mcpInstructionsGuidance, selection))
 
 	return nil
 }

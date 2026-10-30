@@ -101,17 +101,19 @@ func TestSidecarEnableOffersNoWait(t *testing.T) {
 
 //nolint:paralleltest // Terminal queues are process-global.
 func TestSidecarHealthCallToAction(t *testing.T) {
-	for _, fixture := range []struct{ health, want string }{
-		{"starting", "Sidecar mcp is still starting. Run `exasol sidecar status mcp`"},
-		{"failing", "Sidecar mcp is not serving. Address the probe failure"},
-		{"serving", ""},
-		{"", ""},
+	for _, fixture := range []struct{ name, health, want string }{
+		{"mcp", "starting", "Sidecar mcp is still starting. Run `exasol mcp status -d dev`"},
+		{"mcp", "failing", "Sidecar mcp is not serving. Address the probe failure"},
+		{"mcp", "serving", "Run `exasol mcp instructions -d dev` to show setup instructions"},
+		{"mcp", "", ""},
+		{"api", "starting", "Run `exasol sidecar status api -d dev`"},
+		{"api", "serving", ""},
 	} {
 		// Given
 		resetTerminalMessages()
-		result := deploy.SidecarResult{Name: "mcp", Health: fixture.health}
+		result := deploy.SidecarResult{Name: fixture.name, Health: fixture.health}
 		// When
-		addSidecarHealthCallToAction(result)
+		addSidecarHealthCallToAction(result, " -d dev")
 		var stderr bytes.Buffer
 		writeTerminalCallsToAction(&stderr, callsToActionVisible(false))
 		// Then

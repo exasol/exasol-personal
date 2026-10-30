@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import json
+import shlex
 from pathlib import Path
 from subprocess import CalledProcessError
 
@@ -112,13 +113,17 @@ def test_mcp_instructions_requires_an_enabled_server(
     exasol_path: str, tmp_path: Path
 ) -> None:
     # Given
-    selection = init_local(exasol_path, tmp_path / "deployment")
+    directory = tmp_path / "deployment"
+    selection = init_local(exasol_path, directory)
     # When
     with pytest.raises(CalledProcessError) as failure:
         run_command([exasol_path, "mcp", "instructions", "codex", *selection[:2]])
     # Then
     assert "the MCP server is not enabled" in failure.value.stderr
-    assert "exasol mcp enable" in failure.value.stderr
+    assert (
+        f"exasol mcp enable --deployment-dir {shlex.quote(str(directory))}"
+        in failure.value.stderr
+    )
 
 
 def test_mcp_instructions_explain_a_missing_deployment(
@@ -145,3 +150,19 @@ def test_mcp_instructions_explain_a_missing_deployment(
     assert "use the selected deployment's MCP endpoint" in stderr
     assert "exasol install local" in stderr
     assert "exasol mcp instructions claude-code -d NAME" in stderr
+
+
+def test_mcp_instructions_point_other_clients_to_the_endpoint(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given
+    directory = tmp_path / "deployment"
+    selection = init_local(exasol_path, directory)
+    # When
+    with pytest.raises(CalledProcessError) as failure:
+        run_command([exasol_path, "mcp", "instructions", "other", *selection[:2]])
+    # Then
+    stderr = failure.value.stderr
+    assert 'no setup instructions for MCP client "other"' in stderr
+    assert "instructions are available for: claude-code" in stderr
+    assert f"exasol mcp status --deployment-dir {shlex.quote(str(directory))}" in stderr
