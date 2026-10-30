@@ -4,25 +4,25 @@ Exasol Product Documentation:
 No Exasol Personal deployment exists in this deployment directory yet.
 
 Next steps:
-  exasol presets list             // list available presets
-  exasol install <infra preset>   // create and start a deployment
+{{ nextSteps "exasol presets list" "list available presets"
+  (print "exasol install <infra preset>" .DeploymentSelection) "create and start a deployment" }}
 {{ else if eq .DeploymentState "initialized" }}
 Ready for deployment.
 
 Next steps:
-  exasol deploy    // provision resources and start the database
+{{ nextSteps (print "exasol deploy" .DeploymentSelection) "provision resources and start the database" }}
 {{ else if eq .DeploymentState "operation_in_progress" }}
 A deployment operation is in progress or did not finish cleanly.
 Please wait for any running launcher command to finish.
 
 Next steps:
-  exasol status    // check the deployment state
+{{ nextSteps (print "exasol status" .DeploymentSelection) "check the deployment state" }}
 {{ else if eq .DeploymentState "running" }}
 SQL clients documentation:
   https://docs.exasol.com/db/latest/connect_exasol/sql_clients.htm
 
 Open a SQL session:
-  exasol connect
+  exasol connect{{ .DeploymentSelection }}
 {{- if .MCPEndpoint }}
 
 Show setup instructions for your AI client:
@@ -35,22 +35,22 @@ Enable the MCP server:
 {{- end }}
 
 When you're finished, stop the deployment:
-  exasol stop
+  exasol stop{{ .DeploymentSelection }}
 {{ else if eq .DeploymentState "stopped" }}
 Deployment stopped.
 
 Next steps:
-  exasol start     // restart the deployment
-  exasol destroy   // delete provisioned resources
+{{ nextSteps (print "exasol start" .DeploymentSelection) "restart the deployment"
+  (print "exasol destroy" .DeploymentSelection) "delete provisioned resources" }}
 {{ else if eq .DeploymentState "deployment_failed" }}
 Deployment failed.
 
 Next steps:
-  exasol deploy    // retry provisioning after fixing the problem
-  exasol destroy   // clean up resources
+{{ nextSteps (print "exasol deploy" .DeploymentSelection) "retry provisioning after fixing the problem"
+  (print "exasol destroy" .DeploymentSelection) "clean up resources" }}
 {{ else if eq .DeploymentState "interrupted" }}
 Deployment operation interrupted.
 
 Next steps:
-  exasol status    // inspect the interrupted deployment
+{{ nextSteps (print "exasol status" .DeploymentSelection) "inspect the interrupted deployment" }}
 {{- end }}

@@ -31,7 +31,7 @@ To connect using a client of your choice:
 
 === CLI Connection Instructions ===
 To connect using the CLI:
-  exasol connect
+  exasol connect{{ $.DeploymentSelection }}
 
 {{ if .HasAdminUI -}}
 === How to open the Administration UI ===
@@ -52,16 +52,16 @@ To connect using the CLI:
 {{ if .ShellSupported }}{{ if .IsLocalBackend }}
 === Host Shell Instructions ===
   Local endpoint: {{ .DisplayHostname }}
-  Host shell (VM OS): exasol shell host
+  Host shell (VM OS): exasol shell host{{ $.DeploymentSelection }}
 {{ if .SSHCommand -}}
   Alternative: {{ .SSHCommand }}
 {{ end -}}
 
-Note: exasol destroy deletes the local VM disk/data and launcher-managed share for this deployment.
+Note: exasol destroy{{ $.DeploymentSelection }} deletes the local VM disk/data and launcher-managed share for this deployment.
 {{ else }}
 === SSH Connection Instructions ===
   Public IP: {{ .PublicIp }}
-  Host shell (OS): exasol shell host
+  Host shell (OS): exasol shell host{{ $.DeploymentSelection }}
 {{ if .SSHCommand -}}
   Alternative: {{ .SSHCommand }}
 {{ end -}}

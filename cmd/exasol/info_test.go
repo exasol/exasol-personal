@@ -12,6 +12,7 @@ import (
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
+	"github.com/stretchr/testify/require"
 )
 
 //nolint:paralleltest // replaces package-level templates and terminal message queues
@@ -356,10 +357,10 @@ func TestFormatDeploymentInfoNoticeGroupsRunningStepsByGoal(t *testing.T) {
 				t.Fatalf("expected terminal notice to render: %v", err)
 			}
 			expected := "Open a SQL session:\n" +
-				"  exasol connect\n\n" +
+				"  exasol connect --deployment-dir /work/exasol\n\n" +
 				fixture.mcp +
 				"When you're finished, stop the deployment:\n" +
-				"  exasol stop"
+				"  exasol stop --deployment-dir /work/exasol"
 			if !strings.HasSuffix(content, expected) {
 				t.Fatalf("expected terminal notice to end with:\n%s\ngot:\n%s", expected, content)
 			}
@@ -392,4 +393,36 @@ func TestFormatDeploymentInfoNoticeExplainsActiveOperation(t *testing.T) {
 			t.Fatalf("expected terminal notice to contain %q, got:\n%s", expected, content)
 		}
 	}
+}
+
+func TestFormatDeploymentInfoNoticeSelectsTheDeployment(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	report := &deploy.DeploymentInfoReport{
+		DeploymentDir:   "/work/exasol",
+		DeploymentState: deploy.StatusStopped,
+	}
+
+	// When
+	content, err := formatDeploymentInfoNotice(report)
+	if err != nil {
+		t.Fatalf("expected terminal notice to render: %v", err)
+	}
+
+	// Then
+	expected := "  exasol start --deployment-dir /work/exasol     // restart the deployment\n" +
+		"  exasol destroy --deployment-dir /work/exasol   // delete provisioned resources"
+	if !strings.Contains(content, expected) {
+		t.Fatalf("expected terminal notice to contain %q, got:\n%s", expected, content)
+	}
+}
+
+func TestFormatNextStepsAlignsComments(t *testing.T) {
+	t.Parallel()
+
+	// When / Then
+	require.Equal(t,
+		"  exasol connect   // connect\n  exasol stop      // stop",
+		formatNextSteps("exasol connect", "connect", "exasol stop", "stop"))
 }
