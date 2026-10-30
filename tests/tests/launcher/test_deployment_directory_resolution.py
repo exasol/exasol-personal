@@ -384,7 +384,7 @@ def test_status_reports_uninitialized_explicit_deployment_dir(
     assert data["deploymentDir"] == str(deployment_dir)
 
 
-def test_status_debug_logs_current_deployment_dir(
+def test_status_reports_current_deployment_dir(
     exasol_path: str, tmp_path: Path
 ) -> None:
     # Given the current working directory is a recognized deployment directory
@@ -414,10 +414,12 @@ def test_status_debug_logs_current_deployment_dir(
         check=True,
     )
 
-    # Then the current deployment directory is logged and reported
+    # Then the current deployment directory is logged, announced once, and reported
     data = json.loads(result.stdout)
     assert data["deploymentDir"] == str(deployment_dir)
     _assert_deployment_dir_logged(result.stderr, deployment_dir, "current")
+    notice = f"Using deployment in current directory: {deployment_dir}"
+    assert result.stderr.count(notice) == 1
 
 
 def test_init_creates_default_deployment_dir(exasol_path: str, tmp_path: Path) -> None:

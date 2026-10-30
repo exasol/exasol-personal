@@ -75,6 +75,13 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
+- Commands run from inside a deployment directory without `--deployment-dir` or `-d` now report
+  the deployment they act on, as they already do for the default and named deployments:
+
+  ```text
+  Using deployment in current directory: /home/me/.exasol/personal/deployments/dev
+  ```
+
 - `--tofu-update-lockfile` is now offered only by deployments whose infrastructure preset uses the OpenTofu backend. It stays available for OpenTofu-backed `exasol install` and `exasol deploy`, is no longer listed in the help of a local preset or deployment, and is rejected with an error naming the preset when passed to one.
 
   Example: `exasol install local --tofu-update-lockfile` reports `unsupported deployment option: infrastructure preset "local" does not support --tofu-update-lockfile`.
