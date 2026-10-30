@@ -21,9 +21,21 @@ Next steps:
 SQL clients documentation:
   https://docs.exasol.com/db/latest/connect_exasol/sql_clients.htm
 
-Next steps:
-  exasol connect   // open a SQL terminal connection
-  exasol stop      // stop the deployment without deleting resources
+Open a SQL session:
+  exasol connect
+{{- if .MCPEndpoint }}
+
+Show setup instructions for your AI client:
+  exasol mcp instructions{{ .DeploymentSelection }}
+{{- else if .SuggestMCP }}
+
+Optional: use this database with an AI assistant.
+Enable the MCP server:
+  exasol mcp enable{{ .DeploymentSelection }}
+{{- end }}
+
+When you're finished, stop the deployment:
+  exasol stop
 {{ else if eq .DeploymentState "stopped" }}
 Deployment stopped.
 

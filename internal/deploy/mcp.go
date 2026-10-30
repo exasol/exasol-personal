@@ -53,3 +53,14 @@ func MCPServerURL(ctx context.Context, deployment config.DeploymentDir) (string,
 
 	return endpoint, err
 }
+
+// SuggestMCPServer reports whether a deployment could enable the MCP server
+// but has not.
+func SuggestMCPServer(deployment config.DeploymentDir) bool {
+	if !supportsSidecars(deployment) || !CatalogSupports(MCPSidecarName) {
+		return false
+	}
+	document, err := config.ReadSidecars(deployment)
+
+	return err == nil && !enabledSidecar(document, MCPSidecarName)
+}

@@ -5,6 +5,8 @@ package config
 
 import (
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/exasol/exasol-personal/internal/launcherpaths"
 	"github.com/exasol/exasol-personal/internal/presets"
@@ -146,4 +148,33 @@ func (DeploymentDir) RelativeInfrastructureArtifactDir() string {
 // preset directory.
 func (DeploymentDir) RelativeInstallationPresetDir() string {
 	return RelativeInstallationPresetDir()
+}
+
+var shellSafePath = regexp.MustCompile(`^[A-Za-z0-9_./:@%+=,~-]+$`)
+
+// CLISelection returns the flag that selects this deployment from any
+// working directory, with a leading space, so printed commands stay runnable
+// as written. The default deployment needs none.
+func (d DeploymentDir) CLISelection() string {
+	root, err := DeploymentsRootPath()
+	if err != nil {
+		return deploymentDirSelection(d.root)
+	}
+	if filepath.Dir(d.root) != filepath.Clean(root) {
+		return deploymentDirSelection(d.root)
+	}
+	name := filepath.Base(d.root)
+	if name == defaultDeploymentDirName {
+		return ""
+	}
+
+	return " -d " + name
+}
+
+func deploymentDirSelection(path string) string {
+	if shellSafePath.MatchString(path) {
+		return " --deployment-dir " + path
+	}
+
+	return " --deployment-dir '" + strings.ReplaceAll(path, "'", `'\''`) + "'"
 }

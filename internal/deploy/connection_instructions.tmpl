@@ -68,6 +68,18 @@ Note: exasol destroy deletes the local VM disk/data and launcher-managed share f
 {{ end }}{{ end }}
 {{- end }}
 
+{{- if .Connection }}
+{{- if .MCPEndpoint }}
+=== MCP Server for AI Agents ===
+  Endpoint: {{ .MCPEndpoint }}
+  Show client setup instructions: exasol mcp instructions{{ .DeploymentSelection }}
+
+{{ else if .SuggestMCP }}
+=== MCP Server for AI Agents ===
+  Serve the database to AI agents: exasol mcp enable{{ .DeploymentSelection }}
+
+{{ end }}
+{{- end }}
 {{- with .Connection }}
 === SQL clients documentation ===
   https://docs.exasol.com/db/latest/connect_exasol/sql_clients.htm

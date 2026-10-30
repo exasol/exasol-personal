@@ -313,6 +313,60 @@ func TestFormatDeploymentInfoNoticeIncludesStateGuidance(t *testing.T) {
 	}
 }
 
+func TestFormatDeploymentInfoNoticeGroupsRunningStepsByGoal(t *testing.T) {
+	t.Parallel()
+
+	enabled := []deploy.SidecarSummary{{
+		Name:      deploy.MCPSidecarName,
+		Enabled:   true,
+		Endpoints: []deploy.SidecarEndpoint{{URL: "http://127.0.0.1:4896/mcp"}},
+	}}
+	for name, fixture := range map[string]struct {
+		suggest  bool
+		sidecars []deploy.SidecarSummary
+		mcp      string
+	}{
+		"without MCP": {},
+		"MCP suggested": {
+			suggest: true,
+			mcp: "Optional: use this database with an AI assistant.\n" +
+				"Enable the MCP server:\n" +
+				"  exasol mcp enable --deployment-dir /work/exasol\n\n",
+		},
+		"MCP enabled": {
+			sidecars: enabled,
+			mcp: "Show setup instructions for your AI client:\n" +
+				"  exasol mcp instructions --deployment-dir /work/exasol\n\n",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			// Given
+			report := &deploy.DeploymentInfoReport{
+				DeploymentDir:   "/work/exasol",
+				DeploymentState: deploy.StatusRunning,
+				SuggestMCP:      fixture.suggest,
+				Sidecars:        fixture.sidecars,
+			}
+
+			// When
+			content, err := formatDeploymentInfoNotice(report)
+			// Then
+			if err != nil {
+				t.Fatalf("expected terminal notice to render: %v", err)
+			}
+			expected := "Open a SQL session:\n" +
+				"  exasol connect\n\n" +
+				fixture.mcp +
+				"When you're finished, stop the deployment:\n" +
+				"  exasol stop"
+			if !strings.HasSuffix(content, expected) {
+				t.Fatalf("expected terminal notice to end with:\n%s\ngot:\n%s", expected, content)
+			}
+		})
+	}
+}
+
 func TestFormatDeploymentInfoNoticeExplainsActiveOperation(t *testing.T) {
 	t.Parallel()
 

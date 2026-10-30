@@ -39,6 +39,8 @@ type DeploymentInfoReport struct {
 	Connection      *ConnectionDetails       `json:"connection,omitempty"`
 	// Nil for a deployment that cannot run sidecars.
 	Sidecars []SidecarSummary `json:"sidecars,omitzero"`
+	// SuggestMCP feeds terminal guidance; JSON consumers read Sidecars.
+	SuggestMCP bool `json:"-"`
 }
 
 type SidecarSummary struct {
@@ -55,6 +57,28 @@ type DeploymentPresetSummary struct {
 type DeploymentAttributes struct {
 	ClusterSize  int    `json:"clusterSize,omitempty"`
 	ClusterState string `json:"clusterState,omitempty"`
+}
+
+// DeploymentSelection is the flag that selects this deployment in printed
+// commands.
+func (report *DeploymentInfoReport) DeploymentSelection() string {
+	return config.NewDeploymentDir(report.DeploymentDir).CLISelection()
+}
+
+// MCPEndpoint is empty unless the MCP server is enabled with a declared endpoint.
+func (report *DeploymentInfoReport) MCPEndpoint() string {
+	for _, summary := range report.Sidecars {
+		if summary.Name != MCPSidecarName || !summary.Enabled {
+			continue
+		}
+		for _, endpoint := range summary.Endpoints {
+			if endpoint.URL != "" {
+				return endpoint.URL
+			}
+		}
+	}
+
+	return ""
 }
 
 func (details *ConnectionDetails) DisplayHostname() string {
@@ -169,6 +193,7 @@ func deploymentInfoReportFromState(
 	}
 	addDeploymentAttributes(deployment, report)
 	report.Sidecars = savedSidecarSummaries(deployment)
+	report.SuggestMCP = deploymentState == StatusRunning && SuggestMCPServer(deployment)
 
 	switch deploymentState {
 	case StatusRunning:

@@ -81,3 +81,20 @@ func TestMCPServerURLRejectsDeploymentsWithoutSidecarSupport(t *testing.T) {
 	// Then
 	require.ErrorIs(t, err, ErrSidecarsUnsupported)
 }
+
+func TestSuggestMCPServerUntilItIsEnabled(t *testing.T) {
+	t.Parallel()
+	// Given
+	deployment := initLocalDeploymentForInfoTest(t)
+	cloud := config.NewDeploymentDir(t.TempDir())
+	initDeploymentForInfoTest(t, cloud)
+	// When / Then
+	require.Equal(t, CatalogSupports(MCPSidecarName), SuggestMCPServer(deployment))
+	require.False(t, SuggestMCPServer(cloud))
+	writeSidecarsForInfoTest(t, deployment, mcpTestDefinition)
+	require.False(t, SuggestMCPServer(deployment))
+	writeSidecarsForInfoTest(t, deployment, strings.Replace(
+		mcpTestDefinition, "  mcp:\n", "  mcp:\n    enabled: false\n", 1,
+	))
+	require.Equal(t, CatalogSupports(MCPSidecarName), SuggestMCPServer(deployment))
+}
