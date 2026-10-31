@@ -19,7 +19,6 @@ import (
 )
 
 const (
-	runtimeArtifactsDirName  = "runtime-artifacts"
 	artifactsDirName         = "artifacts"
 	downloadsDirName         = "downloads"
 	cacheIndexFileName       = "index.json"
@@ -127,30 +126,12 @@ type partialDownloadCandidate struct {
 	path string
 }
 
-func DefaultCacheRoot() (string, error) {
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve user cache directory: %w", err)
-	}
-
-	return filepath.Join(launcherpaths.DirPath(cacheDir), runtimeArtifactsDirName), nil
-}
-
-func DefaultConfigPath() (string, error) {
-	rootDir, err := launcherpaths.RootDirPath()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(rootDir, cacheConfigFileName), nil
-}
-
 func NewDefaultCache() (*Cache, error) {
-	root, err := DefaultCacheRoot()
+	root, err := launcherpaths.CacheRootPath()
 	if err != nil {
 		return nil, err
 	}
-	configPath, err := DefaultConfigPath()
+	configPath, err := launcherpaths.ResourceConfigFilePath()
 	if err != nil {
 		return nil, err
 	}

@@ -11,6 +11,8 @@ from typing import Final
 import pytest
 
 from .helpers import (
+    deployments_root,
+    env_with_home,
     first_infrastructure_preset_id_or_skip,
     record_running_local_deployment,
     run_command,
@@ -18,15 +20,6 @@ from .helpers import (
 
 DEFAULT_STATUS_TIMEOUT_SECONDS: Final = 5
 UNRESPONSIVE_DEPLOYMENT_COUNT: Final = 3
-
-
-def _env_with_home(home: Path) -> dict[str, str]:
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["USERPROFILE"] = str(home)
-    env["HOMEDRIVE"] = ""
-    env["HOMEPATH"] = ""
-    return env
 
 
 def test_deployments_list_json_is_empty_array_when_none_exist(
@@ -40,7 +33,7 @@ def test_deployments_list_json_is_empty_array_when_none_exist(
     # When deployments list is invoked
     result = subprocess.run(
         [launcher, "deployments", "list", "--json"],
-        env=_env_with_home(home),
+        env=env_with_home(home),
         capture_output=True,
         text=True,
         check=True,
@@ -67,14 +60,14 @@ def test_deployments_list_reports_named_deployments(
             "staging",
             "--no-launcher-version-check",
         ],
-        env=_env_with_home(home),
+        env=env_with_home(home),
     )
-    (home / ".exasol" / "personal" / "deployments" / "empty-named").mkdir(parents=True)
+    (deployments_root(home) / "empty-named").mkdir(parents=True)
 
     # When deployments list is invoked with --json
     result = subprocess.run(
         [launcher, "deployments", "list", "--json"],
-        env=_env_with_home(home),
+        env=env_with_home(home),
         capture_output=True,
         text=True,
         check=True,
@@ -114,7 +107,7 @@ def test_deployments_list_reports_same_status_as_status_command(
     home.mkdir()
     infra_id = first_infrastructure_preset_id_or_skip(exasol_path)
     launcher = str(Path(exasol_path).resolve())
-    named_dir = home / ".exasol" / "personal" / "deployments" / "staging"
+    named_dir = deployments_root(home) / "staging"
     run_command(
         [
             launcher,
@@ -124,12 +117,12 @@ def test_deployments_list_reports_same_status_as_status_command(
             "staging",
             "--no-launcher-version-check",
         ],
-        env=_env_with_home(home),
+        env=env_with_home(home),
     )
     _set_workflow_state(named_dir, {"running": {}})
     status_result = subprocess.run(
         [launcher, "status", "--deployment", "staging", "--json"],
-        env=_env_with_home(home),
+        env=env_with_home(home),
         capture_output=True,
         text=True,
         check=True,
@@ -138,7 +131,7 @@ def test_deployments_list_reports_same_status_as_status_command(
     # When deployments list is invoked with --json
     result = subprocess.run(
         [launcher, "deployments", "list", "--json"],
-        env=_env_with_home(home),
+        env=env_with_home(home),
         capture_output=True,
         text=True,
         check=True,
@@ -164,7 +157,7 @@ def test_deployments_list_bounds_status_checks_and_runs_them_concurrently(
     # Given several named deployments whose runtime and database never answer
     home = tmp_path / "home"
     home.mkdir()
-    env = {**_env_with_home(home), "PATH": hanging_podman_env["PATH"]}
+    env = {**env_with_home(home), "PATH": hanging_podman_env["PATH"]}
     launcher = str(Path(exasol_path).resolve())
     names = [f"hung-{index}" for index in range(UNRESPONSIVE_DEPLOYMENT_COUNT)]
     for name in names:
@@ -180,7 +173,7 @@ def test_deployments_list_bounds_status_checks_and_runs_them_concurrently(
             env=env,
         )
         record_running_local_deployment(
-            home / ".exasol" / "personal" / "deployments" / name,
+            deployments_root(home) / name,
             unresponsive_db_port,
         )
 
@@ -216,14 +209,14 @@ def test_deployments_list_does_not_accept_deployment_dir_or_deployment(
     # When deployments list is invoked with --deployment-dir or --deployment
     dir_result = subprocess.run(
         [launcher, "deployments", "list", "--deployment-dir", str(tmp_path)],
-        env=_env_with_home(home),
+        env=env_with_home(home),
         capture_output=True,
         text=True,
         check=False,
     )
     deployment_result = subprocess.run(
         [launcher, "deployments", "list", "--deployment", "staging"],
-        env=_env_with_home(home),
+        env=env_with_home(home),
         capture_output=True,
         text=True,
         check=False,
