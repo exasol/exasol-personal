@@ -179,7 +179,8 @@ sidecars:
     container:
       image: docker.io/library/caddy:2-alpine
       ports:
-        - containerPort: 8080
+        - name: http
+          containerPort: 8080
           hostPort: 18080
           hostIP: 127.0.0.1
 `))
@@ -479,6 +480,10 @@ func newSidecarOperationsFixture(t *testing.T) (*deploymentSidecars, *sidecarRun
 		deployment: deployment,
 		templates:  sidecarTestCatalog(t),
 		runtime:    selected,
+		ports: testLocalPortAllocator(
+			t, localMinimumAutomaticPort, localMaximumPort,
+			func(string, int) bool { return true },
+		),
 	}, selected
 }
 
