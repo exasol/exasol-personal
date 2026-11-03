@@ -38,6 +38,9 @@ Notable user-facing changes to Exasol Personal are documented here.
   Example: `cannot enable sidecar "mcp": Podman could not set up the deployment network
   (nftables error)`.
 
+- `exasol start` prints the connection instructions of a running database
+  when only sidecars fail to start.
+
 ### Breaking Changes
 
 - None.
