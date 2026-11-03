@@ -83,7 +83,7 @@ func probedStatus(
 	if prepare != nil {
 		prepare(selected)
 	}
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	result, err := operations.status(t.Context(), "example")
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestSidecarStoppedContainerReportsNoHealth(t *testing.T) {
 	operations, selected := newSidecarOperationsFixture(t)
 	operations.templates = probedCatalog(t, closedPort(t),
 		"      readinessProbe: {tcpSocket: {port: web}}\n")
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	selected.containers.Stop()
 	// When
@@ -210,7 +210,7 @@ func TestSidecarEditedProbeNeedsNoRecreation(t *testing.T) {
 	operations, selected := newSidecarOperationsFixture(t)
 	operations.templates = probedCatalog(t, closedPort(t),
 		"      readinessProbe: {tcpSocket: {port: web}}\n")
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	created, _ := selected.containers.Calls()
 	document, err := config.ReadSidecars(operations.deployment)
@@ -239,7 +239,7 @@ func waitingFixture(
 	operations, selected := newSidecarOperationsFixture(t)
 	operations.templates = probedCatalog(t, port, probe)
 	selected.containers.Fail("exec", errors.New("not ready"))
-	result, err := operations.enable(t.Context(), "example")
+	result, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	require.Equal(t, sidecarHealthStarting, result.Health)
 

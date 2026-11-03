@@ -25,7 +25,7 @@ func TestSidecarEnableSavesAvailableTemplatePort(t *testing.T) {
 	operations, _ := newSidecarOperationsFixture(t)
 	operations.templates = sidecarTestPublishedCatalog(t)
 	// When
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	// Then
 	require.NoError(t, err)
 	require.Equal(t, 18080, savedHostPort(t, operations.deployment, "example"))
@@ -41,7 +41,7 @@ func TestSidecarEnableAdvancesPastHeldTemplatePort(t *testing.T) {
 		func(_ string, port int) bool { return port != 18080 },
 	)
 	// When
-	result, err := operations.enable(t.Context(), "example")
+	result, err := operations.enable(t.Context(), "example", "")
 	// Then
 	require.NoError(t, err)
 	require.Equal(t, 18081, savedHostPort(t, operations.deployment, "example"))
@@ -74,12 +74,49 @@ func TestSidecarEnableSkipsPortsSavedForOtherServices(t *testing.T) {
 				}))
 			}
 			// When
-			_, err := operations.enable(t.Context(), "example")
+			_, err := operations.enable(t.Context(), "example", "")
 			// Then
 			require.NoError(t, err)
 			require.Equal(t, 18081, savedHostPort(t, operations.deployment, "example"))
 		})
 	}
+}
+
+func TestSidecarEnableWithPortsMovesRunningSidecar(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, _ := newSidecarOperationsFixture(t)
+	operations.templates = sidecarTestPublishedCatalog(t)
+	_, err := operations.enable(t.Context(), "example", "")
+	require.NoError(t, err)
+	// When
+	result, err := operations.enable(t.Context(), "example", "http:18090")
+	// Then
+	require.NoError(t, err)
+	require.Equal(t, sidecarReconciliationComplete, result.Reconciliation)
+	require.Equal(t, []SidecarEndpoint{{IP: "127.0.0.1", Port: 18090}}, result.Endpoints)
+}
+
+func TestSidecarPortsRejectHostPortOfUnlistedOwnPort(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, _ := newSidecarOperationsFixture(t)
+	operations.templates = sidecarTestPublishedCatalog(t)
+	_, err := operations.enable(t.Context(), "example", "")
+	require.NoError(t, err)
+	document, err := config.ReadSidecars(operations.deployment)
+	require.NoError(t, err)
+	definition := document.Sidecars["example"]
+	definition.Container.Ports = append(definition.Container.Ports, sidecar.Port{
+		Name: "admin", ContainerPort: 9090, HostPort: 18081,
+	})
+	document.Sidecars["example"] = definition
+	require.NoError(t, config.WriteSidecars(operations.deployment, document))
+	// When
+	_, err = operations.enable(t.Context(), "example", "http:18081")
+	// Then
+	require.ErrorContains(t, err, `host port 18081 is saved for sidecar "example" port "admin"`)
+	require.Equal(t, 18080, savedHostPort(t, operations.deployment, "example"))
 }
 
 func TestSidecarEnableWithoutFreePortSavesNothing(t *testing.T) {
@@ -92,7 +129,7 @@ func TestSidecarEnableWithoutFreePortSavesNothing(t *testing.T) {
 		func(string, int) bool { return false },
 	)
 	// When
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	// Then
 	require.ErrorContains(t, err, `sidecar "example"`)
 	require.ErrorContains(t, err, `"http"`)
