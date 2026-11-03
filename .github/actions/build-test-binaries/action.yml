@@ -1,0 +1,43 @@
+name: build-test-binaries
+description: Cross-compile the coverage-instrumented test binaries and upload one artifact per platform
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Go and Task
+      uses: ./.github/actions/setup-go
+    - name: Build
+      shell: bash
+      env:
+        # Override containers conf at least until github rolls out
+        # 'ubuntu-24.04 version 20260810.271.1' for all instanced of
+        # 'ubuntu-latest'.  At the time of writing, this is in staged rollout
+        # and version 20260720.247.2 ships a v1 registries.conf that the
+        # library that we use refuses.
+        CONTAINERS_REGISTRIES_CONF: ${{ github.workspace }}/.github/containers/registries.conf
+      run: |
+        # Each target builds into its own directory because the Linux and
+        # macOS binaries share the name "exasol".
+        build() {
+          GOOS="$1" GOARCH="$2" task build COVERAGE=true "BUILD_DIR_NAME=bin/$3"
+        }
+        build linux amd64 linux-amd64
+        build windows amd64 windows-amd64
+        build darwin arm64 macos-arm64
+    - name: Upload Linux AMD64 binary
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: exasol-linux-amd64
+        path: bin/linux-amd64/exasol
+        if-no-files-found: error
+    - name: Upload Windows AMD64 binary
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: exasol-windows-amd64
+        path: bin/windows-amd64/exasol.exe
+        if-no-files-found: error
+    - name: Upload macOS ARM64 binary
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: exasol-macos-arm64
+        path: bin/macos-arm64/exasol
+        if-no-files-found: error

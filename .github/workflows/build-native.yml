@@ -1,0 +1,104 @@
+name: Build natively on Linux, Windows, and macOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, "release/**"]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+# A new push cancels the previous run of the same pull request or branch,
+# including main, where only the latest commit needs a complete run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      build: ${{ steps.detect.outputs.build }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The pull request merge commit and its two parents are enough to diff against the base.
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Detect build tooling changes
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          tooling_paths='^(Taskfile\.yml|tasks/|tools/|go\.mod|go\.sum|\.goreleaser\.yaml|\.github/workflows/|\.github/actions/|assets/resources/resources\.yaml)'
+
+          if [[ "${EVENT_NAME}" != "pull_request" ]]; then
+            build=true
+            reason="triggered by ${EVENT_NAME}"
+          elif git diff --name-only HEAD^1 HEAD | grep -qE "${tooling_paths}"; then
+            build=true
+            reason="the pull request changes build tooling"
+          else
+            build=false
+            reason="the pull request does not change build tooling"
+          fi
+
+          echo "build=${build}" >> "${GITHUB_OUTPUT}"
+          echo "Native builds run: ${build} (${reason})." >> "${GITHUB_STEP_SUMMARY}"
+
+  build-native-linux:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # this is need because we use "git describe" to get the latest version from git
+          fetch-depth: 0
+      - uses: ./.github/actions/build
+        with:
+          coverage: "false"
+
+  build-native-windows:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/build
+        with:
+          coverage: "false"
+
+  # Pull requests from forks must not run on the self-hosted runner.
+  build-native-macos:
+    needs: changes
+    if: >-
+      needs.changes.outputs.build == 'true' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, macOS, ARM64, virtualization, osx06]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # The runner's shared tool cache is not writable, so keep the Go toolchain job-local.
+      - name: Use a job-local tool cache
+        run: |
+          mkdir -p "${RUNNER_TEMP}/tool-cache"
+          echo "RUNNER_TOOL_CACHE=${RUNNER_TEMP}/tool-cache" >> "${GITHUB_ENV}"
+      - uses: ./.github/actions/build
+        with:
+          coverage: "false"

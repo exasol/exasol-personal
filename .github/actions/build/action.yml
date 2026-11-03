@@ -1,5 +1,10 @@
 name: build
 description: Build the project
+inputs:
+  coverage:
+    description: Enable coverage instrumentation.
+    required: false
+    default: "true"
 runs:
   using: "composite"
   steps:
@@ -14,4 +19,5 @@ runs:
         # and version 20260720.247.2 ships a v1 registries.conf that the
         # library that we use refuses.
         CONTAINERS_REGISTRIES_CONF: ${{ github.workspace }}/.github/containers/registries.conf
-      run: task build COVERAGE=true
+        COVERAGE: ${{ inputs.coverage }}
+      run: task build COVERAGE="${COVERAGE}"
