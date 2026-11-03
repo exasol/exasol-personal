@@ -355,6 +355,138 @@ def test_sidecar_invalid_port_entry_names_the_entry(
     assert definition.read_text(encoding="utf-8") == saved
 
 
+def test_sidecar_config_get_reports_saved_host_ports(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    selection = ["--deployment-dir", str(sidecar_directory)]
+    run_command(
+        [exasol_path, "sidecar", "enable", "mcp", "--ports", "mcp:14897", *selection]
+    )
+    # When
+    text = run_command([exasol_path, "sidecar", "config", "get", "mcp", *selection])
+    data = json.loads(
+        run_command(
+            [
+                exasol_path,
+                "sidecar",
+                "config",
+                "get",
+                "mcp",
+                "ports",
+                "--json",
+                *selection,
+            ]
+        ).stdout
+    )
+    # Then
+    assert "ports = mcp:14897" in text.stdout
+    assert data == {"name": "mcp", "ports": "mcp:14897"}
+
+
+def test_sidecar_config_set_on_stopped_deployment_names_start(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    selection = ["--deployment-dir", str(sidecar_directory)]
+    run_command([exasol_path, "sidecar", "enable", "mcp", *selection])
+    state_path = sidecar_directory / ".exasolLauncherState.json"
+    state = json.loads(state_path.read_text())
+    state["currentWorkflowState"] = {"stopped": {}}
+    state_path.write_text(json.dumps(state))
+    # When
+    result = run_command(
+        [
+            exasol_path,
+            "sidecar",
+            "config",
+            "set",
+            "mcp",
+            "--ports",
+            "mcp:14897",
+            *selection,
+        ]
+    )
+    # Then
+    assert "run `exasol start` to apply these changes" in result.stderr
+
+
+def test_sidecar_list_reports_saved_host_ports(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    selection = ["--deployment-dir", str(sidecar_directory)]
+    run_command(
+        [exasol_path, "sidecar", "enable", "mcp", "--ports", "mcp:14897", *selection]
+    )
+    # When
+    text = run_command([exasol_path, "sidecar", "list", *selection])
+    listed = json.loads(
+        run_command([exasol_path, "sidecar", "list", "--json", *selection]).stdout
+    )
+    # Then
+    assert "ports = mcp:14897" in text.stdout
+    assert next(entry for entry in listed if entry["name"] == "mcp")["ports"] == (
+        "mcp:14897"
+    )
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [["get", "mcp"], ["set", "mcp", "--ports", "mcp:14897"], ["reset", "mcp", "ports"]],
+)
+def test_sidecar_config_for_unsaved_sidecar_fails(
+    exasol_path: str, sidecar_directory: Path, arguments: list[str]
+) -> None:
+    # When
+    with pytest.raises(CalledProcessError) as failure:
+        run_command(
+            [
+                exasol_path,
+                "sidecar",
+                "config",
+                *arguments,
+                "--deployment-dir",
+                str(sidecar_directory),
+            ]
+        )
+    # Then
+    assert "exasol sidecar enable mcp" in failure.value.stderr
+
+
+def test_sidecar_config_reset_keeps_unnamed_host_port(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    definition = sidecar_directory / "sidecars.yaml"
+    definition.write_text(
+        "version: 1\nsidecars:\n  saved:\n    container:\n      image: caddy:2\n"
+        "      ports:\n        - {containerPort: 8080, hostPort: 18080}\n"
+        "        - {name: http, containerPort: 8081, hostPort: 18081}\n",
+        encoding="utf-8",
+    )
+    # When
+    result = run_command(
+        [
+            exasol_path,
+            "sidecar",
+            "config",
+            "reset",
+            "saved",
+            "ports",
+            "--json",
+            "--deployment-dir",
+            str(sidecar_directory),
+        ]
+    )
+    # Then
+    ports = yaml.safe_load(definition.read_text(encoding="utf-8"))["sidecars"]["saved"][
+        "container"
+    ]["ports"]
+    assert ports[0]["hostPort"] == 18080  # noqa: PLR2004
+    assert json.loads(result.stdout)["ports"] == f"http:{ports[1]['hostPort']}"
+
+
 @pytest.mark.openspec("deployment-info-reporting")
 def test_info_reports_saved_sidecars(exasol_path: str, sidecar_directory: Path) -> None:
     # Given
