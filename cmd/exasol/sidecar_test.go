@@ -127,6 +127,22 @@ func TestSidecarHealthCallToAction(t *testing.T) {
 }
 
 //nolint:paralleltest // Terminal queues are process-global.
+func TestSidecarConfigurationReportsAppliedPorts(t *testing.T) {
+	// Given
+	resetTerminalMessages()
+	t.Cleanup(resetTerminalMessages)
+	result := deploy.SidecarConfiguration{Name: "mcp", Ports: "mcp:14897", Applied: true}
+	// When
+	err := renderSidecarConfiguration(result, nil, &CommonFlags{DeploymentName: "dev"})
+	var stderr bytes.Buffer
+	writeTerminalCallsToAction(&stderr, callsToActionVisible(false))
+	// Then
+	require.NoError(t, err)
+	require.Contains(t, stderr.String(),
+		"Sidecar mcp now publishes these ports. Run `exasol mcp status -d dev`")
+}
+
+//nolint:paralleltest // Terminal queues are process-global.
 func TestSidecarRestartGuidanceFollowsOutputMode(t *testing.T) {
 	for _, jsonOutput := range []bool{false, true} {
 		// Given
