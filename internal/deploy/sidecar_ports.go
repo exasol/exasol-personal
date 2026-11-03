@@ -6,6 +6,9 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/exasol/exasol-personal/internal/sidecar"
 )
@@ -42,6 +45,54 @@ func (sidecars *deploymentSidecars) reservedHostPorts(
 	}
 
 	return reserved
+}
+
+func (sidecars *deploymentSidecars) setHostPorts(
+	document sidecar.Document, name string, container *sidecar.Container, raw string,
+) error {
+	reserved := sidecars.reservedHostPorts(document, name)
+	named := map[string]bool{}
+	for entry := range strings.SplitSeq(raw, ",") {
+		portName, _, _ := strings.Cut(entry, ":")
+		named[strings.TrimSpace(portName)] = true
+	}
+	for _, port := range container.Ports {
+		if port.HostPort > 0 && port.Name == "" {
+			reserved[port.HostPort] = fmt.Sprintf("sidecar %q", name)
+		} else if port.HostPort > 0 && !named[port.Name] {
+			reserved[port.HostPort] = fmt.Sprintf("sidecar %q port %q", name, port.Name)
+		}
+	}
+	seen := map[string]bool{}
+	for entry := range strings.SplitSeq(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		portName, rawPort, found := strings.Cut(entry, ":")
+		portName = strings.TrimSpace(portName)
+		port, err := strconv.Atoi(strings.TrimSpace(rawPort))
+		index := slices.IndexFunc(container.Ports, func(candidate sidecar.Port) bool {
+			return candidate.Name == portName && candidate.HostPort > 0
+		})
+		switch {
+		case !found || portName == "" || err != nil:
+			return fmt.Errorf("port entry %q: expected <port-name>:<host-port>", entry)
+		case seen[portName]:
+			return fmt.Errorf("port entry %q: port %q is given more than once", entry, portName)
+		case port < 1 || port > localMaximumPort:
+			return fmt.Errorf("port entry %q: expected a host port from 1 through 65535", entry)
+		case index < 0:
+			return fmt.Errorf(
+				"port entry %q: sidecar %q publishes no port named %q", entry, name, portName,
+			)
+		}
+		if owner, taken := reserved[port]; taken {
+			return fmt.Errorf("port entry %q: host port %d is saved for %s", entry, port, owner)
+		}
+		seen[portName] = true
+		reserved[port] = fmt.Sprintf("sidecar %q port %q", name, portName)
+		container.Ports[index].HostPort = port
+	}
+
+	return nil
 }
 
 func (sidecars *deploymentSidecars) selectHostPorts(

@@ -950,6 +950,7 @@ Flags:
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --no-wait                    Return without waiting for a starting sidecar to serve
+      --ports string               Host ports to save, as comma-separated <port-name>:<host-port> entries, for example mcp:14896
 ```
 
 #### `exasol mcp instructions` { data-toc-label="mcp instructions" }
@@ -1130,6 +1131,7 @@ Flags:
       --deployment-dir file-path   Override the deployment directory selected automatically
   -j, --json                       Output in JSON format
       --no-wait                    Return without waiting for a starting sidecar to serve
+      --ports string               Host ports to save, as comma-separated <port-name>:<host-port> entries, for example mcp:14896
 ```
 
 #### `exasol sidecar list` { data-toc-label="sidecar list" }

@@ -410,7 +410,7 @@ func TestSidecarEnableReportsSupportedChoices(t *testing.T) {
 		directory := writeInitializedDeployment(t, "backend: local\nlocal: {}\n")
 		deployment := config.NewDeploymentDir(directory)
 		// When
-		_, err := deploy.EnableSidecar(testManagerContext(t), deployment, name, true)
+		_, err := deploy.EnableSidecar(testManagerContext(t), deployment, name, "", true)
 		// Then
 		require.ErrorContains(t, err, "supported choices:")
 		require.ErrorContains(t, err, name)
