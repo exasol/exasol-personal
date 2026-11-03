@@ -106,6 +106,7 @@ type SecretKeyRef struct {
 type PublishedPort struct {
 	Sidecar  string
 	Index    int
+	Name     string
 	HostIP   string
 	HostPort int
 	// Where the container runtime bound the port, which differs from HostPort

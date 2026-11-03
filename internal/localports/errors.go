@@ -41,14 +41,14 @@ func ClassifyBindFailure(
 	if cause == nil {
 		return nil
 	}
-	if bindConflictDiagnostic(diagnostic) {
+	if BindConflict(diagnostic) {
 		return &UnavailableError{Service: service, Port: port, Cause: cause}
 	}
 
 	return cause
 }
 
-func bindConflictDiagnostic(diagnostic string) bool {
+func BindConflict(diagnostic string) bool {
 	diagnostic = strings.ToLower(diagnostic)
 	for _, marker := range []string{
 		"address already in use",

@@ -549,6 +549,22 @@ func TestMacForwardsRetainEndpointsWhenRunnerFails(t *testing.T) {
 	require.Contains(t, stub.state, "sidecar.caddy.0")
 }
 
+func TestMacForwardsClassifyHeldHostPort(t *testing.T) {
+	t.Parallel()
+	// Given
+	stub := &forwardStub{err: errors.New("listen tcp 127.0.0.1:18080: address already in use")}
+	endpoint := caddyEndpoint()
+	endpoint.Name = "http"
+	// When
+	err := stub.forwards().open(t.Context(), []sidecar.PublishedPort{endpoint})
+	// Then
+	conflict, ok := errors.AsType[*sidecar.PortConflictError](err)
+	require.True(t, ok, "expected a port conflict, got %v", err)
+	require.Equal(t, "caddy", conflict.Sidecar)
+	require.Equal(t, "http", conflict.Port)
+	require.Equal(t, 18080, conflict.HostPort)
+}
+
 func TestMacRuntimeReportsNoEndpointsBeforeTheVMStarts(t *testing.T) {
 	t.Parallel()
 	// Given

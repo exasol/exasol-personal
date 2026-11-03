@@ -3,7 +3,14 @@
 
 package sidecar
 
-import "strings"
+import (
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/exasol/exasol-personal/internal/localports"
+)
 
 type StartupError struct {
 	Sidecar string
@@ -25,6 +32,44 @@ func NewStartupError(name, diagnostic, failure string) *StartupError {
 
 func (failure *StartupError) Error() string {
 	return "sidecar " + failure.Sidecar + ": " + failure.Cause
+}
+
+type PortConflictError struct {
+	Sidecar  string
+	Port     string
+	HostPort int
+	Cause    error
+}
+
+func (failure *PortConflictError) Error() string {
+	return fmt.Sprintf(
+		"sidecar %s cannot bind host port %d of port %s: %v",
+		failure.Sidecar, failure.HostPort, failure.Port, failure.Cause,
+	)
+}
+
+func (failure *PortConflictError) Unwrap() error { return failure.Cause }
+
+// ClassifyPortConflict identifies the conflicting port by the host port the
+// diagnostic names, or by the only published one.
+func ClassifyPortConflict(name string, ports []Port, cause error, diagnostic string) error {
+	if !localports.BindConflict(diagnostic) {
+		return cause
+	}
+	// Recovery selects a port by name, so an unnamed one stays a startup failure.
+	published := slices.DeleteFunc(slices.Clone(ports), func(port Port) bool {
+		return port.HostPort == 0 || port.Name == ""
+	})
+	for _, port := range published {
+		if len(published) == 1 ||
+			strings.Contains(diagnostic, ":"+strconv.Itoa(port.HostPort)) {
+			return &PortConflictError{
+				Sidecar: name, Port: port.Name, HostPort: port.HostPort, Cause: cause,
+			}
+		}
+	}
+
+	return cause
 }
 
 // ReportedCause prefers the runtime's own error line: a container runtime
