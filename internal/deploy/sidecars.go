@@ -66,9 +66,11 @@ type SidecarAvailability struct {
 }
 
 type deploymentSidecars struct {
-	deployment config.DeploymentDir
-	templates  sidecar.Resolver
-	runtime    sidecarRuntime
+	deployment    config.DeploymentDir
+	templates     sidecar.Resolver
+	runtime       sidecarRuntime
+	ports         localPortAllocator
+	databasePorts string
 }
 
 type SidecarNetworkUnsupportedError = localinstall.ServiceNetworkUnsupportedError
@@ -300,11 +302,17 @@ func newDeploymentSidecars(
 		return nil, err
 	}
 
-	return &deploymentSidecars{
+	operations := &deploymentSidecars{
 		deployment: deployment,
 		templates:  templates,
 		runtime:    selected,
-	}, nil
+		ports:      newLocalPortAllocator(),
+	}
+	if manifest.Local != nil {
+		operations.databasePorts = manifest.Local.Ports
+	}
+
+	return operations, nil
 }
 
 // MCPSidecarName is the catalog entry of the official Exasol MCP server.
@@ -366,6 +374,10 @@ func (sidecars *deploymentSidecars) enable(
 			return SidecarResult{}, err
 		}
 		definition = entry.Definition
+		err = sidecars.selectHostPorts(ctx, document, name, &definition.Container)
+		if err != nil {
+			return SidecarResult{}, err
+		}
 	}
 	if definition.Enabled == nil || !*definition.Enabled {
 		definition.Enabled = new(true)
