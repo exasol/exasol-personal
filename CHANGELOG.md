@@ -13,7 +13,20 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol install ionos --instance-type 4x16 --data-volume-size 200`
 
+- Added sidecar host port selection. `exasol sidecar enable` saves a free host
+  port for each named published port, starting at the catalog's `hostPort`,
+  and automatic database ports skip host ports saved for sidecars.
+  `--ports <port-name>:<host-port>` saves an exact host port.
+  `exasol sidecar list` reports host ports by port name, and
+  `exasol sidecar config get`, `set --ports`, and `reset` manage a saved
+  sidecar's host ports and apply a change to a running sidecar immediately.
+  Examples: `exasol sidecar enable mcp --ports mcp:14896` and
+  `exasol sidecar config reset mcp ports`.
+
 ### Changed
+
+- The MCP sidecar is published on host port `4896` when it is free, and on
+  the next free port otherwise.
 
 ### Fixed
 
