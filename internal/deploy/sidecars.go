@@ -934,7 +934,7 @@ func (sidecars *deploymentSidecars) publish(
 				continue
 			}
 			ports = append(ports, sidecar.PublishedPort{
-				Sidecar: definition.Name, Index: index,
+				Sidecar: definition.Name, Index: index, Name: port.Name,
 				HostIP: port.HostIP, HostPort: port.HostPort,
 				RuntimePort: bound[sidecarPortKey{definition.Name, port.ContainerPort}],
 			})

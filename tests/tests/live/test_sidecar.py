@@ -372,6 +372,36 @@ def test_sidecar_failure_preserves_database_status(service: SidecarDeployment) -
     assert "42" in service.sql()
 
 
+def test_sidecar_config_set_to_held_port_offers_recovery(
+    service: SidecarDeployment,
+) -> None:
+    # Given
+    service.sidecar("enable")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as holder:
+        holder.bind(("127.0.0.1", 0))
+        holder.listen()
+        held_port = int(holder.getsockname()[1])
+        # When
+        with pytest.raises(CalledProcessError) as failure:
+            service.deployment.launcher.run_command(
+                "sidecar",
+                str(service.directory),
+                "config",
+                "set",
+                "caddy",
+                "--ports",
+                f"http:{held_port}",
+                capture_output=True,
+                timeout=300,
+            )
+    # Then
+    stderr = failure.value.stderr
+    assert f"sidecar caddy cannot bind host port {held_port} of port http" in stderr
+    assert "exasol sidecar config set caddy --ports http:<available-port>" in stderr
+    assert "exasol sidecar config reset caddy ports" in stderr
+    assert _saved_entry(service)["container"]["ports"][0]["hostPort"] == held_port  # type: ignore[index]
+
+
 @pytest.mark.parametrize(
     ("policy", "exit_code", "restarts"),
     [

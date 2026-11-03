@@ -24,7 +24,7 @@ const localRetryGuidance = "The deployment is stopped, so you can fix the report
 	"  exasol config set --ports auto"
 
 func addDeploymentRecoveryCallToAction(err error) {
-	addDeploymentRecoveryCallToActionFor(err, "")
+	addDeploymentRecoveryCallToActionFor(err, commonFlags.Selection())
 }
 
 func addDeploymentRecoveryCallToActionFor(err error, selection string) {
@@ -40,7 +40,16 @@ func addDeploymentRecoveryCallToActionFor(err error, selection string) {
 		addTerminalCallToAction(fmt.Sprintf(guidance, selection))
 	}
 
-	if startup, ok := errors.AsType[*sidecar.StartupError](err); ok {
+	if conflict, ok := errors.AsType[*sidecar.PortConflictError](err); ok {
+		addTerminalCallToAction(fmt.Sprintf(
+			"Select another host port for sidecar %s:\n"+
+				"  exasol sidecar config set %s --ports %s:<available-port>%s\n"+
+				"  exasol sidecar config reset %s ports%s",
+			conflict.Sidecar,
+			conflict.Sidecar, conflict.Port, selection,
+			conflict.Sidecar, selection,
+		))
+	} else if startup, ok := errors.AsType[*sidecar.StartupError](err); ok {
 		addTerminalCallToAction(fmt.Sprintf(
 			"Inspect the reported sidecar for the full diagnosis:\n"+
 				"  exasol sidecar status %s%s",
