@@ -15,6 +15,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const sidecarPortsUsage = "Host ports to save, as comma-separated " +
+	"<port-name>:<host-port> entries, for example mcp:14896"
+
 const sidecarRestartGuidance = "Run `exasol stop` followed by `exasol start` " +
 	"to restart the deployment and start the enabled sidecars."
 
@@ -75,6 +78,7 @@ func addSidecarSubcommand(
 // argument.
 func newSidecarEnableCommand(flags *CommonFlags, fixed string) *cobra.Command {
 	var noWait bool
+	var ports string
 	command := newSidecarActionCommand(
 		flags,
 		fixed,
@@ -83,7 +87,7 @@ func newSidecarEnableCommand(flags *CommonFlags, fixed string) *cobra.Command {
 		func(
 			ctx context.Context, deployment config.DeploymentDir, name string,
 		) (deploy.SidecarResult, error) {
-			result, err := deploy.EnableSidecar(ctx, deployment, name, !noWait)
+			result, err := deploy.EnableSidecar(ctx, deployment, name, ports, !noWait)
 			if err == nil {
 				addSidecarHealthCallToAction(result, deployment.CLISelection())
 			}
@@ -95,6 +99,7 @@ func newSidecarEnableCommand(flags *CommonFlags, fixed string) *cobra.Command {
 		&noWait, "no-wait", false,
 		"Return without waiting for a starting sidecar to serve",
 	)
+	command.Flags().StringVar(&ports, "ports", "", sidecarPortsUsage)
 
 	return command
 }

@@ -160,14 +160,14 @@ func catalogAvailability(
 // EnableSidecar with wait reports the sidecar once it is no longer starting,
 // or once its probes' window has passed.
 func EnableSidecar(
-	ctx context.Context, deployment config.DeploymentDir, name string, wait bool,
+	ctx context.Context, deployment config.DeploymentDir, name, ports string, wait bool,
 ) (SidecarResult, error) {
-	return enableSidecarTemplate(ctx, deployment, nil, name, wait)
+	return enableSidecarTemplate(ctx, deployment, nil, name, ports, wait)
 }
 
 func enableSidecarTemplate(
 	ctx context.Context, deployment config.DeploymentDir, templates sidecar.Resolver,
-	name string, wait bool,
+	name, ports string, wait bool,
 ) (SidecarResult, error) {
 	// Templates first, so a command can enable what the catalog does not carry.
 	return withSidecar(
@@ -175,7 +175,7 @@ func enableSidecarTemplate(
 		deployment,
 		templates,
 		func(sidecars *deploymentSidecars) (SidecarResult, error) {
-			result, err := sidecars.enable(ctx, name)
+			result, err := sidecars.enable(ctx, name, ports)
 			if err != nil || !wait {
 				return result, err
 			}
@@ -344,9 +344,19 @@ func sidecarCatalog(templates sidecar.Resolver) (sidecar.Resolver, error) {
 	return sidecar.Catalogs{templates, embedded}, nil
 }
 
+func (sidecars *deploymentSidecars) template(name string) (sidecar.Definition, error) {
+	catalog, err := sidecarCatalog(sidecars.templates)
+	if err != nil {
+		return sidecar.Definition{}, err
+	}
+	entry, err := catalog.Resolve(name, runtime.GOARCH)
+
+	return entry.Definition, err
+}
+
 func (sidecars *deploymentSidecars) enable(
 	ctx context.Context,
-	name string,
+	name, ports string,
 ) (SidecarResult, error) {
 	if _, err := sidecars.mutationDeferred(); err != nil {
 		return SidecarResult{}, err
@@ -357,21 +367,21 @@ func (sidecars *deploymentSidecars) enable(
 	}
 	definition, saved := document.Sidecars[name]
 	if !saved {
-		catalog, err := sidecarCatalog(sidecars.templates)
-		if err != nil {
-			return SidecarResult{}, err
+		definition, err = sidecars.template(name)
+		if err == nil && ports == "" {
+			err = sidecars.selectHostPorts(ctx, document, name, &definition.Container)
 		}
-		entry, err := catalog.Resolve(name, runtime.GOARCH)
-		if err != nil {
-			return SidecarResult{}, err
-		}
-		definition = entry.Definition
-		err = sidecars.selectHostPorts(ctx, document, name, &definition.Container)
 		if err != nil {
 			return SidecarResult{}, err
 		}
 	}
-	if definition.Enabled == nil || !*definition.Enabled {
+	if ports != "" {
+		err = sidecars.setHostPorts(document, name, &definition.Container, ports)
+		if err != nil {
+			return SidecarResult{}, err
+		}
+	}
+	if definition.Enabled == nil || !*definition.Enabled || ports != "" {
 		definition.Enabled = new(true)
 		document.Sidecars[name] = definition
 		if err := config.WriteSidecars(sidecars.deployment, document); err != nil {

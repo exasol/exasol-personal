@@ -4,6 +4,7 @@
 import json
 from pathlib import Path
 from subprocess import CalledProcessError
+from typing import Any
 
 import pytest
 import yaml
@@ -263,6 +264,95 @@ def test_sidecar_invalid_probe_names_the_offending_field(
     assert "sidecars.saved.container.readinessProbe.httpGet.port" in (
         failure.value.stderr
     )
+
+
+def _saved_mcp(directory: Path) -> dict[str, Any]:
+    saved = yaml.safe_load((directory / "sidecars.yaml").read_text(encoding="utf-8"))
+    return dict(saved["sidecars"]["mcp"])
+
+
+def test_sidecar_enable_saves_explicit_host_port(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    selection = ["--deployment-dir", str(sidecar_directory)]
+    # When
+    run_command(
+        [exasol_path, "sidecar", "enable", "mcp", "--ports", "mcp:14897", *selection]
+    )
+    # Then
+    assert _saved_mcp(sidecar_directory)["container"]["ports"][0]["hostPort"] == 14897  # noqa: PLR2004
+
+
+def test_sidecar_enable_with_ports_updates_enabled_sidecar(
+    exasol_path: str, sidecar_directory: Path
+) -> None:
+    # Given
+    selection = ["--deployment-dir", str(sidecar_directory)]
+    run_command(
+        [exasol_path, "sidecar", "enable", "mcp", "--ports", "mcp:14897", *selection]
+    )
+    before = _saved_mcp(sidecar_directory)
+    # When
+    run_command(
+        [exasol_path, "sidecar", "enable", "mcp", "--ports", "mcp:14898", *selection]
+    )
+    # Then
+    after = _saved_mcp(sidecar_directory)
+    assert after["container"]["ports"][0]["hostPort"] == 14898  # noqa: PLR2004
+    after["container"]["ports"][0]["hostPort"] = 14897
+    assert after == before
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        ":14897",
+        "unknown:14897",
+        "internal:14897",
+        "mcp:14897,mcp:14898",
+        "mcp:65536",
+        "mcp:18563",
+        "mcp:18080",
+    ],
+)
+def test_sidecar_invalid_port_entry_names_the_entry(
+    exasol_path: str, tmp_path: Path, entry: str
+) -> None:
+    # Given
+    directory = tmp_path / "deployment"
+    selection = ["--deployment-dir", str(directory)]
+    run_command(
+        [
+            exasol_path,
+            "init",
+            "local",
+            "--ports",
+            "db:18563",
+            *selection,
+            "--no-launcher-version-check",
+        ]
+    )
+    definition = directory / "sidecars.yaml"
+    definition.write_text(
+        "version: 1\nsidecars:\n"
+        "  mcp:\n    container:\n      image: caddy:2\n      ports:\n"
+        "        - {name: mcp, containerPort: 4896, hostPort: 14896}\n"
+        "        - {name: internal, containerPort: 9090}\n"
+        "  other:\n    container:\n      image: caddy:2\n      ports:\n"
+        "        - {name: http, containerPort: 8080, hostPort: 18080}\n",
+        encoding="utf-8",
+    )
+    saved = definition.read_text(encoding="utf-8")
+    offending = entry.rsplit(",", maxsplit=1)[-1]
+    # When
+    with pytest.raises(CalledProcessError) as failure:
+        run_command(
+            [exasol_path, "sidecar", "enable", "mcp", "--ports", entry, *selection]
+        )
+    # Then
+    assert f'"{offending}"' in failure.value.stderr
+    assert definition.read_text(encoding="utf-8") == saved
 
 
 @pytest.mark.openspec("deployment-info-reporting")
