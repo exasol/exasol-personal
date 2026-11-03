@@ -401,7 +401,7 @@ func (sidecars *deploymentSidecars) enable(
 	if definition.Enabled == nil || !*definition.Enabled || ports != "" {
 		definition.Enabled = new(true)
 		document.Sidecars[name] = definition
-		if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
+		if err := sidecars.save(ctx, document); err != nil {
 			return SidecarResult{}, err
 		}
 	}
@@ -452,7 +452,7 @@ func (sidecars *deploymentSidecars) disable(
 		definition.Enabled = new(false)
 		document.Sidecars[name] = definition
 	}
-	if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
+	if err := sidecars.save(ctx, document); err != nil {
 		return SidecarResult{}, err
 	}
 
@@ -680,6 +680,32 @@ func (sidecars *deploymentSidecars) deploymentInitialized() (bool, error) {
 	_, initialized := workflow.(*config.WorkflowStateInitialized)
 
 	return initialized, nil
+}
+
+// save keeps the saved connection instructions, which name sidecar endpoints,
+// in step with the definitions. A deployment that is not running gets them
+// rewritten by its next start.
+func (sidecars *deploymentSidecars) save(ctx context.Context, document sidecar.Document) error {
+	if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
+		return err
+	}
+	deferred, err := sidecars.mutationDeferred()
+	if err != nil || deferred {
+		return err
+	}
+	_, err = os.Stat(sidecars.deployment.ConnectionInstructionsPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	instructions, err := getConnectionInstructionsTextUnsafe(ctx, sidecars.deployment)
+	if err != nil {
+		return err
+	}
+
+	return writeConnectionInstructionsFile(sidecars.deployment, instructions)
 }
 
 func (sidecars *deploymentSidecars) mutationDeferred() (bool, error) {
