@@ -9,6 +9,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
@@ -69,9 +70,8 @@ var startCmd = &cobra.Command{
 			if errors.Is(err, deploy.ErrLifecycleActionSkipped) {
 				return nil
 			}
-			addDeploymentRecoveryCallToAction(err)
 
-			return err
+			return addStartFailureOutput(deployment, err, commonFlags.OutputJson)
 		}
 
 		if commonFlags.OutputJson {
@@ -83,6 +83,20 @@ var startCmd = &cobra.Command{
 
 		return addConnectionInstructionsTerminalOutput(deployment)
 	},
+}
+
+func addStartFailureOutput(
+	deployment config.DeploymentDir, err error, jsonOutput bool,
+) error {
+	if _, sidecarsFailed := errors.AsType[*deploy.SidecarsFailedError](err); sidecarsFailed &&
+		!jsonOutput {
+		if printErr := addConnectionInstructionsTerminalOutput(deployment); printErr != nil {
+			err = errors.Join(err, printErr)
+		}
+	}
+	addDeploymentRecoveryCallToAction(err)
+
+	return err
 }
 
 var stopCmd = &cobra.Command{

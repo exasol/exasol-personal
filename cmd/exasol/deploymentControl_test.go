@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
@@ -101,6 +103,33 @@ func TestAddLocalPortRecoveryCallToActionQueuesStructuredRecovery(t *testing.T) 
 		if !strings.Contains(stderr.String(), expected) {
 			t.Fatalf("expected recovery guidance %q, got %q", expected, stderr.String())
 		}
+	}
+}
+
+//nolint:paralleltest // Mutates shared terminal message queues.
+func TestStartSidecarFailureKeepsConnectionInstructions(t *testing.T) {
+	// Given
+	resetTerminalMessages()
+	defer resetTerminalMessages()
+	deployment := config.NewDeploymentDir(t.TempDir())
+	if err := os.WriteFile(
+		deployment.ConnectionInstructionsPath(), []byte("Port: 8563"), 0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	cause := errors.New("sidecar mcp: image unavailable")
+
+	// When
+	err := addStartFailureOutput(
+		deployment, &deploy.SidecarsFailedError{Cause: cause}, false,
+	)
+
+	// Then
+	if !errors.Is(err, cause) {
+		t.Fatalf("expected the sidecar failure, got %v", err)
+	}
+	if len(terminalOutputs) != 1 || terminalOutputs[0] != "Port: 8563" {
+		t.Fatalf("expected the connection instructions, got %q", terminalOutputs)
 	}
 }
 

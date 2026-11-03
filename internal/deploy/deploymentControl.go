@@ -473,11 +473,26 @@ func runStartBackend(
 		return err
 	}
 
+	var sidecarErr error
+	if err := lifecycle.Err(); err != nil {
+		sidecarErr = &SidecarsFailedError{Cause: err}
+	}
+
 	return errors.Join(
 		writeConnectionInstructionsFile(deployment, connectionInstructions),
-		lifecycle.Err(),
+		sidecarErr,
 	)
 }
+
+// SidecarsFailedError reports sidecar failures of a start that left the
+// database running, so its connection instructions still apply.
+type SidecarsFailedError struct {
+	Cause error
+}
+
+func (failure *SidecarsFailedError) Error() string { return failure.Cause.Error() }
+
+func (failure *SidecarsFailedError) Unwrap() error { return failure.Cause }
 
 func workflowStatePermitsStop(
 	exasolState *config.ExasolPersonalState,
