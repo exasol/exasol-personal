@@ -196,7 +196,13 @@ func (b *localBackend) Configure(
 	if err := applyLocalConfigOverrides(local, overrides, capabilities); err != nil {
 		return err
 	}
-	ports, err := b.ports.resolve(ctx, local.Ports, localServiceCatalog)
+	sidecars, err := config.ReadSidecars(b.deployment)
+	if err != nil {
+		return err
+	}
+	ports, err := b.ports.resolve(
+		ctx, local.Ports, localServiceCatalog, savedSidecarHostPorts(sidecars, ""),
+	)
 	if err != nil {
 		return err
 	}

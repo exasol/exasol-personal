@@ -76,7 +76,7 @@ func TestLocalPortAllocator_SelectsDefaultThenAdvancesAndWraps(t *testing.T) {
 				t, 2, 5, func(_ string, port int) bool { return test.available(port) },
 			)
 
-			actual, err := allocator.resolve(context.Background(), "", service)
+			actual, err := allocator.resolve(context.Background(), "", service, nil)
 			if err != nil {
 				t.Fatalf("expected allocation to succeed, got %v", err)
 			}
@@ -95,6 +95,7 @@ func TestLocalPortAllocator_ReportsExhaustedService(t *testing.T) {
 		context.Background(),
 		"",
 		[]localService{{name: "db", guestPort: 4, defaultHostPort: 4}},
+		nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), `service "db"`) {
 		t.Fatalf("expected exhausted database service error, got %v", err)
@@ -137,6 +138,7 @@ func TestLocalPortAllocator_RequiresCandidateOnEveryLoopback(t *testing.T) {
 		context.Background(),
 		"",
 		[]localService{{name: "db", guestPort: 4, defaultHostPort: 4}},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("expected allocation to succeed, got %v", err)
@@ -160,6 +162,7 @@ func TestLocalPortAllocator_AssignsDistinctPortsToServices(t *testing.T) {
 			{name: "db", guestPort: 4, defaultHostPort: 4},
 			{name: "ui", guestPort: 4, defaultHostPort: 4},
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("expected allocation to succeed, got %v", err)
@@ -181,6 +184,7 @@ func TestLocalPortAllocator_PreservesExplicitMappings(t *testing.T) {
 		context.Background(),
 		"db:3",
 		[]localService{{name: "db", guestPort: 4, defaultHostPort: 4}},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("expected explicit mapping to succeed, got %v", err)
@@ -206,6 +210,7 @@ func TestLocalPortAllocator_NormalizesAutomaticMappings(t *testing.T) {
 				context.Background(),
 				raw,
 				[]localService{{name: "db", guestPort: 4, defaultHostPort: 4}},
+				nil,
 			)
 			if err != nil {
 				t.Fatalf("expected %q to normalize, got %v", raw, err)
@@ -214,5 +219,45 @@ func TestLocalPortAllocator_NormalizesAutomaticMappings(t *testing.T) {
 				t.Fatalf("expected db:4, got %q", actual)
 			}
 		})
+	}
+}
+
+func TestLocalPortAllocator_SkipsSavedPorts(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	allocator := testLocalPortAllocator(t, 2, 5, func(string, int) bool { return true })
+	// When
+	actual, err := allocator.resolve(
+		context.Background(),
+		"",
+		[]localService{{name: "db", guestPort: 4, defaultHostPort: 4}},
+		map[int]string{4: `sidecar "api"`},
+	)
+	// Then
+	if err != nil {
+		t.Fatalf("expected allocation to succeed, got %v", err)
+	}
+	if actual != "db:5" {
+		t.Fatalf("expected db:5 after the saved port, got %q", actual)
+	}
+}
+
+func TestLocalPortAllocator_RejectsExplicitSavedPort(t *testing.T) {
+	t.Parallel()
+
+	// Given
+	allocator := testLocalPortAllocator(t, 2, 5, func(string, int) bool { return true })
+	// When
+	_, err := allocator.resolve(
+		context.Background(),
+		"db:3",
+		[]localService{{name: "db", guestPort: 4, defaultHostPort: 4}},
+		map[int]string{3: `sidecar "api"`},
+	)
+	// Then
+	if err == nil || !strings.Contains(err.Error(), `"db" cannot use host port 3`) ||
+		!strings.Contains(err.Error(), `sidecar "api"`) {
+		t.Fatalf("expected an error naming the service, port, and sidecar, got %v", err)
 	}
 }

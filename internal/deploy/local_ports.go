@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"slices"
 	"strconv"
@@ -54,16 +55,25 @@ func (allocator localPortAllocator) resolve(
 	ctx context.Context,
 	raw string,
 	services []localService,
+	saved map[int]string,
 ) (string, error) {
 	mappings, order, err := parseLocalPortMappings(raw)
 	if err != nil {
 		return "", err
 	}
 
-	reserved := make(map[int]string, len(mappings))
+	reserved := make(map[int]string, len(mappings)+len(saved))
 	for service, port := range mappings {
 		if port <= 0 {
 			continue
+		}
+		if owner, exists := saved[port]; exists {
+			return "", fmt.Errorf(
+				"local service %q cannot use host port %d, which is saved for %s",
+				service,
+				port,
+				owner,
+			)
 		}
 		if other, exists := reserved[port]; exists && other != service {
 			return "", fmt.Errorf(
@@ -75,6 +85,7 @@ func (allocator localPortAllocator) resolve(
 		}
 		reserved[port] = service
 	}
+	maps.Copy(reserved, saved)
 
 	var addresses []net.IPAddr
 	held := make([]net.Listener, 0, len(services))

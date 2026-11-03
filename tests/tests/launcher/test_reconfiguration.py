@@ -204,6 +204,78 @@ def test_running_local_configuration_requires_stop(
     assert options["ports"] == "db:18563"
 
 
+def _save_sidecar_host_port(deployment_dir: Path, port: int) -> None:
+    (deployment_dir / "sidecars.yaml").write_text(
+        "version: 1\nsidecars:\n  api:\n    container:\n      image: caddy:2\n"
+        f"      ports: [{{name: http, containerPort: 8080, hostPort: {port}}}]\n",
+        encoding="utf-8",
+    )
+
+
+def _saved_database_port(exasol_path: str, deployment_dir: Path) -> int:
+    infrastructure = _get_active_configuration(exasol_path, deployment_dir)[
+        "infrastructure"
+    ]
+    assert isinstance(infrastructure, dict)
+    options = infrastructure["options"]
+    assert isinstance(options, dict)
+    port_mapping = options["ports"]
+    assert isinstance(port_mapping, str)
+
+    return int(port_mapping.removeprefix("db:"))
+
+
+@pytest.mark.openspec("exasol-local-deployment")
+def test_automatic_local_ports_skip_saved_sidecar_ports(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a stopped deployment whose automatic database port a sidecar saves
+    deployment_dir = tmp_path / "deployment"
+    _init_stopped_local_deployment(exasol_path, deployment_dir, 18563)
+    selection = ["--deployment-dir", str(deployment_dir)]
+    run_command([exasol_path, "config", "reset", "ports", *selection])
+    automatic = _saved_database_port(exasol_path, deployment_dir)
+    _save_sidecar_host_port(deployment_dir, automatic)
+
+    # When automatic ports are requested again
+    run_command([exasol_path, "config", "reset", "ports", *selection])
+
+    # Then the database port differs from the sidecar's
+    assert _saved_database_port(exasol_path, deployment_dir) != automatic
+
+
+@pytest.mark.openspec("exasol-local-deployment")
+def test_explicit_local_port_saved_for_sidecar_is_rejected(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a stopped deployment with a sidecar saved on another port
+    deployment_dir = tmp_path / "deployment"
+    database_port = 18563
+    _init_stopped_local_deployment(exasol_path, deployment_dir, database_port)
+    _save_sidecar_host_port(deployment_dir, 28563)
+
+    # When the database is configured onto the sidecar's port
+    with pytest.raises(CalledProcessError) as failure:
+        run_command(
+            [
+                exasol_path,
+                "config",
+                "set",
+                "--ports",
+                "db:28563",
+                "--deployment-dir",
+                str(deployment_dir),
+            ]
+        )
+
+    # Then the command names the service, port, and sidecar and keeps the mapping
+    assert (
+        'local service "db" cannot use host port 28563, which is saved for '
+        'sidecar "api"' in failure.value.stderr
+    )
+    assert _saved_database_port(exasol_path, deployment_dir) == database_port
+
+
 @pytest.mark.skipif(
     not sys.platform.startswith("linux"), reason="uses the Linux Podman runtime"
 )
