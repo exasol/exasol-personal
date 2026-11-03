@@ -183,11 +183,15 @@ const configurationRestartGuidance = "configuration updated locally; " +
 
 func addConfigurationChangedOutput(configuration deploy.DeploymentConfiguration) {
 	addTerminalOutput(formatConfigurationValues(configuration))
-	guidance := configurationApplyGuidance
-	if configuration.ApplyCommand == "start" {
-		guidance = configurationRestartGuidance
+	addTerminalCallToAction(configurationGuidance(configuration.ApplyCommand))
+}
+
+func configurationGuidance(applyCommand string) string {
+	if applyCommand == "start" {
+		return configurationRestartGuidance
 	}
-	addTerminalCallToAction(guidance)
+
+	return configurationApplyGuidance
 }
 
 func formatConfigurationValues(configuration deploy.DeploymentConfiguration) string {

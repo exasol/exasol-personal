@@ -61,6 +61,9 @@ type SidecarAvailability struct {
 	Architectures []string `json:"architectures"`
 	Supported     bool     `json:"supported"`
 	Enabled       bool     `json:"enabled"`
+	// The saved host ports, or the catalog's for a sidecar without a saved
+	// definition, so a user can name them in --ports before enabling.
+	Ports string `json:"ports,omitempty"`
 	// Unsupported says why, so a listing explains itself.
 	Unsupported string `json:"unsupported,omitempty"`
 }
@@ -126,6 +129,7 @@ func unsupportedAvailability(
 			Name:          name,
 			Description:   entries[name].Description,
 			Architectures: slices.Clone(entries[name].Architectures),
+			Ports:         hostPortEntries(entries[name].Container.Ports),
 			Unsupported:   "not supported for " + kind + " deployments",
 		})
 	}
@@ -145,12 +149,17 @@ func catalogAvailability(
 	result := make([]SidecarAvailability, 0, len(entries))
 	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		entry := entries[name]
+		ports := entry.Container.Ports
+		if saved, ok := document.Sidecars[name]; ok {
+			ports = saved.Container.Ports
+		}
 		result = append(result, SidecarAvailability{
 			Name:          name,
 			Description:   entry.Description,
 			Architectures: slices.Clone(entry.Architectures),
 			Supported:     slices.Contains(entry.Architectures, architecture),
 			Enabled:       enabledSidecar(document, name),
+			Ports:         hostPortEntries(ports),
 		})
 	}
 
@@ -261,11 +270,11 @@ func GetAllSidecarStatus(
 	return results, err
 }
 
-func withSidecar(
+func withSidecar[T any](
 	ctx context.Context, deployment config.DeploymentDir, templates sidecar.Resolver,
-	action func(*deploymentSidecars) (SidecarResult, error),
-) (SidecarResult, error) {
-	var result SidecarResult
+	action func(*deploymentSidecars) (T, error),
+) (T, error) {
+	var result T
 	err := withDeploymentExclusiveLock(ctx, deployment, func(dir config.DeploymentDir) error {
 		operations, err := newDeploymentSidecars(ctx, dir, templates)
 		if err != nil {
@@ -369,7 +378,7 @@ func (sidecars *deploymentSidecars) enable(
 	if !saved {
 		definition, err = sidecars.template(name)
 		if err == nil && ports == "" {
-			err = sidecars.selectHostPorts(ctx, document, name, &definition.Container)
+			err = sidecars.selectHostPorts(ctx, document, name, &definition.Container, nil)
 		}
 		if err != nil {
 			return SidecarResult{}, err

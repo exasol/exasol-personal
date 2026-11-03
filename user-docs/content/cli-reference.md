@@ -1055,10 +1055,69 @@ Usage:
 	exasol sidecar [command] [flags]
 
 Additional Commands:
+	config                        Manage a saved sidecar's host ports
 	disable                       Disable a sidecar and remove its runtime resources
 	enable                        Enable a catalog sidecar and wait until it serves
 	list                          List catalog sidecars and deployment enablement
 	status                        Show sidecar state and published endpoints
+```
+
+#### `exasol sidecar config` { data-toc-label="sidecar config" }
+
+```text
+Manage a saved sidecar's host ports
+
+Usage:
+	exasol sidecar config [command] [flags]
+
+Additional Commands:
+	get         Show a saved sidecar's host ports
+	reset       Select free host ports for a saved sidecar
+	set         Save a sidecar's host ports
+```
+
+##### `exasol sidecar config get` { data-toc-label="sidecar config get" }
+
+```text
+Show a saved sidecar's host ports
+
+Usage:
+	exasol sidecar config get <name> [ports] [flags]
+
+Flags:
+  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+      --deployment-dir file-path   Override the deployment directory selected automatically
+  -j, --json                       Output in JSON format
+```
+
+##### `exasol sidecar config reset` { data-toc-label="sidecar config reset" }
+
+```text
+Select free host ports for a saved sidecar
+
+Usage:
+	exasol sidecar config reset <name> (ports | --all) [flags]
+
+Flags:
+      --all                        Reset all options
+  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+      --deployment-dir file-path   Override the deployment directory selected automatically
+  -j, --json                       Output in JSON format
+```
+
+##### `exasol sidecar config set` { data-toc-label="sidecar config set" }
+
+```text
+Save a sidecar's host ports
+
+Usage:
+	exasol sidecar config set <name> [flags]
+
+Flags:
+  -d, --deployment string          Select <home>/.exasol/personal/deployments/<name> as the deployment directory
+      --deployment-dir file-path   Override the deployment directory selected automatically
+  -j, --json                       Output in JSON format
+      --ports string               Host ports to save, as comma-separated <port-name>:<host-port> entries, for example mcp:14896
 ```
 
 #### `exasol sidecar disable` { data-toc-label="sidecar disable" }

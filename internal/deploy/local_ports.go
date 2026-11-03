@@ -38,6 +38,8 @@ type localPortAllocator struct {
 	listen      func(string, string) (net.Listener, error)
 	minimumPort int
 	maximumPort int
+	// The caller's own service holds these, so a probe would always fail.
+	owned map[int]bool
 }
 
 func newLocalPortAllocator() localPortAllocator {
@@ -215,6 +217,9 @@ func (allocator localPortAllocator) tryPort(
 ) ([]net.Listener, bool) {
 	if _, exists := reserved[port]; exists {
 		return nil, false
+	}
+	if allocator.owned[port] {
+		return nil, true
 	}
 
 	listeners := make([]net.Listener, 0, len(addresses))
