@@ -106,7 +106,7 @@ func (sidecars *deploymentSidecars) configurePorts(
 		return SidecarConfiguration{}, err
 	}
 	document.Sidecars[name] = definition
-	if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
+	if err := sidecars.save(ctx, document); err != nil {
 		return SidecarConfiguration{}, err
 	}
 	result := newSidecarConfiguration(name, definition)

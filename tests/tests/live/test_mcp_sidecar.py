@@ -223,6 +223,33 @@ def test_mcp_sidecar_complete_local_lifecycle(
     assert_mcp_interaction(running_endpoint(reenabled_status, host_port))
 
 
+def test_mcp_sidecar_port_change_updates_connection_instructions(
+    mcp_deployment: SidecarDeployment,
+) -> None:
+    # Given
+    mcp_deployment.sidecar("enable")
+    set_host_port(mcp_deployment, available_loopback_port())
+    mcp_deployment.deployment.deploy()
+    host_port = available_loopback_port()
+    # When
+    mcp_deployment.deployment.launcher.run_command(
+        "sidecar",
+        str(mcp_deployment.directory),
+        "config",
+        "set",
+        MCP_SIDECAR,
+        "--ports",
+        f"mcp:{host_port}",
+        capture_output=True,
+        timeout=300,
+    )
+    # Then
+    instructions = (mcp_deployment.directory / "connection-instructions.txt").read_text(
+        encoding="utf-8"
+    )
+    assert f"Endpoint: http://127.0.0.1:{host_port}/mcp" in instructions
+
+
 def test_mcp_sidecar_rejects_rebound_requests(
     mcp_deployment: SidecarDeployment,
 ) -> None:
