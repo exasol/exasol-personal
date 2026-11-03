@@ -130,10 +130,15 @@ func (runtime *SidecarRuntime) Ensure(
 			err = commandErr.Err
 		}
 
-		return sidecar.NewStartupError(
+		return sidecar.ClassifyPortConflict(
 			definition.Name,
-			resolved.Redact(diagnostic.String()),
-			resolved.Redact(err.Error()),
+			definition.Ports,
+			sidecar.NewStartupError(
+				definition.Name,
+				resolved.Redact(diagnostic.String()),
+				resolved.Redact(err.Error()),
+			),
+			diagnostic.String()+"\n"+err.Error(),
 		)
 	}
 

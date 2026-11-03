@@ -88,6 +88,27 @@ func TestSidecarStartupFailureOffersStatus(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Terminal queues and the default flags are process-global.
+func TestLifecyclePortConflictHintSelectsTheDeployment(t *testing.T) {
+	// Given
+	resetTerminalMessages()
+	t.Cleanup(resetTerminalMessages)
+	saved := *commonFlags
+	t.Cleanup(func() { *commonFlags = saved })
+	commonFlags.DeploymentDir = "./dev"
+	// When
+	addDeploymentRecoveryCallToAction(&sidecar.PortConflictError{
+		Sidecar: "mcp", Port: "mcp", HostPort: 4896, Cause: errors.New("in use"),
+	})
+	var stderr bytes.Buffer
+	writeTerminalCallsToAction(&stderr, callsToActionVisible(false))
+	// Then
+	require.Contains(t, stderr.String(),
+		"exasol sidecar config set mcp --ports mcp:<available-port> --deployment-dir ./dev")
+	require.Contains(t, stderr.String(),
+		"exasol sidecar config reset mcp ports --deployment-dir ./dev")
+}
+
 func TestSidecarEnableOffersNoWait(t *testing.T) {
 	t.Parallel()
 	// Given
