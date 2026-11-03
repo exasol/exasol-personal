@@ -61,7 +61,8 @@ Services handle their own connection retries while the database starts.
 
 `exasol stop` removes disposable sidecar containers while retaining definitions.
 `exasol destroy` removes owned containers and the deployment network. Failures
-are reported separately from database state. Fix the reported problem and
+are reported separately from database state; a start that leaves the database
+running still prints its connection instructions. Fix the reported problem and
 retry enable or start. A failed disable can be retried to finish cleanup.
 Failures identify the affected host and sidecar. Other hosts are still
 reconciled, and retries use the same deployment-wide saved definition.

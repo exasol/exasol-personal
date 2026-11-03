@@ -23,6 +23,9 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- `exasol start` prints the connection instructions of a running database
+  when only sidecars fail to start.
+
 ### Breaking Changes
 
 - None.
