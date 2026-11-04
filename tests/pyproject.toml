@@ -21,7 +21,7 @@ dev = [
     "pytest-xdist>=3.8.0",
     "ruff>=0.16.10",
     "types-requests>=2.33.0.20261006",
-    "types-pyyaml>=6.0.12",
+    "types-pyyaml>=6.0.12.20261103",
 ]
 
 [tool.pytest.ini_options]
