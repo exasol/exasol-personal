@@ -30,7 +30,8 @@ func (failure *StartupError) Error() string {
 // ReportedCause prefers the runtime's own error line: a container runtime
 // writes progress before it fails, so the first line is usually not the cause.
 func ReportedCause(diagnostic string) string {
-	var last, reported string
+	var last string
+	var reported []string
 	for line := range strings.SplitSeq(diagnostic, "\n") {
 		trimmed := strings.TrimSpace(line)
 		// Docker follows its error with a pointer to the command's help.
@@ -39,11 +40,13 @@ func ReportedCause(diagnostic string) string {
 		}
 		last = trimmed
 		if isErrorLine(trimmed) {
-			reported = trimmed
+			reported = []string{trimmed}
+		} else if len(reported) > 0 {
+			reported = append(reported, trimmed)
 		}
 	}
-	if reported != "" {
-		return reported
+	if len(reported) > 0 {
+		return strings.Join(reported, "\n")
 	}
 
 	return last
