@@ -982,6 +982,9 @@ func ownedNames(containers []localinstall.ContainerListing) []string {
 }
 
 func openedFor(opened []sidecar.PublishedPort, name string) []sidecar.PublishedPort {
+	if opened == nil {
+		return nil
+	}
 	ports := make([]sidecar.PublishedPort, 0, len(opened))
 	for _, port := range opened {
 		if port.Sidecar == name {
@@ -1060,9 +1063,10 @@ func sidecarEndpoints(
 	published []sidecar.PublishedPort,
 	declarations endpointDeclarations,
 ) []SidecarEndpoint {
-	// Opened endpoints replace the bindings that stay behind the boundary.
+	// Opened endpoints replace the bindings that stay behind the boundary, so a
+	// runtime that forwards ports reports only the forwards it opened.
 	endpoints := []SidecarEndpoint{}
-	if len(published) > 0 {
+	if published != nil {
 		for _, port := range published {
 			endpoints = append(endpoints, declarations.endpoint(port.HostIP, port.HostPort))
 		}

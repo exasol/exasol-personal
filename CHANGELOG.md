@@ -41,6 +41,9 @@ Notable user-facing changes to Exasol Personal are documented here.
 - `exasol start` prints the connection instructions of a running database
   when only sidecars fail to start.
 
+- On macOS, sidecar status reports no endpoint for a port whose forward is
+  not open, instead of an address inside the local VM.
+
 ### Breaking Changes
 
 - None.
