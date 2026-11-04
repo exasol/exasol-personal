@@ -249,8 +249,7 @@ func (install *NanoInstall) Start(
 	if err != nil {
 		failure := fmt.Errorf("failed to start Nano container %s: %w", containerName, err)
 		if serviceNetworkUnsupported(err) {
-			failure = errors.Join(failure,
-				&ServiceNetworkUnsupportedError{WSL: hostUsesWSL(), Database: true})
+			failure = errors.Join(failure, newServiceNetworkUnsupportedError())
 		}
 		failure = classifyPodmanStartBindFailure(
 			ctx,

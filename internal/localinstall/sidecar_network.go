@@ -17,25 +17,14 @@ import (
 
 const serviceNetworkUnsupportedLabel = "com.exasol.launcher.service-network-unsupported"
 
-// ServiceNetworkUnsupportedError reports that the host kernel cannot provide
-// Podman's nftables networking, for sidecars or, when Database is set, for the
-// database itself.
+// ServiceNetworkUnsupportedError reports that Podman failed to set up the
+// deployment network with an nftables error.
 type ServiceNetworkUnsupportedError struct {
-	WSL      bool
-	Database bool
+	WSL bool
 }
 
-func (err *ServiceNetworkUnsupportedError) Error() string {
-	switch {
-	case err.Database && err.WSL:
-		return "Podman on this host requires WSL 2.7 or later"
-	case err.Database:
-		return "the kernel lacks the nftables support Podman needs"
-	case err.WSL:
-		return "sidecars on Podman require WSL 2.7 or later"
-	default:
-		return "the kernel lacks the nftables support Podman needs for sidecars"
-	}
+func (*ServiceNetworkUnsupportedError) Error() string {
+	return "Podman could not set up the deployment network (nftables error)"
 }
 
 func newServiceNetworkUnsupportedError() error {

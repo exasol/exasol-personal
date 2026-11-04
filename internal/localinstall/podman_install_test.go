@@ -213,9 +213,8 @@ func TestPodmanInstallStart_NamesTheHostRequirementWhenTheRetryHitsNftables(t *t
 	err := install.Start(context.Background(), nil, nil, startConfig)
 
 	// Then
-	unsupported, ok := errors.AsType[*ServiceNetworkUnsupportedError](err)
-	if !ok || !unsupported.Database {
-		t.Fatalf("expected the database host requirement, got %v", err)
+	if _, ok := errors.AsType[*ServiceNetworkUnsupportedError](err); !ok {
+		t.Fatalf("expected the host requirement, got %v", err)
 	}
 	if runs := runCommands(t, fixture.logPath); len(runs) != 2 {
 		t.Fatalf("expected the networked run and one retry, got %#v", runs)

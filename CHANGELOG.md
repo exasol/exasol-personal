@@ -10,6 +10,14 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- Local Podman deployments install and start again on WSL 2.6 and other kernels where Podman
+  cannot set up the deployment network. The database starts without that network, and sidecars,
+  which need it, report the failure with a call to action: on Windows and inside WSL, run
+  `wsl --update`, as sidecars on Podman need WSL 2.7 or later.
+
+  Example: `cannot enable sidecar "mcp": Podman could not set up the deployment network
+  (nftables error)`.
+
 ### Breaking Changes
 
 - None.
@@ -57,10 +65,7 @@ Notable user-facing changes to Exasol Personal are documented here.
   start names the cause and points at `exasol sidecar status <name>` for the
   full diagnosis. Connection values reach containers through an owner-readable
   file the launcher removes once the container is created. macOS publishes a
-  declared host port through the local runner's live forwarding. Sidecars on
-  Podman need WSL 2.7 or later on Windows and inside WSL; on older kernels the
-  database starts without the deployment network and enabling a sidecar reports
-  the requirement. Cloud
+  declared host port through the local runner's live forwarding. Cloud
   deployments report that sidecars are unsupported for their type. Status
   reports a complete URL for a published port that declares an application
   protocol. Containers accept a Kubernetes `readinessProbe` with an `exec`,

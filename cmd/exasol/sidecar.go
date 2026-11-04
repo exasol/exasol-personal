@@ -19,12 +19,14 @@ const sidecarRestartGuidance = "Run `exasol stop` followed by `exasol start` " +
 	"to restart the deployment and start the enabled sidecars."
 
 const (
-	sidecarWSLUpdateGuidance = "Update WSL from a Windows terminal with `wsl --update`, " +
+	sidecarWSLUpdateGuidance = "This usually means WSL is older than 2.7. " +
+		"Update WSL from a Windows terminal with `wsl --update`, " +
 		"then restart the deployment with `exasol stop%[1]s` and `exasol start%[1]s`."
-	sidecarKernelGuidance = "Update the kernel or switch Podman to iptables, " +
+	sidecarKernelGuidance = "This usually means the kernel lacks nftables support. " +
+		"Update the kernel or switch Podman to iptables, " +
 		"then restart the deployment with `exasol stop%[1]s` and `exasol start%[1]s`. See " +
 		"https://exasol.github.io/exasol-personal/latest/troubleshooting/" +
-		"#sidecars-on-podman-require-wsl-27-or-later"
+		"#podman-could-not-set-up-the-deployment-network-nftables-error"
 )
 
 // nolint: gochecknoinits
