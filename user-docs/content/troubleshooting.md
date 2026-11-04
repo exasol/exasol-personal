@@ -51,6 +51,35 @@ On Linux the database runs directly in Podman on the host. Install Podman with y
 package manager and make sure it is available in `PATH`. See
 [System requirements](system-requirements.md#local-database).
 
+### `rootless netns: kill network process: permission denied` on Ubuntu
+
+Ubuntu 26.04 can deny Podman permission to stop its `pasta` network helper because of a missing
+AppArmor rule ([Ubuntu bug 2154379](https://bugs.launchpad.net/ubuntu/+source/passt/+bug/2154379)).
+`exasol stop` or `exasol destroy` then fails during container removal and can leave the deployment
+network behind. Repeating the command before repairing the host policy does not resolve the cause.
+
+Ask your administrator to check for the matching denial:
+
+```bash
+sudo journalctl -k | grep 'profile="pasta"' | grep 'operation="signal"'
+```
+
+The matching entry names `comm="podman"`, `signal=term`, `peer="podman"`, and
+`apparmor="DENIED"`. Install a distribution update that fixes the linked bug when available.
+Until then, an administrator can apply the
+[runner-image maintainers' correction](https://github.com/actions/runner-images/issues/15182)
+to `/etc/apparmor.d/usr.bin.pasta`: add this rule inside the `profile pasta` block, then reload it
+with `sudo apparmor_parser -r /etc/apparmor.d/usr.bin.pasta`:
+
+```text
+signal (receive) set=(term) peer=podman,
+```
+
+This permits only receipt of SIGTERM from Podman's AppArmor profile. Keep AppArmor enabled.
+The launcher does not change this host policy. After the administrator repairs it, run
+`podman unshare --rootless-netns true` to verify network teardown, then repeat `exasol destroy`
+for the affected deployment. Keep its deployment directory until destruction completes.
+
 ### Podman is not installed and Windows Package Manager is unavailable
 
 The launcher can install Podman on Windows, but only through `winget`. Install App Installer from

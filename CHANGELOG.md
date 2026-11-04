@@ -105,7 +105,9 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 - Failed Podman and Docker commands now report the container engine's own error alongside the exit
   status, without `--verbose`, and a failed deployment records the engine's error output in
-  `deployment.log`.
+  `deployment.log`. Nested causes are retained, including network teardown failures. See the
+  [troubleshooting guide](https://exasol.github.io/exasol-personal/latest/troubleshooting/#rootless-netns-kill-network-process-permission-denied-on-ubuntu)
+  for the Ubuntu 26.04 AppArmor correction needed when Podman cannot stop its rootless network helper.
 
   Example: `failed to start Nano container exasol-db-<id>: exit status 126: Error: netavark:
   nftables error: "nft" did not return successfully while applying ruleset`.

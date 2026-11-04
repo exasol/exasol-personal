@@ -286,6 +286,11 @@ jobs:
           description: ${{ env.STATUS_DESC }}
           target-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
+      - name: Prepare rootless Podman networking
+        if: ${{ matrix.container_engine == 'podman' && runner.os == 'Linux' }}
+        shell: bash
+        run: bash .github/scripts/prepare-rootless-podman.sh
+
       # Runner images differ in their Docker Engine; local deployments need 29 or later.
       - name: Ensure Docker Engine 29
         if: ${{ matrix.container_engine == 'docker' && runner.os == 'Linux' }}
