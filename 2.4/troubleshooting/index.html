@@ -1,0 +1,2271 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Install, deploy, and use Exasol Personal">
+      
+      
+      
+        <link rel="canonical" href="https://exasol.github.io/exasol-personal/2.4/troubleshooting/">
+      
+      
+        <link rel="prev" href="../cli-reference/">
+      
+      
+        <link rel="next" href="../limitations/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/favicon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Troubleshooting - Exasol Personal</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/exasol.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#troubleshooting" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You are viewing the documentation for an older version of Exasol Personal.
+  <a href="../..">
+    <strong>Go to the latest version.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL(".."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Exasol Personal" class="md-header__button md-logo" aria-label="Exasol Personal" data-md-component="logo">
+      
+  <img src="../assets/exasol-logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Exasol Personal
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Troubleshooting
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/exasol/exasol-personal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    exasol/exasol-personal
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Exasol Personal" class="md-nav__button md-logo" aria-label="Exasol Personal" data-md-component="logo">
+      
+  <img src="../assets/exasol-logo.svg" alt="logo">
+
+    </a>
+    Exasol Personal
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/exasol/exasol-personal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    exasol/exasol-personal
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Get started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../system-requirements/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install the launcher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../local-deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run Exasol locally
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cloud-deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deploy to the cloud
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cloud deployments
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Cloud deployments
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cloud-resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources and costs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cloud/aws/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AWS account setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cloud/azure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Azure account setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cloud/exoscale/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exoscale account setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cloud/stackit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    STACKIT account setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../manage-deployments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Manage deployments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use the database
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Use the database
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../connect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect to the database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ai-agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect an AI agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../load-data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Load sample data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../udfs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UDFs and script languages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../virtual-schemas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual schemas
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sidecars/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sidecars
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Launcher
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Launcher
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Script the launcher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../presets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Presets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../launcher-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Help
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Help
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#collect-diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collect diagnostics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installing-the-launcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installing the launcher
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installing the launcher">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exasol-command-not-found" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        exasol: command not found
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#preparing-a-local-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preparing a local host
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Preparing a local host">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#docker-is-not-available" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        docker is not available
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#podman-is-required-to-run-exasol-locally-on-this-platform" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        'podman' is required to run exasol locally on this platform
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rootless-netns-kill-network-process-permission-denied-on-ubuntu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rootless netns: kill network process: permission denied on Ubuntu
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#podman-is-not-installed-and-windows-package-manager-is-unavailable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Podman is not installed and Windows Package Manager is unavailable
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#podman-is-not-available-on-path-on-windows-after-installing-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        podman is not available on PATH on Windows after installing it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#local-runtime-host-preparation-requires-approval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        local runtime host preparation requires approval
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#starting-a-local-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starting a local deployment
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Starting a local deployment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#status-is-stopped-after-a-windows-reboot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status is stopped after a Windows reboot
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#local-service-db-cannot-bind-configured-host-port" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        local service "db" cannot bind configured host port
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#netavark-nftables-error-on-wsl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        netavark: nftables error on WSL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#connection-details-differ-from-the-last-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connection details differ from the last session
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installing-to-the-cloud" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installing to the cloud
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installing to the cloud">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-provider-rejects-the-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The provider rejects the credentials
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#azure-reports-resource-provider-registration-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Azure reports resource-provider registration errors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-installation-was-interrupted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The installation was interrupted
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recovering-a-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recovering a deployment
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recovering a deployment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#status-is-operation_in_progress-but-nothing-is-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status is operation_in_progress but nothing is running
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resources-were-removed-outside-the-launcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resources were removed outside the launcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#features-and-runtimes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features and runtimes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#get-more-help" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get more help
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../limitations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limitations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project information
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project information
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../privacy-and-licensing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Privacy and licensing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#collect-diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collect diagnostics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installing-the-launcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installing the launcher
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installing the launcher">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exasol-command-not-found" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        exasol: command not found
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#preparing-a-local-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preparing a local host
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Preparing a local host">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#docker-is-not-available" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        docker is not available
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#podman-is-required-to-run-exasol-locally-on-this-platform" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        'podman' is required to run exasol locally on this platform
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rootless-netns-kill-network-process-permission-denied-on-ubuntu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rootless netns: kill network process: permission denied on Ubuntu
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#podman-is-not-installed-and-windows-package-manager-is-unavailable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Podman is not installed and Windows Package Manager is unavailable
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#podman-is-not-available-on-path-on-windows-after-installing-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        podman is not available on PATH on Windows after installing it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#local-runtime-host-preparation-requires-approval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        local runtime host preparation requires approval
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#starting-a-local-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starting a local deployment
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Starting a local deployment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#status-is-stopped-after-a-windows-reboot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status is stopped after a Windows reboot
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#local-service-db-cannot-bind-configured-host-port" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        local service "db" cannot bind configured host port
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#netavark-nftables-error-on-wsl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        netavark: nftables error on WSL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#connection-details-differ-from-the-last-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connection details differ from the last session
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installing-to-the-cloud" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installing to the cloud
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installing to the cloud">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-provider-rejects-the-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The provider rejects the credentials
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#azure-reports-resource-provider-registration-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Azure reports resource-provider registration errors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-installation-was-interrupted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The installation was interrupted
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recovering-a-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recovering a deployment
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recovering a deployment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#status-is-operation_in_progress-but-nothing-is-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status is operation_in_progress but nothing is running
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resources-were-removed-outside-the-launcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resources were removed outside the launcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#features-and-runtimes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features and runtimes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#get-more-help" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get more help
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h1>
+<p>Problems are grouped by the point at which they appear. Each entry names what you see, why it
+happens, and how to resolve it.</p>
+<h2 id="collect-diagnostics">Collect diagnostics<a class="headerlink" href="#collect-diagnostics" title="Permanent link">&para;</a></h2>
+<p>Before changing anything, ask the launcher what it sees:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>exasol<span class="w"> </span>status<span class="w">          </span><span class="c1"># deployment state, safe at any time</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>exasol<span class="w"> </span>diag<span class="w"> </span><span class="nb">local</span><span class="w">      </span><span class="c1"># JSON: runtime state, bound ports, reachability, database readiness</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>exasol<span class="w"> </span>diag<span class="w"> </span>info<span class="w">       </span><span class="c1"># JSON: full deployment information</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>exasol<span class="w"> </span>diag<span class="w"> </span>cache<span class="w">      </span><span class="c1"># JSON: runtime artifact cache state</span>
+</span></code></pre></div>
+<p><code>exasol status</code> reports one of the documented state values; see
+<a href="../scripting/#interpret-deployment-status">Interpret deployment status</a> for their meanings. The
+<code>diag</code> commands only report, they never change a deployment.</p>
+<p>Add <code>--json</code> to most commands for machine-readable output.</p>
+<h2 id="installing-the-launcher">Installing the launcher<a class="headerlink" href="#installing-the-launcher" title="Permanent link">&para;</a></h2>
+<h3 id="exasol-command-not-found"><code>exasol: command not found</code><a class="headerlink" href="#exasol-command-not-found" title="Permanent link">&para;</a></h3>
+<p>The installer places the <code>exasol</code> binary in <code>~/.local/bin</code>, which is not on every system's <code>PATH</code>.
+Add the directory as instructed by the installer output, then open a new terminal so the change
+takes effect. Verify with <code>exasol version</code>. See <a href="../getting-started/">Install the launcher</a>.</p>
+<h2 id="preparing-a-local-host">Preparing a local host<a class="headerlink" href="#preparing-a-local-host" title="Permanent link">&para;</a></h2>
+<h3 id="docker-is-not-available"><code>docker is not available</code><a class="headerlink" href="#docker-is-not-available" title="Permanent link">&para;</a></h3>
+<p>The deployment uses Docker, but the launcher cannot use it. The message includes Docker's own
+error. Check that the daemon is running with <code>docker info</code>, that your user may use it (membership of
+the <code>docker</code> group applies only to new login sessions), and that the active context in
+<code>docker context ls</code> is the one you expect. If the message says the daemon runs Windows containers,
+switch Docker Desktop to Linux containers. If it names a Docker Engine older than 29, upgrade
+Docker. To use Podman instead on a deployment that has not
+started yet, run <code>exasol config set --container-engine podman</code>.</p>
+<p>While Docker does not answer, <code>exasol status</code> reports <code>database_connection_failed</code> with a message
+that the container engine is not answering, and <code>exasol start</code> and <code>exasol stop</code> fail with this
+error. Once Docker answers again, it restarts a running deployment as described in
+<a href="../local-deployment/#docker-behaviour">Docker behaviour</a>.</p>
+<h3 id="podman-is-required-to-run-exasol-locally-on-this-platform"><code>'podman' is required to run exasol locally on this platform</code><a class="headerlink" href="#podman-is-required-to-run-exasol-locally-on-this-platform" title="Permanent link">&para;</a></h3>
+<p>On Linux the database runs directly in Podman on the host. Install Podman with your distribution's
+package manager and make sure it is available in <code>PATH</code>. See
+<a href="../system-requirements/#local-database">System requirements</a>.</p>
+<h3 id="rootless-netns-kill-network-process-permission-denied-on-ubuntu"><code>rootless netns: kill network process: permission denied</code> on Ubuntu<a class="headerlink" href="#rootless-netns-kill-network-process-permission-denied-on-ubuntu" title="Permanent link">&para;</a></h3>
+<p>Ubuntu 26.04 can deny Podman permission to stop its <code>pasta</code> network helper because of a missing
+AppArmor rule (<a href="https://bugs.launchpad.net/ubuntu/+source/passt/+bug/2154379">Ubuntu bug 2154379</a>).
+<code>exasol stop</code> or <code>exasol destroy</code> then fails during container removal and can leave the deployment
+network behind. Repeating the command before repairing the host policy does not resolve the cause.</p>
+<p>Ask your administrator to check for the matching denial:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>sudo<span class="w"> </span>journalctl<span class="w"> </span>-k<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s1">'profile="pasta"'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s1">'operation="signal"'</span>
+</span></code></pre></div>
+<p>The matching entry names <code>comm="podman"</code>, <code>signal=term</code>, <code>peer="podman"</code>, and
+<code>apparmor="DENIED"</code>. Install a distribution update that fixes the linked bug when available.
+Until then, an administrator can apply the
+<a href="https://github.com/actions/runner-images/issues/15182">runner-image maintainers' correction</a>
+to <code>/etc/apparmor.d/usr.bin.pasta</code>: add this rule inside the <code>profile pasta</code> block, then reload it
+with <code>sudo apparmor_parser -r /etc/apparmor.d/usr.bin.pasta</code>:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>signal (receive) set=(term) peer=podman,
+</span></code></pre></div>
+<p>This permits only receipt of SIGTERM from Podman's AppArmor profile. Keep AppArmor enabled.
+The launcher does not change this host policy. After the administrator repairs it, run
+<code>podman unshare --rootless-netns true</code> to verify network teardown, then repeat <code>exasol destroy</code>
+for the affected deployment. Keep its deployment directory until destruction completes.</p>
+<h3 id="podman-is-not-installed-and-windows-package-manager-is-unavailable">Podman is not installed and Windows Package Manager is unavailable<a class="headerlink" href="#podman-is-not-installed-and-windows-package-manager-is-unavailable" title="Permanent link">&para;</a></h3>
+<p>The launcher can install Podman on Windows, but only through <code>winget</code>. Install App Installer from
+the Microsoft Store, or install Podman manually from <a href="https://podman.io/">podman.io</a>, then run the
+command again.</p>
+<h3 id="podman-is-not-available-on-path-on-windows-after-installing-it"><code>podman is not available on PATH</code> on Windows after installing it<a class="headerlink" href="#podman-is-not-available-on-path-on-windows-after-installing-it" title="Permanent link">&para;</a></h3>
+<p>Windows fixes a process's <code>PATH</code> when it starts, so a terminal opened before Podman was installed
+never sees it. Open a new terminal and run the command again.</p>
+<h3 id="local-runtime-host-preparation-requires-approval"><code>local runtime host preparation requires approval</code><a class="headerlink" href="#local-runtime-host-preparation-requires-approval" title="Permanent link">&para;</a></h3>
+<p>Installing Podman changes shared host state, so the launcher asks before doing it. A command with
+no terminal attached cannot ask and refuses instead of changing the host. Re-run with
+<code>--auto-approve</code>, or run the displayed setup command yourself. See
+<a href="../local-deployment/#windows-host-preparation">Windows host preparation</a>.</p>
+<h2 id="starting-a-local-deployment">Starting a local deployment<a class="headerlink" href="#starting-a-local-deployment" title="Permanent link">&para;</a></h2>
+<h3 id="status-is-stopped-after-a-windows-reboot">Status is <code>stopped</code> after a Windows reboot<a class="headerlink" href="#status-is-stopped-after-a-windows-reboot" title="Permanent link">&para;</a></h3>
+<p>On Windows the deployment runs inside Podman's machine, which does not start again by itself when
+the host reboots. <code>exasol status</code> then reports:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Status: stopped
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>Message: Deployment stopped. Run `start` to restart or `destroy` to delete resources.
+</span></code></pre></div>
+<p>Start the deployment again, which also starts the Podman machine:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>exasol<span class="w"> </span>start
+</span></code></pre></div>
+<h3 id="local-service-db-cannot-bind-configured-host-port"><code>local service "db" cannot bind configured host port</code><a class="headerlink" href="#local-service-db-cannot-bind-configured-host-port" title="Permanent link">&para;</a></h3>
+<p>Another process claimed the port the deployment saved during initialization. Stop the deployment,
+assign a different port or let the launcher choose one, then start it again:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>exasol<span class="w"> </span>stop
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>exasol<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--ports<span class="w"> </span>db:9563<span class="w">  </span><span class="c1"># or: exasol config set --ports auto</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>exasol<span class="w"> </span>start
+</span></code></pre></div>
+<p>See <a href="../local-deployment/">Run Exasol locally</a> for how the launcher selects and keeps the port.</p>
+<h3 id="netavark-nftables-error-on-wsl"><code>netavark: nftables error</code> on WSL<a class="headerlink" href="#netavark-nftables-error-on-wsl" title="Permanent link">&para;</a></h3>
+<p>A local deployment fails to start with:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>exit status 126: Error: netavark: nftables error: "nft" did not return successfully while applying ruleset
+</span></code></pre></div>
+<p>Older WSL kernels, including the one shipped with WSL 2.6, lack the nftables support that Podman
+needs to set up the deployment network.</p>
+<p>Update WSL from a Windows terminal, then run the command again:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>wsl<span class="w"> </span>--update
+</span></code></pre></div>
+<p>If you cannot update WSL and run the Linux launcher inside a WSL distribution, install <code>iptables</code> in
+that distribution, switch Podman to it in <code>~/.config/containers/containers.conf</code>, and run the
+command again:</p>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">[network]</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">firewall_driver</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"iptables"</span>
+</span></code></pre></div>
+<p>The setting applies to all of your Podman containers.</p>
+<h3 id="connection-details-differ-from-the-last-session">Connection details differ from the last session<a class="headerlink" href="#connection-details-differ-from-the-last-session" title="Permanent link">&para;</a></h3>
+<p>Node addresses can change whenever a deployment restarts. Run <code>exasol info</code> to display the current
+connection details.</p>
+<h2 id="installing-to-the-cloud">Installing to the cloud<a class="headerlink" href="#installing-to-the-cloud" title="Permanent link">&para;</a></h2>
+<h3 id="the-provider-rejects-the-credentials">The provider rejects the credentials<a class="headerlink" href="#the-provider-rejects-the-credentials" title="Permanent link">&para;</a></h3>
+<p>The launcher uses the credentials your provider's <abbr title="Command-line interface">CLI</abbr> or environment already supplies, and reports
+the provider's own authentication error. Confirm the credentials outside the launcher, then run the
+installation again. See the setup guide for <a href="../cloud/aws/">AWS</a>, <a href="../cloud/azure/">Azure</a>,
+<a href="../cloud/exoscale/">Exoscale</a>, or <a href="../cloud/stackit/">STACKIT</a>.</p>
+<h3 id="azure-reports-resource-provider-registration-errors">Azure reports resource-provider registration errors<a class="headerlink" href="#azure-reports-resource-provider-registration-errors" title="Permanent link">&para;</a></h3>
+<p>A new Azure subscription does not have every required resource provider registered. Register them
+as described in <a href="../cloud/azure/#configure-subscription-access">Configure subscription access</a>, then
+run the installation again.</p>
+<h3 id="the-installation-was-interrupted">The installation was interrupted<a class="headerlink" href="#the-installation-was-interrupted" title="Permanent link">&para;</a></h3>
+<p>Cloud resources created before an interruption are not removed automatically and can continue to
+incur charges. Keep the deployment directory and retry the same installation command; the directory
+records the selected presets and deployment state.</p>
+<p>If you do not want to retry, remove the provisioned resources with <code>exasol destroy</code>. See
+<a href="../manage-deployments/#destroy-a-deployment">Destroy a deployment</a>.</p>
+<h2 id="recovering-a-deployment">Recovering a deployment<a class="headerlink" href="#recovering-a-deployment" title="Permanent link">&para;</a></h2>
+<h3 id="status-is-operation_in_progress-but-nothing-is-running">Status is <code>operation_in_progress</code> but nothing is running<a class="headerlink" href="#status-is-operation_in_progress-but-nothing-is-running" title="Permanent link">&para;</a></h3>
+<p>The deployment directory stays locked while a launcher operation runs, and a process that was
+terminated can leave the lock behind. Confirm that no other launcher process is running, then
+release the lock:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>exasol<span class="w"> </span>diag<span class="w"> </span>unlock
+</span></code></pre></div>
+<p>Unlocking a directory that another process is still using can leave the deployment in an
+inconsistent state, so check first.</p>
+<h3 id="resources-were-removed-outside-the-launcher">Resources were removed outside the launcher<a class="headerlink" href="#resources-were-removed-outside-the-launcher" title="Permanent link">&para;</a></h3>
+<p>If deployment resources no longer exist or cannot be reached through the launcher, remove only the
+local deployment directory:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>exasol<span class="w"> </span>remove
+</span></code></pre></div>
+<p>This does not destroy resources. If you deleted the deployment directory before destroying the
+resources, remove the remaining resources through the cloud provider or local environment. See
+<a href="../manage-deployments/#destroy-a-deployment">Destroy a deployment</a>.</p>
+<h2 id="features-and-runtimes">Features and runtimes<a class="headerlink" href="#features-and-runtimes" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Runtime downloads:</strong> for an invalid or interrupted runtime-tool download, follow the targeted
+  cleanup steps under <a href="../launcher-cache/#clean-a-failed-download">Runtime cache</a>. The cache normally
+  requires no maintenance.</li>
+<li><strong><abbr title="User-defined functions">UDFs</abbr> and script language containers:</strong> a container that cannot be activated is recorded as
+  pending and the database still starts. See
+  <a href="../udfs/#install-a-custom-container"><abbr title="User-defined functions">UDFs</abbr> and script language containers</a>.</li>
+<li><strong>Virtual schemas:</strong> adapter, driver, and runtime errors are covered by
+  <a href="../virtual-schemas/#troubleshooting">Virtual schemas</a>.</li>
+<li><strong>Missing capability:</strong> some behavior differs between local and cloud deployments by design. Check
+  <a href="../limitations/">Limitations</a> before treating it as a fault.</li>
+</ul>
+<h2 id="get-more-help">Get more help<a class="headerlink" href="#get-more-help" title="Permanent link">&para;</a></h2>
+<p>Run <code>exasol &lt;command&gt; --help</code> for the options of an individual command. For further assistance, ask
+in the <a href="https://community.exasol.com">Exasol Community</a> using the <code>exasol-personal</code> tag, and include
+the output of <code>exasol status</code> and <code>exasol diag local</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../cli-reference/" class="md-footer__link md-footer__link--prev" aria-label="Previous: CLI reference">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                CLI reference
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../limitations/" class="md-footer__link md-footer__link--next" aria-label="Next: Limitations">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Limitations
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["announce.dismiss", "content.code.annotate", "content.code.copy", "content.code.select", "content.tooltips", "navigation.footer", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
