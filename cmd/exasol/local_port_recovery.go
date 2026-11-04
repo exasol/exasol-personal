@@ -32,6 +32,14 @@ func addDeploymentRecoveryCallToActionFor(err error, selection string) {
 		addTerminalCallToAction(sidecarRestartGuidance)
 	}
 
+	if unsupported, ok := errors.AsType[*deploy.SidecarNetworkUnsupportedError](err); ok {
+		guidance := sidecarKernelGuidance
+		if unsupported.WSL {
+			guidance = sidecarWSLUpdateGuidance
+		}
+		addTerminalCallToAction(fmt.Sprintf(guidance, selection))
+	}
+
 	if startup, ok := errors.AsType[*sidecar.StartupError](err); ok {
 		addTerminalCallToAction(fmt.Sprintf(
 			"Inspect the reported sidecar for the full diagnosis:\n"+

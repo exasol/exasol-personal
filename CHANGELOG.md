@@ -57,7 +57,10 @@ Notable user-facing changes to Exasol Personal are documented here.
   start names the cause and points at `exasol sidecar status <name>` for the
   full diagnosis. Connection values reach containers through an owner-readable
   file the launcher removes once the container is created. macOS publishes a
-  declared host port through the local runner's live forwarding. Cloud
+  declared host port through the local runner's live forwarding. Sidecars on
+  Podman need WSL 2.7 or later on Windows and inside WSL; on older kernels the
+  database starts without the deployment network and enabling a sidecar reports
+  the requirement. Cloud
   deployments report that sidecars are unsupported for their type. Status
   reports a complete URL for a published port that declares an application
   protocol. Containers accept a Kubernetes `readinessProbe` with an `exec`,

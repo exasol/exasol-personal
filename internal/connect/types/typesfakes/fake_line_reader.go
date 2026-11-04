@@ -10,9 +10,8 @@ import (
 type FakeLineReader struct {
 	CloseStub        func() error
 	closeMutex       sync.RWMutex
-	closeArgsForCall []struct {
-	}
-	closeReturns struct {
+	closeArgsForCall []struct{}
+	closeReturns     struct {
 		result1 error
 	}
 	closeReturnsOnCall map[int]struct {
@@ -20,9 +19,8 @@ type FakeLineReader struct {
 	}
 	ReadlineStub        func() (string, error)
 	readlineMutex       sync.RWMutex
-	readlineArgsForCall []struct {
-	}
-	readlineReturns struct {
+	readlineArgsForCall []struct{}
+	readlineReturns     struct {
 		result1 string
 		result2 error
 	}
@@ -31,14 +29,14 @@ type FakeLineReader struct {
 		result2 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
 }
 
 func (fake *FakeLineReader) Close() error {
 	fake.closeMutex.Lock()
 	ret, specificReturn := fake.closeReturnsOnCall[len(fake.closeArgsForCall)]
-	fake.closeArgsForCall = append(fake.closeArgsForCall, struct {
-	}{})
+	fake.closeArgsForCall = append(fake.closeArgsForCall, struct{}{})
 	stub := fake.CloseStub
 	fakeReturns := fake.closeReturns
 	fake.recordInvocation("Close", []interface{}{})
@@ -90,8 +88,7 @@ func (fake *FakeLineReader) CloseReturnsOnCall(i int, result1 error) {
 func (fake *FakeLineReader) Readline() (string, error) {
 	fake.readlineMutex.Lock()
 	ret, specificReturn := fake.readlineReturnsOnCall[len(fake.readlineArgsForCall)]
-	fake.readlineArgsForCall = append(fake.readlineArgsForCall, struct {
-	}{})
+	fake.readlineArgsForCall = append(fake.readlineArgsForCall, struct{}{})
 	stub := fake.ReadlineStub
 	fakeReturns := fake.readlineReturns
 	fake.recordInvocation("Readline", []interface{}{})
@@ -153,9 +150,18 @@ func (fake *FakeLineReader) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeLineReader) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeLineReader) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

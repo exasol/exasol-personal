@@ -564,8 +564,13 @@ type podmanNetwork struct {
 }
 
 type podmanInspection struct {
+	Config          podmanContainerConfig `json:"config"`
 	HostConfig      podmanHostConfig      `json:"hostConfig"`
 	NetworkSettings podmanNetworkSettings `json:"networkSettings"`
+}
+
+type podmanContainerConfig struct {
+	Labels map[string]string `json:"labels"`
 }
 
 type podmanHostConfig struct {
@@ -642,6 +647,7 @@ func (inspection podmanInspection) attachment() ContainerAttachment {
 	return ContainerAttachment{
 		Bridged:  inspection.HostConfig.NetworkMode == podmanBridgeDriver,
 		Networks: networks,
+		Labels:   inspection.Config.Labels,
 	}
 }
 

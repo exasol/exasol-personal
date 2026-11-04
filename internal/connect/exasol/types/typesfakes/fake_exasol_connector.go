@@ -12,9 +12,8 @@ import (
 type FakeExasolConnector struct {
 	CloseStub        func() error
 	closeMutex       sync.RWMutex
-	closeArgsForCall []struct {
-	}
-	closeReturns struct {
+	closeArgsForCall []struct{}
+	closeReturns     struct {
 		result1 error
 	}
 	closeReturnsOnCall map[int]struct {
@@ -22,11 +21,8 @@ type FakeExasolConnector struct {
 	}
 	ExecStub        func(string, []driver.Value) (driver.Result, error)
 	execMutex       sync.RWMutex
-	execArgsForCall []struct {
-		arg1 string
-		arg2 []driver.Value
-	}
-	execReturns struct {
+	execArgsForCall []FakeExasolConnectorExecArgs
+	execReturns     struct {
 		result1 driver.Result
 		result2 error
 	}
@@ -36,12 +32,8 @@ type FakeExasolConnector struct {
 	}
 	QueryContextStub        func(context.Context, string, []driver.NamedValue) (driver.Rows, error)
 	queryContextMutex       sync.RWMutex
-	queryContextArgsForCall []struct {
-		arg1 context.Context
-		arg2 string
-		arg3 []driver.NamedValue
-	}
-	queryContextReturns struct {
+	queryContextArgsForCall []FakeExasolConnectorQueryContextArgs
+	queryContextReturns     struct {
 		result1 driver.Rows
 		result2 error
 	}
@@ -50,14 +42,27 @@ type FakeExasolConnector struct {
 		result2 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeExasolConnectorExecArgs holds the arguments of one call to Exec.
+type FakeExasolConnectorExecArgs struct {
+	Arg1 string
+	Arg2 []driver.Value
+}
+
+// FakeExasolConnectorQueryContextArgs holds the arguments of one call to QueryContext.
+type FakeExasolConnectorQueryContextArgs struct {
+	Arg1 context.Context
+	Arg2 string
+	Arg3 []driver.NamedValue
 }
 
 func (fake *FakeExasolConnector) Close() error {
 	fake.closeMutex.Lock()
 	ret, specificReturn := fake.closeReturnsOnCall[len(fake.closeArgsForCall)]
-	fake.closeArgsForCall = append(fake.closeArgsForCall, struct {
-	}{})
+	fake.closeArgsForCall = append(fake.closeArgsForCall, struct{}{})
 	stub := fake.CloseStub
 	fakeReturns := fake.closeReturns
 	fake.recordInvocation("Close", []interface{}{})
@@ -114,10 +119,7 @@ func (fake *FakeExasolConnector) Exec(arg1 string, arg2 []driver.Value) (driver.
 	}
 	fake.execMutex.Lock()
 	ret, specificReturn := fake.execReturnsOnCall[len(fake.execArgsForCall)]
-	fake.execArgsForCall = append(fake.execArgsForCall, struct {
-		arg1 string
-		arg2 []driver.Value
-	}{arg1, arg2Copy})
+	fake.execArgsForCall = append(fake.execArgsForCall, FakeExasolConnectorExecArgs{arg1, arg2Copy})
 	stub := fake.ExecStub
 	fakeReturns := fake.execReturns
 	fake.recordInvocation("Exec", []interface{}{arg1, arg2Copy})
@@ -147,7 +149,15 @@ func (fake *FakeExasolConnector) ExecArgsForCall(i int) (string, []driver.Value)
 	fake.execMutex.RLock()
 	defer fake.execMutex.RUnlock()
 	argsForCall := fake.execArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeExasolConnector) ExecArgs() []FakeExasolConnectorExecArgs {
+	fake.execMutex.RLock()
+	defer fake.execMutex.RUnlock()
+	args := make([]FakeExasolConnectorExecArgs, len(fake.execArgsForCall))
+	copy(args, fake.execArgsForCall)
+	return args
 }
 
 func (fake *FakeExasolConnector) ExecReturns(result1 driver.Result, result2 error) {
@@ -184,11 +194,7 @@ func (fake *FakeExasolConnector) QueryContext(arg1 context.Context, arg2 string,
 	}
 	fake.queryContextMutex.Lock()
 	ret, specificReturn := fake.queryContextReturnsOnCall[len(fake.queryContextArgsForCall)]
-	fake.queryContextArgsForCall = append(fake.queryContextArgsForCall, struct {
-		arg1 context.Context
-		arg2 string
-		arg3 []driver.NamedValue
-	}{arg1, arg2, arg3Copy})
+	fake.queryContextArgsForCall = append(fake.queryContextArgsForCall, FakeExasolConnectorQueryContextArgs{arg1, arg2, arg3Copy})
 	stub := fake.QueryContextStub
 	fakeReturns := fake.queryContextReturns
 	fake.recordInvocation("QueryContext", []interface{}{arg1, arg2, arg3Copy})
@@ -218,7 +224,15 @@ func (fake *FakeExasolConnector) QueryContextArgsForCall(i int) (context.Context
 	fake.queryContextMutex.RLock()
 	defer fake.queryContextMutex.RUnlock()
 	argsForCall := fake.queryContextArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3
+}
+
+func (fake *FakeExasolConnector) QueryContextArgs() []FakeExasolConnectorQueryContextArgs {
+	fake.queryContextMutex.RLock()
+	defer fake.queryContextMutex.RUnlock()
+	args := make([]FakeExasolConnectorQueryContextArgs, len(fake.queryContextArgsForCall))
+	copy(args, fake.queryContextArgsForCall)
+	return args
 }
 
 func (fake *FakeExasolConnector) QueryContextReturns(result1 driver.Rows, result2 error) {
@@ -257,9 +271,18 @@ func (fake *FakeExasolConnector) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeExasolConnector) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeExasolConnector) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

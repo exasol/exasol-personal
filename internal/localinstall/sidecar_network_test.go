@@ -6,6 +6,7 @@ package localinstall
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -160,6 +161,91 @@ func TestSidecarDatabaseNetworkAttachment(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSidecarDatabaseWithoutServiceNetworkReportsUnsupportedHost(t *testing.T) {
+	t.Parallel()
+	// Given
+	runtime, environment := newNetworkFixture(t)
+	environment.database = fmt.Sprintf(
+		`[{"Config":{"Labels":{%q:"true"}},"HostConfig":{"NetworkMode":"pasta"},`+
+			`"NetworkSettings":{"Networks":{}}}]`, serviceNetworkUnsupportedLabel)
+	// When
+	restart, attachErr := runtime.AttachDatabase(context.Background())
+	required, inspectErr := runtime.DatabaseRestartRequired(context.Background())
+	supportedErr := runtime.ServiceNetworkSupported(context.Background())
+	// Then
+	var unsupported *ServiceNetworkUnsupportedError
+	require.ErrorAs(t, attachErr, &unsupported)
+	require.ErrorAs(t, supportedErr, &unsupported)
+	require.False(t, restart)
+	require.NoError(t, inspectErr)
+	require.False(t, required)
+	require.False(t, attachmentConnected(t, environment.calls))
+	for _, command := range environment.calls {
+		require.NotEqual(t, "network", command[1], "touched the deployment network")
+	}
+}
+
+func TestSidecarServiceNetworkSupportedForDatabaseOnNetwork(t *testing.T) {
+	t.Parallel()
+	// Given
+	runtime, environment := newNetworkFixture(t)
+	environment.database = `[{"HostConfig":{"NetworkMode":"bridge"},` +
+		`"NetworkSettings":{"Networks":{"exasol-db-test-services":{"Aliases":["database"]}}}}]`
+	// When
+	err := runtime.ServiceNetworkSupported(context.Background())
+	// Then
+	require.NoError(t, err)
+}
+
+func TestServiceNetworkUnsupportedMatchesNetavarkNftablesFailures(t *testing.T) {
+	t.Parallel()
+	for _, fixture := range []struct {
+		name, stderr string
+		unsupported  bool
+	}{
+		{
+			"linux", `Error: netavark: nftables error: "nft" did not return successfully ` +
+				"while applying ruleset", true,
+		},
+		{
+			"windows", `Error: netavark (exit code 1): nftables error: "nft" did not return ` +
+				"successfully while applying ruleset:", true,
+		},
+		{
+			"bind", "Error: rootlessport listen tcp 127.0.0.1:8563: bind: address already in use",
+			false,
+		},
+		{"other netavark", "Error: netavark: IO error: No such file or directory", false},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			// Given
+			err := fmt.Errorf("start: %w", &CommandError{
+				Stderr: fixture.stderr, Err: errors.New("exit status 126"),
+			})
+			// When
+			unsupported := serviceNetworkUnsupported(err)
+			// Then
+			require.Equal(t, fixture.unsupported, unsupported)
+		})
+	}
+	require.False(t, serviceNetworkUnsupported(nil))
+}
+
+func TestServiceNetworkUnsupportedErrorNamesTheHostRequirement(t *testing.T) {
+	t.Parallel()
+	// When
+	wsl := (&ServiceNetworkUnsupportedError{WSL: true}).Error()
+	kernel := (&ServiceNetworkUnsupportedError{}).Error()
+	databaseWSL := (&ServiceNetworkUnsupportedError{WSL: true, Database: true}).Error()
+	databaseKernel := (&ServiceNetworkUnsupportedError{Database: true}).Error()
+	// Then
+	require.Equal(t, "sidecars on Podman require WSL 2.7 or later", wsl)
+	require.Equal(t, "the kernel lacks the nftables support Podman needs for sidecars", kernel)
+	require.Equal(t, "Podman on this host requires WSL 2.7 or later", databaseWSL)
+	require.Equal(t, "the kernel lacks the nftables support Podman needs", databaseKernel)
 }
 
 func TestSidecarDatabaseQueriesTolerateStoppedDeployment(t *testing.T) {

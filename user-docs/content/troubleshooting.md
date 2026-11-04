@@ -129,26 +129,32 @@ exasol start
 
 See [Run Exasol locally](local-deployment.md) for how the launcher selects and keeps the port.
 
-### `netavark: nftables error` on WSL
+### `sidecars on Podman require WSL 2.7 or later`
 
-A local deployment fails to start with:
+Enabling a sidecar fails with this message, or `exasol start` and `exasol sidecar status` report it
+for an enabled sidecar. On Linux outside WSL, the message reads
+`the kernel lacks the nftables support Podman needs for sidecars`. The database keeps running, and
+local deployments without sidecars are not affected.
 
-```text
-exit status 126: Error: netavark: nftables error: "nft" did not return successfully while applying ruleset
-```
+Older kernels, including the one shipped with WSL 2.6, lack the nftables support that Podman needs
+for the [deployment network](local-deployment.md#deployment-network), so the database starts
+without it and sidecars cannot reach it. This applies to the Windows launcher and to the Linux
+launcher inside WSL. Docker is not affected.
 
-Older WSL kernels, including the one shipped with WSL 2.6, lack the nftables support that Podman
-needs to set up the deployment network.
+Rootful Podman cannot start the database without the network on these kernels, so
+`exasol install local` and `exasol start` fail with `Podman on this host requires WSL 2.7 or later`
+(on Linux outside WSL, `the kernel lacks the nftables support Podman needs`). The same fix applies.
 
-Update WSL from a Windows terminal, then run the command again:
+Update WSL from a Windows terminal, restart the deployment, and enable the sidecar again:
 
 ```bash
 wsl --update
+exasol stop
+exasol start
 ```
 
-If you cannot update WSL and run the Linux launcher inside a WSL distribution, install `iptables` in
-that distribution, switch Podman to it in `~/.config/containers/containers.conf`, and run the
-command again:
+If you run the Linux launcher and cannot update WSL or the kernel, install `iptables`, switch
+Podman to it in `~/.config/containers/containers.conf`, then run `exasol stop` and `exasol start`:
 
 ```toml
 [network]

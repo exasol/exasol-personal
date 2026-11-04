@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -129,6 +130,40 @@ func TestAddLocalPortRecoveryCallToActionQueuesRetryGuidance(t *testing.T) {
 		if !strings.Contains(stderr.String(), expected) {
 			t.Fatalf("expected retry guidance %q, got %q", expected, stderr.String())
 		}
+	}
+}
+
+//nolint:paralleltest // mutates shared terminal message queues
+func TestAddSidecarNetworkCallToActionNamesTheHostFix(t *testing.T) {
+	for _, fixture := range []struct {
+		name      string
+		wsl       bool
+		selection string
+		expected  string
+	}{
+		{"wsl", true, "", "Update WSL from a Windows terminal with `wsl --update`, " +
+			"then restart the deployment with `exasol stop` and `exasol start`."},
+		{"wsl selection", true, " -d win263", "Update WSL from a Windows terminal with " +
+			"`wsl --update`, then restart the deployment with `exasol stop -d win263` and " +
+			"`exasol start -d win263`."},
+		{"kernel", false, "", fmt.Sprintf(sidecarKernelGuidance, "")},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			// Given
+			resetTerminalMessages()
+			defer resetTerminalMessages()
+
+			// When
+			addDeploymentRecoveryCallToActionFor(fmt.Errorf("cannot enable sidecar %q: %w",
+				"mcp", &deploy.SidecarNetworkUnsupportedError{WSL: fixture.wsl}), fixture.selection)
+			var stderr bytes.Buffer
+			writeTerminalCallsToAction(&stderr, true)
+
+			// Then
+			if stderr.String() != "\n"+fixture.expected+"\n" {
+				t.Fatalf("expected guidance %q, got %q", fixture.expected, stderr.String())
+			}
+		})
 	}
 }
 

@@ -6,10 +6,72 @@ package localinstall
 import (
 	"context"
 	"fmt"
+	"maps"
+	"os"
+	goruntime "runtime"
 	"slices"
+	"strings"
 
 	"github.com/exasol/exasol-personal/internal/sidecar"
 )
+
+const serviceNetworkUnsupportedLabel = "com.exasol.launcher.service-network-unsupported"
+
+// ServiceNetworkUnsupportedError reports that the host kernel cannot provide
+// Podman's nftables networking, for sidecars or, when Database is set, for the
+// database itself.
+type ServiceNetworkUnsupportedError struct {
+	WSL      bool
+	Database bool
+}
+
+func (err *ServiceNetworkUnsupportedError) Error() string {
+	switch {
+	case err.Database && err.WSL:
+		return "Podman on this host requires WSL 2.7 or later"
+	case err.Database:
+		return "the kernel lacks the nftables support Podman needs"
+	case err.WSL:
+		return "sidecars on Podman require WSL 2.7 or later"
+	default:
+		return "the kernel lacks the nftables support Podman needs for sidecars"
+	}
+}
+
+func newServiceNetworkUnsupportedError() error {
+	return &ServiceNetworkUnsupportedError{WSL: hostUsesWSL()}
+}
+
+// The Windows launcher runs Podman in a WSL machine.
+func hostUsesWSL() bool {
+	if goruntime.GOOS == "windows" {
+		return true
+	}
+	release, err := os.ReadFile("/proc/sys/kernel/osrelease")
+
+	return err == nil && strings.Contains(strings.ToLower(string(release)), "microsoft")
+}
+
+func serviceNetworkUnsupported(err error) bool {
+	stderr := CommandStderr(err)
+
+	return strings.Contains(stderr, "netavark") && strings.Contains(stderr, "nftables error")
+}
+
+func withoutServiceNetwork(spec ContainerSpec) ContainerSpec {
+	spec.Network = ""
+	spec.NetworkAlias = ""
+	labels := make(map[string]string, len(spec.Labels)+1)
+	maps.Copy(labels, spec.Labels)
+	labels[serviceNetworkUnsupportedLabel] = "true"
+	spec.Labels = labels
+
+	return spec
+}
+
+func lacksServiceNetwork(container ContainerAttachment) bool {
+	return container.Labels[serviceNetworkUnsupportedLabel] != ""
+}
 
 func (runtime *SidecarRuntime) NetworkName() string {
 	return runtime.owner + "-services"
@@ -42,6 +104,9 @@ func (runtime *SidecarRuntime) AttachDatabase(ctx context.Context) (bool, error)
 	if err != nil || !present {
 		return false, err
 	}
+	if lacksServiceNetwork(container) {
+		return false, newServiceNetworkUnsupportedError()
+	}
 	if !container.Bridged {
 		return true, nil
 	}
@@ -60,7 +125,7 @@ func (runtime *SidecarRuntime) AttachDatabase(ctx context.Context) (bool, error)
 
 func (runtime *SidecarRuntime) DatabaseRestartRequired(ctx context.Context) (bool, error) {
 	container, present, err := runtime.client.Attachment(ctx, runtime.owner, nil)
-	if err != nil || !present {
+	if err != nil || !present || lacksServiceNetwork(container) {
 		return false, err
 	}
 	if !container.Bridged {
@@ -69,6 +134,20 @@ func (runtime *SidecarRuntime) DatabaseRestartRequired(ctx context.Context) (boo
 	network, joined := container.Member(runtime.NetworkName())
 
 	return joined && !slices.Contains(network.Aliases, sidecar.DatabaseAlias), nil
+}
+
+// ServiceNetworkSupported fails while the running database lacks the deployment
+// network because the host cannot provide it.
+func (runtime *SidecarRuntime) ServiceNetworkSupported(ctx context.Context) error {
+	container, present, err := runtime.client.Attachment(ctx, runtime.owner, nil)
+	if err != nil || !present {
+		return err
+	}
+	if lacksServiceNetwork(container) {
+		return newServiceNetworkUnsupportedError()
+	}
+
+	return nil
 }
 
 func (runtime *SidecarRuntime) RemoveNetwork(ctx context.Context) error {

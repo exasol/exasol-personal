@@ -18,6 +18,15 @@ import (
 const sidecarRestartGuidance = "Run `exasol stop` followed by `exasol start` " +
 	"to restart the deployment and start the enabled sidecars."
 
+const (
+	sidecarWSLUpdateGuidance = "Update WSL from a Windows terminal with `wsl --update`, " +
+		"then restart the deployment with `exasol stop%[1]s` and `exasol start%[1]s`."
+	sidecarKernelGuidance = "Update the kernel or switch Podman to iptables, " +
+		"then restart the deployment with `exasol stop%[1]s` and `exasol start%[1]s`. See " +
+		"https://exasol.github.io/exasol-personal/latest/troubleshooting/" +
+		"#sidecars-on-podman-require-wsl-27-or-later"
+)
+
 // nolint: gochecknoinits
 func init() {
 	rootCmd.AddCommand(newSidecarCommand(commonFlags))
@@ -255,7 +264,7 @@ const sidecarDeferredGuidance = "Sidecar %s will run after the next " +
 // addSidecarDeferredCallToAction answers the question enable leaves open on a
 // deployment whose database is not running.
 func addSidecarDeferredCallToAction(result deploy.SidecarResult) {
-	if result.Enabled && !result.Running {
+	if result.Enabled && !result.Running && result.LastOperationError == "" {
 		addTerminalCallToAction(fmt.Sprintf(sidecarDeferredGuidance, result.Name))
 	}
 }

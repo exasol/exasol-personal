@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -237,8 +238,20 @@ func (install *NanoInstall) Start(
 	if outErr != nil {
 		startErrOutput = io.MultiWriter(outErr, &startDiagnostic)
 	}
-	if err := install.client.Create(ctx, spec, out, startErrOutput); err != nil {
+	var networkedErrOutput bytes.Buffer
+	err = install.client.Create(ctx, spec, out, &networkedErrOutput)
+	if serviceNetworkUnsupported(err) {
+		slog.Debug("starting Nano without the deployment network", "error", err)
+		err = install.client.Create(ctx, withoutServiceNetwork(spec), out, startErrOutput)
+	} else {
+		_, _ = startErrOutput.Write(networkedErrOutput.Bytes())
+	}
+	if err != nil {
 		failure := fmt.Errorf("failed to start Nano container %s: %w", containerName, err)
+		if serviceNetworkUnsupported(err) {
+			failure = errors.Join(failure,
+				&ServiceNetworkUnsupportedError{WSL: hostUsesWSL(), Database: true})
+		}
 		failure = classifyPodmanStartBindFailure(
 			ctx,
 			install,
