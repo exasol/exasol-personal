@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Runtime and security policy
         run: |
           podman info --debug
@@ -16,11 +17,13 @@ jobs:
           sudo aa-status || true
           sudo cat /etc/apparmor.d/usr.bin.pasta || true
           sudo cat /etc/apparmor.d/podman || true
-      - name: Apply upstream narrow pasta profile correction
+      - name: Apply and verify idempotent CI correction
         run: |
-          sudo sed -i '$ i\  signal (receive) set=(term) peer=podman,' /etc/apparmor.d/usr.bin.pasta
-          sudo apparmor_parser -r /etc/apparmor.d/usr.bin.pasta
-          podman unshare --rootless-netns true
+          bash .github/scripts/prepare-rootless-podman.sh
+          before=$(sha256sum /etc/apparmor.d/usr.bin.pasta)
+          bash .github/scripts/prepare-rootless-podman.sh
+          after=$(sha256sum /etc/apparmor.d/usr.bin.pasta)
+          test "$before" = "$after"
       - name: Reproduce removal of the last bridge container
         shell: bash
         run: |
