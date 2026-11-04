@@ -1,0 +1,41 @@
+name: Podman teardown investigation
+on:
+  push:
+    branches: [nh.podman-teardown-probe_SPOT-33528]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Runtime and security policy
+        run: |
+          podman info --debug
+          cat /etc/os-release
+          sudo aa-status || true
+          sudo cat /etc/apparmor.d/usr.bin.pasta || true
+          sudo cat /etc/apparmor.d/podman || true
+      - name: Reproduce removal of the last bridge container
+        shell: bash
+        run: |
+          set -uo pipefail
+          podman pull docker.io/library/alpine:3.22
+          failed=0
+          for attempt in 1 2 3; do
+            network="exasol-teardown-probe-${attempt}"
+            container="exasol-teardown-probe-${attempt}"
+            podman network create "$network" || exit 1
+            podman run -d --name "$container" --network "$network" -p 127.0.0.1::80 docker.io/library/alpine:3.22 sleep 300 || exit 1
+            podman --log-level debug rm --force --ignore -- "$container" || failed=1
+            podman ps -a
+            podman network inspect "$network"
+            podman network rm "$network" || failed=1
+          done
+          exit "$failed"
+      - name: Kernel denials and remaining resources
+        if: always()
+        run: |
+          sudo journalctl -k --since '-15 minutes' --no-pager | grep -Ei 'apparmor|DENIED|podman|pasta' || true
+          podman ps -a
+          podman network ls
