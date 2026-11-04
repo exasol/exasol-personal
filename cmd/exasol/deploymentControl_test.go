@@ -141,9 +141,11 @@ func TestAddSidecarNetworkCallToActionNamesTheHostFix(t *testing.T) {
 		selection string
 		expected  string
 	}{
-		{"wsl", true, "", "Update WSL from a Windows terminal with `wsl --update`, " +
+		{"wsl", true, "", "This usually means WSL is older than 2.7. " +
+			"Update WSL from a Windows terminal with `wsl --update`, " +
 			"then restart the deployment with `exasol stop` and `exasol start`."},
-		{"wsl selection", true, " -d win263", "Update WSL from a Windows terminal with " +
+		{"wsl selection", true, " -d win263", "This usually means WSL is older than 2.7. " +
+			"Update WSL from a Windows terminal with " +
 			"`wsl --update`, then restart the deployment with `exasol stop -d win263` and " +
 			"`exasol start -d win263`."},
 		{"kernel", false, "", fmt.Sprintf(sidecarKernelGuidance, "")},

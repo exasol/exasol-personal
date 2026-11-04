@@ -95,18 +95,18 @@ data.
 
 ### Requirement: Hosts without service network support keep the database running
 
-Start SHALL start the database without the deployment bridge when it cannot
-be started on the bridge because the host's kernel lacks the required nftables
-support. Enabling a sidecar on such a running deployment SHALL fail without
+Start SHALL start the database without the deployment bridge when starting it
+on the bridge fails with Podman's nftables error. Enabling a sidecar on such a running deployment SHALL fail without
 saving the sidecar and keep the database running. Starting such a deployment
 with an enabled sidecar SHALL start the database and report each enabled
 sidecar as failed, as for any other sidecar start failure, and status SHALL
-report each enabled sidecar as failed. On Windows and inside WSL, these
-failures SHALL state that sidecars on Podman require WSL 2.7 or later, and the
-text output of enable and start SHALL include a call to action to run
-`wsl --update`, then `exasol stop` and `exasol start`. On other hosts, the
-failures SHALL name the kernel's missing nftables support, and the call to
-action SHALL link to the troubleshooting documentation. A later start that succeeds on the bridge SHALL
+report each enabled sidecar as failed. These failures SHALL state that Podman
+could not set up the deployment network. On Windows and inside WSL, the text
+output of enable and start SHALL include a call to action naming WSL older than
+2.7 as the usual cause and to run `wsl --update`, then `exasol stop` and
+`exasol start`. On other hosts, the call to action SHALL name the kernel's
+missing nftables support as the usual cause and link to the troubleshooting
+documentation. A later start that succeeds on the bridge SHALL
 make sidecars available again.
 
 #### Scenario: A deployment without sidecars starts on WSL 2.6
@@ -118,8 +118,9 @@ make sidecars available again.
 #### Scenario: Enable on WSL 2.6 reports the WSL requirement
 
 - **WHEN** a sidecar is enabled on a running Podman deployment on WSL 2.6
-- **THEN** the command fails with the WSL 2.7 requirement and a call to action
-  to run `wsl --update`, `exasol stop` and `exasol start`, and the database
+- **THEN** the command fails stating that Podman could not set up the
+  deployment network, with a call to action naming WSL older than 2.7 and to
+  run `wsl --update`, `exasol stop` and `exasol start`, and the database
   keeps serving SQL
 - **AND** the sidecar is not enabled
 
@@ -127,8 +128,8 @@ make sidecars available again.
 
 - **WHEN** a Podman deployment with an enabled sidecar is started on WSL 2.6
 - **THEN** the database serves SQL, the start fails reporting the sidecar with
-  the WSL 2.7 requirement and the same call to action, and status reports the
-  sidecar failed with the WSL 2.7 requirement
+  the same failure and call to action, and status reports the sidecar failed
+  with the same failure
 
 #### Scenario: Sidecars become available after the host is fixed
 

@@ -129,21 +129,20 @@ exasol start
 
 See [Run Exasol locally](local-deployment.md) for how the launcher selects and keeps the port.
 
-### `sidecars on Podman require WSL 2.7 or later`
+### `Podman could not set up the deployment network (nftables error)`
 
 Enabling a sidecar fails with this message, or `exasol start` and `exasol sidecar status` report it
-for an enabled sidecar. On Linux outside WSL, the message reads
-`the kernel lacks the nftables support Podman needs for sidecars`. The database keeps running, and
-local deployments without sidecars are not affected.
+for an enabled sidecar. The database keeps running, and local deployments without sidecars are not
+affected.
 
-Older kernels, including the one shipped with WSL 2.6, lack the nftables support that Podman needs
-for the [deployment network](local-deployment.md#deployment-network), so the database starts
-without it and sidecars cannot reach it. This applies to the Windows launcher and to the Linux
+The usual cause is a kernel without the nftables support that Podman needs for the
+[deployment network](local-deployment.md#deployment-network), such as the one shipped with WSL 2.6,
+so the database starts without it and sidecars cannot reach it. Sidecars on Podman need WSL 2.7 or
+later. This applies to the Windows launcher and to the Linux
 launcher inside WSL. Docker is not affected.
 
 Rootful Podman cannot start the database without the network on these kernels, so
-`exasol install local` and `exasol start` fail with `Podman on this host requires WSL 2.7 or later`
-(on Linux outside WSL, `the kernel lacks the nftables support Podman needs`). The same fix applies.
+`exasol install local` and `exasol start` fail with the same message. The same fix applies.
 
 Update WSL from a Windows terminal, restart the deployment, and enable the sidecar again:
 

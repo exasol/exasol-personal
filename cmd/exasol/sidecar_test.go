@@ -169,7 +169,7 @@ func TestSidecarDeferredGuidanceOnlyForUnfailedSidecars(t *testing.T) {
 		deferred      bool
 	}{
 		{"deferred", "", true},
-		{"failed", "sidecars on Podman require WSL 2.7 or later", false},
+		{"failed", "Podman could not set up the deployment network (nftables error)", false},
 	} {
 		//nolint:paralleltest // Terminal queues are process-global.
 		t.Run(scenario.name, func(t *testing.T) {

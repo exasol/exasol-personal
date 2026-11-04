@@ -234,18 +234,14 @@ func TestServiceNetworkUnsupportedMatchesNetavarkNftablesFailures(t *testing.T) 
 	require.False(t, serviceNetworkUnsupported(nil))
 }
 
-func TestServiceNetworkUnsupportedErrorNamesTheHostRequirement(t *testing.T) {
+func TestServiceNetworkUnsupportedErrorStatesTheObservedFailure(t *testing.T) {
 	t.Parallel()
 	// When
 	wsl := (&ServiceNetworkUnsupportedError{WSL: true}).Error()
 	kernel := (&ServiceNetworkUnsupportedError{}).Error()
-	databaseWSL := (&ServiceNetworkUnsupportedError{WSL: true, Database: true}).Error()
-	databaseKernel := (&ServiceNetworkUnsupportedError{Database: true}).Error()
 	// Then
-	require.Equal(t, "sidecars on Podman require WSL 2.7 or later", wsl)
-	require.Equal(t, "the kernel lacks the nftables support Podman needs for sidecars", kernel)
-	require.Equal(t, "Podman on this host requires WSL 2.7 or later", databaseWSL)
-	require.Equal(t, "the kernel lacks the nftables support Podman needs", databaseKernel)
+	require.Equal(t, "Podman could not set up the deployment network (nftables error)", wsl)
+	require.Equal(t, wsl, kernel)
 }
 
 func TestSidecarDatabaseQueriesTolerateStoppedDeployment(t *testing.T) {
