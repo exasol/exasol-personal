@@ -49,6 +49,16 @@ locals {
     }
   }
   deployment_secrets = {
+    bucketfs = {
+      bfsdefault = {
+        buckets = {
+          default = {
+            read  = { username = "r", password = random_password.bucketfs_read.result }
+            write = { username = "w", password = random_password.bucketfs_write.result }
+          }
+        }
+      }
+    }
     adminUiUsername = "admin"
     adminUiPassword = local.adminui_password_final
     dbUsername      = "sys"

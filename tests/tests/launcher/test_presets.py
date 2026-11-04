@@ -15,6 +15,7 @@ BUILT_IN_INFRASTRUCTURE_PRESETS: Final = {
     "aws",
     "azure",
     "exoscale",
+    "ionos",
     "local",
     "stackit",
 }

@@ -25,8 +25,8 @@ Provisions Exasol Personal on IONOS Cloud dedicated core servers with Ubuntu 24.
 
 ```bash
 exasol install ionos
-exasol install ionos --instance-type 8x32 --data-volume-size 200
-exasol install ionos --cluster-size 2 --instance-type 8x32 --data-volume-size 200
+exasol install ionos --instance-type 4x16 --data-volume-size 200
+exasol install ionos --cluster-size 2 --instance-type 4x16 --data-volume-size 200
 exasol install ionos --location de/txl --cpu-family INTEL_ICELAKE --disk-type "SSD Standard"
 exasol install ionos --datacenter-id <uuid>
 ```

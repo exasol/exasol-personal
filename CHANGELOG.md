@@ -11,7 +11,7 @@ Notable user-facing changes to Exasol Personal are documented here.
   Nodes are sized as `<cores>x<ram_gb>` with `--instance-type`, and `--datacenter-id` deploys into an
   existing data center instead of creating one.
 
-  Example: `exasol install ionos --instance-type 8x32 --data-volume-size 200`
+  Example: `exasol install ionos --instance-type 4x16 --data-volume-size 200`
 
 ### Changed
 

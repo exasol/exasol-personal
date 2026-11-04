@@ -88,7 +88,7 @@ Getting started:
   Local deployments are also supported on Windows. See the documentation for
   Windows installation and prerequisites.
 
-  Or deploy to your own cloud (AWS, Azure, Exoscale, STACKIT), e.g.:
+  Or deploy to your own cloud (AWS, Azure, Exoscale, STACKIT, IONOS Cloud), e.g.:
       exasol install aws
 
   Then see how to connect, and open a SQL shell:
