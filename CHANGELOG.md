@@ -6,6 +6,18 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Breaking Changes
+
+- None.
+
+## 2.4.0 - 2026-11-04
+
+### Added
+
 - New built-in cloud deployments store read and write credentials for the default BucketFS bucket
   in `secrets.json`, ready for HTTPS file uploads after installation.
 
@@ -148,6 +160,9 @@ Notable user-facing changes to Exasol Personal are documented here.
   Nano also adds preview support for more expressions involving ARRAY and VECTOR values.
 
 ### Fixed
+
+- On macOS, enabling a sidecar port on a VM started by an older local runner now explains
+  how to recover: run `exasol stop` and `exasol start`, then retry the sidecar command.
 
 - The connection instructions that `install` and `start` print and the next steps of
   `exasol info` now select the deployment in every command they show, for example
