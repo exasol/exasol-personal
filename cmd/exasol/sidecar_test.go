@@ -163,6 +163,37 @@ func TestSidecarRestartGuidanceFollowsOutputMode(t *testing.T) {
 }
 
 //nolint:paralleltest // Terminal queues are process-global.
+func TestSidecarDeferredGuidanceOnlyForUnfailedSidecars(t *testing.T) {
+	for _, scenario := range []struct {
+		name, failure string
+		deferred      bool
+	}{
+		{"deferred", "", true},
+		{"failed", "sidecars on Podman require WSL 2.7 or later", false},
+	} {
+		//nolint:paralleltest // Terminal queues are process-global.
+		t.Run(scenario.name, func(t *testing.T) {
+			// Given
+			resetTerminalMessages()
+			t.Cleanup(resetTerminalMessages)
+			result := deploy.SidecarResult{
+				Name: "example", Enabled: true, State: "stopped",
+				LastOperationError: scenario.failure, Endpoints: []deploy.SidecarEndpoint{},
+			}
+			// When
+			err := renderSidecarResult(result, false)
+			var stderr bytes.Buffer
+			writeTerminalCallsToAction(&stderr, callsToActionVisible(false))
+			// Then
+			require.NoError(t, err)
+			require.Equal(t, scenario.deferred, strings.Contains(
+				stderr.String(), fmt.Sprintf(sidecarDeferredGuidance, "example"),
+			))
+		})
+	}
+}
+
+//nolint:paralleltest // Terminal queues are process-global.
 func TestSidecarEnableCommandUsesSavedDefinition(t *testing.T) {
 	// Given
 	catalog := resources.SidecarCatalogYAML

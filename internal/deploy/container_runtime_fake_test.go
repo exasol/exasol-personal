@@ -31,6 +31,8 @@ type containerRuntimeFake struct {
 	lastEnv string
 	// A database that predates the per-deployment service network.
 	databaseOffNetwork bool
+	// A database started without the network because the host lacks support.
+	serviceNetworkUnsupported bool
 	// Containers created from now on report having started this long ago.
 	age   time.Duration
 	execs [][]string
@@ -103,6 +105,13 @@ func (fake *containerRuntimeFake) LeaveServiceNetwork() {
 	fake.mutex.Lock()
 	defer fake.mutex.Unlock()
 	fake.databaseOffNetwork = true
+}
+
+func (fake *containerRuntimeFake) StartWithoutServiceNetwork() {
+	fake.mutex.Lock()
+	defer fake.mutex.Unlock()
+	fake.databaseOffNetwork = true
+	fake.serviceNetworkUnsupported = true
 }
 
 // Sidecars reports the containers the driver created, keyed by sidecar name.
@@ -371,7 +380,13 @@ func (fake *containerRuntimeFake) network(stdout io.Writer, args []string) error
 // inspect answers the database container's network attachment.
 func (fake *containerRuntimeFake) inspect(stdout io.Writer, _ []string) error {
 	if fake.databaseOffNetwork {
+		labels := map[string]string{}
+		if fake.serviceNetworkUnsupported {
+			labels["com.exasol.launcher.service-network-unsupported"] = "true"
+		}
+
 		return json.NewEncoder(stdout).Encode([]map[string]any{{
+			"config":          map[string]any{"labels": labels},
 			"hostConfig":      map[string]string{"networkMode": "pasta"},
 			"networkSettings": map[string]any{"networks": map[string]any{}},
 		}})

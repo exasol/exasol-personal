@@ -136,6 +136,7 @@ type ContainerAttachment struct {
 	// Bridged reports a container the runtime can place on a managed network.
 	Bridged  bool
 	Networks map[string]NetworkMembership
+	Labels   map[string]string
 }
 
 type NetworkMembership struct {

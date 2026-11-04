@@ -23,6 +23,9 @@ A local database always runs as a single node. Platform-specific requirements ar
   Engine 29 or later, or with Windows Package Manager (`winget`) and the prerequisites for a Podman
   machine. Windows on ARM64 is not supported for local deployments.
 
+[Sidecars](sidecars.md) on Podman need WSL 2.7 or later when the launcher runs on Windows or inside
+WSL. Run `wsl --update` from a Windows terminal to update.
+
 ## Cloud database
 
 Cloud deployments run on AWS, Azure, Exoscale, or STACKIT infrastructure. The launcher provisions

@@ -50,7 +50,10 @@ Each new database container joins a named bridge network owned by its
 deployment, where it is reachable as `database`. The published database port
 remains the port saved in the deployment configuration. Existing containers
 adopt the deployment network after an explicit `exasol stop` followed by
-`exasol start`. Destroying the deployment removes its network.
+`exasol start`. Destroying the deployment removes its network. When the host kernel cannot provide
+the network, for example under WSL 2.6, the database starts without it and sidecars are
+unavailable; see
+[Troubleshooting](troubleshooting.md#sidecars-on-podman-require-wsl-27-or-later).
 
 ## Container engine
 

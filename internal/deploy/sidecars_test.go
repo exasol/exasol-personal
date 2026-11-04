@@ -624,6 +624,80 @@ func TestSidecarOperationsPersistRestartRequirement(t *testing.T) {
 	require.NotContains(t, state["example"], "exasol stop")
 }
 
+func TestSidecarEnableRefusesDatabaseWithoutServiceNetwork(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, selected := newSidecarOperationsFixture(t)
+	selected.containers.StartWithoutServiceNetwork()
+	// When
+	_, err := operations.enable(context.Background(), "example")
+	document, readErr := config.ReadSidecars(operations.deployment)
+	// Then
+	_, unsupported := errors.AsType[*SidecarNetworkUnsupportedError](err)
+	require.True(t, unsupported, "enable error: %v", err)
+	require.Contains(t, err.Error(), `cannot enable sidecar "example"`)
+	require.NoError(t, readErr)
+	require.False(t, enabledSidecar(document, "example"))
+	require.Zero(t, selected.created())
+	require.True(t, selected.running)
+}
+
+func TestSidecarStartReportsDatabaseWithoutServiceNetwork(t *testing.T) {
+	t.Parallel()
+	// Given an enabled sidecar and a database restarted without the network
+	operations, selected := newSidecarOperationsFixture(t)
+	_, err := operations.enable(context.Background(), "example")
+	require.NoError(t, err)
+	selected.containers.Clear()
+	selected.containers.StartWithoutServiceNetwork()
+	// When
+	err = reconcileForTest(context.Background(), operations, false)
+	result, statusErr := operations.status(context.Background(), "example")
+	// Then
+	_, unsupported := errors.AsType[*SidecarNetworkUnsupportedError](err)
+	require.True(t, unsupported, "reconcile error: %v", err)
+	require.Contains(t, err.Error(), `sidecar "example"`)
+	require.NoError(t, statusErr)
+	require.True(t, result.Enabled)
+	require.False(t, result.RestartRequired)
+	require.Contains(t, result.LastOperationError, err.Error())
+}
+
+func TestSidecarDisableRemovesSidecarWithoutServiceNetwork(t *testing.T) {
+	t.Parallel()
+	// Given a second enabled sidecar and a database restarted without the network
+	operations, selected := newSidecarOperationsFixture(t)
+	_, err := operations.enable(context.Background(), "example")
+	require.NoError(t, err)
+	document, err := config.ReadSidecars(operations.deployment)
+	require.NoError(t, err)
+	document.Sidecars["other"] = document.Sidecars["example"]
+	editSavedDefinition(&document, "other", func(definition *sidecar.Definition) {
+		definition.Container.Name = "other"
+	})
+	require.NoError(t, config.WriteSidecars(operations.deployment, document))
+	selected.containers.StartWithoutServiceNetwork()
+	// When
+	result, err := operations.disable(context.Background(), "example", false)
+	// Then
+	_, unsupported := errors.AsType[*SidecarNetworkUnsupportedError](err)
+	require.True(t, unsupported, "disable error: %v", err)
+	require.False(t, result.Enabled)
+	require.Empty(t, selected.containers.Sidecars())
+}
+
+func TestSidecarStatusReportsNoRestartWithoutServiceNetwork(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, selected := newSidecarOperationsFixture(t)
+	selected.containers.StartWithoutServiceNetwork()
+	// When
+	result, err := operations.status(context.Background(), "example")
+	// Then
+	require.NoError(t, err)
+	require.False(t, result.RestartRequired)
+}
+
 func TestSidecarReconciliationUsesSavedDefinitions(t *testing.T) {
 	t.Parallel()
 	// Given

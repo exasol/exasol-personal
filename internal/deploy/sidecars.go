@@ -71,6 +71,8 @@ type deploymentSidecars struct {
 	runtime    sidecarRuntime
 }
 
+type SidecarNetworkUnsupportedError = localinstall.ServiceNetworkUnsupportedError
+
 var ErrSidecarRestartRequired = errors.New(
 	"enabled sidecars require a deployment restart",
 )
@@ -340,8 +342,14 @@ func (sidecars *deploymentSidecars) enable(
 	ctx context.Context,
 	name string,
 ) (SidecarResult, error) {
-	if _, err := sidecars.mutationDeferred(); err != nil {
+	deferred, err := sidecars.mutationDeferred()
+	if err != nil {
 		return SidecarResult{}, err
+	}
+	if !deferred {
+		if err := sidecars.serviceNetworkSupported(ctx); err != nil {
+			return SidecarResult{}, fmt.Errorf("cannot enable sidecar %q: %w", name, err)
+		}
 	}
 	document, err := config.ReadSidecars(sidecars.deployment)
 	if err != nil {
@@ -368,6 +376,19 @@ func (sidecars *deploymentSidecars) enable(
 	}
 
 	return sidecars.applyAndReport(ctx, name)
+}
+
+func (sidecars *deploymentSidecars) serviceNetworkSupported(ctx context.Context) error {
+	running, err := sidecars.runtime.SidecarHostRunning(ctx)
+	if err != nil || !running {
+		return err
+	}
+	manager, err := sidecars.runtime.Sidecars(ctx)
+	if err != nil {
+		return err
+	}
+
+	return manager.ServiceNetworkSupported(ctx)
 }
 
 func (sidecars *deploymentSidecars) disable(
@@ -723,8 +744,12 @@ func (sidecars *deploymentSidecars) applySidecars(
 		return SidecarApplyResult{}, err
 	}
 	// Only a deployment that will serve sidecars needs the database reachable.
+	var unreachable error
 	if len(desired) > 0 {
 		restart, err := manager.AttachDatabase(ctx)
+		if _, unsupported := errors.AsType[*SidecarNetworkUnsupportedError](err); unsupported {
+			unreachable, err = err, nil
+		}
 		if err != nil {
 			return SidecarApplyResult{}, err
 		}
@@ -738,6 +763,15 @@ func (sidecars *deploymentSidecars) applySidecars(
 	}
 	result := SidecarApplyResult{Applied: true, Failures: map[string]error{}}
 	for _, definition := range desired {
+		if unreachable != nil {
+			result.Failures[definition.Name] = fmt.Errorf(
+				"sidecar %q: %w",
+				definition.Name,
+				unreachable,
+			)
+
+			continue
+		}
 		if err := manager.Ensure(ctx, definition, secrets); err != nil {
 			result.Failures[definition.Name] = err
 		}

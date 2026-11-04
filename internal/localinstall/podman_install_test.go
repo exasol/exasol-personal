@@ -125,6 +125,156 @@ func TestPodmanInstallStart_BootstrapsInitialPasswordForFreshDatabase(t *testing
 	}
 }
 
+func runCommands(t *testing.T, logPath string) []string {
+	t.Helper()
+	var runs []string
+	for _, command := range readCommandLog(t, logPath) {
+		if strings.HasPrefix(command, "<podman><run>") {
+			runs = append(runs, command)
+		}
+	}
+
+	return runs
+}
+
+func TestPodmanInstallStart_FallsBackWithoutNetworkWhenKernelLacksNftables(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	withTestInitialPassword(&startConfig)
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "nftables"), "enabled")
+	var outErr bytes.Buffer
+
+	// When
+	err := install.Start(context.Background(), nil, &outErr, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected start without the network to succeed, got %v", err)
+	}
+	if strings.Contains(outErr.String(), "nftables") {
+		t.Fatalf("expected the handled network failure to stay quiet, got %q", outErr.String())
+	}
+	runs := runCommands(t, fixture.logPath)
+	if len(runs) != 2 || !strings.Contains(runs[0], "<--network>") {
+		t.Fatalf("expected a run on the network and one retry, got %#v", runs)
+	}
+	retry := runs[1]
+	for _, unexpected := range []string{"<--network>", "<--network-alias>"} {
+		if strings.Contains(retry, unexpected) {
+			t.Fatalf("expected the retry without %q, got %q", unexpected, retry)
+		}
+	}
+	for _, expected := range []string{
+		"<--label><" + serviceNetworkUnsupportedLabel + "=true>",
+		"<--volume><" + startConfig.BootstrapDir + ":/run/secrets:ro,Z>",
+	} {
+		if !strings.Contains(retry, expected) {
+			t.Fatalf("expected the retry to contain %q, got %q", expected, retry)
+		}
+	}
+	if _, statErr := os.Stat(bootstrapPasswordPath(startConfig)); statErr != nil {
+		t.Fatalf("expected the initial password to survive the retry, got %v", statErr)
+	}
+}
+
+func TestPodmanInstallStart_ReportsAFailedRetryWithoutNetwork(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	withTestInitialPassword(&startConfig)
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "nftables"), "enabled")
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "fail"), "run")
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "fake run failure") {
+		t.Fatalf("expected the retry's failure, got %v", err)
+	}
+	if _, statErr := os.Stat(bootstrapPasswordPath(startConfig)); !os.IsNotExist(statErr) {
+		t.Fatalf("expected bootstrap password to be removed, got %v", statErr)
+	}
+}
+
+func TestPodmanInstallStart_NamesTheHostRequirementWhenTheRetryHitsNftables(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "nftables"), "always")
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+
+	// Then
+	unsupported, ok := errors.AsType[*ServiceNetworkUnsupportedError](err)
+	if !ok || !unsupported.Database {
+		t.Fatalf("expected the database host requirement, got %v", err)
+	}
+	if runs := runCommands(t, fixture.logPath); len(runs) != 2 {
+		t.Fatalf("expected the networked run and one retry, got %#v", runs)
+	}
+}
+
+func TestPodmanInstallStart_DoesNotRetryOtherRunFailures(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	writeTestFile(t, filepath.Join(fixture.scenarioDir, "fail"), "run")
+	var outErr bytes.Buffer
+
+	// When
+	err := install.Start(context.Background(), nil, &outErr, startConfig)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected the run failure to fail the start")
+	}
+	if runs := runCommands(t, fixture.logPath); len(runs) != 1 {
+		t.Fatalf("expected a single run, got %#v", runs)
+	}
+	if !strings.Contains(outErr.String(), "fake run failure") {
+		t.Fatalf("expected the engine's error output to be forwarded, got %q", outErr.String())
+	}
+}
+
+func TestPodmanInstallStart_LaterStartOnNetworkDropsTheFallbackLabel(t *testing.T) {
+	t.Parallel()
+	skipPodmanInstallTestOnWindows(t)
+
+	// Given a database that fell back without the network
+	install, startConfig, fixture := newPodmanInstallFixture(t)
+	nftables := filepath.Join(fixture.scenarioDir, "nftables")
+	writeTestFile(t, nftables, "enabled")
+	if err := install.Start(context.Background(), nil, nil, startConfig); err != nil {
+		t.Fatalf("expected the fallback start to succeed, got %v", err)
+	}
+	if err := os.Remove(nftables); err != nil {
+		t.Fatalf("failed to fix the host: %v", err)
+	}
+
+	// When
+	err := install.Start(context.Background(), nil, nil, startConfig)
+	// Then
+	if err != nil {
+		t.Fatalf("expected the start on the network to succeed, got %v", err)
+	}
+	runs := runCommands(t, fixture.logPath)
+	last := runs[len(runs)-1]
+	if !strings.Contains(last, "<--network>") ||
+		strings.Contains(last, serviceNetworkUnsupportedLabel) {
+		t.Fatalf("expected a run on the network without the fallback label, got %q", last)
+	}
+}
+
 func TestPodmanInstallStart_OmitsInitialPasswordForExistingDatabase(t *testing.T) {
 	t.Parallel()
 	skipPodmanInstallTestOnWindows(t)
@@ -1033,6 +1183,14 @@ if [ "$1" != "podman" ]; then
   exit 90
 fi
 command=$2
+if [ "$command" = "run" ] && [ -f "$scenario_dir/nftables" ]; then
+	case "$(cat "$scenario_dir/nftables") $*" in
+		always*|*--network*)
+			printf 'Error: netavark: nftables error: "nft" did not return successfully\n' >&2
+			exit 126
+			;;
+	esac
+fi
 if [ -f "$scenario_dir/fail" ] && [ "$(cat "$scenario_dir/fail")" = "$command" ]; then
 	if [ "$command" = "run" ] && [ -f "$scenario_dir/partial-start" ]; then
 		touch "$scenario_dir/running"

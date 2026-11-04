@@ -469,6 +469,7 @@ func (inspection dockerInspection) attachment() ContainerAttachment {
 	return ContainerAttachment{
 		Bridged:  mode != "host" && mode != "none" && !strings.HasPrefix(mode, "container:"),
 		Networks: networks,
+		Labels:   inspection.Config.Labels,
 	}
 }
 
