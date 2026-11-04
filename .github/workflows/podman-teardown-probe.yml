@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   probe:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Runtime and security policy
@@ -16,6 +16,11 @@ jobs:
           sudo aa-status || true
           sudo cat /etc/apparmor.d/usr.bin.pasta || true
           sudo cat /etc/apparmor.d/podman || true
+      - name: Apply upstream narrow pasta profile correction
+        run: |
+          sudo sed -i '$ i\  signal (receive) set=(term) peer=podman,' /etc/apparmor.d/usr.bin.pasta
+          sudo apparmor_parser -r /etc/apparmor.d/usr.bin.pasta
+          podman unshare --rootless-netns true
       - name: Reproduce removal of the last bridge container
         shell: bash
         run: |
