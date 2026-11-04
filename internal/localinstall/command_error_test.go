@@ -129,3 +129,30 @@ func TestStderrTailKeepsMostRecentOutput(t *testing.T) {
 	require.Len(t, tail.data, stderrTailLimit)
 	require.True(t, strings.HasSuffix(string(tail.data), "Error: last"))
 }
+
+func TestPodmanRemovalFailureReportsNestedNetworkCause(t *testing.T) {
+	t.Parallel()
+	// Given
+	stderr := "Error: cleaning up container abc: " +
+		"removing container abc network: 2 errors occurred:\n" +
+		"\t* rootless netns: kill network process: permission denied\n" +
+		"\t* another network cleanup failure\n\n"
+	exitErr := errors.New("exit status 125")
+	runtime := podmanRuntime{
+		environment: &stderrEnvironment{stderr: stderr, err: exitErr},
+		binary:      podmanBinary,
+	}
+	// When
+	err := runtime.Remove(t.Context(), "abc", true, nil, nil)
+	// Then
+	require.ErrorIs(t, err, exitErr)
+	require.Equal(
+		t,
+		"exit status 125: Error: cleaning up container abc: "+
+			"removing container abc network: 2 errors occurred:\n"+
+			"* rootless netns: kill network process: permission denied\n"+
+			"* another network cleanup failure",
+		err.Error(),
+	)
+	require.Equal(t, strings.TrimSpace(stderr), CommandStderr(err))
+}

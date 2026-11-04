@@ -20,6 +20,12 @@ func TestStartupErrorNamesTheReportedCause(t *testing.T) {
 			"requested access to the resource is denied",
 		},
 		{
+			"network cleanup error includes its nested cause",
+			"Error: removing container abc network: 1 error occurred:\n" +
+				"\t* rootless netns: kill network process: permission denied\n\n",
+			"rootless netns: kill network process: permission denied",
+		},
+		{
 			"single error line",
 			"Error: rootlessport listen tcp 127.0.0.1:4896: bind: address already in use",
 			"address already in use",
