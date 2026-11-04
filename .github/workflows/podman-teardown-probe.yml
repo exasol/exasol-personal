@@ -7,43 +7,48 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Runtime and security policy
-        run: |
-          podman info --debug
-          cat /etc/os-release
-          sudo aa-status || true
-          sudo cat /etc/apparmor.d/usr.bin.pasta || true
-          sudo cat /etc/apparmor.d/podman || true
-      - name: Apply and verify idempotent CI correction
-        run: |
-          bash .github/scripts/prepare-rootless-podman.sh
-          before=$(sha256sum /etc/apparmor.d/usr.bin.pasta)
-          bash .github/scripts/prepare-rootless-podman.sh
-          after=$(sha256sum /etc/apparmor.d/usr.bin.pasta)
-          test "$before" = "$after"
-      - name: Reproduce removal of the last bridge container
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/build
+      - name: Verify launcher destruction before and after host repair
         shell: bash
         run: |
-          set -uo pipefail
-          podman pull docker.io/library/alpine:3.22
-          failed=0
-          for attempt in 1 2 3; do
-            network="exasol-teardown-probe-${attempt}"
-            container="exasol-teardown-probe-${attempt}"
-            podman network create "$network" || exit 1
-            podman run -d --name "$container" --network "$network" -p 127.0.0.1::80 docker.io/library/alpine:3.22 sleep 300 || exit 1
-            podman --log-level debug rm --force --ignore -- "$container" || failed=1
-            podman ps -a
-            podman network inspect "$network"
-            podman network rm "$network" || failed=1
-          done
-          exit "$failed"
-      - name: Kernel denials and remaining resources
+          set -euo pipefail
+          deployment="${RUNNER_TEMP}/exasol-teardown-deployment"
+          bin/exasol install local --container-engine podman --auto-approve --deployment-dir "$deployment"
+          container=$(podman ps --filter name=exasol-db- --format '{{.Names}}')
+          test -n "$container"
+          network="${container}-services"
+          podman network inspect "$network"
+          if bin/exasol destroy --auto-approve --deployment-dir "$deployment" > "${RUNNER_TEMP}/destroy-before.log" 2>&1; then
+            echo '::error::Expected uncorrected Ubuntu 26.04 destruction to fail'
+            exit 1
+          fi
+          cat "${RUNNER_TEMP}/destroy-before.log"
+          grep -F 'rootless netns: kill network process: permission denied' "${RUNNER_TEMP}/destroy-before.log"
+          podman ps -a
+          podman network inspect "$network"
+          test -d "$deployment/local/runtime/exa"
+          bash .github/scripts/prepare-rootless-podman.sh
+          bin/exasol destroy --auto-approve --deployment-dir "$deployment"
+          if podman container exists "$container"; then exit 1; fi
+          if podman network exists "$network"; then exit 1; fi
+          test ! -e "$deployment/local"
+          test -d "$deployment"
+          bin/exasol status --json --deployment-dir "$deployment" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data); assert data["status"] == "initialized"'
+          bin/exasol remove --auto-approve --deployment-dir "$deployment"
+          test ! -d "$deployment"
+      - name: Kernel evidence and guaranteed cleanup
         if: always()
+        shell: bash
         run: |
-          sudo journalctl -k --since '-15 minutes' --no-pager | grep -Ei 'apparmor|DENIED|podman|pasta' || true
+          sudo journalctl -k --since '-25 minutes' --no-pager | grep -Ei 'apparmor|DENIED|podman|pasta' || true
+          bash .github/scripts/prepare-rootless-podman.sh
+          if [ -d "${RUNNER_TEMP}/exasol-teardown-deployment" ]; then
+            bin/exasol destroy --remove --auto-approve --deployment-dir "${RUNNER_TEMP}/exasol-teardown-deployment"
+          fi
           podman ps -a
           podman network ls
