@@ -1156,7 +1156,7 @@ func (forwards macForwards) opened() ([]sidecar.PublishedPort, error) {
 	if err != nil {
 		return nil, err
 	}
-	var ports []sidecar.PublishedPort
+	ports := []sidecar.PublishedPort{}
 	for _, name := range slices.Sorted(maps.Keys(current)) {
 		service, index, owned := parseForwardName(name)
 		if !owned {

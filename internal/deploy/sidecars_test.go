@@ -1202,6 +1202,12 @@ func TestSidecarEndpointsResolveAgainstTheObservedAddress(t *testing.T) {
 			},
 		},
 		{
+			name:      "unopened forward",
+			container: listingWithPorts(boundPort("", 46295, 8080)),
+			published: []sidecar.PublishedPort{},
+			want:      []SidecarEndpoint{},
+		},
+		{
 			name:      "IPv6 loopback",
 			container: listingWithPorts(boundPort("::1", 18080, 8080)),
 			want: []SidecarEndpoint{

@@ -140,6 +140,7 @@ var (
 type PortPublisher interface {
 	// Withdraws endpoints it opened earlier that are no longer requested.
 	OpenPorts(ctx context.Context, ports []sidecar.PublishedPort) error
+	// Nil when containers publish host ports directly, without forwards.
 	OpenedPorts(ctx context.Context) ([]sidecar.PublishedPort, error)
 }
 
