@@ -50,18 +50,18 @@ exasol-nano-image:
   embed: true
   artifact:
     darwin/arm64:
-      url: docker://docker.io/exasol/nano:2026.2.0-nano.6@sha256:79b0bdbac8460ab0546bff97b7c91164adad3b82a38b2f7578ca9845b133830e
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.8@sha256:d1125a0a6bf275788cbdf086a7249be3820bc3172d01ec0781781d6a900ef342
       download_path: nano.tar
-      sha256: "c19bd91a910484412944c941ce234beebf870ae7f4ed4090c1d49af51337ae86"
+      sha256: "20da2c81c5c54768bf26f10d023b7db57e5bca9be24955e0eaef95c8a7d8679b"
     linux/arm64:
-      url: docker://docker.io/exasol/nano:2026.2.0-nano.6@sha256:79b0bdbac8460ab0546bff97b7c91164adad3b82a38b2f7578ca9845b133830e
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.8@sha256:d1125a0a6bf275788cbdf086a7249be3820bc3172d01ec0781781d6a900ef342
       download_path: nano.tar
-      sha256: "c19bd91a910484412944c941ce234beebf870ae7f4ed4090c1d49af51337ae86"
+      sha256: "20da2c81c5c54768bf26f10d023b7db57e5bca9be24955e0eaef95c8a7d8679b"
     linux/amd64:
-      url: docker://docker.io/exasol/nano:2026.2.0-nano.6@sha256:a06d625e5e03730397b4af39b1aba4943386ad30ef71bf9d10d1ec550180a76f
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.8@sha256:9da12df785d2b77b4be82e0b01fcdaef9d4805921fb2ae94ba312395e9deb6f5
       download_path: nano.tar
-      sha256: "a0587b922757546c24247565d2dfdadd025bdaf9f84cb25e2cadc6b256fd86f7"
+      sha256: "ed020fff65d78f96485aa9c43208276beab0e85c0484ed8e89613e98bc7b6261"
     windows/amd64:
-      url: docker://docker.io/exasol/nano:2026.2.0-nano.6@sha256:a06d625e5e03730397b4af39b1aba4943386ad30ef71bf9d10d1ec550180a76f
+      url: docker://docker.io/exasol/nano:2026.2.0-nano.8@sha256:9da12df785d2b77b4be82e0b01fcdaef9d4805921fb2ae94ba312395e9deb6f5
       download_path: nano.tar
-      sha256: "a0587b922757546c24247565d2dfdadd025bdaf9f84cb25e2cadc6b256fd86f7"
+      sha256: "ed020fff65d78f96485aa9c43208276beab0e85c0484ed8e89613e98bc7b6261"
