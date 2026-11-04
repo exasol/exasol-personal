@@ -146,15 +146,18 @@ func TestSidecarWithoutProbesReportsNoHealth(t *testing.T) {
 
 func TestSidecarProbeWaitsForItsInitialDelay(t *testing.T) {
 	t.Parallel()
-	// Given
-	catalog := probedCatalog(t, closedPort(t),
-		"      readinessProbe: {exec: {command: [check]}, initialDelaySeconds: 10}\n")
-	// When
-	result, selected := probedStatus(t, catalog, 9*time.Second, nil)
-	// Then
-	require.Equal(t, sidecarHealthStarting, result.Health)
-	require.Empty(t, result.HealthError)
-	require.Empty(t, selected.containers.Execs())
+	port := closedPort(t)
+	synctest.Test(t, func(t *testing.T) {
+		// Given
+		catalog := probedCatalog(t, port,
+			"      readinessProbe: {exec: {command: [check]}, initialDelaySeconds: 10}\n")
+		// When
+		result, selected := probedStatus(t, catalog, 9*time.Second, nil)
+		// Then
+		require.Equal(t, sidecarHealthStarting, result.Health)
+		require.Empty(t, result.HealthError)
+		require.Empty(t, selected.containers.Execs())
+	})
 }
 
 func TestSidecarExecProbeRunsInsideTheContainer(t *testing.T) {
