@@ -346,7 +346,7 @@ The system SHALL check local database readiness every one to two seconds and SHA
 
 ### Requirement: Local deployments SHALL persist deterministic service ports
 
-When a local deployment is initialized or reconfigured with an unset or automatic port mapping, the launcher SHALL select and persist a concrete host port for every exposed service. For each service, automatic allocation SHALL try its default port first, scan upward through `65535`, wrap to the lowest unprivileged port `1024`, and continue through the port immediately before the default. A selected port SHALL be available on every IPv4 and IPv6 loopback address resolved for `localhost` at selection time.
+When a local deployment is initialized or reconfigured with an unset or automatic port mapping, the launcher SHALL select and persist a concrete host port for every exposed service. For each service, automatic allocation SHALL try its default port first, scan upward through `65535`, wrap to the lowest unprivileged port `1024`, and continue through the port immediately before the default. A selected port SHALL be available on every IPv4 and IPv6 loopback address resolved for `localhost` at selection time and SHALL differ from every host port saved for the deployment's sidecars. An explicit service port that is saved for one of the deployment's sidecars SHALL be rejected with an error naming the service, the port, and the sidecar.
 
 #### Scenario: Default database port is available
 
@@ -402,6 +402,18 @@ When a local deployment is initialized or reconfigured with an unset or automati
 - **WHEN** a local deployment exposes more than one service
 - **THEN** automatic allocation starts from each service's own default port
 - **AND** the launcher assigns distinct host ports to the services
+
+#### Scenario: Automatic allocation skips sidecar ports
+
+- **WHEN** a user requests automatic ports for a stopped local deployment
+- **AND** the database default port is saved as a host port of one of its sidecars
+- **THEN** the launcher persists a database port that differs from every saved sidecar host port
+
+#### Scenario: Explicit port saved for a sidecar is rejected
+
+- **WHEN** a user configures a local deployment with an explicit database port that is saved as a host port of one of its sidecars
+- **THEN** the command fails and preserves the deployment's current port mapping
+- **AND** the error names the service, the port, and the sidecar
 
 ### Requirement: Local deployments SHALL bind the persisted service ports exactly
 
