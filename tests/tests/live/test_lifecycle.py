@@ -19,7 +19,7 @@ REMOTE_ARCHIVE_RETRY_DELAY_SECONDS = 10
 
 @pytest.mark.openspec("deployment-lifecycle-recovery")
 @pytest.mark.smoke
-@pytest.mark.providers("aws", "azure", "exoscale")
+@pytest.mark.providers("aws", "azure", "exoscale", "ionos")
 def test_stop_and_start(reusable_live_deployment: Deployment) -> None:
     assert reusable_live_deployment.db_connectable()
 
