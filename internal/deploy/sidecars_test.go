@@ -28,7 +28,7 @@ func TestSidecarCleanupFailureStillStopsDatabase(t *testing.T) {
 	operations, selected := newSidecarOperationsFixture(t)
 	require.NoError(t, writeLocalDeploymentArtifacts(operations.deployment,
 		&localruntime.VMRuntimeEndpoint{RuntimeEndpoint: *selected.endpoint}))
-	if _, err := operations.enable(context.Background(), "example"); err != nil {
+	if _, err := operations.enable(context.Background(), "example", ""); err != nil {
 		t.Fatal(err)
 	}
 	selected.containers.Add("second")
@@ -89,7 +89,7 @@ func TestSidecarDestroyRemovesObservedState(t *testing.T) {
 	t.Parallel()
 	// Given
 	operations, selected := newSidecarOperationsFixture(t)
-	if _, err := operations.enable(context.Background(), "example"); err != nil {
+	if _, err := operations.enable(context.Background(), "example", ""); err != nil {
 		t.Fatal(err)
 	}
 	// When
@@ -179,7 +179,8 @@ sidecars:
     container:
       image: docker.io/library/caddy:2-alpine
       ports:
-        - containerPort: 8080
+        - name: http
+          containerPort: 8080
           hostPort: 18080
           hostIP: 127.0.0.1
 `))
@@ -311,7 +312,7 @@ func TestSidecarEnableSavesEndpointDeclarations(t *testing.T) {
 	operations, _ := newSidecarOperationsFixture(t)
 	operations.templates = sidecarTestEndpointCatalog(t, true)
 	// When
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	// Then
 	require.NoError(t, err)
 	document, err := config.ReadSidecars(operations.deployment)
@@ -479,6 +480,10 @@ func newSidecarOperationsFixture(t *testing.T) (*deploymentSidecars, *sidecarRun
 		deployment: deployment,
 		templates:  sidecarTestCatalog(t),
 		runtime:    selected,
+		ports: testLocalPortAllocator(
+			t, localMinimumAutomaticPort, localMaximumPort,
+			func(string, int) bool { return true },
+		),
 	}, selected
 }
 
@@ -486,7 +491,7 @@ func TestSidecarDisableDefersPublicationWhileStopped(t *testing.T) {
 	t.Parallel()
 	// Given
 	operations, selected := newSidecarOperationsFixture(t)
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	state, err := config.ReadExasolPersonalState(operations.deployment)
 	require.NoError(t, err)
@@ -515,7 +520,7 @@ func TestSidecarSavedDefinitionSurvivesCatalogChange(t *testing.T) {
 	// Given
 	operations, selected := newSidecarOperationsFixture(t)
 	ctx := context.Background()
-	_, err := operations.enable(ctx, "example")
+	_, err := operations.enable(ctx, "example", "")
 	require.NoError(t, err)
 	saved := selected.exampleContainer()
 	require.NotNil(t, saved)
@@ -567,7 +572,7 @@ func TestSidecarOperationsDeferredIntent(t *testing.T) {
 				require.NoError(t, err)
 				selected.running = false
 				// When
-				result, err := operations.enable(context.Background(), "example")
+				result, err := operations.enable(context.Background(), "example", "")
 				// Then
 				if err != nil || !result.Enabled || result.Running ||
 					selected.created() != 0 {
@@ -589,7 +594,7 @@ func TestSidecarCleanupIgnoresDatabaseAttachment(t *testing.T) {
 	t.Parallel()
 	// Given a running sidecar and a database that no longer answers to its alias
 	operations, selected := newSidecarOperationsFixture(t)
-	_, err := operations.enable(context.Background(), "example")
+	_, err := operations.enable(context.Background(), "example", "")
 	require.NoError(t, err)
 	selected.containers.LeaveServiceNetwork()
 	// When
@@ -605,7 +610,7 @@ func TestSidecarOperationsPersistRestartRequirement(t *testing.T) {
 	operations, selected := newSidecarOperationsFixture(t)
 	selected.containers.LeaveServiceNetwork()
 	// When
-	result, err := operations.enable(context.Background(), "example")
+	result, err := operations.enable(context.Background(), "example", "")
 	// Then
 	if err != nil || !result.Enabled || !result.RestartRequired ||
 		result.Running {
@@ -628,7 +633,7 @@ func TestSidecarReconciliationUsesSavedDefinitions(t *testing.T) {
 	t.Parallel()
 	// Given
 	operations, selected := newSidecarOperationsFixture(t)
-	if _, err := operations.enable(context.Background(), "example"); err != nil {
+	if _, err := operations.enable(context.Background(), "example", ""); err != nil {
 		t.Fatal(err)
 	}
 	selected.containers.Add("orphan")
@@ -653,7 +658,7 @@ func TestSidecarStartupFailureRetainsDesiredAndDatabaseState(t *testing.T) {
 	operations, selected := newSidecarOperationsFixture(t)
 	selected.containers.Fail("run", errors.New("image unavailable"))
 	// When
-	_, startErr := operations.enable(context.Background(), "example")
+	_, startErr := operations.enable(context.Background(), "example", "")
 	result, statusErr := operations.status(context.Background(), "example")
 	state, stateErr := config.ReadExasolPersonalState(operations.deployment)
 	// Then
@@ -815,7 +820,7 @@ func TestSidecarStatusRefreshesRecordedFailures(t *testing.T) {
 			entry := sidecars.templates.Entries()["example"]
 			entry.Container.Ports = []sidecar.Port{{ContainerPort: 8080, HostPort: 18080}}
 			sidecars.templates.Entries()["example"] = entry
-			_, err := sidecars.enable(t.Context(), "example")
+			_, err := sidecars.enable(t.Context(), "example", "")
 			require.NoError(t, err)
 			delete(sidecars.templates.Entries(), "example")
 			_, err = runtime.manager.List(t.Context())
@@ -924,7 +929,7 @@ func TestSidecarEnableSavesEnabledState(t *testing.T) {
 				}))
 			}
 			// When
-			result, err := operations.enable(t.Context(), "example")
+			result, err := operations.enable(t.Context(), "example", "")
 			// Then
 			require.NoError(t, err)
 			require.True(t, result.Enabled)
@@ -942,7 +947,7 @@ func TestSidecarReenableUsesTheDisabledDefinition(t *testing.T) {
 	t.Parallel()
 	// Given
 	operations, selected := newSidecarOperationsFixture(t)
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	document, err := config.ReadSidecars(operations.deployment)
 	require.NoError(t, err)
@@ -953,7 +958,7 @@ func TestSidecarReenableUsesTheDisabledDefinition(t *testing.T) {
 	// When
 	disabled, disableErr := operations.disable(t.Context(), "example", false)
 	stopped := selected.exampleContainer()
-	enabled, enableErr := operations.enable(t.Context(), "example")
+	enabled, enableErr := operations.enable(t.Context(), "example", "")
 	// Then
 	require.NoError(t, disableErr)
 	require.False(t, disabled.Enabled)
@@ -970,7 +975,7 @@ func TestSidecarDisableAlreadyDisabledIsNoOp(t *testing.T) {
 	t.Parallel()
 	// Given
 	operations, runtime := newSidecarOperationsFixture(t)
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	_, err = operations.disable(t.Context(), "example", false)
 	require.NoError(t, err)
@@ -989,7 +994,7 @@ func TestSidecarReconciliationRemovesDisabledSidecar(t *testing.T) {
 	t.Parallel()
 	// Given
 	operations, selected := newSidecarOperationsFixture(t)
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	document, err := config.ReadSidecars(operations.deployment)
 	require.NoError(t, err)
@@ -1012,7 +1017,7 @@ func TestSidecarRemoveDeletesTheSavedEntry(t *testing.T) {
 			t.Parallel()
 			// Given
 			operations, selected := newSidecarOperationsFixture(t)
-			_, err := operations.enable(t.Context(), "example")
+			_, err := operations.enable(t.Context(), "example", "")
 			require.NoError(t, err)
 			if disabledFirst {
 				_, err = operations.disable(t.Context(), "example", false)
@@ -1054,7 +1059,7 @@ func TestSidecarDisableRecordsUnverifiedCleanup(t *testing.T) {
 	t.Parallel()
 	// Given
 	operations, runtime := newSidecarOperationsFixture(t)
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	runtime.available = false
 	// When
@@ -1073,7 +1078,7 @@ func TestSidecarObservedEndpointsFollowRuntime(t *testing.T) {
 	// Given
 	operations, _ := newSidecarOperationsFixture(t)
 	operations.templates = sidecarTestPublishedCatalog(t)
-	if _, err := operations.enable(context.Background(), "example"); err != nil {
+	if _, err := operations.enable(context.Background(), "example", ""); err != nil {
 		t.Fatal(err)
 	}
 	// When
@@ -1090,7 +1095,7 @@ func TestSidecarStatusReportsDeclaredEndpointURL(t *testing.T) {
 	// Given
 	operations, _ := newSidecarOperationsFixture(t)
 	operations.templates = sidecarTestEndpointCatalog(t, true)
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	// When
 	result, err := operations.status(t.Context(), "example")
@@ -1107,7 +1112,7 @@ func TestSidecarStatusOmitsURLForInternalPort(t *testing.T) {
 	// Given
 	operations, _ := newSidecarOperationsFixture(t)
 	operations.templates = sidecarTestEndpointCatalog(t, false)
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	// When
 	result, err := operations.status(t.Context(), "example")
@@ -1122,7 +1127,7 @@ func TestSidecarDeclaredEndpointSurvivesCatalogChange(t *testing.T) {
 	// Given
 	operations, _ := newSidecarOperationsFixture(t)
 	operations.templates = sidecarTestEndpointCatalog(t, true)
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	delete(operations.templates.Entries(), "example")
 	// When
@@ -1137,7 +1142,7 @@ func TestSidecarEditedDeclarationNeedsNoRecreation(t *testing.T) {
 	// Given
 	operations, _ := newSidecarOperationsFixture(t)
 	operations.templates = sidecarTestEndpointCatalog(t, true)
-	_, err := operations.enable(t.Context(), "example")
+	_, err := operations.enable(t.Context(), "example", "")
 	require.NoError(t, err)
 	document, err := config.ReadSidecars(operations.deployment)
 	require.NoError(t, err)
@@ -1195,6 +1200,12 @@ func TestSidecarEndpointsResolveAgainstTheObservedAddress(t *testing.T) {
 			want: []SidecarEndpoint{
 				{IP: "127.0.0.1", Port: 18080, URL: "http://127.0.0.1:18080/v1"},
 			},
+		},
+		{
+			name:      "unopened forward",
+			container: listingWithPorts(boundPort("", 46295, 8080)),
+			published: []sidecar.PublishedPort{},
+			want:      []SidecarEndpoint{},
 		},
 		{
 			name:      "IPv6 loopback",

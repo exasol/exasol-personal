@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -14,6 +15,9 @@ import (
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
+
+const sidecarPortsUsage = "Host ports to save, as comma-separated " +
+	"<port-name>:<host-port> entries, for example mcp:14896"
 
 const sidecarRestartGuidance = "Run `exasol stop` followed by `exasol start` " +
 	"to restart the deployment and start the enabled sidecars."
@@ -53,8 +57,112 @@ func newSidecarCommand(flags *CommonFlags) *cobra.Command {
 	} {
 		addSidecarSubcommand(command, child, flags, true)
 	}
+	command.AddCommand(newSidecarConfigCommand(flags))
 
 	return command
+}
+
+const (
+	sidecarPortsOption = "ports"
+	// A sidecar name and an option name.
+	sidecarConfigArgs = 2
+)
+
+func newSidecarConfigCommand(flags *CommonFlags) *cobra.Command {
+	command := &cobra.Command{
+		Use: "config", Short: "Manage a saved sidecar's host ports", Args: cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error { return command.Help() },
+	}
+	get := &cobra.Command{
+		Use: "get <name> [ports]", Short: "Show a saved sidecar's host ports",
+		Args: cobra.RangeArgs(1, sidecarConfigArgs),
+		RunE: func(command *cobra.Command, args []string) error {
+			if err := requireSidecarPortsOption(args[1:]); err != nil {
+				return err
+			}
+			result, err := deploy.GetSidecarConfiguration(
+				command.Context(), flags.Deployment(), args[0],
+			)
+
+			return renderSidecarConfiguration(result, err, flags)
+		},
+	}
+	var ports string
+	set := &cobra.Command{
+		Use: "set <name>", Short: "Save a sidecar's host ports",
+		Args: cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			if ports == "" {
+				return errors.New("--ports is required")
+			}
+			result, err := deploy.ConfigureSidecarPorts(
+				command.Context(), flags.Deployment(), args[0], ports,
+			)
+
+			return renderSidecarConfiguration(result, err, flags)
+		},
+	}
+	set.Flags().StringVar(&ports, "ports", "", sidecarPortsUsage)
+	var all bool
+	reset := &cobra.Command{
+		Use: "reset <name> (ports | --all)", Short: "Select free host ports for a saved sidecar",
+		Args: cobra.RangeArgs(1, sidecarConfigArgs),
+		RunE: func(command *cobra.Command, args []string) error {
+			if len(args) == 1 && !all {
+				return errors.New("provide option names to reset, or pass --all")
+			}
+			if err := requireSidecarPortsOption(args[1:]); err != nil {
+				return err
+			}
+			result, err := deploy.ConfigureSidecarPorts(
+				command.Context(), flags.Deployment(), args[0], "",
+			)
+
+			return renderSidecarConfiguration(result, err, flags)
+		},
+	}
+	reset.Flags().BoolVar(&all, "all", false, "Reset all options")
+	for _, child := range []*cobra.Command{get, set, reset} {
+		addSidecarSubcommand(command, child, flags, true)
+	}
+
+	return command
+}
+
+func requireSidecarPortsOption(options []string) error {
+	for _, option := range options {
+		if option != sidecarPortsOption {
+			return fmt.Errorf("unknown sidecar option %q; supported options: %s",
+				option, sidecarPortsOption)
+		}
+	}
+
+	return nil
+}
+
+func renderSidecarConfiguration(
+	result deploy.SidecarConfiguration, err error, flags *CommonFlags,
+) error {
+	if err != nil {
+		addDeploymentRecoveryCallToActionFor(err, flags.Selection())
+
+		return err
+	}
+	if flags.OutputJson {
+		return addJSONTerminalOutput(result)
+	}
+	addTerminalOutput(fmt.Sprintf(
+		"Sidecar %s configuration:\n  %s = %s", result.Name, sidecarPortsOption, result.Ports,
+	))
+	if result.ApplyCommand != "" {
+		addTerminalCallToAction(configurationGuidance(result.ApplyCommand))
+	}
+	if result.Applied {
+		addTerminalCallToAction(fmt.Sprintf(sidecarAppliedGuidance,
+			result.Name, sidecarStatusCommand(result.Name)+flags.Selection()))
+	}
+
+	return nil
 }
 
 func addSidecarSubcommand(
@@ -75,6 +183,7 @@ func addSidecarSubcommand(
 // argument.
 func newSidecarEnableCommand(flags *CommonFlags, fixed string) *cobra.Command {
 	var noWait bool
+	var ports string
 	command := newSidecarActionCommand(
 		flags,
 		fixed,
@@ -83,7 +192,7 @@ func newSidecarEnableCommand(flags *CommonFlags, fixed string) *cobra.Command {
 		func(
 			ctx context.Context, deployment config.DeploymentDir, name string,
 		) (deploy.SidecarResult, error) {
-			result, err := deploy.EnableSidecar(ctx, deployment, name, !noWait)
+			result, err := deploy.EnableSidecar(ctx, deployment, name, ports, !noWait)
 			if err == nil {
 				addSidecarHealthCallToAction(result, deployment.CLISelection())
 			}
@@ -95,12 +204,15 @@ func newSidecarEnableCommand(flags *CommonFlags, fixed string) *cobra.Command {
 		&noWait, "no-wait", false,
 		"Return without waiting for a starting sidecar to serve",
 	)
+	command.Flags().StringVar(&ports, "ports", "", sidecarPortsUsage)
 
 	return command
 }
 
 const (
 	sidecarStartingGuidance = "Sidecar %s is still starting. " +
+		"Run `%s` to check whether it is serving."
+	sidecarAppliedGuidance = "Sidecar %s now publishes these ports. " +
 		"Run `%s` to check whether it is serving."
 	sidecarFailingGuidance = "Sidecar %s is not serving. Address the probe failure, " +
 		"then run `%s` to check it again."
@@ -327,6 +439,9 @@ func formatSidecarList(entries []deploy.SidecarAvailability) string {
 		}
 		lines = append(lines, fmt.Sprintf("%s (%s): %s [%s]", entry.Name,
 			strings.Join(entry.Architectures, ", "), entry.Description, state))
+		if entry.Ports != "" {
+			lines = append(lines, fmt.Sprintf("  %s = %s", sidecarPortsOption, entry.Ports))
+		}
 	}
 
 	return strings.Join(lines, "\n")

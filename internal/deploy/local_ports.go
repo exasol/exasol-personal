@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"slices"
 	"strconv"
@@ -37,6 +38,8 @@ type localPortAllocator struct {
 	listen      func(string, string) (net.Listener, error)
 	minimumPort int
 	maximumPort int
+	// The caller's own service holds these, so a probe would always fail.
+	owned map[int]bool
 }
 
 func newLocalPortAllocator() localPortAllocator {
@@ -54,16 +57,25 @@ func (allocator localPortAllocator) resolve(
 	ctx context.Context,
 	raw string,
 	services []localService,
+	saved map[int]string,
 ) (string, error) {
 	mappings, order, err := parseLocalPortMappings(raw)
 	if err != nil {
 		return "", err
 	}
 
-	reserved := make(map[int]string, len(mappings))
+	reserved := make(map[int]string, len(mappings)+len(saved))
 	for service, port := range mappings {
 		if port <= 0 {
 			continue
+		}
+		if owner, exists := saved[port]; exists {
+			return "", fmt.Errorf(
+				"local service %q cannot use host port %d, which is saved for %s",
+				service,
+				port,
+				owner,
+			)
 		}
 		if other, exists := reserved[port]; exists && other != service {
 			return "", fmt.Errorf(
@@ -75,37 +87,21 @@ func (allocator localPortAllocator) resolve(
 		}
 		reserved[port] = service
 	}
-
-	var addresses []net.IPAddr
-	held := make([]net.Listener, 0, len(services))
-	defer func() {
-		for _, listener := range held {
-			_ = listener.Close()
-		}
-	}()
+	maps.Copy(reserved, saved)
 
 	known := make(map[string]struct{}, len(services))
+	pending := make([]localService, 0, len(services))
 	for _, service := range services {
 		known[service.name] = struct{}{}
-		port, configured := mappings[service.name]
-		if configured && port > 0 {
-			continue
+		if port, configured := mappings[service.name]; !configured || port <= 0 {
+			pending = append(pending, service)
 		}
-		if addresses == nil {
-			addresses, err = allocator.loopbackAddresses(ctx)
-			if err != nil {
-				return "", err
-			}
-		}
-
-		port, listeners, err := allocator.selectPort(service, addresses, reserved)
-		if err != nil {
-			return "", err
-		}
-		mappings[service.name] = port
-		reserved[port] = service.name
-		held = append(held, listeners...)
 	}
+	selected, err := allocator.allocate(ctx, pending, reserved)
+	if err != nil {
+		return "", err
+	}
+	maps.Copy(mappings, selected)
 
 	for service, port := range mappings {
 		if _, exists := known[service]; !exists && port == 0 {
@@ -114,6 +110,45 @@ func (allocator localPortAllocator) resolve(
 	}
 
 	return formatLocalPortMappings(mappings, services, order), nil
+}
+
+// allocate holds each candidate until every service has one, so the selected
+// ports are distinct.
+func (allocator localPortAllocator) allocate(
+	ctx context.Context,
+	services []localService,
+	reserved map[int]string,
+) (map[string]int, error) {
+	selected := make(map[string]int, len(services))
+	if len(services) == 0 {
+		return selected, nil
+	}
+	addresses, err := allocator.loopbackAddresses(ctx)
+	if err != nil {
+		return nil, err
+	}
+	reserved = maps.Clone(reserved)
+	if reserved == nil {
+		reserved = map[int]string{}
+	}
+	held := make([]net.Listener, 0, len(services))
+	defer func() {
+		for _, listener := range held {
+			_ = listener.Close()
+		}
+	}()
+
+	for _, service := range services {
+		port, listeners, err := allocator.selectPort(service, addresses, reserved)
+		if err != nil {
+			return nil, err
+		}
+		selected[service.name] = port
+		reserved[port] = service.name
+		held = append(held, listeners...)
+	}
+
+	return selected, nil
 }
 
 func (allocator localPortAllocator) loopbackAddresses(ctx context.Context) ([]net.IPAddr, error) {
@@ -182,6 +217,9 @@ func (allocator localPortAllocator) tryPort(
 ) ([]net.Listener, bool) {
 	if _, exists := reserved[port]; exists {
 		return nil, false
+	}
+	if allocator.owned[port] {
+		return nil, true
 	}
 
 	listeners := make([]net.Listener, 0, len(addresses))

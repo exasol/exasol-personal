@@ -61,14 +61,19 @@ type SidecarAvailability struct {
 	Architectures []string `json:"architectures"`
 	Supported     bool     `json:"supported"`
 	Enabled       bool     `json:"enabled"`
+	// The saved host ports, or the catalog's for a sidecar without a saved
+	// definition, so a user can name them in --ports before enabling.
+	Ports string `json:"ports,omitempty"`
 	// Unsupported says why, so a listing explains itself.
 	Unsupported string `json:"unsupported,omitempty"`
 }
 
 type deploymentSidecars struct {
-	deployment config.DeploymentDir
-	templates  sidecar.Resolver
-	runtime    sidecarRuntime
+	deployment    config.DeploymentDir
+	templates     sidecar.Resolver
+	runtime       sidecarRuntime
+	ports         localPortAllocator
+	databasePorts string
 }
 
 var ErrSidecarRestartRequired = errors.New(
@@ -124,6 +129,7 @@ func unsupportedAvailability(
 			Name:          name,
 			Description:   entries[name].Description,
 			Architectures: slices.Clone(entries[name].Architectures),
+			Ports:         hostPortEntries(entries[name].Container.Ports),
 			Unsupported:   "not supported for " + kind + " deployments",
 		})
 	}
@@ -143,12 +149,17 @@ func catalogAvailability(
 	result := make([]SidecarAvailability, 0, len(entries))
 	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		entry := entries[name]
+		ports := entry.Container.Ports
+		if saved, ok := document.Sidecars[name]; ok {
+			ports = saved.Container.Ports
+		}
 		result = append(result, SidecarAvailability{
 			Name:          name,
 			Description:   entry.Description,
 			Architectures: slices.Clone(entry.Architectures),
 			Supported:     slices.Contains(entry.Architectures, architecture),
 			Enabled:       enabledSidecar(document, name),
+			Ports:         hostPortEntries(ports),
 		})
 	}
 
@@ -158,14 +169,14 @@ func catalogAvailability(
 // EnableSidecar with wait reports the sidecar once it is no longer starting,
 // or once its probes' window has passed.
 func EnableSidecar(
-	ctx context.Context, deployment config.DeploymentDir, name string, wait bool,
+	ctx context.Context, deployment config.DeploymentDir, name, ports string, wait bool,
 ) (SidecarResult, error) {
-	return enableSidecarTemplate(ctx, deployment, nil, name, wait)
+	return enableSidecarTemplate(ctx, deployment, nil, name, ports, wait)
 }
 
 func enableSidecarTemplate(
 	ctx context.Context, deployment config.DeploymentDir, templates sidecar.Resolver,
-	name string, wait bool,
+	name, ports string, wait bool,
 ) (SidecarResult, error) {
 	// Templates first, so a command can enable what the catalog does not carry.
 	return withSidecar(
@@ -173,7 +184,7 @@ func enableSidecarTemplate(
 		deployment,
 		templates,
 		func(sidecars *deploymentSidecars) (SidecarResult, error) {
-			result, err := sidecars.enable(ctx, name)
+			result, err := sidecars.enable(ctx, name, ports)
 			if err != nil || !wait {
 				return result, err
 			}
@@ -259,11 +270,11 @@ func GetAllSidecarStatus(
 	return results, err
 }
 
-func withSidecar(
+func withSidecar[T any](
 	ctx context.Context, deployment config.DeploymentDir, templates sidecar.Resolver,
-	action func(*deploymentSidecars) (SidecarResult, error),
-) (SidecarResult, error) {
-	var result SidecarResult
+	action func(*deploymentSidecars) (T, error),
+) (T, error) {
+	var result T
 	err := withDeploymentExclusiveLock(ctx, deployment, func(dir config.DeploymentDir) error {
 		operations, err := newDeploymentSidecars(ctx, dir, templates)
 		if err != nil {
@@ -298,11 +309,17 @@ func newDeploymentSidecars(
 		return nil, err
 	}
 
-	return &deploymentSidecars{
+	operations := &deploymentSidecars{
 		deployment: deployment,
 		templates:  templates,
 		runtime:    selected,
-	}, nil
+		ports:      newLocalPortAllocator(),
+	}
+	if manifest.Local != nil {
+		operations.databasePorts = manifest.Local.Ports
+	}
+
+	return operations, nil
 }
 
 // MCPSidecarName is the catalog entry of the official Exasol MCP server.
@@ -336,9 +353,19 @@ func sidecarCatalog(templates sidecar.Resolver) (sidecar.Resolver, error) {
 	return sidecar.Catalogs{templates, embedded}, nil
 }
 
+func (sidecars *deploymentSidecars) template(name string) (sidecar.Definition, error) {
+	catalog, err := sidecarCatalog(sidecars.templates)
+	if err != nil {
+		return sidecar.Definition{}, err
+	}
+	entry, err := catalog.Resolve(name, runtime.GOARCH)
+
+	return entry.Definition, err
+}
+
 func (sidecars *deploymentSidecars) enable(
 	ctx context.Context,
-	name string,
+	name, ports string,
 ) (SidecarResult, error) {
 	if _, err := sidecars.mutationDeferred(); err != nil {
 		return SidecarResult{}, err
@@ -349,20 +376,24 @@ func (sidecars *deploymentSidecars) enable(
 	}
 	definition, saved := document.Sidecars[name]
 	if !saved {
-		catalog, err := sidecarCatalog(sidecars.templates)
+		definition, err = sidecars.template(name)
+		if err == nil && ports == "" {
+			err = sidecars.selectHostPorts(ctx, document, name, &definition.Container, nil)
+		}
 		if err != nil {
 			return SidecarResult{}, err
 		}
-		entry, err := catalog.Resolve(name, runtime.GOARCH)
-		if err != nil {
-			return SidecarResult{}, err
-		}
-		definition = entry.Definition
 	}
-	if definition.Enabled == nil || !*definition.Enabled {
+	if ports != "" {
+		err = sidecars.setHostPorts(document, name, &definition.Container, ports)
+		if err != nil {
+			return SidecarResult{}, err
+		}
+	}
+	if definition.Enabled == nil || !*definition.Enabled || ports != "" {
 		definition.Enabled = new(true)
 		document.Sidecars[name] = definition
-		if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
+		if err := sidecars.save(ctx, document); err != nil {
 			return SidecarResult{}, err
 		}
 	}
@@ -400,7 +431,7 @@ func (sidecars *deploymentSidecars) disable(
 		definition.Enabled = new(false)
 		document.Sidecars[name] = definition
 	}
-	if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
+	if err := sidecars.save(ctx, document); err != nil {
 		return SidecarResult{}, err
 	}
 
@@ -628,6 +659,32 @@ func (sidecars *deploymentSidecars) deploymentInitialized() (bool, error) {
 	_, initialized := workflow.(*config.WorkflowStateInitialized)
 
 	return initialized, nil
+}
+
+// save keeps the saved connection instructions, which name sidecar endpoints,
+// in step with the definitions. A deployment that is not running gets them
+// rewritten by its next start.
+func (sidecars *deploymentSidecars) save(ctx context.Context, document sidecar.Document) error {
+	if err := config.WriteSidecars(sidecars.deployment, document); err != nil {
+		return err
+	}
+	deferred, err := sidecars.mutationDeferred()
+	if err != nil || deferred {
+		return err
+	}
+	_, err = os.Stat(sidecars.deployment.ConnectionInstructionsPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	instructions, err := getConnectionInstructionsTextUnsafe(ctx, sidecars.deployment)
+	if err != nil {
+		return err
+	}
+
+	return writeConnectionInstructionsFile(sidecars.deployment, instructions)
 }
 
 func (sidecars *deploymentSidecars) mutationDeferred() (bool, error) {
@@ -869,7 +926,7 @@ func (sidecars *deploymentSidecars) publish(
 				continue
 			}
 			ports = append(ports, sidecar.PublishedPort{
-				Sidecar: definition.Name, Index: index,
+				Sidecar: definition.Name, Index: index, Name: port.Name,
 				HostIP: port.HostIP, HostPort: port.HostPort,
 				RuntimePort: bound[sidecarPortKey{definition.Name, port.ContainerPort}],
 			})
@@ -891,6 +948,9 @@ func ownedNames(containers []localinstall.ContainerListing) []string {
 }
 
 func openedFor(opened []sidecar.PublishedPort, name string) []sidecar.PublishedPort {
+	if opened == nil {
+		return nil
+	}
 	ports := make([]sidecar.PublishedPort, 0, len(opened))
 	for _, port := range opened {
 		if port.Sidecar == name {
@@ -969,9 +1029,10 @@ func sidecarEndpoints(
 	published []sidecar.PublishedPort,
 	declarations endpointDeclarations,
 ) []SidecarEndpoint {
-	// Opened endpoints replace the bindings that stay behind the boundary.
+	// Opened endpoints replace the bindings that stay behind the boundary, so a
+	// runtime that forwards ports reports only the forwards it opened.
 	endpoints := []SidecarEndpoint{}
-	if len(published) > 0 {
+	if published != nil {
 		for _, port := range published {
 			endpoints = append(endpoints, declarations.endpoint(port.HostIP, port.HostPort))
 		}

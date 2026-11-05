@@ -1156,7 +1156,7 @@ func (forwards macForwards) opened() ([]sidecar.PublishedPort, error) {
 	if err != nil {
 		return nil, err
 	}
-	var ports []sidecar.PublishedPort
+	ports := []sidecar.PublishedPort{}
 	for _, name := range slices.Sorted(maps.Keys(current)) {
 		service, index, owned := parseForwardName(name)
 		if !owned {
@@ -1178,12 +1178,14 @@ func (forwards macForwards) open(ctx context.Context, ports []sidecar.PublishedP
 		return err
 	}
 	wanted := make(map[string]runnerForwardState, len(ports))
+	published := make(map[string]sidecar.PublishedPort, len(ports))
 	for _, port := range ports {
 		// A guest port appears once the container serves the endpoint, so an
 		// unbound declaration withdraws its forward and keeps enablement.
 		if port.RuntimePort == 0 {
 			continue
 		}
+		published[forwardName(port)] = port
 		wanted[forwardName(port)] = runnerForwardState{
 			HostIP: port.HostIP, HostPort: port.HostPort, GuestPort: port.RuntimePort,
 		}
@@ -1204,7 +1206,11 @@ func (forwards macForwards) open(ctx context.Context, ports []sidecar.PublishedP
 		}
 		if err := forwards.update(ctx, "add", "--host-ip", port.HostIP,
 			fmt.Sprintf("%s:%d:%d", name, port.GuestPort, port.HostPort)); err != nil {
-			return err
+			source := published[name]
+
+			return sidecar.ClassifyPortConflict(source.Sidecar, []sidecar.Port{
+				{Name: source.Name, HostPort: source.HostPort},
+			}, err, err.Error())
 		}
 	}
 

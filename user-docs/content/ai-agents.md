@@ -17,8 +17,9 @@ and endpoint, `http://127.0.0.1:4896/mcp` by default, and `exasol mcp disable` s
 commands accept the same options as the matching `exasol sidecar` commands for the sidecar named
 `mcp`. `exasol info` lists the endpoint of every enabled sidecar.
 
-If the default host port is occupied, change the mapping in `sidecars.yaml` as described in
-[Networking](sidecars.md#networking).
+The first `exasol mcp enable` saves the next free host port when the default
+one is occupied. To choose the port yourself, see
+[Host ports](sidecars.md#host-ports).
 
 ## Connect a client
 

@@ -88,6 +88,27 @@ func TestSidecarStartupFailureOffersStatus(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Terminal queues and the default flags are process-global.
+func TestLifecyclePortConflictHintSelectsTheDeployment(t *testing.T) {
+	// Given
+	resetTerminalMessages()
+	t.Cleanup(resetTerminalMessages)
+	saved := *commonFlags
+	t.Cleanup(func() { *commonFlags = saved })
+	commonFlags.DeploymentDir = "./dev"
+	// When
+	addDeploymentRecoveryCallToAction(&sidecar.PortConflictError{
+		Sidecar: "mcp", Port: "mcp", HostPort: 4896, Cause: errors.New("in use"),
+	})
+	var stderr bytes.Buffer
+	writeTerminalCallsToAction(&stderr, callsToActionVisible(false))
+	// Then
+	require.Contains(t, stderr.String(),
+		"exasol sidecar config set mcp --ports mcp:<available-port> --deployment-dir ./dev")
+	require.Contains(t, stderr.String(),
+		"exasol sidecar config reset mcp ports --deployment-dir ./dev")
+}
+
 func TestSidecarEnableOffersNoWait(t *testing.T) {
 	t.Parallel()
 	// Given
@@ -124,6 +145,22 @@ func TestSidecarHealthCallToAction(t *testing.T) {
 		}
 	}
 	resetTerminalMessages()
+}
+
+//nolint:paralleltest // Terminal queues are process-global.
+func TestSidecarConfigurationReportsAppliedPorts(t *testing.T) {
+	// Given
+	resetTerminalMessages()
+	t.Cleanup(resetTerminalMessages)
+	result := deploy.SidecarConfiguration{Name: "mcp", Ports: "mcp:14897", Applied: true}
+	// When
+	err := renderSidecarConfiguration(result, nil, &CommonFlags{DeploymentName: "dev"})
+	var stderr bytes.Buffer
+	writeTerminalCallsToAction(&stderr, callsToActionVisible(false))
+	// Then
+	require.NoError(t, err)
+	require.Contains(t, stderr.String(),
+		"Sidecar mcp now publishes these ports. Run `exasol mcp status -d dev`")
 }
 
 //nolint:paralleltest // Terminal queues are process-global.
@@ -379,7 +416,7 @@ func TestSidecarEnableReportsSupportedChoices(t *testing.T) {
 		directory := writeInitializedDeployment(t, "backend: local\nlocal: {}\n")
 		deployment := config.NewDeploymentDir(directory)
 		// When
-		_, err := deploy.EnableSidecar(testManagerContext(t), deployment, name, true)
+		_, err := deploy.EnableSidecar(testManagerContext(t), deployment, name, "", true)
 		// Then
 		require.ErrorContains(t, err, "supported choices:")
 		require.ErrorContains(t, err, name)

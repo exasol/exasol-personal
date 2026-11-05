@@ -7,9 +7,12 @@ catalog names reported by your launcher:
 
 ```bash
 exasol sidecar list
-exasol sidecar enable <name> [--no-wait]
+exasol sidecar enable <name> [--no-wait] [--ports <port-name>:<host-port>,...]
 exasol sidecar status [name]
 exasol sidecar disable <name> [--remove]
+exasol sidecar config get <name> [ports]
+exasol sidecar config set <name> --ports <port-name>:<host-port>,...
+exasol sidecar config reset <name> ports
 ```
 
 Each command accepts `--deployment <name>` or `--deployment-dir <path>` and
@@ -58,7 +61,8 @@ Services handle their own connection retries while the database starts.
 
 `exasol stop` removes disposable sidecar containers while retaining definitions.
 `exasol destroy` removes owned containers and the deployment network. Failures
-are reported separately from database state. Fix the reported problem and
+are reported separately from database state; a start that leaves the database
+running still prints its connection instructions. Fix the reported problem and
 retry enable or start. A failed disable can be retried to finish cleanup.
 Failures identify the affected host and sidecar. Other hosts are still
 reconciled, and retries use the same deployment-wide saved definition.
@@ -82,6 +86,45 @@ Status clears a recorded failure only after verifying the desired outcome.
 inspection failure. Status updates these records while leaving containers,
 forwards, and saved definitions untouched. Use enable, disable, or start to
 apply pending changes. Successful operations also clear their recorded error.
+
+## Host ports
+
+Enable saves a concrete host port for each published port of a catalog
+template. Selection tries the template's `hostPort` first, scans upward through
+65535, and wraps to 1024, the order the database uses for automatic ports. The
+selected port is free on every loopback address of `localhost` and differs
+from the host ports saved for the database and the deployment's other
+sidecars. Automatic database ports also skip host ports saved for sidecars,
+and an explicit database port saved for a sidecar is rejected.
+
+`--ports` saves host ports exactly. Each comma-separated entry names a
+published port, and unlisted ports keep their saved host ports. A published
+port without a `name` always keeps its saved host port. Enable with `--ports`
+also updates an already-enabled sidecar:
+
+```bash
+exasol sidecar enable mcp --ports mcp:14896
+exasol sidecar config set mcp --ports mcp:14897
+```
+
+`list` and `config get` report host ports as `<port-name>:<host-port>`
+entries; `list` shows the catalog's before the sidecar is enabled.
+`config reset <name> ports` (or `--all`) selects free host ports again,
+starting at the catalog template's host port, or at the saved one when the
+catalog no longer offers that sidecar or port. A port the running sidecar
+already publishes counts as free.
+
+A change to an enabled sidecar applies immediately on a running deployment.
+`config set` and `config reset` return without waiting for the sidecar to
+serve; `status` reports its health. A stopped deployment publishes the new
+port on the next start, and the command says so. When another process holds a
+saved host port, the command fails, keeps the saved port, and suggests these
+commands:
+
+```bash
+exasol sidecar config set <name> --ports <port-name>:<available-port>
+exasol sidecar config reset <name> ports
+```
 
 ## Edit deployment configuration
 
