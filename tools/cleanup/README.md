@@ -15,9 +15,11 @@ Build:
 task build
 ```
 
-Provider selection uses `--provider=<name>[,<name>...]`. If omitted, all known providers (`aws`, `exoscale`, `stackit`, `azure`) are included. Location flags such as `--aws-region`, `--exoscale-zone`, `--stackit-region`, and `--azure-location` are multi-value too, so one provider can appear multiple times in the `Scope:` table - once per searched region or zone. Stackit cleanup also needs `--stackit-project-id` when the Stackit provider is selected; Azure needs `--azure-subscription-id`. Azure discovery is subscription-wide, so `--azure-location` is an optional filter rather than a separate search target (omit it to search every region). In command help, provider-specific flags are shown in separate provider option groups so they stay visually distinct from generic options such as `--owner`, `--json`, or `--verbose`.
+Provider selection uses `--provider=<name>[,<name>...]`. If omitted, all known providers (`aws`, `exoscale`, `stackit`, `azure`, `ionos`) are included. Location flags such as `--aws-region`, `--exoscale-zone`, `--stackit-region`, `--azure-location`, and `--ionos-location` are multi-value too, so one provider can appear multiple times in the `Scope:` table - once per searched region or zone. Stackit cleanup also needs `--stackit-project-id` when the Stackit provider is selected; Azure needs `--azure-subscription-id`. Azure discovery is subscription-wide, so `--azure-location` is an optional filter rather than a separate search target (omit it to search every region); the same applies to `--ionos-location` for IONOS. In command help, provider-specific flags are shown in separate provider option groups so they stay visually distinct from generic options such as `--owner`, `--json`, or `--verbose`.
 
 Azure authenticates through the standard `DefaultAzureCredential` chain (environment variables, workload/managed identity, or the Azure CLI), and identifies Exasol Personal deployments by the same `Project`/`Deployment`/`Owner` tags the launcher applies. See [Set up Microsoft Azure](../../user-docs/content/cloud/azure.md) for account setup.
+
+IONOS authenticates with `IONOS_TOKEN` (or `IONOS_USERNAME` and `IONOS_PASSWORD`). IONOS resources carry no owner, so `--owner` filters match nothing but `*`. See [Set up IONOS Cloud](../../user-docs/content/cloud/ionos.md) for account setup.
 
 Discover deployments:
 
@@ -28,6 +30,7 @@ Discover deployments:
 ./bin/exasol-cleanup discover --provider=stackit --stackit-project-id=<project-id> --stackit-region=eu01
 ./bin/exasol-cleanup discover --provider=azure --azure-subscription-id=<subscription-id> --owner=*
 ./bin/exasol-cleanup discover --provider=azure --azure-subscription-id=<subscription-id> --azure-location=westeurope
+./bin/exasol-cleanup discover --provider=ionos --ionos-location=de/fra
 ./bin/exasol-cleanup discover --legacy --owner=*
 ```
 

@@ -26,7 +26,7 @@ jobs:
         # switch, but on a longer threshold. Add the outgoing region as a row
         # whenever AWS_REGION changes.
         include:
-          - providers: aws,azure,exoscale
+          - providers: aws,azure,exoscale,ionos
             awsRegion: ${{ vars.AWS_REGION }}
             maxAgeHours: 24
           - providers: aws
@@ -63,6 +63,14 @@ jobs:
         run: |
           echo "EXOSCALE_API_KEY=${SECRET_EXOSCALE_API_KEY}" >> "$GITHUB_ENV"
           echo "EXOSCALE_API_SECRET=${SECRET_EXOSCALE_API_SECRET}" >> "$GITHUB_ENV"
+
+      - name: Setup IONOS credentials
+        if: ${{ contains(matrix.providers, 'ionos') }}
+        shell: bash
+        env:
+          SECRET_IONOS_TOKEN: ${{ secrets.IONOS_TOKEN }}
+        run: |
+          echo "IONOS_TOKEN=${SECRET_IONOS_TOKEN}" >> "$GITHUB_ENV"
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
