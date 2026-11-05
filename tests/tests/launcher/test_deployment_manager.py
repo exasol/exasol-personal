@@ -474,7 +474,7 @@ def test_evidence_summary_reports_selected_and_omitted_targets() -> None:
 
     assert "providers selected: aws" in summary
     assert "execution boundaries selected: reusable-live" in summary
-    assert "providers omitted: azure, exoscale, local" in summary
+    assert "providers omitted: azure, exoscale, ionos, local" in summary
     assert "specialized suites selected: smoke" in summary
     assert "STACKIT omitted" in summary
     assert "deployments created: 3" in summary

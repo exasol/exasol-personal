@@ -21,7 +21,7 @@ from framework.deployment import (
 )
 from framework.launcher import DeploymentConfig, Launcher
 
-_ACTIVE_PROVIDERS = ("aws", "azure", "exoscale", "local")
+_ACTIVE_PROVIDERS = ("aws", "azure", "exoscale", "ionos", "local")
 _ACTIVE_PLATFORMS = (
     "linux-amd64",
     "macos-amd64",

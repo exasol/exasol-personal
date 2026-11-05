@@ -116,7 +116,7 @@ task tests-launcher
 # Run broad live evidence on AWS, excluding opt-in stress tests
 task tests-deployment
 
-# Run the focused smoke path on AWS, Azure, or Exoscale
+# Run the focused smoke path on AWS, Azure, Exoscale, or IONOS
 task tests-deployment-smoke INFRA=azure
 
 # Run deliberately abnormal recovery scenarios
