@@ -50,7 +50,9 @@ Fixes #
 - [ ] Added/updated tests
 - [ ] All tests pass locally
 - [ ] Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) format
+- [ ] Ran an AI code review on the final changes and addressed its findings
+- [ ] Ran an AI evaluation of the changed feature or fix as a user would (user-facing changes only)
 
 ## Additional Notes
 
-<!-- Any additional information, screenshots, or context -->
+<!-- Any additional information, screenshots, or context, including AI review or evaluation findings you chose not to fix and why -->
