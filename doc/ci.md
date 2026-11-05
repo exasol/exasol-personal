@@ -166,6 +166,7 @@ Workflow input:
   - AWS runs broad live evidence
   - Azure runs the smoke path
   - Exoscale runs the smoke path
+  - IONOS runs the smoke path
 - Current enabled local rows:
   - Linux AMD64 runs `tests-deployment-local` on `ubuntu-latest` twice, once on Podman and once on Docker, each with its own status. The Docker row first upgrades a runner whose Docker Engine is older than 29, the minimum local deployments accept
   - Windows AMD64 runs `tests-deployment-local` on `windows-latest` on Podman, because the hosted runner's Docker runs only Windows containers
@@ -178,6 +179,7 @@ Workflow input:
   - AWS via OIDC role assumption
   - Azure via OIDC (`azure/login`)
   - Exoscale via `EXOSCALE_API_KEY` / `EXOSCALE_API_SECRET` secrets
+  - IONOS via the `IONOS_TOKEN` secret
   - Azure identifiers are sourced from GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
 
 **Warning:** Cloud rows create real infrastructure and incur costs; local rows create a real database deployment on the selected runner.
@@ -220,6 +222,12 @@ Authoritative references:
 - AWS IAM — Creating OIDC identity providers: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html
 - AWS IAM — Configuring a role for GitHub OIDC: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-idp_oidc.html#idp_oidc_Create_GitHub
 - Action — aws-actions/configure-aws-credentials: https://github.com/aws-actions/configure-aws-credentials
+
+## IONOS Cloud Contract for Deployment Tests
+
+Deployment tests and the nightly cleanup authenticate to IONOS Cloud with the `IONOS_TOKEN` repository secret, whose user needs the **Create Data Center**, **Reserve IP**, and **Create Internet Access** privileges described in the [IONOS Cloud guide](../user-docs/content/cloud/ionos.md). Each CI run creates its own data center and destroys it when the run ends, and the nightly cleanup removes any leftovers, including development deployments on the same contract that are older than a day.
+
+The contract caps resources both in total and per server, and those limits are shared by CI and developers. They must allow at least two parallel CI deployments plus one development deployment at the default instance type, which is about 4 reserved IPs, 16 cores, 64 GB RAM, and 1000 GB SSD in total, and 32 GB RAM per server. The contract currently allows one reserved IP, so only one IONOS deployment can exist at a time: a CI run fails while a development deployment is running, and vice versa. Raise the limits before running IONOS rows in parallel or alongside development work. When a run fails with a quota or per-server limit error, check the limits under Resource Overview in the Data Center Designer and ask IONOS support to raise them.
 
 ## Governance Controls
 
