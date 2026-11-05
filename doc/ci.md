@@ -54,9 +54,10 @@ This ensures multi-platform compatibility is validated on the main branch.
 ### Orphaned Deployment Cleanup (`cleanup-orphaned-deployments.yml`)
 
 Runs nightly (and on manual dispatch) to delete cloud resources left behind by failed or interrupted deployment tests, using the [cleanup tool](../tools/cleanup/README.md).
-Deployments older than the configured age threshold are removed across AWS, Azure, and Exoscale.
+Deployments older than the configured age threshold are removed across AWS, Azure, Exoscale, and IONOS Cloud.
 
-Deployments in the region CI currently deploys to (`AWS_REGION`) are removed once they are a day old, as are Azure and Exoscale deployments.
+Deployments in the region CI currently deploys to (`AWS_REGION`) are removed once they are a day old, as are Azure, Exoscale, and IONOS deployments.
+IONOS is searched across every location of the contract that the `IONOS_TOKEN` secret belongs to.
 AWS resources outlive a change of deployment region, so the regions CI deployed to previously are swept as well, but on a longer grace period of three days, since nothing left there belongs to a recent test run.
 Each region runs as its own job with its own threshold, so add the outgoing region as a row whenever `AWS_REGION` changes, and drop a row once its region is known to be empty.
 Splitting by region also keeps a deployment from matching two search targets at once, which the cleanup tool rejects: AWS reports global resources such as IAM roles in `us-east-1` regardless of which region holds the deployment's instances.

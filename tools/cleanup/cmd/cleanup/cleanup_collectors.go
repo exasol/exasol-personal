@@ -16,6 +16,7 @@ import (
 	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/aws"
 	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/azure"
 	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/exoscale"
+	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/ionos"
 	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/stackit"
 )
 
@@ -43,6 +44,10 @@ var stackitCollectorFactory = func(projectID, region, ownerFilter string) shared
 
 var azureCollectorFactory = func(subscriptionID, location, ownerFilter string, legacy bool) shared.ProviderCollector {
 	return azure.NewCollector(subscriptionID, location, ownerFilter, legacy)
+}
+
+var ionosCollectorFactory = func(location, ownerFilter string) shared.ProviderCollector {
+	return ionos.NewCollector(location, ownerFilter)
 }
 
 var awsCallerIdentityARNLookup = func(ctx context.Context, region string) (string, bool) {
@@ -157,7 +162,7 @@ func cleanupProviderSpecs() []cleanupProviderSpec {
 		{
 			Name:         exoscale.ProviderName,
 			Locations:    resolvedExoscaleZones,
-			ResolveOwner: resolveExoscaleOwner,
+			ResolveOwner: resolveOwnerFilterOrAny,
 			BuildCollector: func(location, ownerFilter string, legacy bool) shared.ProviderCollector {
 				return exoscaleCollectorFactory(location, ownerFilter, legacy)
 			},
@@ -176,6 +181,14 @@ func cleanupProviderSpecs() []cleanupProviderSpec {
 			ResolveOwner: resolveAzureOwner,
 			BuildCollector: func(location, ownerFilter string, legacy bool) shared.ProviderCollector {
 				return azureCollectorFactory(cleanupOpts.AzureSubscriptionID, location, ownerFilter, legacy)
+			},
+		},
+		{
+			Name:         ionos.ProviderName,
+			Locations:    resolvedIonosLocations,
+			ResolveOwner: resolveOwnerFilterOrAny,
+			BuildCollector: func(location, ownerFilter string, _ bool) shared.ProviderCollector {
+				return ionosCollectorFactory(location, ownerFilter)
 			},
 		},
 	}
@@ -198,7 +211,7 @@ func resolveAWSOwner(ctx context.Context, region string) cleanupOwnerResolution 
 	return cleanupOwnerResolution{Filter: filter, Display: "(caller)", Source: "default"}
 }
 
-func resolveExoscaleOwner(_ context.Context, _ string) cleanupOwnerResolution {
+func resolveOwnerFilterOrAny(_ context.Context, _ string) cleanupOwnerResolution {
 	if cleanupOpts.OwnerFilter != "" {
 		return cleanupOwnerResolution{Filter: cleanupOpts.OwnerFilter, Display: cleanupOpts.OwnerFilter, Source: "explicit"}
 	}
@@ -252,6 +265,10 @@ func resolvedStackitRegions() []string {
 
 func resolvedAzureLocations() []string {
 	return shared.ResolvedLocations(cleanupOpts.AzureLocations, []string{azure.DefaultLocation})
+}
+
+func resolvedIonosLocations() []string {
+	return shared.ResolvedLocations(cleanupOpts.IonosLocations, []string{ionos.DefaultLocation})
 }
 
 func renderCleanupScope(writer io.Writer, scope cleanupScope) {
