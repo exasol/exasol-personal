@@ -9,7 +9,8 @@ Thank you for your interest in contributing! We welcome contributions from the c
 3. **Create a branch** for your changes: `git checkout -b feature/your-feature-name`
 4. **Make your changes** following our [coding guidelines](doc/best_practices.md)
 5. **Test your changes** - see [Development Guide](doc/development.md#testing)
-6. **Submit a pull request**
+6. **Run the AI pre-review checks** if you use an AI coding agent - see [Pre-review Checks](#pre-review-checks)
+7. **Submit a pull request**
 
 ## Code and Writing Guidelines
 
@@ -43,6 +44,15 @@ Thank you for your interest in contributing! We welcome contributions from the c
 - **Run `task fmt` and `task lint`** before committing
 - **Ensure all tests pass** - run `task all` to check
 - **Reference related issues** using `#issue-number`
+
+## Pre-review Checks
+
+If you use an AI coding agent, run these checks on the final state of your change before requesting review, and tick the matching checklist items in the pull request. Unticked items are fine; maintainers may run the checks during review.
+
+- **AI code review** - run your agent's code review on your changes. Treat its findings as likely defects: fix them, or explain in the pull request why a finding is invalid or already mitigated.
+- **AI evaluation** - for user-facing changes (see the [changelog criteria](#pull-request-guidelines)), have your agent try the feature or fix you changed as a user would, through the CLI and documentation, not the whole product. Its findings range from bugs to UX, documentation, or architecture concerns and missing capabilities, so as the owner of the change, decide whether each one is valid and whether to fix it now, track it in a follow-up issue, or dismiss it with a reason.
+
+Exasol contributors can use the `reviewing-changes` and `evaluating-products` skills from the `platform-jira-skills` plugin in [exasol/platform-team-resources](https://github.com/exasol/platform-team-resources), scoping the evaluation to the change.
 
 ## Code Review Process
 
