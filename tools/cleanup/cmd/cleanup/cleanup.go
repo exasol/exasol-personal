@@ -14,6 +14,7 @@ import (
 	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/aws"
 	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/azure"
 	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/exoscale"
+	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/ionos"
 	"github.com/exasol/exasol-personal/tools/cleanup/pkg/cleanup/providers/stackit"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -26,6 +27,7 @@ const (
 	cleanupFlagGroupExoscale   = "Exoscale options"
 	cleanupFlagGroupStackit    = "STACKIT options"
 	cleanupFlagGroupAzure      = "Azure options"
+	cleanupFlagGroupIonos      = "IONOS options"
 )
 
 var cleanupFlagGroupOrder = []string{
@@ -34,6 +36,7 @@ var cleanupFlagGroupOrder = []string{
 	cleanupFlagGroupExoscale,
 	cleanupFlagGroupStackit,
 	cleanupFlagGroupAzure,
+	cleanupFlagGroupIonos,
 }
 
 type cleanupFlagOptions struct {
@@ -48,6 +51,7 @@ var cleanupOpts = struct {
 	StackitProjectID    string
 	AzureLocations      []string
 	AzureSubscriptionID string
+	IonosLocations      []string
 	Providers           []string
 	OwnerFilter         string
 	OlderThan           time.Duration
@@ -56,7 +60,7 @@ var cleanupOpts = struct {
 }{}
 
 func allProviders() []string {
-	return []string{aws.ProviderName, exoscale.ProviderName, stackit.ProviderName, azure.ProviderName}
+	return []string{aws.ProviderName, exoscale.ProviderName, stackit.ProviderName, azure.ProviderName, ionos.ProviderName}
 }
 
 // getSelectedProviders returns a list of provider names that should be used.
@@ -121,6 +125,10 @@ func registerCommonFlags(cmd *cobra.Command, options cleanupFlagOptions) {
 		StringSliceVar(&cleanupOpts.AzureLocations, "azure-location", nil,
 			"Azure locations to filter deployment resources (repeat flag or use comma-separated values; default: all locations)")
 	setFlagGroup(cmd, "azure-location", cleanupFlagGroupAzure)
+	cmd.Flags().
+		StringSliceVar(&cleanupOpts.IonosLocations, "ionos-location", nil,
+			"IONOS locations to filter deployment resources (repeat flag or use comma-separated values; default: all locations)")
+	setFlagGroup(cmd, "ionos-location", cleanupFlagGroupIonos)
 	cmd.Flags().
 		BoolVar(&cleanupOpts.Verbose, "verbose", false,
 			"Enable verbose (debug) logging")

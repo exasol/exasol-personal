@@ -65,10 +65,13 @@ Default or protected constructs (main route tables, default security groups) are
 - Cross-account or organization-wide cost analysis.
 
 ## Multi-provider support
-The tool discovers and cleans up deployments across every cloud the launcher targets (AWS, Exoscale, STACKIT, and Azure). Each provider plugs into a shared collector interface behind common commands, so discovery, inspection, and ordered deletion behave the same regardless of platform, and global safeguards (dry-run default, explicit execution flag, owner filtering, JSON output) apply uniformly.
+The tool discovers and cleans up deployments across every cloud the launcher targets (AWS, Exoscale, STACKIT, Azure, and IONOS Cloud). Each provider plugs into a shared collector interface behind common commands, so discovery, inspection, and ordered deletion behave the same regardless of platform, and global safeguards (dry-run default, explicit execution flag, owner filtering, JSON output) apply uniformly.
 
 ### Azure
 The launcher confines every Azure deployment to a dedicated resource group tagged with the shared `Project`/`Deployment`/`Owner` metadata. Discovery is therefore subscription-wide: resource groups carrying that metadata identify deployments, and a location is an optional filter rather than a separate search target. Cleanup is resource-group scoped — deleting the group cascades to every resource it contains, so Azure resolves inter-resource dependency ordering itself. A `run` lists the contained resources for transparency and executes the single group deletion, honoring the same dry-run-by-default and `--execute` safety model as the other providers. Authentication uses the standard Azure default credential chain.
+
+### IONOS Cloud
+IONOS resources carry no deployment labels except on servers, so discovery relies on the launcher's naming scheme: a datacenter named after the deployment was created by the launcher, and every other resource carries the deployment id as a name prefix. Discovery is contract-wide with an optional location filter, and creation times come from the API because labels are incomplete. When the deployment owns its datacenter, deleting it cascades to the servers, volumes, and LAN inside; a datacenter the user supplied, or one that also hosts another deployment, is kept and only the deployment's own resources in it are deleted. Reserved IP blocks live outside datacenters and are always deleted last. Resources carry no owner, so owner filtering cannot narrow IONOS results.
 
 ## Summary
 The cleanup feature adds a recoverability layer focused on cost control and operational hygiene. It provides deterministic, safe, and transparent deletion of orphaned deployments with minimal user input.
