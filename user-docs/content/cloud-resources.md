@@ -49,6 +49,12 @@ operating-system volume, and separate data volume.
 When Object Storage archive support is enabled, it also creates a separate archive bucket and
 scoped credentials.
 
+### IONOS Cloud
+
+The IONOS Cloud preset creates a data center, or uses the one given with `--datacenter-id`, with a
+public LAN and a reserved IP block that holds one public IP per node. Each node has a dedicated
+core server with its operating-system volume, a separate data volume, and firewall rules.
+
 ## Stop or destroy a deployment
 
 `exasol stop` preserves the deployment so that it can be started again. It stops or deallocates the
@@ -63,10 +69,12 @@ compute nodes, but retained storage and some networking resources can continue t
 - STACKIT storage is billed independently of a linked server's state, and public IP and Object
   Storage are separate billed services; see the
   [STACKIT price list](https://www.stackit.de/en/prices/).
+- IONOS Cloud continues to bill volumes and reserved IPs while servers are shut off; see the
+  [IONOS Cloud price list](https://cloud.ionos.com/prices).
 
 Archive and bootstrap object storage persists while the deployment is stopped and can therefore
-keep accruing storage charges. Public IP charges depend on the provider; the Azure and STACKIT
-presets allocate dedicated public IP resources, while AWS and Exoscale use addresses assigned to
+keep accruing storage charges. Public IP charges depend on the provider; the Azure, STACKIT, and IONOS
+Cloud presets allocate dedicated public IP resources, while AWS and Exoscale use addresses assigned to
 their compute instances.
 
 Run `exasol destroy` when you no longer need the deployment. Destroy removes the launcher-managed

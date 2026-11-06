@@ -16,7 +16,7 @@ SCRIPTS = REPO_ROOT / "assets/installation/ubuntu/files/opt/exasol_launcher/scri
 pytestmark = pytest.mark.openspec("bucketfs-credentials")
 
 
-@pytest.mark.parametrize("provider", ["aws", "azure", "exoscale", "stackit"])
+@pytest.mark.parametrize("provider", ["aws", "azure", "exoscale", "ionos", "stackit"])
 def test_cloud_bucketfs_credentials_contract(provider: str) -> None:
     root = REPO_ROOT / "assets/infrastructure" / provider
     secrets = (root / "secrets.tf").read_text()

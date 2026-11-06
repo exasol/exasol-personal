@@ -36,7 +36,10 @@ def test_help_flag_surfaces_local_preset_and_quick_start(exasol_path: str) -> No
 
     # Then the local preset is listed first among the built-in presets
     output = result.stdout.strip()
-    assert "Built-in presets are: local, aws, azure, exoscale, and stackit." in output
+    assert (
+        "Built-in presets are: local, aws, azure, exoscale, stackit, and ionos."
+        in output
+    )
 
     # And a local quick-start pointer and deployment lifecycle are documented
     assert "exasol install local" in output

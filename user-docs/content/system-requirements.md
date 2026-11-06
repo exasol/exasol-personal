@@ -28,7 +28,7 @@ WSL. Run `wsl --update` from a Windows terminal to update.
 
 ## Cloud database
 
-Cloud deployments run on AWS, Azure, Exoscale, or STACKIT infrastructure. The launcher provisions
+Cloud deployments run on AWS, Azure, Exoscale, STACKIT, or IONOS Cloud infrastructure. The launcher provisions
 Ubuntu 24.04 LTS on x86-64 compute instances.
 
 The cloud account must have permission and quota for the selected compute, storage, and networking
