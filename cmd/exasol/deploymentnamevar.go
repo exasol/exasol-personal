@@ -11,7 +11,7 @@ import (
 )
 
 // A pflag variable type that only accepts strings safe to use as a literal
-// deployment directory name (see internal/config.NamedDeploymentDirPath).
+// deployment directory name (see internal/launcherpaths.NamedDeploymentDirPath).
 
 var deploymentNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 

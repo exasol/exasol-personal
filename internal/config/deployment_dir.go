@@ -12,11 +12,6 @@ import (
 	"github.com/exasol/exasol-personal/internal/presets"
 )
 
-const (
-	deploymentsDirName       = "deployments"
-	defaultDeploymentDirName = "default"
-)
-
 // DeploymentDir represents the root of a deployment directory.
 //
 // It is intentionally a layout-only value object: it knows the canonical paths
@@ -36,48 +31,6 @@ func NewDeploymentDir(path string) DeploymentDir {
 	}
 
 	return DeploymentDir{root: root}
-}
-
-func DefaultDeploymentDirPath() (string, error) {
-	rootDir, err := LauncherRootDirPath()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(rootDir, deploymentsDirName, defaultDeploymentDirName), nil
-}
-
-// DeploymentsRootPath returns the launcher-managed directory that contains
-// the default deployment directory and every named deployment directory.
-func DeploymentsRootPath() (string, error) {
-	rootDir, err := LauncherRootDirPath()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(rootDir, deploymentsDirName), nil
-}
-
-// NamedDeploymentDirPath returns the launcher-managed deployment directory
-// path for name, in the same parent directory as the default deployment
-// directory. Callers are responsible for validating name is safe to use as a
-// literal directory name (see DeploymentNameVar in cmd/exasol).
-func NamedDeploymentDirPath(name string) (string, error) {
-	rootDir, err := LauncherRootDirPath()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(rootDir, deploymentsDirName, name), nil
-}
-
-func LauncherRootDirPath() (string, error) {
-	return launcherpaths.RootDirPath()
-}
-
-// LauncherDirPath returns the launcher-owned directory below baseDir.
-func LauncherDirPath(baseDir string) string {
-	return launcherpaths.DirPath(baseDir)
 }
 
 func (d DeploymentDir) Root() string {
@@ -156,19 +109,18 @@ var shellSafePath = regexp.MustCompile(`^[A-Za-z0-9_./:@%+=,~-]+$`)
 // working directory, with a leading space, so printed commands stay runnable
 // as written. The default deployment needs none.
 func (d DeploymentDir) CLISelection() string {
-	root, err := DeploymentsRootPath()
+	defaultDir, err := launcherpaths.DefaultDeploymentDirPath()
 	if err != nil {
 		return deploymentDirSelection(d.root)
 	}
-	if filepath.Dir(d.root) != filepath.Clean(root) {
+	if filepath.Dir(d.root) != filepath.Dir(defaultDir) {
 		return deploymentDirSelection(d.root)
 	}
-	name := filepath.Base(d.root)
-	if name == defaultDeploymentDirName {
+	if d.root == defaultDir {
 		return ""
 	}
 
-	return " -d " + name
+	return " -d " + filepath.Base(d.root)
 }
 
 func deploymentDirSelection(path string) string {

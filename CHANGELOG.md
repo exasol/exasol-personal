@@ -20,7 +20,20 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Breaking Changes
 
-- None.
+- Launcher-managed files move from `~/.exasol/personal` to platform-specific
+  locations. Deployments and SQL history move to `~/.exasol/launcher` on Linux,
+  `~/Library/Application Support/exasol/launcher` on macOS, and
+  `%LOCALAPPDATA%\exasol\launcher` on Windows. The cache settings file becomes
+  `resources.yaml` in the platform configuration directory, and the runtime
+  cache moves to `exasol/launcher/resources` in the platform cache directory.
+  The first command after an upgrade moves existing files, reports each move,
+  deletes the old runtime cache, and removes the old directories it leaves
+  empty. While a deployment at the old location is in use, every command except
+  `stop` and `diag unlock` exits with an error that lists what to do first:
+  stop a running local deployment, for example with
+  `exasol stop --deployment-dir ~/.exasol/personal/deployments/default`, and
+  close every `exasol` shell that uses it.
+  Earlier launcher versions do not find migrated deployments.
 
 ## 2.4.0 - 2026-11-04
 
