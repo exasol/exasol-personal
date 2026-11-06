@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/launcherpaths"
 	"github.com/spf13/cobra"
 )
 
@@ -77,7 +78,11 @@ func TestResolveDeploymentDir_DefaultWinsWhenFlagOmittedOutsideDeploymentDir(t *
 	if source != deploymentDirSourceDefault {
 		t.Fatalf("expected default source, got %v", source)
 	}
-	expected := filepath.Join(config.LauncherDirPath(home), "deployments", "default")
+	deploymentsRoot, err := launcherpaths.DeploymentsRootPath()
+	if err != nil {
+		t.Fatalf("failed to resolve deployments root: %v", err)
+	}
+	expected := filepath.Join(deploymentsRoot, "default")
 	if deployment.Root() != expected {
 		t.Fatalf("expected %q, got %q", expected, deployment.Root())
 	}
@@ -101,7 +106,11 @@ func TestResolveDeploymentDir_NamedFlagWins(t *testing.T) {
 	if source != deploymentDirSourceNamed {
 		t.Fatalf("expected named source, got %v", source)
 	}
-	expected := filepath.Join(config.LauncherDirPath(home), "deployments", "staging")
+	deploymentsRoot, err := launcherpaths.DeploymentsRootPath()
+	if err != nil {
+		t.Fatalf("failed to resolve deployments root: %v", err)
+	}
+	expected := filepath.Join(deploymentsRoot, "staging")
 	if deployment.Root() != expected {
 		t.Fatalf("expected %q, got %q", expected, deployment.Root())
 	}
@@ -126,7 +135,11 @@ func TestResolveDeploymentDir_NamedFlagWinsOverCurrentDeploymentDir(t *testing.T
 	if source != deploymentDirSourceNamed {
 		t.Fatalf("expected named source, got %v", source)
 	}
-	expected := filepath.Join(config.LauncherDirPath(home), "deployments", "staging")
+	deploymentsRoot, err := launcherpaths.DeploymentsRootPath()
+	if err != nil {
+		t.Fatalf("failed to resolve deployments root: %v", err)
+	}
+	expected := filepath.Join(deploymentsRoot, "staging")
 	if deployment.Root() != expected {
 		t.Fatalf("expected %q, got %q", expected, deployment.Root())
 	}
@@ -212,6 +225,10 @@ func setTestHome(t *testing.T, home string) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("HOMEDRIVE", "")
 	t.Setenv("HOMEPATH", "")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 }
 
 func TestResolveDeploymentDir_IgnoresCommandsWithoutDeploymentDirFlag(t *testing.T) {
