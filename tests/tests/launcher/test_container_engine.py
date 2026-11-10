@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -158,3 +159,50 @@ def test_running_deployment_names_destroy_for_an_engine_change(
     assert refused.returncode != 0
     assert "run `exasol destroy` before changing its container engine" in refused.stderr
     assert "exasol stop" not in refused.stderr
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="the fake docker command is a POSIX shell script",
+)
+@pytest.mark.parametrize("approval", [["--auto-approve"], []])
+def test_unattended_deploy_names_the_other_engine_when_auto_cannot_use_docker(
+    exasol_path: str, tmp_path: Path, approval: list[str]
+) -> None:
+    # Given a deployment left to auto on a host whose only engine is a Docker
+    # whose daemon does not answer
+    deployment_dir = tmp_path / "deployment"
+    _init(exasol_path, deployment_dir)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo "Docker version 29.0.1"; exit 0; fi\n'
+        'echo "Cannot connect to the Docker daemon" >&2\n'
+        "exit 1\n"
+    )
+    docker.chmod(0o755)
+    env = {**os.environ, "PATH": str(bin_dir)}
+    # When deploying without a person to answer
+    result = subprocess.run(
+        [
+            exasol_path,
+            "deploy",
+            *approval,
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        stdin=subprocess.DEVNULL,
+        env=env,
+        check=False,
+    )
+    # Then it fails with Docker's error and how to select Podman instead
+    assert result.returncode != 0
+    assert "Cannot connect to the Docker daemon" in result.stderr
+    assert "exasol config set --container-engine podman" in result.stderr
+    # And the deployment keeps auto
+    assert _configured_engine(exasol_path, deployment_dir) == "auto"

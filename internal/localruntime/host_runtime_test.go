@@ -627,3 +627,28 @@ func TestHostStatus_ResolvesUnreachableContainerProbeAgainstTheContainerHost(t *
 		})
 	}
 }
+
+// Only the engine's readiness check can be cured by another engine; the
+// launcher's own files fail the same way on any engine.
+//
+//nolint:paralleltest // The test replaces process-wide PATH with fake binary shims.
+func TestHostRuntimePrepare_MarksOnlyReadinessFailures(t *testing.T) {
+	dir := newIsolatedShimDir(t)
+	dropShim(t, dir, "docker", `printf 'linux 28.0.4\n'`)
+	notReady := NewHostLinuxRuntime(config.NewDeploymentDir(t.TempDir()), nil,
+		localinstall.EngineDocker).Prepare(context.Background(), nil, nil, PrepareOptions{})
+
+	dropShim(t, dir, "docker", `printf 'linux 29.9.1\n'`)
+	deployment := config.NewDeploymentDir(t.TempDir())
+	writeLinuxRuntimeTestFile(t, newRuntimePaths(deployment).WorkDir, "not a directory")
+	filesystem := NewHostLinuxRuntime(deployment, nil, localinstall.EngineDocker).
+		Prepare(context.Background(), nil, nil, PrepareOptions{})
+
+	if !errors.Is(notReady, ErrContainerEngineNotReady) ||
+		!errors.Is(notReady, errDockerUnavailable) {
+		t.Errorf("expected an outdated Docker to be marked not ready, got %v", notReady)
+	}
+	if filesystem == nil || errors.Is(filesystem, ErrContainerEngineNotReady) {
+		t.Errorf("expected a filesystem failure without the readiness mark, got %v", filesystem)
+	}
+}

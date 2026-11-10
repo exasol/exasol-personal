@@ -29,6 +29,7 @@ func hostRuntimePreparationOptions(
 	return localruntime.PrepareOptions{
 		ApproveHostChange:     hostChangeApprover(cmd, mode),
 		ChooseContainerEngine: containerEngineChooser(cmd, mode),
+		OfferContainerEngine:  containerEngineOfferer(cmd, mode),
 		// Preparation progress goes to stderr unconditionally: it reports
 		// multi-minute steps the user needs to see, and is not the
 		// --verbose-gated subprocess output.
@@ -201,6 +202,45 @@ func containerEngineChooser(
 		}
 
 		return chosenContainerEngine(line, request.Options), nil
+	}
+}
+
+// containerEngineOfferer asks whether a new deployment may use the other
+// engine. Only a person can accept: a transient failure must not move a
+// scripted deployment, or install an engine, without anyone deciding to.
+func containerEngineOfferer(
+	cmd *cobra.Command,
+	mode approval.Mode,
+) localruntime.ContainerEngineOfferer {
+	return func(_ context.Context, offer localruntime.ContainerEngineOffer) (bool, error) {
+		if mode != approval.ModePrompt {
+			return false, nil
+		}
+		offered := containerEngineName(offer.Offer.Engine)
+		if len(offer.Offer.Commands) > 0 {
+			offered = containerEngineDisplayName(offer.Offer.Engine)
+		}
+		writer := cmd.ErrOrStderr()
+		_, _ = fmt.Fprintf(writer, "%s cannot be used: %v\n",
+			containerEngineName(offer.Unusable), offer.Cause)
+		_, _ = fmt.Fprintf(writer, "This new deployment can run on %s instead. "+
+			"The deployment keeps the engine it starts on.\n", offered)
+		if len(offer.Offer.Commands) > 0 {
+			_, _ = fmt.Fprintf(writer, "Switching installs %s first, which may request "+
+				"administrator (UAC) approval and take a few minutes. The launcher will run:\n",
+				offered)
+			for _, command := range offer.Offer.Commands {
+				_, _ = fmt.Fprintf(writer, "  %s\n", command)
+			}
+		}
+		_, _ = fmt.Fprintf(writer, "Use %s? [y/N]: ", offered)
+
+		line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return false, fmt.Errorf("failed to read the container engine answer: %w", err)
+		}
+
+		return confirmYes(line), nil
 	}
 }
 

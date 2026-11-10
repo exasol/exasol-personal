@@ -86,6 +86,21 @@ func (command HostCommand) String() string {
 	return strings.TrimSpace(strings.Join(append([]string{command.Name}, command.Args...), " "))
 }
 
+// ErrContainerEngineNotReady marks a preparation failure of the container
+// engine's own readiness check, which another engine might not share, as
+// opposed to a failure of the launcher's own files.
+var ErrContainerEngineNotReady = errors.New("container engine is not ready")
+
+type containerEngineNotReadyError struct {
+	err error
+}
+
+func (e containerEngineNotReadyError) Error() string { return e.err.Error() }
+
+func (e containerEngineNotReadyError) Unwrap() []error {
+	return []error{e.err, ErrContainerEngineNotReady}
+}
+
 // HostChangeRequest describes an approval-gated host environment change.
 type HostChangeRequest struct {
 	Kind HostChangeKind
@@ -121,6 +136,19 @@ type ContainerEngineChooser func(
 // turns that into a failure explaining how to proceed.
 type HostChangeApprover func(context.Context, HostChangeRequest) (bool, error)
 
+// ContainerEngineOffer proposes the other engine for a new deployment whose
+// automatically chosen engine cannot be used. Offer.Commands install it when
+// it is missing.
+type ContainerEngineOffer struct {
+	Unusable localinstall.ContainerEngine
+	Cause    error
+	Offer    ContainerEngineOption
+}
+
+// ContainerEngineOfferer reports whether the user accepts the offered engine.
+// Accepting approves the installation the offer shows.
+type ContainerEngineOfferer func(context.Context, ContainerEngineOffer) (bool, error)
+
 // PrepareOptions carries preparation policy supplied by the command layer.
 // Keeping approval and progress presentation here means a runtime never has
 // to know whether it is attached to a terminal.
@@ -132,6 +160,9 @@ type PrepareOptions struct {
 	// ChooseContainerEngine asks which engine to install when none is. A nil
 	// chooser chooses none.
 	ChooseContainerEngine ContainerEngineChooser
+	// OfferContainerEngine asks whether to use the other engine. Only a
+	// person can accept; a nil offerer declines.
+	OfferContainerEngine ContainerEngineOfferer
 	// Progress receives human-readable preparation progress. Unlike the
 	// --verbose-gated subprocess output, this is always shown: it carries
 	// multi-minute steps the user needs to see.
