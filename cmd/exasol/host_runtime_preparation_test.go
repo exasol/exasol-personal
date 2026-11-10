@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/approval"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/spf13/cobra"
 )
@@ -86,7 +87,10 @@ func TestHostChangeApprover_InteractiveShowsCommandsAndAcceptsYes(t *testing.T) 
 	if !strings.Contains(errOut.String(), "winget install --exact --id RedHat.Podman") {
 		t.Errorf("expected the command to be displayed, got %q", errOut.String())
 	}
-	if !strings.Contains(errOut.String(), "Podman is required") {
+	if !strings.Contains(
+		errOut.String(),
+		"This deployment uses Podman, but Podman is not installed",
+	) {
 		t.Errorf("expected an explanation of the change, got %q", errOut.String())
 	}
 }
@@ -126,5 +130,148 @@ func TestHostRuntimePreparationOptions_AlwaysSuppliesApproverAndProgress(t *test
 	}
 	if errOut.String() != "preparing" {
 		t.Errorf("expected progress on stderr, got %q", errOut.String())
+	}
+}
+
+var testEngineChoiceRequest = localruntime.ContainerEngineChoiceRequest{
+	Options: []localruntime.ContainerEngineOption{
+		{
+			Engine: localinstall.EnginePodman,
+			Commands: []localruntime.HostCommand{
+				{Name: "winget", Args: []string{"install", "--exact", "--id", "RedHat.Podman"}},
+			},
+		},
+		{
+			Engine: localinstall.EngineDocker,
+			Commands: []localruntime.HostCommand{
+				{
+					Name: "winget",
+					Args: []string{"install", "--exact", "--id", "Docker.DockerDesktop"},
+				},
+			},
+		},
+	},
+}
+
+func TestContainerEngineChooser_InteractiveShowsBothEnginesInOnePrompt(t *testing.T) {
+	t.Parallel()
+
+	for input, want := range map[string]localinstall.ContainerEngine{
+		"1\n":      localinstall.EnginePodman,
+		"2\n":      localinstall.EngineDocker,
+		"Docker\n": localinstall.EngineDocker,
+		"podman":   localinstall.EnginePodman,
+		"\n":       "",
+		"3\n":      "",
+		"y\n":      "",
+		"":         "",
+	} {
+		cmd, errOut := newApproverTestCommand(input)
+		chooser := containerEngineChooser(cmd, approval.ModePrompt)
+
+		chosen, err := chooser(context.Background(), testEngineChoiceRequest)
+		if err != nil {
+			t.Fatalf("input %q: unexpected error: %v", input, err)
+		}
+		if chosen != want {
+			t.Errorf("input %q: expected %q, got %q", input, want, chosen)
+		}
+		prompt := errOut.String()
+		if !strings.Contains(prompt, "1) Podman: winget install --exact --id RedHat.Podman") ||
+			!strings.Contains(
+				prompt,
+				"2) Docker Desktop: winget install --exact --id Docker.DockerDesktop",
+			) ||
+			strings.Count(prompt, "Install which?") != 1 {
+			t.Errorf("input %q: expected one prompt listing both commands, got %q", input, prompt)
+		}
+	}
+}
+
+func TestContainerEngineChooser_AutoApproveChoosesThePreferredEngine(t *testing.T) {
+	t.Parallel()
+
+	cmd, errOut := newApproverTestCommand("")
+	chosen, err := containerEngineChooser(cmd, approval.ModeApprove)(
+		context.Background(), testEngineChoiceRequest,
+	)
+	if err != nil || chosen != localinstall.EnginePodman {
+		t.Fatalf("expected Podman under --auto-approve, got %q %v", chosen, err)
+	}
+	if errOut.Len() != 0 {
+		t.Errorf("expected no prompt with --auto-approve, got %q", errOut.String())
+	}
+}
+
+func TestContainerEngineChooser_NonInteractiveNamesTheFlags(t *testing.T) {
+	t.Parallel()
+
+	cmd, _ := newApproverTestCommand("")
+	chosen, err := containerEngineChooser(cmd, approval.ModeNonInteractive)(
+		context.Background(), testEngineChoiceRequest,
+	)
+	if err == nil || chosen != "" {
+		t.Fatalf("expected a failure without a terminal, got %q %v", chosen, err)
+	}
+	for _, flag := range []string{"--auto-approve", "exasol config set --container-engine"} {
+		if !strings.Contains(err.Error(), flag) {
+			t.Errorf("expected the error to name %s, got %v", flag, err)
+		}
+	}
+}
+
+func TestHostChangeApprover_NamesTheEngineItInstalls(t *testing.T) {
+	t.Parallel()
+
+	cmd, errOut := newApproverTestCommand("y\n")
+	request := localruntime.HostChangeRequest{
+		Kind:        localruntime.HostChangeInstallContainerRuntime,
+		Engine:      localinstall.EngineDocker,
+		Alternative: localinstall.EnginePodman,
+	}
+	if _, err := hostChangeApprover(cmd, approval.ModePrompt)(
+		context.Background(), request,
+	); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, part := range []string{
+		"This deployment uses Docker, but Docker Desktop is not installed.",
+		"To use Podman instead, answer N and run `exasol config set --container-engine podman`.",
+	} {
+		if !strings.Contains(errOut.String(), part) {
+			t.Errorf("expected %q in the prompt, got %q", part, errOut.String())
+		}
+	}
+	_, err := hostChangeApprover(cmd, approval.ModeNonInteractive)(context.Background(), request)
+	for _, part := range []string{
+		"This deployment uses Docker, but Docker Desktop is not installed.",
+		"Re-run with --auto-approve to install it",
+		"use Podman with `exasol config set --container-engine podman`",
+	} {
+		if err == nil || !strings.Contains(err.Error(), part) {
+			t.Errorf("expected %q in the unattended failure, got %v", part, err)
+		}
+	}
+}
+
+// Docker that runs Windows containers cannot replace a missing Podman, so the
+// request carries no alternative and nothing suggests Docker.
+func TestHostChangeApprover_SuggestsNoAlternativeThatCannotRun(t *testing.T) {
+	t.Parallel()
+
+	cmd, errOut := newApproverTestCommand("n\n")
+	request := localruntime.HostChangeRequest{
+		Kind:   localruntime.HostChangeInstallContainerRuntime,
+		Engine: localinstall.EnginePodman,
+	}
+	if _, err := hostChangeApprover(cmd, approval.ModePrompt)(
+		context.Background(), request,
+	); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_, err := hostChangeApprover(cmd, approval.ModeNonInteractive)(context.Background(), request)
+	if strings.Contains(errOut.String(), "--container-engine") ||
+		err == nil || strings.Contains(err.Error(), "--container-engine") {
+		t.Errorf("expected no engine to be suggested, got %q and %v", errOut.String(), err)
 	}
 }

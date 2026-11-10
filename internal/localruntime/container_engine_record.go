@@ -115,15 +115,15 @@ func podmanInstalled(ctx context.Context) bool {
 		return true
 	}
 
-	return runtime.GOOS == "windows" && ensurePodmanResolvable(ctx) == nil
+	return runtime.GOOS == string(HostPlatformWindows) && ensurePodmanResolvable(ctx) == nil
 }
 
 // dockerInstalled accepts a docker CLI that is not Podman's Docker-compatible
-// command and whose daemon, if it answers, runs Linux containers. A daemon
-// that does not answer still counts, so the user learns why Docker cannot be
-// used instead of being moved to Podman silently.
+// command and whose daemon, if it answers, is not Podman and runs Linux
+// containers. A daemon that does not answer still counts, so the user learns
+// why Docker cannot be used instead of being moved to Podman silently.
 func dockerInstalled(ctx context.Context) bool {
-	if _, err := exec.LookPath(dockerCommand); err != nil {
+	if resolveDocker(ctx, runtime.GOOS == string(HostPlatformWindows)) != nil {
 		return false
 	}
 	if dockerIsPodman(ctx) {
@@ -131,7 +131,7 @@ func dockerInstalled(ctx context.Context) bool {
 	}
 	probe, err := probeDockerDaemon(ctx)
 
-	return err != nil || probe.osType == dockerLinuxOSType
+	return err != nil || (!probe.podman && probe.osType == dockerLinuxOSType)
 }
 
 func dockerIsPodman(ctx context.Context) bool {

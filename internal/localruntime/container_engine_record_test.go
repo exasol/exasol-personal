@@ -108,6 +108,12 @@ func TestDetectContainerEngine_SelectsTheFirstInstalledEngine(t *testing.T) {
 			expected: localinstall.EnginePodman,
 		},
 		{
+			name: "only docker reaching podman", preference: podmanFirst,
+			docker: `case "$1" in --version) printf 'Docker version 29.9.1\n' ;; ` +
+				`*) printf 'linux 5.8.5 Podman Engine;Conmon;Engine;\n' ;; esac`,
+			expected: localinstall.EnginePodman,
+		},
+		{
 			name: "only docker with windows containers", preference: podmanFirst,
 			docker: `case "$1" in --version) printf 'Docker version 29.9.1\n' ;; ` +
 				`*) printf 'windows\n' ;; esac`,

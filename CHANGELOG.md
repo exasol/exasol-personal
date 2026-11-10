@@ -24,6 +24,14 @@ Notable user-facing changes to Exasol Personal are documented here.
   Examples: `exasol sidecar enable mcp --ports mcp:14896` and
   `exasol sidecar config reset mcp ports`.
 
+- On Windows without a container engine, `exasol install local` asks whether to install Podman or
+  Docker Desktop through Windows Package Manager and keeps the choice as the deployment's
+  `container_engine`. A deployment set to `docker` installs Docker Desktop when it is missing, and
+  the launcher starts a Docker Desktop it installed and waits up to 10 minutes for it to run Linux
+  containers. `--auto-approve` installs Podman.
+
+  Example: `exasol install local --container-engine docker`
+
 ### Changed
 
 - The MCP sidecar is published on host port `4896` when it is free, and on
@@ -34,6 +42,10 @@ Notable user-facing changes to Exasol Personal are documented here.
   sample.sql`. Existing deployments keep their version.
 
 ### Fixed
+
+- A `docker` command that reaches a Podman daemon, such as one a Podman machine serves on Windows,
+  is no longer reported as an outdated Docker Engine. With `container_engine` set to `auto`, the
+  launcher uses Podman for it, and a `docker` deployment fails with a message that names Podman.
 
 - Local Podman deployments install and start again on WSL 2.6 and other kernels where Podman
   cannot set up the deployment network. The database starts without that network, and sidecars,

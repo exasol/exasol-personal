@@ -20,8 +20,9 @@ A local database always runs as a single node. Platform-specific requirements ar
 - **Linux:** AMD64 or ARM64 with Docker or Podman installed and available in `PATH`. Docker must be
   Docker Engine 29 or later. The database uses host resources directly.
 - **Windows:** Windows 10 or later on AMD64, with Docker Desktop running Linux containers on Docker
-  Engine 29 or later, or with Windows Package Manager (`winget`) and the prerequisites for a Podman
-  machine. Windows on ARM64 is not supported for local deployments.
+  Engine 29 or later, or with Podman and the prerequisites for a Podman machine. With Windows
+  Package Manager (`winget`), the launcher can install either. Windows on ARM64 is not supported
+  for local deployments.
 
 [Sidecars](sidecars.md) on Podman need WSL 2.7 or later when the launcher runs on Windows or inside
 WSL. Run `wsl --update` from a Windows terminal to update.

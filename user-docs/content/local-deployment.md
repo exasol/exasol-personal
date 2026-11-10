@@ -7,8 +7,8 @@ Local deployments run on supported macOS, Linux, and Windows computers.
 - On Linux, the database runs directly on the host in Docker or Podman. See
   [Container engine](#container-engine).
 - On Windows, the database runs in Docker Desktop with Linux containers, or in Podman's default
-  machine, which requires Windows Package Manager (`winget`) and the prerequisites for a Podman
-  machine.
+  machine. The launcher can install either through Windows Package Manager (`winget`). See
+  [Windows host preparation](#windows-host-preparation).
 
 After [installing the launcher](getting-started.md), run:
 
@@ -61,10 +61,11 @@ On Linux and Windows, a local deployment runs on Docker or Podman. The `containe
 chooses which:
 
 - `auto` (the default) uses Podman when it is installed, and otherwise Docker when it is installed
-  and runs Linux containers. With neither, it uses Podman, which the launcher offers to install on
-  Windows. A Podman command installed under the name `docker` counts as Podman.
-- `docker` or `podman` uses that engine. The launcher never installs or starts Docker; if Docker
-  cannot be used, the command fails and explains what to check.
+  and runs Linux containers. With neither, it uses Podman on Linux, and on Windows asks which of the
+  two to install. A Podman command installed under the name `docker` counts as Podman.
+- `docker` or `podman` uses that engine. On Windows, the launcher installs a missing engine after
+  approval. It uses an installed Docker as found; if Docker cannot be used, the command fails and
+  explains what to check.
 
 ```bash
 exasol install local --container-engine podman
@@ -109,16 +110,26 @@ deployment, because a different one points the launcher at a daemon without its 
 
 ## Windows host preparation
 
-This section applies to deployments that use Podman. If Podman is missing, the launcher can offer
-to install it. It also creates or starts Podman's
-default machine when necessary, without changing the configuration of an existing machine. Because
-installing Podman changes shared host state, the launcher displays the exact command and asks for
-approval.
+When a new deployment needs a container engine that is not installed, the launcher can install it
+through `winget`. Because this changes shared host state, the launcher displays the exact command
+and asks for approval. With `container_engine` set to `auto` and neither engine installed, a single
+prompt asks whether to install Podman or Docker Desktop, and the deployment keeps the engine you
+choose as its `container_engine`. Docker Desktop requires a paid subscription for larger
+organizations; see the [Docker Subscription Service
+Agreement](https://www.docker.com/legal/docker-subscription-service-agreement/).
 
-Use `--auto-approve` for unattended preparation. A command that cannot prompt refuses this host
-change unless the option is present, unlike other confirmations, which an unattended run approves
-automatically. Stopping or destroying an Exasol deployment leaves the shared Podman machine
-running.
+After installing Docker Desktop, the launcher starts it and waits up to 10 minutes for it to run
+Linux containers. Accept Docker's agreement if Docker Desktop shows it. If Docker Desktop is not
+ready in time, or you press Ctrl+C to stop waiting, finish starting it and run the command again. The launcher does not start a Docker
+Desktop it did not install.
+
+For Podman, the launcher also creates or starts Podman's default machine when necessary, without
+changing the configuration of an existing machine. Stopping or destroying an Exasol deployment
+leaves the shared Podman machine running.
+
+Use `--auto-approve` for unattended preparation; with neither engine installed and `auto`, it
+installs Podman. A command that cannot prompt refuses this host change unless the option is
+present, unlike other confirmations, which an unattended run approves automatically.
 
 ## Next steps
 

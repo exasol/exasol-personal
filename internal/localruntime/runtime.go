@@ -69,8 +69,8 @@ const (
 // user approval before a runtime can apply it.
 type HostChangeKind string
 
-// HostChangeInstallContainerRuntime covers installing the container runtime
-// (Podman) onto the host, which mutates state shared beyond this deployment.
+// HostChangeInstallContainerRuntime covers installing a container engine onto
+// the host, which mutates state shared beyond this deployment.
 const HostChangeInstallContainerRuntime HostChangeKind = "install-container-runtime"
 
 // HostCommand describes a command that preparation intends to run. It is
@@ -88,9 +88,33 @@ func (command HostCommand) String() string {
 
 // HostChangeRequest describes an approval-gated host environment change.
 type HostChangeRequest struct {
-	Kind     HostChangeKind
+	Kind HostChangeKind
+	// Engine names the container engine the change installs, if any.
+	Engine localinstall.ContainerEngine
+	// Alternative names the other engine the deployment could select instead,
+	// unless it is installed but cannot be used.
+	Alternative localinstall.ContainerEngine
+	Commands    []HostCommand
+}
+
+// ContainerEngineOption is an engine the user may choose, with the commands
+// that install it.
+type ContainerEngineOption struct {
+	Engine   localinstall.ContainerEngine
 	Commands []HostCommand
 }
+
+// ContainerEngineChoiceRequest asks which engine to install. Options are in
+// the platform's order of preference, so the first is the unattended answer.
+type ContainerEngineChoiceRequest struct {
+	Options []ContainerEngineOption
+}
+
+// ContainerEngineChooser returns the chosen engine, or an empty engine when
+// the user cancels. Choosing an engine approves the installation shown for it.
+type ContainerEngineChooser func(
+	context.Context, ContainerEngineChoiceRequest,
+) (localinstall.ContainerEngine, error)
 
 // HostChangeApprover decides whether an approval-gated host change may run.
 // Returning false (rather than an error) means the user declined; the runtime
@@ -105,10 +129,37 @@ type PrepareOptions struct {
 	// denies all of them, so a caller that forgets to supply one fails
 	// safe instead of silently mutating the host.
 	ApproveHostChange HostChangeApprover
+	// ChooseContainerEngine asks which engine to install when none is. A nil
+	// chooser chooses none.
+	ChooseContainerEngine ContainerEngineChooser
 	// Progress receives human-readable preparation progress. Unlike the
 	// --verbose-gated subprocess output, this is always shown: it carries
 	// multi-minute steps the user needs to see.
 	Progress io.Writer
+
+	// engineRecorded is set by the runtime for a deployment that recorded its
+	// engine, which can no longer select another.
+	engineRecorded bool
+}
+
+// WithInstallationApproved approves installing engine without asking again,
+// because the user already approved it by choosing that engine.
+func (options PrepareOptions) WithInstallationApproved(
+	engine localinstall.ContainerEngine,
+) PrepareOptions {
+	approve := options.ApproveHostChange
+	options.ApproveHostChange = func(ctx context.Context, request HostChangeRequest) (bool, error) {
+		if request.Kind == HostChangeInstallContainerRuntime && request.Engine == engine {
+			return true, nil
+		}
+		if approve == nil {
+			return false, nil
+		}
+
+		return approve(ctx, request)
+	}
+
+	return options
 }
 
 type RuntimeStatus struct {

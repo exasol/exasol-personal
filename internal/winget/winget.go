@@ -1,12 +1,12 @@
 // Copyright 2026 Exasol AG
 // SPDX-License-Identifier: MIT
 
-// Package winget wraps the Windows Package Manager CLI to install
-// podman-for-windows on behalf of the local runtime, plus the registry
-// PATH refresh needed to make the just-installed podman findable in the
-// running launcher process.
+// Package winget wraps the Windows Package Manager CLI to install a
+// container engine on behalf of the local runtime, plus the registry PATH
+// refresh needed to make the just-installed engine findable in the running
+// launcher process.
 //
-// The command shape and flag choices are documented on InstallPodman.
+// The command shape and flag choices are documented on Install.
 // The rationale is intentionally captured in code comments rather than
 // external docs because each flag decision reflects a specific failure
 // mode observed in practice (see PR.md).
@@ -24,9 +24,15 @@ import (
 	"strings"
 )
 
-// PodmanPackageID is the winget package identifier for RedHat's official
-// podman-for-windows distribution.
-const PodmanPackageID = "RedHat.Podman"
+// Package is a winget package identifier.
+type Package string
+
+const (
+	// PodmanPackage is RedHat's official podman-for-windows distribution.
+	PodmanPackage Package = "RedHat.Podman"
+	// DockerDesktopPackage is Docker Inc.'s official Docker Desktop.
+	DockerDesktopPackage Package = "Docker.DockerDesktop"
+)
 
 // binary is the winget executable name. Overridable so tests can stage a
 // shim on PATH under a stable name.
@@ -37,40 +43,32 @@ var binary = "winget"
 // message rather than the generic exec failure.
 var ErrWingetNotFound = errors.New("winget (Windows Package Manager) is not available on PATH")
 
-// podmanPathAdditionsOverrideEnv is the environment variable a test can
-// set to bypass the real Windows registry read in EnsurePodmanOnPath.
+// pathAdditionsOverrideEnv is the environment variable a test can
+// set to bypass the real Windows registry read in RefreshPath.
 // Production callers do not set it.
 //
 // Value semantics: an OS-native PATH string (';'-separated on Windows,
-// ':'-separated elsewhere) whose entries EnsurePodmanOnPath prepends
-// to the current process's PATH so a subsequent LookPath("podman")
-// resolves the newly-installed binary.
-const podmanPathAdditionsOverrideEnv = "EXASOL_WINGET_TEST_PODMAN_PATH_ADDITIONS"
+// ':'-separated elsewhere) whose entries RefreshPath prepends to the
+// current process's PATH so a subsequent LookPath resolves the
+// newly-installed binary.
+const pathAdditionsOverrideEnv = "EXASOL_WINGET_TEST_PATH_ADDITIONS"
 
-// PodmanInstallArgs returns the argv (without the leading "winget"
-// executable name) that InstallPodman invokes. Kept exposed so callers
-// can render the exact command they will run before invoking it.
-func PodmanInstallArgs() []string {
+// InstallArgs returns the argv (without the leading "winget" executable
+// name) that Install invokes. Kept exposed so callers can render the exact
+// command they will run before invoking it.
+func InstallArgs(pkg Package) []string {
 	return []string{
 		"install",
-		"--exact", "--id", PodmanPackageID,
+		"--exact", "--id", string(pkg),
 		"--source", "winget",
 		"--accept-source-agreements",
 		"--accept-package-agreements",
 	}
 }
 
-// PodmanInstallCommand returns the exact "winget ..." command
-// InstallPodman will execute, formatted as a single line. Shown to the
-// user immediately before we invoke it so they can copy it into their
-// own shell if they prefer to run it themselves.
-func PodmanInstallCommand() string {
-	return binary + " " + strings.Join(PodmanInstallArgs(), " ")
-}
-
 // LookupWinget returns ErrWingetNotFound if winget is not on PATH, and
 // nil otherwise. Callers use it to give a specific error before falling
-// through into the generic InstallPodman failure path.
+// through into the generic Install failure path.
 func LookupWinget() error {
 	if _, err := exec.LookPath(binary); err != nil {
 		return fmt.Errorf("%w: %w", ErrWingetNotFound, err)
@@ -79,14 +77,14 @@ func LookupWinget() error {
 	return nil
 }
 
-// InstallPodman runs "winget install --exact --id RedHat.Podman" with
-// the flag set documented below and streams winget's own output to out
+// Install runs "winget install --exact --id <package>" with the flag set
+// documented below and streams winget's own output to out
 // and outErr so the user can see download progress. Blocks until winget
 // exits.
 //
 // Flag choices, each motivated by a specific failure mode:
 //
-//   - --exact --id RedHat.Podman: exact-match on the official RedHat
+//   - --exact --id <package>: exact-match on the official vendor
 //     package rather than substring search, so a compromised or
 //     name-shadowing package in the source cannot be substituted.
 //
@@ -100,8 +98,8 @@ func LookupWinget() error {
 //     to the source and package licence prompts. The user consents by
 //     invoking a launcher command that triggers install.
 //
-//   - Scope is intentionally NOT set. RedHat.Podman currently declares
-//     only a machine-scope installer; passing --scope user filters the
+//   - Scope is intentionally NOT set. RedHat.Podman declares only a
+//     machine-scope installer; passing --scope user filters the
 //     installer list to zero candidates and winget aborts with
 //     APPINSTALLER_CLI_ERROR_NO_APPLICABLE_INSTALLER (exit 0x8A150010).
 //     Without --scope, winget picks based on process elevation: an
@@ -112,25 +110,24 @@ func LookupWinget() error {
 //     winget's progress output is the user's only signal that a
 //     multi-minute download is proceeding, and UAC must remain
 //     available to end users who did not launch from an elevated shell.
-func InstallPodman(ctx context.Context, out, outErr io.Writer) error {
+func Install(ctx context.Context, pkg Package, out, outErr io.Writer) error {
 	if err := LookupWinget(); err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, binary, PodmanInstallArgs()...)
+	cmd := exec.CommandContext(ctx, binary, InstallArgs(pkg)...)
 	cmd.Stdout = out
 	cmd.Stderr = outErr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("winget install %s failed: %w", PodmanPackageID, err)
+		return fmt.Errorf("winget install %s failed: %w", pkg, err)
 	}
 
 	return nil
 }
 
-// EnsurePodmanOnPath refreshes the current process's PATH with the
-// entries the Windows registry lists after winget's install of
-// podman-for-windows, so a subsequent exec.LookPath("podman") in the
-// same launcher process resolves the newly-installed binary without
-// waiting for the user to open a new shell.
+// RefreshPath refreshes the current process's PATH with the entries the
+// Windows registry lists after a winget install, so a subsequent
+// exec.LookPath in the same launcher process resolves the newly-installed
+// binary without waiting for the user to open a new shell.
 //
 // Windows sets a process's PATH once at start-up and does not re-read
 // the registry when installers add entries to it. Callers should invoke
@@ -138,10 +135,10 @@ func InstallPodman(ctx context.Context, out, outErr io.Writer) error {
 // install whose PATH the current process missed) and AFTER installing.
 //
 // Entries already on the current process's PATH are preserved and not
-// duplicated; new entries are prepended so podman resolves before any
+// duplicated; new entries are prepended so the installed binary resolves before any
 // conflicting shim earlier in PATH.
-func EnsurePodmanOnPath(ctx context.Context) error {
-	additions, err := podmanPathAdditions(ctx)
+func RefreshPath(ctx context.Context) error {
+	additions, err := pathAdditions(ctx)
 	if err != nil {
 		return err
 	}
@@ -153,18 +150,18 @@ func EnsurePodmanOnPath(ctx context.Context) error {
 	return os.Setenv("PATH", merged)
 }
 
-// podmanPathAdditions returns the PATH entries to add to the current
-// process's PATH so podman becomes findable. On Windows this reads the
+// pathAdditions returns the PATH entries to add to the current process's
+// PATH so newly installed binaries become findable. On Windows this reads the
 // merged machine- + user-scope PATH from the registry via PowerShell.
 // On non-Windows the override env is required (test-only).
-func podmanPathAdditions(ctx context.Context) (string, error) {
-	if override, ok := os.LookupEnv(podmanPathAdditionsOverrideEnv); ok {
+func pathAdditions(ctx context.Context) (string, error) {
+	if override, ok := os.LookupEnv(pathAdditionsOverrideEnv); ok {
 		return override, nil
 	}
 	if runtime.GOOS != "windows" {
 		return "", fmt.Errorf(
-			"winget.EnsurePodmanOnPath: non-windows platform requires %s to be set (test-only)",
-			podmanPathAdditionsOverrideEnv,
+			"winget.RefreshPath: non-windows platform requires %s to be set (test-only)",
+			pathAdditionsOverrideEnv,
 		)
 	}
 
@@ -174,7 +171,7 @@ func podmanPathAdditions(ctx context.Context) (string, error) {
 // readWindowsRegistryPATH concatenates the machine- and user-scope Path
 // values from the Windows registry into a single OS-PATH string using
 // PowerShell. If a scope is empty it is skipped; if both are empty the
-// result is empty and EnsurePodmanOnPath no-ops.
+// result is empty and RefreshPath no-ops.
 func readWindowsRegistryPATH(ctx context.Context) (string, error) {
 	// GetEnvironmentVariable expands REG_EXPAND_SZ automatically.
 	const script = `$m = [Environment]::GetEnvironmentVariable("Path", "Machine")

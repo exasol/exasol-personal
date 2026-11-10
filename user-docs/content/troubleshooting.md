@@ -37,8 +37,10 @@ error. Check that the daemon is running with `docker info`, that your user may u
 the `docker` group applies only to new login sessions), and that the active context in
 `docker context ls` is the one you expect. If the message says the daemon runs Windows containers,
 switch Docker Desktop to Linux containers. If it names a Docker Engine older than 29, upgrade
-Docker. To use Podman instead on a deployment that has not
-started yet, run `exasol config set --container-engine podman`.
+Docker. If it says the `docker` command reaches Podman, a Podman daemon answers in Docker's place;
+point the `docker` command at Docker with `docker context use`, or select Podman. To use Podman
+instead on a deployment that has not started yet, run
+`exasol config set --container-engine podman`.
 
 While Docker does not answer, `exasol status` reports `database_connection_failed` with a message
 that the container engine is not answering, and `exasol start` and `exasol stop` fail with this
@@ -80,22 +82,44 @@ The launcher does not change this host policy. After the administrator repairs i
 `podman unshare --rootless-netns true` to verify network teardown, then repeat `exasol destroy`
 for the affected deployment. Keep its deployment directory until destruction completes.
 
-### Podman is not installed and Windows Package Manager is unavailable
+### A container engine is not installed and Windows Package Manager is unavailable
 
-The launcher can install Podman on Windows, but only through `winget`. Install App Installer from
-the Microsoft Store, or install Podman manually from [podman.io](https://podman.io/), then run the
-command again.
+The launcher can install Podman or Docker Desktop on Windows, but only through `winget`. Install
+App Installer from the Microsoft Store, or install Podman from [podman.io](https://podman.io/) or
+[Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) manually, then run
+the command again.
 
 ### `podman is not available on PATH` on Windows after installing it
 
 Windows fixes a process's `PATH` when it starts, so a terminal opened before Podman was installed
 never sees it. Open a new terminal and run the command again.
 
+### `Docker Desktop did not run Linux containers within 10 minutes`
+
+The launcher installed and started Docker Desktop, but its engine was not ready in time. Finish
+starting Docker Desktop: accept its agreement if it shows one, and sign out and in again or restart
+Windows if it asks. Once `docker info` answers, run the command again; the deployment uses Docker.
+
+### `Podman answers on Docker's API pipe` after installing Docker Desktop
+
+A Podman machine holds the pipe Docker Desktop needs, so Docker Desktop cannot start. Stop the
+Podman machine with `podman machine stop`. If Podman was uninstalled, its machine can keep running;
+end its `win-sshproxy` process, and remove the machine with
+`wsl --unregister podman-machine-default` if you no longer need it. Then start Docker Desktop and
+run the command again.
+
+If the message instead says that `DOCKER_HOST` or a Docker context selects Podman, the `docker`
+command connects to Podman rather than Docker Desktop. Unset `DOCKER_HOST`, or switch to Docker
+Desktop with `docker context use desktop-linux`, and run the command again.
+
 ### `local runtime host preparation requires approval`
 
-Installing Podman changes shared host state, so the launcher asks before doing it. A command with
-no terminal attached cannot ask and refuses instead of changing the host. Re-run with
-`--auto-approve`, or run the displayed setup command yourself. See
+Installing a container engine changes shared host state, so the launcher asks before doing it. A
+command with no terminal attached cannot ask and refuses instead of changing the host; when neither
+engine is installed, the message is `no container engine is installed for local deployments`.
+Re-run with `--auto-approve`, which installs the deployment's engine, or Podman when the deployment
+is set to `auto`, or run the `winget` command the message shows yourself. To install the other
+engine, select it first with `exasol config set --container-engine docker` or `podman`. See
 [Windows host preparation](local-deployment.md#windows-host-preparation).
 
 ## Starting a local deployment

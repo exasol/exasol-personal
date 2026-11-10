@@ -115,45 +115,12 @@ func ensureWindowsPodmanAvailable(
 	if err := ensurePodmanResolvable(ctx); err == nil {
 		return nil
 	}
-	if err := winget.LookupWinget(); err != nil {
-		return fmt.Errorf(
-			"podman is required for local deployments but is not installed, and Windows "+
-				"Package Manager (winget) is unavailable to install it; install "+
-				"App Installer from the Microsoft Store, or install podman manually "+
-				"from https://podman.io/, then re-run this command: %w", err)
-	}
 
-	request := HostChangeRequest{
-		Kind: HostChangeInstallContainerRuntime,
-		Commands: []HostCommand{
-			{Name: "winget", Args: winget.PodmanInstallArgs()},
-		},
-	}
-	if err := requireHostChangeApproval(ctx, options, request); err != nil {
-		return err
-	}
-
-	writePreparationProgress(options.Progress, "Installing the local container runtime...")
-	if err := winget.InstallPodman(ctx, options.Progress, options.Progress); err != nil {
-		return fmt.Errorf(
-			"failed to install podman through Windows Package Manager; install it "+
-				"manually from https://podman.io/, then re-run this command: %w", err)
-	}
-	if err := winget.EnsurePodmanOnPath(ctx); err != nil {
-		return fmt.Errorf("failed to refresh PATH after installing podman: %w", err)
-	}
-	if !podmanOnPath() {
-		return errors.New(
-			"the podman installation completed but podman is still not on PATH; " +
-				"open a new terminal and re-run this command",
-		)
-	}
-
-	return nil
+	return installWithWinget(ctx, options, localinstall.EnginePodman)
 }
 
 func podmanOnPath() bool {
-	_, err := exec.LookPath("podman")
+	_, err := exec.LookPath(podmanCommand)
 
 	return err == nil
 }
@@ -173,7 +140,7 @@ func ensurePodmanResolvable(ctx context.Context) error {
 	if podmanOnPath() {
 		return nil
 	}
-	if err := winget.EnsurePodmanOnPath(ctx); err != nil {
+	if err := winget.RefreshPath(ctx); err != nil {
 		return fmt.Errorf("failed to refresh PATH while looking for podman: %w", err)
 	}
 	if !podmanOnPath() {
@@ -236,7 +203,7 @@ func (environment *windowsHostExecutionEnvironment) Run(
 	stdout, stderr io.Writer,
 	command ...string,
 ) error {
-	if len(command) > 0 && command[0] == "podman" {
+	if len(command) > 0 && command[0] == podmanCommand {
 		if err := ensurePodmanResolvable(ctx); err != nil {
 			return err
 		}
@@ -255,7 +222,7 @@ func (*windowsHostExecutionEnvironment) Sync(
 		return err
 	}
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "podman", "machine", "ssh", "--", "sync")
+	cmd := exec.CommandContext(ctx, podmanCommand, "machine", "ssh", "--", "sync")
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
