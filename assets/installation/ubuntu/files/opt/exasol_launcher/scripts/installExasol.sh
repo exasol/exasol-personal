@@ -65,7 +65,7 @@ CCC_PLAY_DB_PASSWORD=$(quote_b64 "${db_password_b64}")
 CCC_ADMINUI_START_SERVER=true
 CCC_ADMINUI_ADMIN_PASSWORD=$(quote_b64 "${adminui_password_b64}")
 CCC_AWS_PROFILE=none
-CCC_PLAY_LICENSE=@license:personal
+CCC_PLAY_LICENSE=@license:personal-unlimited
 CCC_PLAY_VERSION_UPDATE_CHECK=${db_version_check_enabled}
 CONFEOF
 

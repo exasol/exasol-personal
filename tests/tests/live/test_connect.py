@@ -258,20 +258,35 @@ def test_connect_interactive_shows_version_and_exit_hint(
     assert re.search(r"\bExasol \d+\.\d+\.\d+\b", output) is not None
 
 
-def test_license_session_limit(shared_live_deployment: Deployment) -> None:
-    # license_session_limit is the limit defined in Exasol Personal
-    # license. This value should match it.
-    license_session_limit: Final = 20
-    exceeded_count: Final = 5  # We exceed the session limit by this amount.
+LOCAL_SESSION_LIMIT: Final = 20
+SESSIONS_BEYOND_LOCAL_LIMIT: Final = 5
 
+
+@pytest.mark.providers("local")
+def test_local_session_limit(shared_live_deployment: Deployment) -> None:
+    alive = _count_alive_sessions(
+        shared_live_deployment, LOCAL_SESSION_LIMIT + SESSIONS_BEYOND_LOCAL_LIMIT
+    )
+
+    assert alive == LOCAL_SESSION_LIMIT
+
+
+@pytest.mark.providers("aws", "azure", "exoscale", "ionos")
+def test_cloud_sessions_unlimited(shared_live_deployment: Deployment) -> None:
+    session_count: Final = LOCAL_SESSION_LIMIT + SESSIONS_BEYOND_LOCAL_LIMIT
+
+    alive = _count_alive_sessions(shared_live_deployment, session_count)
+
+    assert alive == session_count
+
+
+def _count_alive_sessions(deployment: Deployment, session_count: int) -> int:
     procs: list[subprocess.Popen[bytes]] = []
-    # Gather primitive arguments for the worker
-    launcher_path = shared_live_deployment.launcher.launcher_path
-    deployment_dir = shared_live_deployment.deployment_dir.name
+    launcher_path = deployment.launcher.launcher_path
+    deployment_dir = deployment.deployment_dir.name
 
     try:
-        # Create SESSION_LIMIT + EXCEEDED_COUNT connections.
-        for _ in range(license_session_limit + exceeded_count):
+        for _ in range(session_count):
             proc = subprocess.Popen(
                 [launcher_path, "connect", "--deployment-dir", deployment_dir],
                 stdin=subprocess.PIPE,
@@ -301,8 +316,7 @@ def test_license_session_limit(shared_live_deployment: Deployment) -> None:
                 proc.kill()
                 proc.wait(timeout=30)
 
-    # Check that we have at most license_session_limit connections alive.
-    assert alive == license_session_limit
+    return alive
 
 
 @pytest.mark.skipif(
