@@ -16,8 +16,11 @@ locals {
   datacenter_id    = one(concat(ionoscloud_datacenter.dc[*].id, data.ionoscloud_datacenter.existing[*].id))
   location         = one(concat(ionoscloud_datacenter.dc[*].location, data.ionoscloud_datacenter.existing[*].location))
   cpu_architecture = one(concat(ionoscloud_datacenter.dc[*].cpu_architecture, data.ionoscloud_datacenter.existing[*].cpu_architecture))
+
+  preferred_cpu_family = var.cpu_family != "" ? var.cpu_family : local.cpu_architecture[0].cpu_family
+  cpu_family           = terraform_data.cpu_family.output
   location_cpu = one([
-    for arch in local.cpu_architecture : arch if arch.cpu_family == var.cpu_family
+    for arch in local.cpu_architecture : arch if arch.cpu_family == local.cpu_family
   ])
 
   # Node configuration
@@ -75,6 +78,16 @@ resource "ionoscloud_lan" "public" {
   public        = true
 }
 
+# Keeps an automatically picked family for the deployment's lifetime, even if the data center's offer changes.
+resource "terraform_data" "cpu_family" {
+  input            = local.preferred_cpu_family
+  triggers_replace = [var.cpu_family]
+
+  lifecycle {
+    ignore_changes = [input]
+  }
+}
+
 # Reserved IPs keep each node's address stable across stop/start.
 resource "ionoscloud_ipblock" "ips" {
   name     = "${local.deployment_id}-ips"
@@ -88,11 +101,11 @@ resource "ionoscloud_server" "nodes" {
   lifecycle {
     precondition {
       condition     = local.location_cpu != null
-      error_message = "cpu_family '${var.cpu_family}' is not offered in ${local.location}. Available: ${join(", ", local.cpu_architecture[*].cpu_family)}."
+      error_message = "cpu_family '${local.cpu_family}' is not offered in ${local.location}. Available: ${join(", ", local.cpu_architecture[*].cpu_family)}."
     }
     precondition {
       condition     = local.location_cpu == null || (local.machine_cores <= try(local.location_cpu.max_cores, 0) && local.machine_ram_gb * 1024 <= try(local.location_cpu.max_ram, 0))
-      error_message = "instance_type '${var.instance_type}' exceeds the per-server limit of ${try(local.location_cpu.max_cores, 0)} cores / ${floor(try(local.location_cpu.max_ram, 0) / 1024)} GB RAM for ${var.cpu_family} in ${local.location}."
+      error_message = "instance_type '${var.instance_type}' exceeds the per-server limit of ${try(local.location_cpu.max_cores, 0)} cores / ${floor(try(local.location_cpu.max_ram, 0) / 1024)} GB RAM for ${local.cpu_family} in ${local.location}."
     }
     # User data and SSH keys are only applied at creation; changing them must not replace a running node.
     ignore_changes = [volume[0].user_data, ssh_keys]
@@ -104,7 +117,7 @@ resource "ionoscloud_server" "nodes" {
   type              = "ENTERPRISE"
   cores             = local.machine_cores
   ram               = local.machine_ram_gb * 1024
-  cpu_family        = var.cpu_family
+  cpu_family        = local.cpu_family
   availability_zone = "AUTO"
   image_name        = var.image_alias
   ssh_keys          = [tls_private_key.ssh_key.public_key_openssh]

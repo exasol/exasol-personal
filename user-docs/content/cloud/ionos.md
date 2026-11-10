@@ -84,7 +84,7 @@ set IONOS_TOKEN=<your-token>
 
 ## Install
 
-The default is a single node with 4 dedicated AMD EPYC cores and 16 GB RAM in `de/fra`, with
+The default is a single node with 4 dedicated cores and 16 GB RAM in `de/fra`, with
 100 GB SSD Premium volumes for the operating system and the database:
 
 ```bash
@@ -108,8 +108,10 @@ for `SSD Premium`, `SSD Standard`, or `HDD` volumes:
 exasol install ionos --location de/txl --cpu-family INTEL_ICELAKE --disk-type "SSD Standard"
 ```
 
-The launcher checks the instance type against the limits of the selected location and CPU family
-before creating servers. Contract limits are enforced by IONOS during provisioning.
+Without `--cpu-family`, the launcher uses the first CPU family that the data center offers. The
+launcher checks the instance type against the limits of the
+location and CPU family before creating servers. Contract limits are enforced by IONOS during
+provisioning.
 
 By default each deployment creates its own data center, which `exasol destroy` removes. To deploy
 into an existing data center, such as one shared by your organization, pass its ID. The location

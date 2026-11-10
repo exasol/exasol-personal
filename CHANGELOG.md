@@ -9,7 +9,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 - Added IONOS Cloud as a cloud provider. `exasol install ionos` deploys Exasol Personal on dedicated
   core servers in your IONOS Cloud contract, authenticated with an API token from `IONOS_TOKEN`.
   Nodes are sized as `<cores>x<ram_gb>` with `--instance-type`, and `--datacenter-id` deploys into an
-  existing data center instead of creating one.
+  existing data center instead of creating one. Without `--cpu-family`, the first CPU family that
+  the data center offers is used.
 
   Example: `exasol install ionos --instance-type 4x16 --data-volume-size 200`
 
