@@ -72,6 +72,14 @@ exasol install local --container-engine podman
 exasol config set --container-engine docker   # before the first start
 ```
 
+When the engine `auto` chose for a deployment that has not started cannot be used, for example
+because the Docker daemon is not running or the Podman machine cannot start, the launcher states
+why and offers the other engine in a terminal, including its installation on Windows. Accepting
+saves the other engine as the deployment's `container_engine`. Runs with `--auto-approve` or without
+a terminal, and deployments with an explicitly selected engine, keep their engine and fail with
+directions to select the other one. On Windows, `auto` passes over a Docker that runs Windows
+containers and states why it uses Podman.
+
 A deployment keeps the engine it first started on, even if Docker is installed or removed later.
 Deployments created by earlier launcher versions keep using Podman. To change the engine of a
 started deployment, destroy it first, which deletes its data. `exasol diag local` reports the

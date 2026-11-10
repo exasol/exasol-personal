@@ -4,7 +4,11 @@
 package deploy
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -209,5 +213,296 @@ func TestChooseContainerEngine_KeepsTheRecordedEngine(t *testing.T) {
 	}
 	if len(fixture.asked) != 0 {
 		t.Errorf("expected no choice for a deployment with an engine, got %+v", fixture.asked)
+	}
+}
+
+// engineRuntimeStub is a runtime on a given engine whose preparation returns
+// prepareErr and keeps the options it was given.
+type engineRuntimeStub struct {
+	*endpointRuntimeStub
+
+	engine     localinstall.ContainerEngine
+	prepareErr error
+	prepared   []localruntime.PrepareOptions
+}
+
+func (stub *engineRuntimeStub) ContainerEngine() localinstall.ContainerEngine {
+	return stub.engine
+}
+
+func (stub *engineRuntimeStub) Prepare(
+	_ context.Context, _, _ io.Writer, options localruntime.PrepareOptions,
+) error {
+	stub.prepared = append(stub.prepared, options)
+
+	return stub.prepareErr
+}
+
+type engineOfferFixture struct {
+	*engineChoiceFixture
+
+	unusable *engineRuntimeStub
+	other    *engineRuntimeStub
+	offers   []localruntime.ContainerEngineOffer
+}
+
+var errEngineNotReady = fmt.Errorf(
+	"%w: docker is not available: the daemon does not answer",
+	localruntime.ErrContainerEngineNotReady,
+)
+
+// newEngineOfferFixture prepares a deployment whose automatically chosen
+// Docker fails its readiness check on Windows, with Podman as the other
+// engine.
+func newEngineOfferFixture(
+	t *testing.T, installed ...localinstall.ContainerEngine,
+) *engineOfferFixture {
+	t.Helper()
+	fixture := &engineOfferFixture{
+		engineChoiceFixture: newEngineChoiceFixture(t, localWindowsOS, "", installed...),
+		unusable: &engineRuntimeStub{
+			endpointRuntimeStub: &endpointRuntimeStub{},
+			engine:              localinstall.EngineDocker,
+			prepareErr:          errEngineNotReady,
+		},
+		other: &engineRuntimeStub{
+			endpointRuntimeStub: &endpointRuntimeStub{},
+			engine:              localinstall.EnginePodman,
+		},
+	}
+	fixture.backend.runtime = fixture.unusable
+	fixture.backend.newRuntime = func(context.Context) (localruntime.Runtime, error) {
+		return fixture.other, nil
+	}
+	fixture.backend.engineCommandFound = fixture.backend.engineInstalled
+	fixture.backend.engineUsable = func(context.Context, localinstall.ContainerEngine) bool {
+		return true
+	}
+	fixture.backend.engineInstallOptions = func(
+		engines []localinstall.ContainerEngine,
+	) ([]localruntime.ContainerEngineOption, error) {
+		return []localruntime.ContainerEngineOption{{
+			Engine:   engines[0],
+			Commands: []localruntime.HostCommand{{Name: "winget", Args: []string{"install"}}},
+		}}, nil
+	}
+
+	return fixture
+}
+
+func (fixture *engineOfferFixture) offer(accept bool) localruntime.PrepareOptions {
+	return localruntime.PrepareOptions{
+		OfferContainerEngine: func(
+			_ context.Context, offer localruntime.ContainerEngineOffer,
+		) (bool, error) {
+			fixture.offers = append(fixture.offers, offer)
+
+			return accept, nil
+		},
+	}
+}
+
+func (fixture *engineOfferFixture) prepare(options localruntime.PrepareOptions) error {
+	return fixture.backend.offerOtherContainerEngine(
+		context.Background(), nil, nil, options, fixture.unusable, errEngineNotReady,
+	)
+}
+
+func TestOfferContainerEngine_AcceptedOfferInstallsSavesAndPreparesTheOtherEngine(t *testing.T) {
+	t.Parallel()
+	fixture := newEngineOfferFixture(t, localinstall.EngineDocker)
+
+	if err := fixture.prepare(fixture.offer(true)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(fixture.offers) != 1 {
+		t.Fatalf("expected one offer, got %+v", fixture.offers)
+	}
+	offer := fixture.offers[0]
+	if offer.Unusable != localinstall.EngineDocker ||
+		offer.Offer.Engine != localinstall.EnginePodman ||
+		!errors.Is(offer.Cause, errEngineNotReady) ||
+		len(offer.Offer.Commands) != 1 {
+		t.Errorf("expected Podman with its installation offered for Docker, got %+v", offer)
+	}
+	if saved := fixture.savedEngine(t); saved != "podman" {
+		t.Errorf("expected podman to be saved, got %q", saved)
+	}
+	if len(fixture.other.prepared) != 1 {
+		t.Fatalf("expected Podman to be prepared once, got %d", len(fixture.other.prepared))
+	}
+	approved, err := fixture.other.prepared[0].ApproveHostChange(
+		context.Background(), localruntime.HostChangeRequest{
+			Kind:   localruntime.HostChangeInstallContainerRuntime,
+			Engine: localinstall.EnginePodman,
+		},
+	)
+	if err != nil || !approved {
+		t.Errorf("expected accepting the offer to approve installing Podman, got %v %v",
+			approved, err)
+	}
+}
+
+func TestOfferContainerEngine_InstalledOtherEngineIsOfferedWithoutInstallation(t *testing.T) {
+	t.Parallel()
+	fixture := newEngineOfferFixture(
+		t, localWindowsOS, localinstall.EngineDocker, localinstall.EnginePodman,
+	)
+
+	if err := fixture.prepare(fixture.offer(true)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(fixture.offers) != 1 || len(fixture.offers[0].Offer.Commands) != 0 {
+		t.Errorf("expected an offer without installation, got %+v", fixture.offers)
+	}
+}
+
+func TestOfferContainerEngine_DeclinedOrUnattendedRunsNameTheOtherEngine(t *testing.T) {
+	t.Parallel()
+	for name, accept := range map[string]*bool{"declined": new(bool), "unattended": nil} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fixture := newEngineOfferFixture(t, localinstall.EngineDocker)
+			options := localruntime.PrepareOptions{}
+			if accept != nil {
+				options = fixture.offer(*accept)
+			}
+
+			err := fixture.prepare(options)
+
+			if !errors.Is(err, errEngineNotReady) ||
+				!strings.Contains(err.Error(), "`exasol config set --container-engine podman`") {
+				t.Fatalf("expected the cause and how to select Podman, got %v", err)
+			}
+			if saved := fixture.savedEngine(t); saved != "" {
+				t.Errorf("expected nothing to be saved, got %q", saved)
+			}
+			if len(fixture.other.prepared) != 0 {
+				t.Error("expected Podman not to be prepared")
+			}
+		})
+	}
+}
+
+func TestOfferContainerEngine_OffersOnlyAnEngineThatCanRun(t *testing.T) {
+	t.Parallel()
+	tests := map[string]func(*engineOfferFixture){
+		// Linux installs neither engine.
+		"missing on Linux": func(fixture *engineOfferFixture) {
+			fixture.backend.goos = localLinuxOS
+		},
+		"winget unavailable": func(fixture *engineOfferFixture) {
+			fixture.backend.engineInstallOptions = func(
+				[]localinstall.ContainerEngine,
+			) ([]localruntime.ContainerEngineOption, error) {
+				return nil, errors.New("winget is not available")
+			}
+		},
+	}
+	for name, arrange := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fixture := newEngineOfferFixture(t, localinstall.EngineDocker)
+			arrange(fixture)
+
+			err := fixture.prepare(fixture.offer(true))
+
+			if len(fixture.offers) != 0 {
+				t.Errorf("expected no offer, got %+v", fixture.offers)
+			}
+			if !strings.Contains(err.Error(), "--container-engine podman") {
+				t.Errorf("expected how to select Podman, got %v", err)
+			}
+		})
+	}
+}
+
+// A failure of the launcher's own files would follow the deployment to any
+// engine, so it is returned as it is.
+func TestOfferContainerEngine_FailureOutsideTheEngineIsNotOffered(t *testing.T) {
+	t.Parallel()
+	fixture := newEngineOfferFixture(t, localinstall.EngineDocker)
+	filesystemErr := errors.New("failed to create local runtime directory: permission denied")
+
+	err := fixture.backend.offerOtherContainerEngine(
+		context.Background(), nil, nil, fixture.offer(true), fixture.unusable, filesystemErr,
+	)
+
+	if len(fixture.offers) != 0 || !errors.Is(err, filesystemErr) ||
+		strings.Contains(err.Error(), "--container-engine") {
+		t.Errorf("expected the filesystem error alone and no offer, got %v and %+v",
+			err, fixture.offers)
+	}
+	if fixture.savedEngine(t) != "" || len(fixture.other.prepared) != 0 {
+		t.Error("expected the deployment to keep its engine")
+	}
+}
+
+// Selecting an engine that cannot run either would only trade one failure for
+// another, so the error does not suggest it.
+func TestOfferContainerEngine_DoesNotSuggestAnUnusableOtherEngine(t *testing.T) {
+	t.Parallel()
+	fixture := newEngineOfferFixture(t, localinstall.EngineDocker)
+	fixture.backend.engineCommandFound = func(context.Context, localinstall.ContainerEngine) bool {
+		return true
+	}
+	fixture.backend.engineUsable = func(context.Context, localinstall.ContainerEngine) bool {
+		return false
+	}
+
+	err := fixture.prepare(fixture.offer(true))
+
+	if len(fixture.offers) != 0 {
+		t.Errorf("expected no offer, got %+v", fixture.offers)
+	}
+	if !errors.Is(err, errEngineNotReady) || strings.Contains(err.Error(), "--container-engine") {
+		t.Errorf("expected only Docker's error, got %v", err)
+	}
+}
+
+func TestOfferContainerEngine_MissingChosenEngineKeepsItsError(t *testing.T) {
+	t.Parallel()
+	fixture := newEngineOfferFixture(t)
+
+	err := fixture.prepare(fixture.offer(true))
+
+	if !errors.Is(err, errEngineNotReady) || len(fixture.offers) != 0 ||
+		strings.Contains(err.Error(), "--container-engine") {
+		t.Errorf("expected the error unchanged without an offer, got %v %+v", err, fixture.offers)
+	}
+}
+
+func TestChoosesContainerEngineAutomatically_OnlyForAutoBeforeTheFirstStart(t *testing.T) {
+	t.Parallel()
+	if !newEngineChoiceFixture(t, localWindowsOS, "auto").backend.
+		choosesContainerEngineAutomatically() {
+		t.Error("expected auto to choose before the first start")
+	}
+	if newEngineChoiceFixture(t, localWindowsOS, "docker").backend.
+		choosesContainerEngineAutomatically() {
+		t.Error("expected an explicit engine to be kept")
+	}
+	recorded := newEngineChoiceFixture(t, localLinuxOS, "")
+	dataDir := filepath.Join(recorded.deployment.Resolve("local"), "runtime", "exa")
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		t.Fatalf("create database data: %v", err)
+	}
+	if recorded.backend.choosesContainerEngineAutomatically() {
+		t.Error("expected a started deployment to keep its engine")
+	}
+}
+
+func TestReportSkippedDocker_ExplainsWhyPodmanIsUsed(t *testing.T) {
+	t.Parallel()
+	fixture := newEngineOfferFixture(t)
+	fixture.backend.dockerRunsWindows = func(context.Context) bool { return true }
+	var progress bytes.Buffer
+
+	fixture.backend.reportSkippedDocker(
+		context.Background(), localruntime.PrepareOptions{Progress: &progress}, fixture.other,
+	)
+
+	if !strings.Contains(progress.String(), "Docker runs Windows containers") {
+		t.Errorf("expected the reason Docker is skipped, got %q", progress.String())
 	}
 }

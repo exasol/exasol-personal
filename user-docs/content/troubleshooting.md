@@ -40,7 +40,8 @@ switch Docker Desktop to Linux containers. If it names a Docker Engine older tha
 Docker. If it says the `docker` command reaches Podman, a Podman daemon answers in Docker's place;
 point the `docker` command at Docker with `docker context use`, or select Podman. To use Podman
 instead on a deployment that has not started yet, run
-`exasol config set --container-engine podman`.
+`exasol config set --container-engine podman`, or accept the launcher's offer of Podman when it
+chose Docker automatically.
 
 While Docker does not answer, `exasol status` reports `database_connection_failed` with a message
 that the container engine is not answering, and `exasol start` and `exasol stop` fail with this

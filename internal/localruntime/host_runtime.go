@@ -186,7 +186,7 @@ func (runtime *HostRuntime) Prepare(
 	}
 	options.engineRecorded = recorded
 	if err := runtime.preparer.EnsureReady(ctx, options); err != nil {
-		return err
+		return containerEngineNotReadyError{err: err}
 	}
 	if err := os.MkdirAll(runtime.paths.WorkDir, dirMode); err != nil {
 		return fmt.Errorf("failed to create local runtime directory: %w", err)

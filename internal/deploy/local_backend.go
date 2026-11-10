@@ -112,7 +112,9 @@ func newLocalBackendForPlatform(
 		ports:                newLocalPortAllocator(),
 		engineInstalled:      localruntime.IsContainerEngineInstalled,
 		engineCommandFound:   localruntime.ContainerEngineCommandFound,
+		engineUsable:         localruntime.IsContainerEngineUsable,
 		engineInstallOptions: localruntime.ContainerEngineInstallOptions,
+		dockerRunsWindows:    localruntime.DockerRunsWindowsContainers,
 	}
 }
 
@@ -126,9 +128,11 @@ type localBackend struct {
 	ports                localPortAllocator
 	engineInstalled      func(context.Context, localinstall.ContainerEngine) bool
 	engineCommandFound   func(context.Context, localinstall.ContainerEngine) bool
+	engineUsable         func(context.Context, localinstall.ContainerEngine) bool
 	engineInstallOptions func(
 		[]localinstall.ContainerEngine,
 	) ([]localruntime.ContainerEngineOption, error)
+	dockerRunsWindows func(context.Context) bool
 }
 
 type localPlatformCapabilities struct {
@@ -158,8 +162,16 @@ func (b *localBackend) Prepare(
 	if err != nil {
 		return err
 	}
+	automatic := b.choosesContainerEngineAutomatically()
+	if automatic {
+		b.reportSkippedDocker(ctx, options, localRuntime)
+	}
+	err = localRuntime.Prepare(ctx, out, outErr, options)
+	if err == nil || !automatic {
+		return err
+	}
 
-	return localRuntime.Prepare(ctx, out, outErr, options)
+	return b.offerOtherContainerEngine(ctx, out, outErr, options, localRuntime, err)
 }
 
 func (b *localBackend) ValidateEnvironment() error {
@@ -966,6 +978,145 @@ func (b *localBackend) chooseContainerEngineToInstall(
 	}
 
 	return options.WithInstallationApproved(chosen), nil
+}
+
+// choosesContainerEngineAutomatically reports whether `auto` picks the engine
+// of this deployment, which has not been prepared with one yet.
+func (b *localBackend) choosesContainerEngineAutomatically() bool {
+	engines := localContainerEnginesForPlatform(b.goos, b.goarch)
+	if len(engines) == 0 || b.manifest == nil {
+		return false
+	}
+	configured := ""
+	if b.manifest.Local != nil {
+		configured = b.manifest.Local.ContainerEngine
+	}
+	choice, err := parseLocalContainerEngineChoice(
+		localContainerEngineConfigName, configured, engines,
+	)
+	if err != nil || choice != localContainerEngineAuto {
+		return false
+	}
+	_, recorded, err := localruntime.RecordedContainerEngine(b.deployment)
+
+	return err == nil && !recorded
+}
+
+// reportSkippedDocker explains why `auto` uses Podman on a Windows host whose
+// Docker runs Windows containers.
+func (b *localBackend) reportSkippedDocker(
+	ctx context.Context,
+	options localruntime.PrepareOptions,
+	localRuntime localruntime.Runtime,
+) {
+	if b.goos != localWindowsOS || options.Progress == nil ||
+		containerEngineOf(localRuntime) != localinstall.EnginePodman ||
+		b.engineInstalled(ctx, localinstall.EnginePodman) || !b.dockerRunsWindows(ctx) {
+		return
+	}
+	_, _ = fmt.Fprintln(options.Progress,
+		"Docker runs Windows containers, which local deployments cannot use, so this "+
+			"deployment uses Podman. To use Docker instead, switch Docker Desktop to Linux "+
+			"containers and run `exasol config set --container-engine docker` before deploying.")
+}
+
+// offerOtherContainerEngine handles a failed preparation of the engine `auto`
+// chose: an installed engine that cannot be used. It offers the other engine
+// when it can run here and prepares it once accepted; otherwise it adds how to
+// select the other engine to cause.
+func (b *localBackend) offerOtherContainerEngine(
+	ctx context.Context,
+	out, outErr io.Writer,
+	options localruntime.PrepareOptions,
+	localRuntime localruntime.Runtime,
+	cause error,
+) error {
+	unusable := containerEngineOf(localRuntime)
+	if ctx.Err() != nil || unusable == "" ||
+		!errors.Is(cause, localruntime.ErrContainerEngineNotReady) ||
+		!b.engineInstalled(ctx, unusable) {
+		return cause
+	}
+	other, found := otherContainerEngine(
+		localContainerEnginesForPlatform(b.goos, b.goarch), unusable,
+	)
+	if !found {
+		return cause
+	}
+	otherFound := b.engineCommandFound(ctx, other)
+	if otherFound && !b.engineUsable(ctx, other) {
+		return cause
+	}
+	directions := fmt.Errorf(
+		"%w\nTo use %s for this deployment instead, run "+
+			"`exasol config set --container-engine %s` and retry",
+		cause, other, other,
+	)
+	offer, available := b.containerEngineOffer(other, otherFound)
+	if !available || options.OfferContainerEngine == nil {
+		return directions
+	}
+	accepted, err := options.OfferContainerEngine(ctx, localruntime.ContainerEngineOffer{
+		Unusable: unusable, Cause: cause, Offer: offer,
+	})
+	if err != nil {
+		return err
+	}
+	if !accepted {
+		return directions
+	}
+	if err := b.saveContainerEngine(other); err != nil {
+		return err
+	}
+	otherRuntime, err := b.localRuntime(ctx)
+	if err != nil {
+		return err
+	}
+
+	return otherRuntime.Prepare(ctx, out, outErr, options.WithInstallationApproved(other))
+}
+
+// containerEngineOffer describes how the deployment would switch to a usable
+// engine, or to a missing one, which only Windows installs.
+func (b *localBackend) containerEngineOffer(
+	engine localinstall.ContainerEngine,
+	found bool,
+) (localruntime.ContainerEngineOption, bool) {
+	if found {
+		return localruntime.ContainerEngineOption{Engine: engine}, true
+	}
+	if b.goos != localWindowsOS {
+		return localruntime.ContainerEngineOption{}, false
+	}
+	installations, err := b.engineInstallOptions([]localinstall.ContainerEngine{engine})
+	if err != nil || len(installations) == 0 {
+		return localruntime.ContainerEngineOption{}, false
+	}
+
+	return installations[0], true
+}
+
+func containerEngineOf(localRuntime localruntime.Runtime) localinstall.ContainerEngine {
+	if engineRuntime, ok := localRuntime.(interface {
+		ContainerEngine() localinstall.ContainerEngine
+	}); ok {
+		return engineRuntime.ContainerEngine()
+	}
+
+	return ""
+}
+
+func otherContainerEngine(
+	engines []localinstall.ContainerEngine,
+	engine localinstall.ContainerEngine,
+) (localinstall.ContainerEngine, bool) {
+	for _, candidate := range engines {
+		if candidate != engine {
+			return candidate, true
+		}
+	}
+
+	return "", false
 }
 
 // saveContainerEngine stores engine as the deployment's choice and selects

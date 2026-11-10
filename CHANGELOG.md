@@ -32,6 +32,12 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `exasol install local --container-engine docker`
 
+- When the container engine `auto` chose for a new local deployment is installed but cannot be
+  used, `exasol install` and `exasol deploy` state why and offer the other engine in a terminal,
+  including its installation on Windows, and keep the accepted engine as the deployment's
+  `container_engine`. Explicitly selected engines, runs with `--auto-approve`, and runs without a
+  terminal keep the engine and fail with directions to select the other one.
+
 ### Changed
 
 - The MCP sidecar is published on host port `4896` when it is free, and on

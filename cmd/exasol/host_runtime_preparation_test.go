@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -273,5 +274,62 @@ func TestHostChangeApprover_SuggestsNoAlternativeThatCannotRun(t *testing.T) {
 	if strings.Contains(errOut.String(), "--container-engine") ||
 		err == nil || strings.Contains(err.Error(), "--container-engine") {
 		t.Errorf("expected no engine to be suggested, got %q and %v", errOut.String(), err)
+	}
+}
+
+var testEngineOffer = localruntime.ContainerEngineOffer{
+	Unusable: localinstall.EngineDocker,
+	Cause:    errors.New("docker is not available: the daemon does not answer"),
+	Offer: localruntime.ContainerEngineOption{
+		Engine: localinstall.EnginePodman,
+		Commands: []localruntime.HostCommand{
+			{Name: "winget", Args: []string{"install", "--exact", "--id", "RedHat.Podman"}},
+		},
+	},
+}
+
+func TestContainerEngineOfferer_InteractiveStatesWhyAndShowsTheInstallation(t *testing.T) {
+	t.Parallel()
+
+	answers := map[string]bool{"y\n": true, "yes\n": true, "\n": false, "n\n": false, "": false}
+	for input, want := range answers {
+		cmd, errOut := newApproverTestCommand(input)
+
+		accepted, err := containerEngineOfferer(cmd, approval.ModePrompt)(
+			context.Background(), testEngineOffer,
+		)
+		if err != nil {
+			t.Fatalf("input %q: unexpected error: %v", input, err)
+		}
+		if accepted != want {
+			t.Errorf("input %q: expected %v, got %v", input, want, accepted)
+		}
+		prompt := errOut.String()
+		for _, part := range []string{
+			"Docker cannot be used: docker is not available: the daemon does not answer",
+			"can run on Podman instead",
+			"winget install --exact --id RedHat.Podman",
+			"Use Podman? [y/N]",
+		} {
+			if !strings.Contains(prompt, part) {
+				t.Errorf("input %q: expected %q in the prompt, got %q", input, part, prompt)
+			}
+		}
+	}
+}
+
+func TestContainerEngineOfferer_OnlyAPersonCanAccept(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []approval.Mode{approval.ModeApprove, approval.ModeNonInteractive} {
+		cmd, errOut := newApproverTestCommand("y\n")
+
+		accepted, err := containerEngineOfferer(cmd, mode)(context.Background(), testEngineOffer)
+		if err != nil || accepted {
+			t.Errorf("mode %q: expected the offer to be declined, got %v %v", mode, accepted, err)
+		}
+		if errOut.Len() != 0 {
+			t.Errorf("mode %q: expected no prompt, got %q", mode, errOut.String())
+		}
 	}
 }

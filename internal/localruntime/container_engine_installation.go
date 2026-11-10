@@ -78,6 +78,18 @@ func IsContainerEngineUsable(ctx context.Context, engine localinstall.ContainerE
 	}
 }
 
+// DockerRunsWindowsContainers reports whether the Docker daemon answers and
+// runs Windows containers, which `auto` passes over.
+func DockerRunsWindowsContainers(ctx context.Context) bool {
+	if resolveDocker(ctx, runtime.GOOS == string(HostPlatformWindows)) != nil ||
+		dockerIsPodman(ctx) {
+		return false
+	}
+	probe, err := probeDockerDaemon(ctx)
+
+	return err == nil && probe.osType != "" && probe.osType != dockerLinuxOSType
+}
+
 // ContainerEngineInstallOptions describes how Windows Package Manager installs
 // each of engines, in the given order.
 func ContainerEngineInstallOptions(
