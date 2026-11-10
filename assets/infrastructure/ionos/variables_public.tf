@@ -19,9 +19,9 @@ variable "instance_type" {
 }
 
 variable "cpu_family" {
-  description = "CPU family for the servers; must be offered in the selected location (e.g. AMD_EPYC, INTEL_XEON, INTEL_ICELAKE)"
+  description = "CPU family for the servers; must be offered in the selected location (e.g. AMD_EPYC, INTEL_XEON, INTEL_ICELAKE). If empty, the first family the data center offers is used"
   type        = string
-  default     = "AMD_EPYC"
+  default     = ""
 }
 
 variable "disk_type" {

@@ -17,7 +17,7 @@ Provisions Exasol Personal on IONOS Cloud dedicated core servers with Ubuntu 24.
 ## Configuration
 
 - `datacenter_id` deploys into an existing datacenter instead of creating one, for example `--datacenter-id <uuid>`. Its location then overrides `location`.
-- `instance_type` is `<cores>x<ram_gb>` (default `4x16`). It must fit the location's per-server limits for the selected `cpu_family` (default `AMD_EPYC`).
+- `instance_type` is `<cores>x<ram_gb>` (default `4x16`). It must fit the location's per-server limits for the selected `cpu_family`. If `cpu_family` is empty (default), the first family the data center offers is used and kept for the deployment's lifetime.
 - `disk_type` applies to both volumes (default `SSD Premium`). `os_volume_size` and `data_volume_size` default to 100 GB.
 - `allowed_cidr` accepts `0.0.0.0/0` or a single address as `<ip>/32`, because IONOS firewall rules match a single source IP.
 

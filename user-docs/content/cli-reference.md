@@ -270,7 +270,7 @@ Installation variable flags of preset `ubuntu`:
 Infrastructure variable flags of preset `ionos`:
       --adminui-password string   Optional Admin UI password. If empty, a random password is generated (default: "")
       --cluster-size number       Number of nodes in the cluster (use 1 for single-node deployment); each node gets its own server, data volume and reserved public IP (default: 1)
-      --cpu-family string         CPU family for the servers; must be offered in the selected location (e.g. AMD_EPYC, INTEL_XEON, INTEL_ICELAKE) (default: "AMD_EPYC")
+      --cpu-family string         CPU family for the servers; must be offered in the selected location (e.g. AMD_EPYC, INTEL_XEON, INTEL_ICELAKE). If empty, the first family the data center offers is used (default: "")
       --data-volume-size number   Size in GB for the database data volume (default: 100)
       --datacenter-id string      Optional ID of an existing IONOS datacenter to deploy into. If empty, a datacenter is created per deployment in --location (default: "")
       --db-password string        Optional database password. If empty, a random password is generated (default: "")
@@ -424,7 +424,7 @@ Installation variable flags of preset `ubuntu`:
 Infrastructure variable flags of preset `ionos`:
       --adminui-password string   Optional Admin UI password. If empty, a random password is generated (default: "")
       --cluster-size number       Number of nodes in the cluster (use 1 for single-node deployment); each node gets its own server, data volume and reserved public IP (default: 1)
-      --cpu-family string         CPU family for the servers; must be offered in the selected location (e.g. AMD_EPYC, INTEL_XEON, INTEL_ICELAKE) (default: "AMD_EPYC")
+      --cpu-family string         CPU family for the servers; must be offered in the selected location (e.g. AMD_EPYC, INTEL_XEON, INTEL_ICELAKE). If empty, the first family the data center offers is used (default: "")
       --data-volume-size number   Size in GB for the database data volume (default: 100)
       --datacenter-id string      Optional ID of an existing IONOS datacenter to deploy into. If empty, a datacenter is created per deployment in --location (default: "")
       --db-password string        Optional database password. If empty, a random password is generated (default: "")
