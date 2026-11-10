@@ -29,6 +29,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 - The MCP sidecar is published on host port `4896` when it is free, and on
   the next free port otherwise.
 
+- Cloud deployments now install Exasol 2026.1.2 by default (previously 2026.1.0). This update fixes
+  Parquet imports that never finish, such as loading the sample data with `exasol connect -f
+  sample.sql`. Existing deployments keep their version.
+
 ### Fixed
 
 - Local Podman deployments install and start again on WSL 2.6 and other kernels where Podman
