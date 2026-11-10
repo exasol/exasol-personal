@@ -53,14 +53,14 @@ func dropShim(t *testing.T, dir, name, body string) string {
 	return logPath
 }
 
-// clearPodmanPathOverride pins the winget package's PATH-additions test
-// hook to an empty value so EnsurePodmanOnPath treats it as a present
+// clearPathOverride pins the winget package's PATH-additions test
+// hook to an empty value so RefreshPath treats it as a present
 // but empty override and no-ops. Leaving it truly unset would make the
-// non-windows guard in winget.podmanPathAdditions fire and surface a
+// non-windows guard in winget.pathAdditions fire and surface a
 // test-only error into Prepare.
-func clearPodmanPathOverride(t *testing.T) {
+func clearPathOverride(t *testing.T) {
 	t.Helper()
-	t.Setenv("EXASOL_WINGET_TEST_PODMAN_PATH_ADDITIONS", "")
+	t.Setenv("EXASOL_WINGET_TEST_PATH_ADDITIONS", "")
 }
 
 // recordingApprover captures the requests it is asked to approve, so tests
@@ -87,7 +87,7 @@ func (approver *recordingApprover) options() PrepareOptions {
 
 //nolint:paralleltest // The test replaces process-wide PATH with fake binary shims.
 func TestWindowsPrepare_PodmanAlreadyPresentSkipsWinget(t *testing.T) {
-	clearPodmanPathOverride(t)
+	clearPathOverride(t)
 	dir := newIsolatedShimDir(t)
 	dropShim(t, dir, "podman", `exit 0`)
 
@@ -119,7 +119,7 @@ func TestWindowsPrepare_RegistryRefreshRecoversStalePath(t *testing.T) {
 
 	podmanDir := t.TempDir()
 	dropShim(t, podmanDir, "podman", `exit 0`)
-	t.Setenv("EXASOL_WINGET_TEST_PODMAN_PATH_ADDITIONS", podmanDir)
+	t.Setenv("EXASOL_WINGET_TEST_PATH_ADDITIONS", podmanDir)
 
 	deployment := config.NewDeploymentDir(t.TempDir())
 	hostRuntime := NewHostWindowsRuntime(deployment, nil, localinstall.EnginePodman)
@@ -145,7 +145,7 @@ func TestWindowsPrepare_ApprovedInstallInvokesWinget(t *testing.T) {
 	// (we cannot fake a Windows registry write from a shell shim), so
 	// Prepare must surface the specific "still not on PATH" error after
 	// running the approved command.
-	clearPodmanPathOverride(t)
+	clearPathOverride(t)
 	dir := newIsolatedShimDir(t)
 	wingetLog := dropShim(t, dir, "winget", `exit 0`)
 
@@ -183,7 +183,7 @@ func TestWindowsPrepare_ApprovedInstallInvokesWinget(t *testing.T) {
 
 //nolint:paralleltest // The test replaces process-wide PATH with fake binary shims.
 func TestWindowsPrepare_DeclinedInstallDoesNotRunWinget(t *testing.T) {
-	clearPodmanPathOverride(t)
+	clearPathOverride(t)
 	dir := newIsolatedShimDir(t)
 	wingetLog := dropShim(t, dir, "winget", `exit 0`)
 
@@ -210,7 +210,7 @@ func TestWindowsPrepare_DeclinedInstallDoesNotRunWinget(t *testing.T) {
 //
 //nolint:paralleltest // The test replaces process-wide PATH with fake binary shims.
 func TestWindowsPrepare_MissingApproverDeniesInstall(t *testing.T) {
-	clearPodmanPathOverride(t)
+	clearPathOverride(t)
 	dir := newIsolatedShimDir(t)
 	wingetLog := dropShim(t, dir, "winget", `exit 0`)
 
@@ -234,7 +234,7 @@ func TestWindowsPrepare_MissingApproverDeniesInstall(t *testing.T) {
 
 //nolint:paralleltest // The test replaces process-wide PATH with fake binary shims.
 func TestWindowsPrepare_WingetMissingProducesHelpfulError(t *testing.T) {
-	clearPodmanPathOverride(t)
+	clearPathOverride(t)
 	newIsolatedShimDir(t)
 
 	deployment := config.NewDeploymentDir(t.TempDir())
@@ -259,7 +259,7 @@ func TestWindowsPrepare_WingetMissingProducesHelpfulError(t *testing.T) {
 
 //nolint:paralleltest // The test replaces process-wide PATH with fake binary shims.
 func TestWindowsPrepare_WingetFailureExplainsManualFallback(t *testing.T) {
-	clearPodmanPathOverride(t)
+	clearPathOverride(t)
 	dir := newIsolatedShimDir(t)
 	dropShim(t, dir, "winget", `echo "download failed" >&2; exit 1`)
 
@@ -327,7 +327,7 @@ func TestWindowsEnsureQueryable_RecoversPodmanMissingFromProcessPath(t *testing.
 if [ "$1 $2" = "machine inspect" ]; then printf 'running\n'; exit 0; fi
 exit 1`
 	logPath := dropShim(t, podmanDir, "podman", shim)
-	t.Setenv("EXASOL_WINGET_TEST_PODMAN_PATH_ADDITIONS", podmanDir)
+	t.Setenv("EXASOL_WINGET_TEST_PATH_ADDITIONS", podmanDir)
 
 	hostRuntime := NewHostWindowsRuntime(
 		config.NewDeploymentDir(t.TempDir()), nil, localinstall.EnginePodman,
@@ -352,7 +352,7 @@ func TestWindowsExecutionEnvironment_ResolvesPodmanMissingFromProcessPath(t *tes
 	newIsolatedShimDir(t)
 	podmanDir := t.TempDir()
 	logPath := dropShim(t, podmanDir, "podman", `exit 0`)
-	t.Setenv("EXASOL_WINGET_TEST_PODMAN_PATH_ADDITIONS", podmanDir)
+	t.Setenv("EXASOL_WINGET_TEST_PATH_ADDITIONS", podmanDir)
 
 	environment := windowsHostEnvironmentPreparer{}.NewExecutionEnvironment(nil)
 

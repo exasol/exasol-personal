@@ -180,6 +180,11 @@ func (runtime *HostRuntime) Prepare(
 	_, _ io.Writer,
 	options PrepareOptions,
 ) error {
+	_, recorded, err := RecordedContainerEngine(runtime.Deployment())
+	if err != nil {
+		return err
+	}
+	options.engineRecorded = recorded
 	if err := runtime.preparer.EnsureReady(ctx, options); err != nil {
 		return err
 	}

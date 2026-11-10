@@ -104,23 +104,31 @@ func newLocalBackendForPlatform(
 	goos, goarch string,
 ) *localBackend {
 	return &localBackend{
-		deployment: deployment,
-		manifest:   manifest,
-		runtime:    localRuntime,
-		goos:       goos,
-		goarch:     goarch,
-		ports:      newLocalPortAllocator(),
+		deployment:           deployment,
+		manifest:             manifest,
+		runtime:              localRuntime,
+		goos:                 goos,
+		goarch:               goarch,
+		ports:                newLocalPortAllocator(),
+		engineInstalled:      localruntime.IsContainerEngineInstalled,
+		engineCommandFound:   localruntime.ContainerEngineCommandFound,
+		engineInstallOptions: localruntime.ContainerEngineInstallOptions,
 	}
 }
 
 type localBackend struct {
-	deployment config.DeploymentDir
-	manifest   *presets.InfrastructureManifest
-	runtime    localruntime.Runtime
-	newRuntime func(context.Context) (localruntime.Runtime, error)
-	goos       string
-	goarch     string
-	ports      localPortAllocator
+	deployment           config.DeploymentDir
+	manifest             *presets.InfrastructureManifest
+	runtime              localruntime.Runtime
+	newRuntime           func(context.Context) (localruntime.Runtime, error)
+	goos                 string
+	goarch               string
+	ports                localPortAllocator
+	engineInstalled      func(context.Context, localinstall.ContainerEngine) bool
+	engineCommandFound   func(context.Context, localinstall.ContainerEngine) bool
+	engineInstallOptions func(
+		[]localinstall.ContainerEngine,
+	) ([]localruntime.ContainerEngineOption, error)
 }
 
 type localPlatformCapabilities struct {
@@ -140,6 +148,10 @@ func (b *localBackend) Prepare(
 		return err
 	}
 	if err := b.normalizeAutomaticPorts(ctx); err != nil {
+		return err
+	}
+	options, err := b.chooseContainerEngineToInstall(ctx, options)
+	if err != nil {
 		return err
 	}
 	localRuntime, err := b.localRuntime(ctx)
@@ -215,16 +227,8 @@ func (b *localBackend) Configure(
 		return err
 	}
 
-	data, err := yaml.Marshal(b.manifest)
-	if err != nil {
-		return fmt.Errorf("failed to encode local infrastructure manifest: %w", err)
-	}
-	if err := os.WriteFile(
-		b.deployment.InfrastructureManifestPath(),
-		data,
-		localManifestFileMode,
-	); err != nil {
-		return fmt.Errorf("failed to write local infrastructure manifest: %w", err)
+	if err := b.writeManifest(); err != nil {
+		return err
 	}
 	if capabilities.vmSizing && runtimeConfig.memoryMB <= localInfraMemThresholdMB {
 		slog.Warn(localInfraMemoryNoticeText, "memory_mb", runtimeConfig.memoryMB)
@@ -903,6 +907,98 @@ func (b *localBackend) localRuntime(ctx context.Context) (localruntime.Runtime, 
 	}
 
 	return b.runtime, nil
+}
+
+// chooseContainerEngineToInstall lets the user choose the engine to install
+// when `auto` finds none on Windows, where the launcher can install either.
+// The choice is saved, so a run that stops after installing resumes on it.
+func (b *localBackend) chooseContainerEngineToInstall(
+	ctx context.Context,
+	options localruntime.PrepareOptions,
+) (localruntime.PrepareOptions, error) {
+	engines := localContainerEnginesForPlatform(b.goos, b.goarch)
+	if b.goos != localWindowsOS || len(engines) == 0 || b.manifest == nil {
+		return options, nil
+	}
+	configured := ""
+	if b.manifest.Local != nil {
+		configured = b.manifest.Local.ContainerEngine
+	}
+	choice, err := parseLocalContainerEngineChoice(
+		localContainerEngineConfigName, configured, engines,
+	)
+	if err != nil || choice != localContainerEngineAuto {
+		return options, err
+	}
+	if _, recorded, err := localruntime.RecordedContainerEngine(b.deployment); err != nil ||
+		recorded {
+		return options, err
+	}
+	for _, engine := range engines {
+		// A Docker that `auto` passes over, such as one running Windows
+		// containers, is not offered for installation.
+		if b.engineInstalled(ctx, engine) || b.engineCommandFound(ctx, engine) {
+			return options, nil
+		}
+	}
+	installOptions, err := b.engineInstallOptions(engines)
+	if err != nil {
+		return options, err
+	}
+	var chosen localinstall.ContainerEngine
+	if options.ChooseContainerEngine != nil {
+		chosen, err = options.ChooseContainerEngine(
+			ctx, localruntime.ContainerEngineChoiceRequest{Options: installOptions},
+		)
+		if err != nil {
+			return options, err
+		}
+	}
+	if !slices.Contains(engines, chosen) {
+		return options, errors.New(
+			"no container engine was chosen; install Podman or Docker Desktop, or select " +
+				"one with `exasol config set --container-engine podman` or `docker`, then " +
+				"re-run this command",
+		)
+	}
+	if err := b.saveContainerEngine(chosen); err != nil {
+		return options, err
+	}
+
+	return options.WithInstallationApproved(chosen), nil
+}
+
+// saveContainerEngine stores engine as the deployment's choice and selects
+// the runtime again for it.
+func (b *localBackend) saveContainerEngine(engine localinstall.ContainerEngine) error {
+	if b.manifest.Local == nil {
+		b.manifest.Local = &presets.InfrastructureLocal{}
+	}
+	b.manifest.Local.ContainerEngine = string(engine)
+	if err := b.writeManifest(); err != nil {
+		return err
+	}
+	if b.newRuntime != nil {
+		b.runtime = nil
+	}
+
+	return nil
+}
+
+func (b *localBackend) writeManifest() error {
+	data, err := yaml.Marshal(b.manifest)
+	if err != nil {
+		return fmt.Errorf("failed to encode local infrastructure manifest: %w", err)
+	}
+	if err := os.WriteFile(
+		b.deployment.InfrastructureManifestPath(),
+		data,
+		localManifestFileMode,
+	); err != nil {
+		return fmt.Errorf("failed to write local infrastructure manifest: %w", err)
+	}
+
+	return nil
 }
 
 // normalizeAutomaticPorts persists legacy automatic mappings before any local

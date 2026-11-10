@@ -36,6 +36,11 @@ func TestDockerPreparer_EnsureReadyChecksTheDaemon(t *testing.T) {
 			wantErr: "Docker Engine 29 or later",
 		},
 		{
+			name:    "podman answers the docker command",
+			body:    `printf 'linux 5.8.5 Podman Engine;Conmon;Engine;\n'`,
+			wantErr: "the docker command reaches Podman 5.8.5, not a Docker daemon",
+		},
+		{
 			name: "daemon unreachable", body: `printf 'permission denied\n' >&2; exit 1`,
 			wantErr: "permission denied",
 		},

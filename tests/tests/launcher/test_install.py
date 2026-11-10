@@ -553,3 +553,50 @@ def test_install_local_without_terminal_refuses_host_preparation(
 
     # And Podman was not installed
     assert not windows_podman_path().is_file()
+
+
+@pytest.mark.openspec("docker-host-runtime")
+@pytest.mark.skipif(
+    not IS_WINDOWS_LOCAL_PLATFORM,
+    reason="Only Windows offers a choice of container engine to install",
+)
+def test_install_local_without_terminal_names_the_engine_choice_flags(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    """With no engine, a run without a terminal names the flags to choose one."""
+    # Given a Windows host without an engine, where winget could install one
+    if (
+        shutil.which("podman") is not None
+        or windows_podman_path().is_file()
+        or shutil.which("docker") is not None
+    ):
+        pytest.skip("A container engine is installed, so no engine is chosen")
+    if shutil.which("winget") is None:
+        pytest.skip("winget is unavailable, so the choice is never offered")
+    deployment_dir = tmp_path / "deployment"
+
+    # When install runs without a terminal and without --auto-approve
+    result = subprocess.run(
+        [
+            exasol_path,
+            "install",
+            "local",
+            "--deployment-dir",
+            str(deployment_dir),
+            "--no-launcher-version-check",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+
+    # Then it fails and names how to proceed
+    assert result.returncode != 0
+    assert "--auto-approve" in result.stderr
+    assert "exasol config set --container-engine" in result.stderr
+
+    # And no engine was installed
+    assert not windows_podman_path().is_file()
+    assert shutil.which("docker") is None
