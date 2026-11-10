@@ -897,9 +897,14 @@ func (b *localBackend) Stop(
 func (b *localBackend) Destroy(
 	ctx context.Context,
 	out, outErr io.Writer,
+	options DestroyOptions,
 ) error {
 	localRuntime, err := b.localRuntime(ctx)
 	if err != nil {
+		return err
+	}
+	destroyed, err := b.destroyWithoutContainerEngine(ctx, localRuntime, options)
+	if destroyed || err != nil {
 		return err
 	}
 
@@ -1198,4 +1203,40 @@ func (b *localBackend) deployOrStart(
 	return startPreparedLocalRuntime(
 		ctx, localRuntime, runtimeConfig, waitTimeoutSeconds, out, outErr,
 	)
+}
+
+// destroyWithoutContainerEngine destroys a deployment whose container engine
+// command is gone once the user accepts leaving behind what that engine still
+// holds, because the engine's own cleanup cannot run. It reports whether it
+// handled the destroy.
+func (b *localBackend) destroyWithoutContainerEngine(
+	ctx context.Context,
+	localRuntime localruntime.Runtime,
+	options DestroyOptions,
+) (bool, error) {
+	engine := containerEngineOf(localRuntime)
+	remover, removable := localRuntime.(interface {
+		DestroyWithoutContainerEngine() error
+	})
+	if options.ConfirmWithoutContainerEngine == nil || engine == "" || !removable ||
+		b.engineCommandFound(ctx, engine) {
+		return false, nil
+	}
+	container, err := localinstall.ContainerName(localRuntime.Deployment())
+	if err != nil {
+		return false, err
+	}
+	confirmed, err := options.ConfirmWithoutContainerEngine(ctx, MissingContainerEngine{
+		Engine:    engine,
+		Container: container,
+		Network:   localinstall.SidecarNetworkName(container),
+	})
+	if err != nil || !confirmed {
+		return false, err
+	}
+	if err := remover.DestroyWithoutContainerEngine(); err != nil {
+		return true, err
+	}
+
+	return true, removeLocalDeploymentArtifacts(localRuntime.Deployment())
 }

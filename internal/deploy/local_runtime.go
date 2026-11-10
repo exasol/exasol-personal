@@ -295,7 +295,12 @@ func destroyLocalRuntime(
 		return sidecarErr
 	}
 
-	deployment := runtime.Deployment()
+	return removeLocalDeploymentArtifacts(runtime.Deployment())
+}
+
+// removeLocalDeploymentArtifacts deletes the files a local deployment writes
+// beside its runtime.
+func removeLocalDeploymentArtifacts(deployment config.DeploymentDir) error {
 	for _, path := range []string{
 		deployment.NodeDetailsPath(),
 		deployment.SecretsPath(),

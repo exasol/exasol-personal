@@ -206,3 +206,47 @@ def test_unattended_deploy_names_the_other_engine_when_auto_cannot_use_docker(
     assert "exasol config set --container-engine podman" in result.stderr
     # And the deployment keeps auto
     assert _configured_engine(exasol_path, deployment_dir) == "auto"
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="an empty PATH cannot hide docker on Windows, which reads the registry PATH",
+)
+@pytest.mark.parametrize("approval", [["--auto-approve"], []])
+def test_unattended_destroy_keeps_a_deployment_whose_engine_is_gone(
+    exasol_path: str, tmp_path: Path, approval: list[str]
+) -> None:
+    # Given a Docker deployment on a host where the docker command is gone
+    deployment_dir = tmp_path / "deployment"
+    _init(exasol_path, deployment_dir, "--container-engine", "docker")
+    runtime_dir = deployment_dir / "local" / "runtime"
+    runtime_dir.mkdir(parents=True)
+    record = runtime_dir / "container-engine.json"
+    record.write_text('{"engine":"docker"}')
+    data = runtime_dir / "exa" / "data"
+    data.parent.mkdir()
+    data.write_text("database")
+    empty_bin = tmp_path / "bin"
+    empty_bin.mkdir()
+    # When destroying without a person to confirm
+    result = subprocess.run(
+        [
+            exasol_path,
+            "destroy",
+            *approval,
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        stdin=subprocess.DEVNULL,
+        env={**os.environ, "PATH": str(empty_bin)},
+        check=False,
+    )
+    # Then it fails with Docker's error and keeps the deployment's files
+    assert result.returncode != 0
+    assert "failed to remove Nano container" in result.stderr
+    assert "Destroy without Docker?" not in result.stderr
+    assert record.exists()
+    assert data.exists()

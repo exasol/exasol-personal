@@ -4,6 +4,13 @@
 package main
 
 import (
+	"bufio"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+
+	"github.com/exasol/exasol-personal/internal/approval"
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/spf13/cobra"
 )
@@ -42,9 +49,10 @@ var destroyCmd = &cobra.Command{
 		cmd.SilenceUsage = true
 
 		deployment := commonFlags.Deployment()
+		mode := rootOpts.ApprovalMode()
 
 		proceed, err := confirmAction(
-			rootOpts.ApprovalMode(),
+			mode,
 			func() bool {
 				removalTarget := ""
 				if destroyOpts.Remove {
@@ -65,6 +73,9 @@ var destroyCmd = &cobra.Command{
 			cmd.Context(),
 			deployment,
 			commonFlags.DeployVerbose,
+			deploy.DestroyOptions{
+				ConfirmWithoutContainerEngine: destroyWithoutContainerEngineConfirmer(cmd, mode),
+			},
 		); err != nil {
 			return err
 		}
@@ -87,6 +98,41 @@ func destroyConfirmationPrompt(localRemovalTarget string) string {
 	prompt += "\n\nProceed with destroy? [y/N]"
 
 	return prompt
+}
+
+// destroyWithoutContainerEngineConfirmer asks whether to destroy a deployment
+// whose container engine command is gone. Only a person can accept, because
+// the engine may still hold the deployment's containers; --auto-approve and
+// runs without a terminal fail instead.
+func destroyWithoutContainerEngineConfirmer(
+	cmd *cobra.Command,
+	mode approval.Mode,
+) func(context.Context, deploy.MissingContainerEngine) (bool, error) {
+	if mode != approval.ModePrompt {
+		return nil
+	}
+
+	return func(_ context.Context, missing deploy.MissingContainerEngine) (bool, error) {
+		name := containerEngineName(missing.Engine)
+		command := string(missing.Engine)
+		writer := cmd.ErrOrStderr()
+		_, _ = fmt.Fprintf(writer, "%s is not installed, so the launcher cannot remove this "+
+			"deployment's containers and network.\n", name)
+		_, _ = fmt.Fprintf(writer, "Destroying without %s deletes the deployment's data and "+
+			"files, and leaves anything %s still holds. If %s is installed again, remove "+
+			"that with:\n", name, name, name)
+		_, _ = fmt.Fprintf(writer, "  %s rm -f $(%s ps -aq --filter name=%s)\n",
+			command, command, missing.Container)
+		_, _ = fmt.Fprintf(writer, "  %s network rm %s\n", command, missing.Network)
+		_, _ = fmt.Fprintf(writer, "Destroy without %s? [y/N]: ", name)
+
+		line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return false, fmt.Errorf("failed to read the destroy answer: %w", err)
+		}
+
+		return confirmYes(line), nil
+	}
 }
 
 // nolint: gochecknoinits

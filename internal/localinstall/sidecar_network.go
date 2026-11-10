@@ -63,7 +63,13 @@ func lacksServiceNetwork(container ContainerAttachment) bool {
 }
 
 func (runtime *SidecarRuntime) NetworkName() string {
-	return runtime.owner + "-services"
+	return SidecarNetworkName(runtime.owner)
+}
+
+// SidecarNetworkName is the network a deployment's services share, named for
+// the deployment's container.
+func SidecarNetworkName(owner string) string {
+	return owner + "-services"
 }
 
 func (runtime *SidecarRuntime) EnsureNetwork(ctx context.Context) error {
