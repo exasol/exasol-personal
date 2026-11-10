@@ -223,7 +223,7 @@ Infrastructure variable flags of preset `aws`:
       --volume-type string        EBS volume type for both OS and data volumes (default: "gp3")
 
 Installation variable flags of preset `ubuntu`:
-      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.2)
       --no-db-version-check     Disable the daily database version check (C4). (default: false)
 ```
 
@@ -242,7 +242,7 @@ Infrastructure variable flags of preset `azure`:
       --os-volume-size number     Size in GB for the OS disk (default: 100)
 
 Installation variable flags of preset `ubuntu`:
-      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.2)
       --no-db-version-check     Disable the daily database version check (C4). (default: false)
 ```
 
@@ -260,7 +260,7 @@ Infrastructure variable flags of preset `exoscale`:
       --zone string               Exoscale zone to deploy into (e.g. ch-gva-2, de-fra-1, de-muc-1, at-vie-1, at-vie-2, bg-sof-1). Set via TF_VAR_zone environment variable. (default: "ch-gva-2")
 
 Installation variable flags of preset `ubuntu`:
-      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.2)
       --no-db-version-check     Disable the daily database version check (C4). (default: false)
 ```
 
@@ -280,7 +280,7 @@ Infrastructure variable flags of preset `ionos`:
       --os-volume-size number     Size in GB for the OS/root volume (default: 100)
 
 Installation variable flags of preset `ubuntu`:
-      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.2)
       --no-db-version-check     Disable the daily database version check (C4). (default: false)
 ```
 
@@ -308,7 +308,7 @@ Infrastructure variable flags of preset `stackit`:
       --volume-performance-class string   Performance class for both OS and data volumes (default: "storage_premium_perf6")
 
 Installation variable flags of preset `ubuntu`:
-      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.2)
       --no-db-version-check     Disable the daily database version check (C4). (default: false)
 ```
 
@@ -377,7 +377,7 @@ Infrastructure variable flags of preset `aws`:
       --volume-type string        EBS volume type for both OS and data volumes (default: "gp3")
 
 Installation variable flags of preset `ubuntu`:
-      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.2)
       --no-db-version-check     Disable the daily database version check (C4). (default: false)
 ```
 
@@ -396,7 +396,7 @@ Infrastructure variable flags of preset `azure`:
       --os-volume-size number     Size in GB for the OS disk (default: 100)
 
 Installation variable flags of preset `ubuntu`:
-      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.2)
       --no-db-version-check     Disable the daily database version check (C4). (default: false)
 ```
 
@@ -414,7 +414,7 @@ Infrastructure variable flags of preset `exoscale`:
       --zone string               Exoscale zone to deploy into (e.g. ch-gva-2, de-fra-1, de-muc-1, at-vie-1, at-vie-2, bg-sof-1). Set via TF_VAR_zone environment variable. (default: "ch-gva-2")
 
 Installation variable flags of preset `ubuntu`:
-      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.2)
       --no-db-version-check     Disable the daily database version check (C4). (default: false)
 ```
 
@@ -434,7 +434,7 @@ Infrastructure variable flags of preset `ionos`:
       --os-volume-size number     Size in GB for the OS/root volume (default: 100)
 
 Installation variable flags of preset `ubuntu`:
-      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.2)
       --no-db-version-check     Disable the daily database version check (C4). (default: false)
 ```
 
@@ -462,7 +462,7 @@ Infrastructure variable flags of preset `stackit`:
       --volume-performance-class string   Performance class for both OS and data volumes (default: "storage_premium_perf6")
 
 Installation variable flags of preset `ubuntu`:
-      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.0)
+      --exasol-version string   Exasol database version to install. Only change this if you are sure the release is compatible. (default: 2026.1.2)
       --no-db-version-check     Disable the daily database version check (C4). (default: false)
 ```
 
