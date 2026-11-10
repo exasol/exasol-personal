@@ -652,3 +652,21 @@ func TestHostRuntimePrepare_MarksOnlyReadinessFailures(t *testing.T) {
 		t.Errorf("expected a filesystem failure without the readiness mark, got %v", filesystem)
 	}
 }
+
+//nolint:paralleltest // The test replaces process-wide PATH with fake binary shims.
+func TestHostRuntimeDestroyWithoutContainerEngine_RemovesTheRuntimeFiles(t *testing.T) {
+	newIsolatedShimDir(t)
+	deployment := config.NewDeploymentDir(t.TempDir())
+	paths := newRuntimePaths(deployment)
+	writeLinuxRuntimeTestFile(t, filepath.Join(paths.WorkDir, nanoDataDirName, "data"), "db")
+	writeLinuxRuntimeTestFile(t, containerEngineMarkerPath(paths), `{"engine":"docker"}`)
+
+	err := NewHostLinuxRuntime(deployment, nil, localinstall.EngineDocker).
+		DestroyWithoutContainerEngine()
+	if err != nil {
+		t.Fatalf("DestroyWithoutContainerEngine() unexpected error: %v", err)
+	}
+	if _, err := os.Stat(paths.Root); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("expected %s to be removed, got %v", paths.Root, err)
+	}
+}

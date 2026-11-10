@@ -546,6 +546,7 @@ func (b *tofuBackend) Stop(
 func (b *tofuBackend) Destroy(
 	ctx context.Context,
 	out, outErr io.Writer,
+	_ DestroyOptions,
 ) error {
 	if !b.hasTofu() {
 		slog.Info("no tofu configuration defined; skipping destroy")

@@ -231,6 +231,14 @@ exasol diag unlock
 Unlocking a directory that another process is still using can leave the deployment in an
 inconsistent state, so check first.
 
+### `failed to remove Nano container` after uninstalling the container engine
+
+The deployment's engine command is gone, so the launcher cannot remove its containers. Run
+`exasol destroy` in a terminal: it asks whether to destroy the deployment without the engine, which
+deletes the deployment's data and files and shows the commands that remove its containers and
+network if the engine is installed again. Runs with `--auto-approve` or without a terminal fail
+instead, because the engine may still hold the deployment's containers.
+
 ### Resources were removed outside the launcher
 
 If deployment resources no longer exist or cannot be reached through the launcher, remove only the

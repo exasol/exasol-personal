@@ -292,6 +292,30 @@ func (runtime *HostRuntime) Destroy(ctx context.Context, out, outErr io.Writer) 
 	return nil
 }
 
+// DestroyWithoutContainerEngine removes the deployment's runtime files for a
+// deployment whose container engine command is gone. Whatever that engine
+// still holds stays behind.
+func (runtime *HostRuntime) DestroyWithoutContainerEngine() error {
+	dataDir := filepath.Join(runtime.paths.WorkDir, nanoDataDirName)
+	quarantined, err := localinstall.HostQuarantinedDataDirs(dataDir)
+	if err != nil {
+		return fmt.Errorf("failed to remove deployment data %s: %w", dataDir, err)
+	}
+	for _, dir := range append([]string{dataDir}, quarantined...) {
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf(
+				"failed to remove deployment data %s; delete it with administrator "+
+					"rights, then re-run this command: %w", dir, err,
+			)
+		}
+	}
+	if err := removeRuntimeFiles(runtime.paths); err != nil {
+		return fmt.Errorf("failed to remove local runtime files %s: %w", runtime.paths.Root, err)
+	}
+
+	return nil
+}
+
 // removeNanoData deletes the database's data and the data recovery set aside.
 // A rootful engine leaves files there that only a container can delete.
 func removeNanoData(

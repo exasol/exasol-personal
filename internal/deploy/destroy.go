@@ -15,10 +15,15 @@ import (
 )
 
 //nolint:revive
-func Destroy(ctx context.Context, deployment config.DeploymentDir, verbose bool) error {
+func Destroy(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	verbose bool,
+	options DestroyOptions,
+) error {
 	if err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
-			return destroyLocked(ctx, deployment, verbose)
+			return destroyLocked(ctx, deployment, verbose, options)
 		}); err != nil {
 		return err
 	}
@@ -26,7 +31,13 @@ func Destroy(ctx context.Context, deployment config.DeploymentDir, verbose bool)
 	return nil
 }
 
-func destroyLocked(ctx context.Context, deployment config.DeploymentDir, verbose bool) error {
+//nolint:revive // verbose mirrors the command-level --verbose flag.
+func destroyLocked(
+	ctx context.Context,
+	deployment config.DeploymentDir,
+	verbose bool,
+	options DestroyOptions,
+) error {
 	slog.Info("Destroying deployment and releasing all resources")
 
 	exasolState, err := config.ReadExasolPersonalState(deployment)
@@ -41,7 +52,7 @@ func destroyLocked(ctx context.Context, deployment config.DeploymentDir, verbose
 		slog.Error("failed to set workflow state to in-progress", "error", err.Error())
 	}
 
-	return runDestroyBackend(ctx, exasolState, deployment, verbose)
+	return runDestroyBackend(ctx, exasolState, deployment, verbose, options)
 }
 
 // runDestroyBackend registers the interruption signal handler, invokes the
@@ -56,6 +67,7 @@ func runDestroyBackend(
 	exasolState *config.ExasolPersonalState,
 	deployment config.DeploymentDir,
 	verbose bool,
+	options DestroyOptions,
 ) error {
 	// Register signal handler for catching interruptions and set state
 	// in case of interruption
@@ -87,6 +99,7 @@ func runDestroyBackend(
 		ctx,
 		externalCommandStandardOut,
 		externalCommandStandardOut,
+		options,
 	); err != nil {
 		unregister()
 

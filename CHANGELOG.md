@@ -56,6 +56,11 @@ Notable user-facing changes to Exasol Personal are documented here.
   is no longer reported as an outdated Docker Engine. With `container_engine` set to `auto`, the
   launcher uses Podman for it, and a `docker` deployment fails with a message that names Podman.
 
+- `exasol destroy` in a terminal can destroy a local deployment whose container engine was
+  uninstalled. After confirmation it deletes the deployment's data and files, and names the
+  commands that remove the containers and network the engine may still hold. Runs with
+  `--auto-approve` or without a terminal still fail.
+
 - Local Podman deployments install and start again on WSL 2.6 and other kernels where Podman
   cannot set up the deployment network. The database starts without that network, and sidecars,
   which need it, report the failure with a call to action: on Windows and inside WSL, run

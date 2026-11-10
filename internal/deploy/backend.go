@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/localinstall"
 	"github.com/exasol/exasol-personal/internal/localruntime"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/runtimeartifacts"
@@ -67,6 +68,23 @@ type StartOptions struct {
 	RuntimePreparation localruntime.PrepareOptions
 }
 
+// DestroyOptions carries the decisions a destroy may need from the user.
+type DestroyOptions struct {
+	// ConfirmWithoutContainerEngine asks whether to destroy a local deployment
+	// whose container engine command is gone. Without it, such a destroy
+	// fails.
+	ConfirmWithoutContainerEngine func(context.Context, MissingContainerEngine) (bool, error)
+}
+
+// MissingContainerEngine names what a destroy leaves on a container engine
+// whose command is gone. The deployment's service containers carry its
+// container's name as a prefix.
+type MissingContainerEngine struct {
+	Engine    localinstall.ContainerEngine
+	Container string
+	Network   string
+}
+
 // deploymentBackend exposes the lifecycle and configuration operations the
 // launcher needs from an infrastructure backend, bound to a specific
 // deployment directory and its infrastructure manifest.
@@ -102,7 +120,7 @@ type deploymentBackend interface {
 		ctx context.Context, out, outErr io.Writer, waitTimeoutSeconds int,
 	) DeploymentLifecycleResult
 	Stop(ctx context.Context, out, outErr io.Writer) DeploymentLifecycleResult
-	Destroy(ctx context.Context, out, outErr io.Writer) error
+	Destroy(ctx context.Context, out, outErr io.Writer, options DestroyOptions) error
 }
 
 func resolveBackendKind(manifest *presets.InfrastructureManifest) (string, error) {

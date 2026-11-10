@@ -670,7 +670,7 @@ func TestDestroyThenRemoveLocalDeploymentDirectoryRemovesLocalFiles(t *testing.T
 	writeMinimalInitializedDeployment(t, deployment)
 
 	// When
-	if err := Destroy(testManagerContext(t), deployment, false); err != nil {
+	if err := Destroy(testManagerContext(t), deployment, false, DestroyOptions{}); err != nil {
 		t.Fatalf("destroy failed: %v", err)
 	}
 	if err := RemoveLocalDeploymentDirectory(testManagerContext(t), deployment); err != nil {
@@ -717,7 +717,7 @@ backend: unknown
 	}
 
 	// When
-	destroyErr := Destroy(testManagerContext(t), deployment, false)
+	destroyErr := Destroy(testManagerContext(t), deployment, false, DestroyOptions{})
 
 	// Then
 	if destroyErr == nil {
