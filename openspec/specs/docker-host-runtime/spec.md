@@ -27,7 +27,7 @@ The system SHALL run a fresh Linux or Windows local deployment whose `container_
 
 #### Scenario: Docker runs only Windows containers
 - **WHEN** a user installs a fresh local deployment on Windows with `container_engine` set to `auto`, Podman is not installed, and the Docker daemon reports that it runs Windows containers
-- **THEN** the launcher prepares and uses host Podman
+- **THEN** the launcher states that Docker runs Windows containers, and prepares and uses host Podman
 
 ### Requirement: Users can select the container engine
 The system SHALL offer a `container_engine` local configuration option on Linux and Windows with the values `auto`, `docker`, and `podman`, defaulting to `auto`, and SHALL run a deployment on an explicitly selected engine, failing with guidance that names that engine when it cannot be used.
@@ -213,3 +213,26 @@ The system SHALL, on Windows, install the container engine a new local deploymen
 #### Scenario: Docker was installed after the terminal opened
 - **WHEN** Docker Desktop was installed after the terminal running the launcher was opened
 - **THEN** a deployment whose `container_engine` is `docker` runs through Docker
+
+### Requirement: An unusable automatic engine choice can be replaced before the first start
+The system SHALL, when the engine `auto` chose for a local deployment without a recorded engine fails its readiness check and the other engine can run on the host, state why in an interactive run and offer the other engine, including its installation on Windows when it is missing, and SHALL save the accepted engine as the deployment's `container_engine` and run the deployment on it.
+
+#### Scenario: User accepts the other engine
+- **WHEN** a user deploys interactively, the engine `auto` chose fails its readiness check, and the user accepts the offered engine
+- **THEN** Nano runs through the offered engine, and `exasol config get container_engine` prints that engine
+
+#### Scenario: Other engine is missing on Windows
+- **WHEN** the engine `auto` chose on Windows fails its readiness check and the other engine is not installed
+- **THEN** the offer lists the other engine's installation, and accepting it installs that engine and runs Nano through it
+
+#### Scenario: User declines the other engine
+- **WHEN** a user declines the offered engine
+- **THEN** the command fails with the chosen engine's error and the `exasol config set --container-engine` command that selects the other engine
+
+#### Scenario: Run without a person to answer
+- **WHEN** the engine `auto` chose fails its readiness check in a run with `--auto-approve` or without a terminal, and the other engine is usable or not installed
+- **THEN** the command fails with the chosen engine's error and the `exasol config set --container-engine` command that selects the other engine
+
+#### Scenario: Other engine cannot run either
+- **WHEN** the engine `auto` chose fails its readiness check and the other engine is installed but also fails its readiness check
+- **THEN** the command fails with the chosen engine's error alone
