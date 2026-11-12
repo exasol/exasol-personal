@@ -77,7 +77,7 @@ def _localhost_loopback_addresses() -> list[_LoopbackAddress]:
         type=socket.SOCK_STREAM,
         proto=socket.IPPROTO_TCP,
     ):
-        if family not in (socket.AF_INET, socket.AF_INET6):
+        if int(family) not in (socket.AF_INET, socket.AF_INET6):
             continue
         address_parts = cast("tuple[object, ...]", sockaddr)
         host = str(address_parts[0])
