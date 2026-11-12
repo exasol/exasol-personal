@@ -55,6 +55,26 @@ func TestParseLocalParquetTableRecognizesSupportedForm(t *testing.T) {
 				Schema: "\u2160S\u00B7X", Table: "TABLE\u0301\u203F1", Path: "f",
 			},
 		},
+		{
+			name:     "quoted identifiers",
+			sql:      `CREATE TABLE "PQ"."SALES" AS (IMPORT FROM LOCAL PARQUET FILE 'f')`,
+			expected: LocalParquetTable{Schema: "PQ", Table: "SALES", Path: "f"},
+		},
+		{
+			name:     "quoted table keeps its case and spaces",
+			sql:      `CREATE TABLE pq."Sales Q" AS (IMPORT FROM LOCAL PARQUET FILE 'f')`,
+			expected: LocalParquetTable{Schema: "PQ", Table: "Sales Q", Path: "f"},
+		},
+		{
+			name:     "quoted schema keeps its case and spaces",
+			sql:      `CREATE TABLE "My Schema".sales AS (IMPORT FROM LOCAL PARQUET FILE 'f')`,
+			expected: LocalParquetTable{Schema: "My Schema", Table: "SALES", Path: "f"},
+		},
+		{
+			name:     "escaped quote in identifier",
+			sql:      `CREATE TABLE s."a""b" AS (IMPORT FROM LOCAL PARQUET FILE 'f')`,
+			expected: LocalParquetTable{Schema: "S", Table: `a"b`, Path: "f"},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -85,8 +105,13 @@ func TestParseLocalParquetTableRejectsUnsupportedShapes(t *testing.T) {
 			sql:  "CREATE TABLE t AS (IMPORT FROM LOCAL PARQUET FILE '/f.parquet')",
 		},
 		{
-			name: "quoted identifiers",
-			sql:  `CREATE TABLE "s"."t" AS (IMPORT FROM LOCAL PARQUET FILE '/f.parquet')`,
+			name: "empty quoted identifier",
+			sql:  `CREATE TABLE s."" AS (IMPORT FROM LOCAL PARQUET FILE '/f.parquet')`,
+		},
+		{
+			name: "quoted identifier longer than 128 characters",
+			sql: `CREATE TABLE s."` + strings.Repeat("t", 129) +
+				`" AS (IMPORT FROM LOCAL PARQUET FILE '/f.parquet')`,
 		},
 		{
 			name: "identifier starting with a digit",

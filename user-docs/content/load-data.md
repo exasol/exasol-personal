@@ -55,7 +55,8 @@ table, use `IMPORT INTO <table> FROM LOCAL PARQUET FILE '<path>'`.
 
 The statement has these limitations:
 
-- The table name includes a schema and both names are unquoted.
+- The table name includes a schema. Quoted names keep their case and spaces, but the schema
+  name contains only letters, digits and underscores, even when quoted.
 - The path contains only ASCII letters, digits, spaces and `: < > / . _ - ~`, so on Windows
   separate folders with `/`.
 - Column sizes can differ from those Exasol infers for the same file in object storage. For

@@ -61,6 +61,11 @@ Notable user-facing changes to Exasol Personal are documented here.
 - On macOS, sidecar status reports no endpoint for a port whose forward is
   not open, instead of an address inside the local VM.
 
+- `exasol connect` accepts quoted schema and table names when creating a table from a local
+  Parquet file, keeping their case and spaces. Schema names with spaces are not supported yet.
+
+  Example: `CREATE TABLE PQ."Sales Q" AS (IMPORT FROM LOCAL PARQUET FILE 'sales.parquet')`
+
 ### Breaking Changes
 
 - Launcher-managed files move from `~/.exasol/personal` to platform-specific

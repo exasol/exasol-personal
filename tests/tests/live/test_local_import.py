@@ -300,6 +300,38 @@ def test_create_table_from_local_parquet_infers_schema(
     sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
 )
 @pytest.mark.openspec("local-parquet-import")
+def test_create_table_from_local_parquet_keeps_quoted_names(
+    reusable_live_deployment: Deployment,
+    tmp_path: Path,
+) -> None:
+    """Quoted schema and table names keep their case and spaces."""
+    # ========== GIVEN ==========
+    local_only = _client_only_parquet(tmp_path)
+    schema = f"Parquet_Quoted_{uuid.uuid4().hex[:8]}"
+    table = f'"{schema}"."Sales Q"'
+    try:
+        statements = [
+            f'CREATE SCHEMA "{schema}";',
+            _inferred_table_statement(table, local_only),
+            f'SELECT "id", "name" FROM {table} ORDER BY "id";',  # noqa: S608 - test-generated identifier
+        ]
+
+        # ========== WHEN ==========
+        proc = reusable_live_deployment.connect(
+            "--command", "\n".join(statements), capture_output=True
+        )
+
+        # ========== THEN ==========
+        assert proc.returncode == 0, f"Quoted-name import failed: {proc.stderr!r}"
+        assert "gamma" in proc.stdout
+    finally:
+        _drop_schema(reusable_live_deployment, f'"{schema}"')
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="Test is not supported on Windows OS"
+)
+@pytest.mark.openspec("local-parquet-import")
 def test_create_or_replace_table_from_local_parquet_replaces_table(
     reusable_live_deployment: Deployment,
     tmp_path: Path,
