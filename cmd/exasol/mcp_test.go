@@ -51,8 +51,10 @@ func TestFormatMCPInstructions(t *testing.T) {
 		formatMCPInstructions(file))
 }
 
+//nolint:paralleltest // queues guidance on the process-global terminal message queue
 func TestMCPInstructionsRejectsUnknownClients(t *testing.T) {
-	t.Parallel()
+	resetTerminalMessages()
+	t.Cleanup(resetTerminalMessages)
 	// Given
 	command := newMCPInstructionsCommand(&CommonFlags{})
 	// When
@@ -62,8 +64,10 @@ func TestMCPInstructionsRejectsUnknownClients(t *testing.T) {
 	require.ErrorContains(t, err, "instructions are available for: claude-code")
 }
 
+//nolint:paralleltest // queues guidance on the process-global terminal message queue
 func TestRequireMCPDeploymentNamesTheUninitializedDirectory(t *testing.T) {
-	t.Parallel()
+	resetTerminalMessages()
+	t.Cleanup(resetTerminalMessages)
 	// Given
 	deployment := config.NewDeploymentDir(t.TempDir())
 	// When
