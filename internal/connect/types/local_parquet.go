@@ -124,9 +124,9 @@ func matchLocalParquetImport(tokens []sqlToken) (*LocalParquetTable, bool) {
 	}
 
 	pattern := []func(sqlToken) bool{
-		isRegularIdentifier,
+		isIdentifier,
 		symbol("."),
-		isRegularIdentifier,
+		isIdentifier,
 		keyword("AS"),
 		symbol("("),
 		keyword("IMPORT"),
@@ -146,11 +146,10 @@ func matchLocalParquetImport(tokens []sqlToken) (*LocalParquetTable, bool) {
 		}
 	}
 
-	return &LocalParquetTable{
-		Schema: strings.ToUpper(tokens[0].value),
-		Table:  strings.ToUpper(tokens[2].value),
-		Path:   tokens[10].value,
-	}, true
+	schema, _ := identifierValue(tokens[0])
+	table, _ := identifierValue(tokens[2])
+
+	return &LocalParquetTable{Schema: schema, Table: table, Path: tokens[10].value}, true
 }
 
 func keyword(word string) func(sqlToken) bool {
@@ -159,6 +158,25 @@ func keyword(word string) func(sqlToken) bool {
 
 func symbol(value string) func(sqlToken) bool {
 	return func(token sqlToken) bool { return token.isSymbol(value) }
+}
+
+func isIdentifier(token sqlToken) bool {
+	_, ok := identifierValue(token)
+
+	return ok
+}
+
+// Unquoted names are upper-cased and double-quoted names keep their spelling.
+func identifierValue(token sqlToken) (string, bool) {
+	if isRegularIdentifier(token) {
+		return strings.ToUpper(token.value), true
+	}
+	length := len([]rune(token.value))
+	if token.kind == tokenQuotedIdentifier && length > 0 && length <= maxIdentifierLength {
+		return token.value, true
+	}
+
+	return "", false
 }
 
 // Exasol's grammar for unquoted identifiers, which the driver also enforces.
