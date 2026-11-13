@@ -35,7 +35,7 @@ func TestMultiNodeConnection_TransportFailoverAndCertificatePinning(t *testing.T
 			port := databaseTestServerPort(t, server)
 			fingerprint := sha256.Sum256(server.Certificate().Raw)
 			info := &config.ConnectionInfo{
-				Host: "localhost", DBPort: port, MultiNode: true,
+				Host: "localhost", DBPort: 1, AllowAllNodes: true,
 				CertFingerprint: hex.EncodeToString(fingerprint[:]),
 				Endpoints: []config.ConnectionEndpoint{
 					{Node: "n11", Host: "localhost", DBPort: port, Eligible: true},
@@ -72,7 +72,7 @@ func TestMultiNodeConnection_RejectsMismatchingCertificates(t *testing.T) {
 	server, attempts := newDatabaseTestServer(t, "")
 	port := databaseTestServerPort(t, server)
 	info := &config.ConnectionInfo{
-		Host: "localhost", DBPort: port, MultiNode: true,
+		Host: "localhost", DBPort: port, AllowAllNodes: true,
 		CertFingerprint: strings.Repeat("0", 64),
 		Endpoints: []config.ConnectionEndpoint{
 			{Host: "localhost", DBPort: port, Eligible: true},

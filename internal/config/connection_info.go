@@ -17,7 +17,7 @@ type ConnectionInfo struct {
 	ClusterState               string
 	Host                       string
 	Endpoints                  []ConnectionEndpoint
-	MultiNode                  bool
+	AllowAllNodes              bool
 	DisplayHost                string
 	DBPort                     int
 	UIPort                     int
@@ -54,11 +54,16 @@ func (info *DeploymentInfo) ConnectionInfo(deployment DeploymentDir) (*Connectio
 		return nil, err
 	}
 
+	allowAllNodes, err := deploymentAllowsAllNodes(deployment, info.Backend)
+	if err != nil {
+		return nil, err
+	}
+
 	host := strings.TrimSpace(info.Connection.Host)
-	if host == "" {
+	if host == "" && !allowAllNodes {
 		return nil, errors.New("deployment connection host is missing")
 	}
-	if info.Connection.DBPort <= 0 {
+	if info.Connection.DBPort <= 0 && !allowAllNodes {
 		return nil, errors.New("deployment database port is missing")
 	}
 
@@ -73,10 +78,6 @@ func (info *DeploymentInfo) ConnectionInfo(deployment DeploymentDir) (*Connectio
 	}
 
 	certFingerPrint := resolveConnectionCertFingerprint(info)
-	multiNode, err := deploymentAllowsAllNodes(deployment, info.Backend)
-	if err != nil {
-		return nil, err
-	}
 
 	return &ConnectionInfo{
 		DeploymentName:             info.DeploymentId,
@@ -84,8 +85,8 @@ func (info *DeploymentInfo) ConnectionInfo(deployment DeploymentDir) (*Connectio
 		ClusterSize:                info.ClusterSize,
 		ClusterState:               info.ClusterState,
 		Host:                       host,
-		Endpoints:                  info.connectionEndpoints(multiNode),
-		MultiNode:                  multiNode,
+		Endpoints:                  info.connectionEndpoints(allowAllNodes),
+		AllowAllNodes:              allowAllNodes,
 		DisplayHost:                displayHost,
 		DBPort:                     info.Connection.DBPort,
 		UIPort:                     info.Connection.UIPort,

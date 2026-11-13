@@ -7,7 +7,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 ### Added
 
 - `exasol info` and `exasol info --json` list public database node endpoints with an `eligible`
-  flag derived from saved configuration. Eligibility does not indicate current network availability.
+  flag derived from saved installation policy and infrastructure endpoint outputs. Eligibility
+  does not indicate current network availability.
   Existing single-host connection fields remain available, and connection instructions include a
   multi-host server list when the deployment supports it.
 
@@ -46,8 +47,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 ### Changed
 
 - New cloud deployments accept any number of database sessions, and `exasol connect` can use
-  every public database node with the shared certificate fingerprint. Deployments without recorded
-  multi-node support keep using their primary host; deployments created by earlier launcher
+  the public database endpoints exposed by the infrastructure preset with the shared certificate
+  fingerprint. Deployments without recorded multi-node support keep using their primary host; deployments created by earlier launcher
   versions keep their session limit.
 
 - The MCP sidecar is published on host port `4896` when it is free, and on

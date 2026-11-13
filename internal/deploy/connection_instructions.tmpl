@@ -13,21 +13,22 @@ Cluster State: {{ .ClusterState }}
 {{- end }}
 {{- end }}
 {{- with .Connection }}
-{{- with .Endpoints }}
 
 Database node endpoints (saved eligibility; reachability not checked):
-{{- range . }}
+{{- range .Endpoints }}
   {{ if .Node }}{{ .Node }}: {{ end }}{{ .Host }}:{{ .DBPort }} ({{ if .Eligible }}eligible{{ else }}topology only{{ end }})
-{{- end }}
+{{- else }}
+  No public database endpoints are recorded by the infrastructure preset.
 {{- end }}
 
+{{- if .ClientEndpoint }}
 === How to Connect from a Graphical SQL Client ===
 To connect using a client of your choice:
 1. Create a new database connection.
 2. Choose 'Exasol' as the driver.
 3. Enter the following values below in 'Database':
-  - Server: {{ .DisplayHostname }}
-  - Port: {{ .DBPort }}
+  - Server: {{ .ClientEndpoint.Host }}
+  - Port: {{ .ClientEndpoint.DBPort }}
   - UserId: {{ .Username }}
 {{- if .CertFingerprint }}
   - Certificate Fingerprint: {{ .CertFingerprint }}
@@ -38,7 +39,8 @@ To connect using a client of your choice:
 {{- if .MultiHost }}
 
 Multi-host server list: {{ .MultiHost }}
-Use port {{ .DBPort }} and the certificate fingerprint above for every server.
+Use port {{ .ClientEndpoint.DBPort }} and the certificate fingerprint above for every server.
+{{- end }}
 {{- end }}
 
 === CLI Connection Instructions ===
