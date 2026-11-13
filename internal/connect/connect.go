@@ -133,6 +133,10 @@ func NewExasolConnection(
 	if connectionInfo == nil {
 		return nil, errors.New("reading deployment connection info: missing connection info")
 	}
+	hosts, err := databaseHosts(connectionInfo)
+	if err != nil {
+		return nil, err
+	}
 
 	databaseOptFns := append([]exasol.OptFn{}, optFns...)
 	if insecureSkipCertValidation || connectionInfo.InsecureSkipCertValidation {
@@ -142,7 +146,7 @@ func NewExasolConnection(
 	database, err := exasol.New(
 		username,
 		password,
-		connectionInfo.Host,
+		hosts,
 		connectionInfo.CertFingerprint,
 		connectionInfo.DBPort,
 		databaseOptFns...,
@@ -154,7 +158,7 @@ func NewExasolConnection(
 	slog.Debug(
 		"connecting to database",
 		"username", username,
-		"host", connectionInfo.Host,
+		"host", hosts,
 		"port", connectionInfo.DBPort,
 		"insecure_skip_cert_validation", insecureSkipCertValidation,
 	)

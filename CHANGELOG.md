@@ -44,8 +44,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
-- New cloud deployments accept any number of database sessions. Deployments created by earlier
-  launcher versions keep their session limit.
+- New cloud deployments accept any number of database sessions, and `exasol connect` can use
+  every public database node with the shared certificate fingerprint. Deployments without recorded
+  multi-node support keep using their primary host; deployments created by earlier launcher
+  versions keep their session limit.
 
 - The MCP sidecar is published on host port `4896` when it is free, and on
   the next free port otherwise.

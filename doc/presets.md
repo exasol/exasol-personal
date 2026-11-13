@@ -18,6 +18,19 @@ An installation preset defines *how* Exasol is installed and configured on provi
 
 An installation preset may be fully launcher-driven (remote orchestration), fully unattended (node-local orchestration + launcher monitoring), or a hybrid. The launcher treats the preset as the source of truth for what happens during installation.
 
+## Database connection support
+
+An installation preset can declare `databaseConnection.allowAllNodes: true` when its installed
+license permits logins on every database node. The launcher reads this declaration from the
+installation manifest copied into the deployment directory at initialization. An omitted or false
+value retains the saved primary connection. Keep this declaration consistent with the license the
+preset installs; changing a running deployment's manifest alone does not replace its license.
+
+Multi-node connections use the public addresses and database ports in `deployment.json`. The
+bundled cloud presets use one database port and a shared TLS certificate across nodes; the current
+driver requires that shared port and verifies each connection with the stored fingerprint. Endpoint
+reporting preserves individual node ports, and `connect` reports incompatible eligible ports.
+
 ## Where presets live (repository layout)
 
 - `assets/infrastructure/<preset>/` – embedded infrastructure presets (OpenTofu templates + `infrastructure.yaml`).
