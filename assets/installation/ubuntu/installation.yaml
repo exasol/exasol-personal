@@ -1,6 +1,9 @@
 name: Exasol on Ubuntu
 description:  Installs Exasol on Ubuntu distributions.
 
+databaseConnection:
+  allowAllNodes: true
+
 compatibility:
   requires:
     - remote-exec

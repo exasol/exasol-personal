@@ -28,6 +28,20 @@ the saved deployment details; `info` does not probe network availability.
 For older deployments, other nodes are labeled `topology only` and have `connectable: false`.
 Use the primary connection for these deployments. Local deployments have a single connection.
 
+## Connection selection
+
+For new cloud deployments, `exasol connect` gives all eligible public node addresses to the
+Exasol driver. The launcher chooses a host and tries another if the transport connection fails or stalls;
+it verifies the stored cluster certificate fingerprint on every attempted connection. This
+handles an unavailable node while opening a session; an established session is not reconnected
+automatically after a node fails.
+
+Deployments retain the installation preset copied when they were initialized. Deployments
+without recorded multi-node support continue to use the saved primary host, including those
+created during the earlier unrestricted-license rollout. Updating the launcher alone does not
+change their connection selection. Older launchers retain their primary-host behavior where
+the existing deployment-version compatibility rules permit access.
+
 ## Use the built-in SQL client
 
 Start an interactive SQL session:
