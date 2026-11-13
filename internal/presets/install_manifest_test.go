@@ -70,3 +70,32 @@ func TestParseInstallManifest_ReadsLocalCommandSteps(t *testing.T) {
 		t.Fatal("expected localCommand step to be populated")
 	}
 }
+
+func TestParseInstallManifest_DatabaseConnectionSupport(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name     string
+		metadata string
+		want     bool
+	}{
+		{name: "legacy"},
+		{name: "enabled", metadata: "databaseConnection:\n  allowAllNodes: true\n", want: true},
+		{name: "disabled", metadata: "databaseConnection:\n  allowAllNodes: false\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			// Given
+			raw := []byte("name: Test\n" + test.metadata)
+			// When
+			manifest, err := parseInstallManifest(raw)
+			// Then
+			if err != nil {
+				t.Fatal(err)
+			}
+			if manifest.DatabaseConnection.AllowAllNodes != test.want {
+				t.Fatalf("expected multi-node support %v", test.want)
+			}
+		})
+	}
+}

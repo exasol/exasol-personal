@@ -16,6 +16,14 @@ Cluster Size: {{ .ClusterSize }}
 Cluster State: {{ .ClusterState }}
 {{- end }}
 {{- end }}
+{{- with .Connection }}
+Database node endpoints (saved eligibility; reachability not checked):
+{{- range .Endpoints }}
+  {{ if .Node }}{{ .Node }}: {{ end }}{{ .Host }}:{{ .DBPort }} ({{ if .Eligible }}eligible{{ else }}topology only{{ end }})
+{{- else }}
+  No public database endpoints are recorded by the infrastructure preset.
+{{- end }}
+{{- end }}
 {{- with .Sidecars }}
 Sidecars:
 {{- range . }}

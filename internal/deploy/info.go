@@ -8,26 +8,28 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/sidecar"
 )
 
 type ConnectionDetails struct {
-	Backend         string                    `json:"backend,omitempty"`
-	Hostname        string                    `json:"host,omitempty"`
-	DisplayHost     string                    `json:"displayHost,omitempty"`
-	DBPort          int                       `json:"dbPort,omitempty"`
-	AdminUI         *config.DeploymentAdminUI `json:"adminUi,omitempty"`
-	Username        string                    `json:"username,omitempty"`
-	CertFingerprint string                    `json:"certFingerprint,omitempty"`
-	InsecureSkipTLS bool                      `json:"insecureSkipCertValidation,omitempty"`
-	SecretsFilePath string                    `json:"-"`
-	PublicIp        string                    `json:"publicIp,omitempty"`
-	SSHCommand      string                    `json:"sshCommand,omitempty"`
-	SSHPort         string                    `json:"sshPort,omitempty"`
-	ShellSupported  bool                      `json:"shellSupported,omitempty"`
-	AdminUISecured  bool                      `json:"-"`
+	Backend         string                      `json:"backend,omitempty"`
+	Hostname        string                      `json:"host,omitempty"`
+	Endpoints       []config.ConnectionEndpoint `json:"endpoints"`
+	DisplayHost     string                      `json:"displayHost,omitempty"`
+	DBPort          int                         `json:"dbPort,omitempty"`
+	AdminUI         *config.DeploymentAdminUI   `json:"adminUi,omitempty"`
+	Username        string                      `json:"username,omitempty"`
+	CertFingerprint string                      `json:"certFingerprint,omitempty"`
+	InsecureSkipTLS bool                        `json:"insecureSkipCertValidation,omitempty"`
+	SecretsFilePath string                      `json:"-"`
+	PublicIp        string                      `json:"publicIp,omitempty"`
+	SSHCommand      string                      `json:"sshCommand,omitempty"`
+	SSHPort         string                      `json:"sshPort,omitempty"`
+	ShellSupported  bool                        `json:"shellSupported,omitempty"`
+	AdminUISecured  bool                        `json:"-"`
 }
 
 type DeploymentInfoReport struct {
@@ -85,6 +87,39 @@ func (details *ConnectionDetails) DisplayHostname() string {
 	return displayHostname(details)
 }
 
+func (details *ConnectionDetails) ClientEndpoint() *config.ConnectionEndpoint {
+	// A nil list represents callers supplying only explicit single-connection details.
+	if details.Endpoints == nil {
+		return &config.ConnectionEndpoint{
+			Host: details.DisplayHostname(), DBPort: details.DBPort, Eligible: true,
+		}
+	}
+	for _, endpoint := range details.Endpoints {
+		if endpoint.Eligible {
+			if details.IsLocalBackend() {
+				endpoint.Host = details.DisplayHostname()
+			}
+
+			return &endpoint
+		}
+	}
+
+	return nil
+}
+
+func (details *ConnectionDetails) MultiHost() string {
+	endpoint := details.ClientEndpoint()
+	if endpoint == nil {
+		return ""
+	}
+	hosts, err := config.ConnectionHosts(details.Endpoints, endpoint.DBPort)
+	if err != nil || len(hosts) <= 1 {
+		return ""
+	}
+
+	return strings.Join(hosts, ",")
+}
+
 func (details *ConnectionDetails) IsLocalBackend() bool {
 	if details == nil {
 		return false
@@ -114,6 +149,7 @@ func readConnectionDetails(deployment config.DeploymentDir) (*ConnectionDetails,
 	return &ConnectionDetails{
 		Backend:         deploymentInfo.Backend,
 		Hostname:        connectionInfo.Host,
+		Endpoints:       connectionInfo.Endpoints,
 		DisplayHost:     connectionInfo.DisplayHost,
 		PublicIp:        connectionInfo.PublicIP,
 		DBPort:          connectionInfo.DBPort,

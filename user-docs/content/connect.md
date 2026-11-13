@@ -6,6 +6,50 @@ Run `exasol info` after installation to display database connection details. The
 See [Connect to Exasol](https://docs.exasol.com/db/latest/connect_exasol.htm) for supported drivers and
 client applications.
 
+## Find node endpoints
+
+`exasol info` lists public database endpoints reported by the infrastructure preset. Eligibility
+combines that exposure with the login permission recorded in the saved installation preset.
+For automation, `exasol info --json` includes `connection.endpoints` with each node's `host`,
+`dbPort`, and `eligible` flag. The existing `connection.host` and `connection.dbPort` fields
+continue to describe the primary connection.
+
+For a cloud deployment that supports connections on all nodes, use the endpoints marked
+`eligible: true` to build a multi-host connection. For example, the [JDBC connection URL](https://docs.exasol.com/db/latest/connect_exasol/drivers/jdbc.htm)
+for two nodes is:
+
+```text
+jdbc:exa:203.0.113.11,203.0.113.12:8563;fingerprint=<connection.certFingerprint>
+```
+
+Use the shared database port from the eligible endpoints, the reported certificate fingerprint,
+and credentials from `secrets.json`. Addresses without a public endpoint are omitted. Endpoint information comes from
+the saved deployment details. An `eligible: true` endpoint is permitted by that configuration;
+it may still be offline or unreachable. `info` does not probe network availability.
+
+For older deployments, other nodes are labeled `topology only` and have `eligible: false`.
+Use the primary connection for these deployments. Local deployments have a single connection.
+
+A cloud preset may expose only some nodes. If known nodes have no public database endpoints,
+`connection.endpoints` is an empty array and `connect` reports missing eligible endpoints.
+The installation’s multi-node permission alone does not provide a public network path.
+
+## Connection selection
+
+For new cloud deployments, `exasol connect` combines the installation preset’s saved login
+permission with the public node addresses and database ports reported by the infrastructure
+preset. Only that eligible subset is supplied to the Exasol driver. The launcher chooses a host
+and tries another if the transport connection fails or stalls;
+it verifies the stored cluster certificate fingerprint on every attempted connection. This
+handles an unavailable node while opening a session; an established session is not reconnected
+automatically after a node fails.
+
+Deployments retain the installation preset copied when they were initialized. Deployments
+without recorded multi-node support continue to use the saved primary host, including those
+created during the earlier unrestricted-license rollout. Updating the launcher alone does not
+change their connection selection. Older launchers retain their primary-host behavior where
+the existing deployment-version compatibility rules permit access.
+
 ## Use the built-in SQL client
 
 Start an interactive SQL session:

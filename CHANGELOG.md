@@ -6,6 +6,12 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- `exasol info` and `exasol info --json` list public database node endpoints with an `eligible`
+  flag derived from saved installation policy and infrastructure endpoint outputs. Eligibility
+  does not indicate current network availability.
+  Existing single-host connection fields remain available, and connection instructions include a
+  multi-host server list when the deployment supports it.
+
 - Added IONOS Cloud as a cloud provider. `exasol install ionos` deploys Exasol Personal on dedicated
   core servers in your IONOS Cloud contract, authenticated with an API token from `IONOS_TOKEN`.
   Nodes are sized as `<cores>x<ram_gb>` with `--instance-type`, and `--datacenter-id` deploys into an
@@ -40,8 +46,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
-- New cloud deployments accept any number of database sessions. Deployments created by earlier
-  launcher versions keep their session limit.
+- New cloud deployments accept any number of database sessions, and `exasol connect` can use
+  the public database endpoints exposed by the infrastructure preset with the shared certificate
+  fingerprint. Deployments without recorded multi-node support keep using their primary host; deployments created by earlier launcher
+  versions keep their session limit.
 
 - The MCP sidecar is published on host port `4896` when it is free, and on
   the next free port otherwise.
