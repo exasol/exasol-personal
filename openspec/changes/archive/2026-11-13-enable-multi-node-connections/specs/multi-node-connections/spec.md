@@ -6,12 +6,22 @@ Establish database connections through eligible public nodes with certificate ve
 
 ### Requirement: Connection selection follows saved deployment support
 
-`exasol connect` SHALL use public node addresses for deployments that recorded support for connections on all nodes in their installation preset, and SHALL use the saved primary connection for unmarked deployments.
+`exasol connect` SHALL combine saved installation login permission with the public node addresses and client-facing database ports reported by the infrastructure preset. For deployments permitting logins on all nodes, it SHALL select the exposed eligible endpoints and their shared port. For unmarked deployments, it SHALL use the saved primary connection.
 
 #### Scenario: Multiple eligible cloud nodes
 
 - **WHEN** a user connects to a deployment that records support for connections on all nodes and exposes multiple public database endpoints with the same port
 - **THEN** the launcher supplies all eligible node addresses to the database driver
+
+#### Scenario: Only a secondary node is publicly exposed
+
+- **WHEN** a deployment permits logins on all nodes and infrastructure reports a public database endpoint only for a secondary node
+- **THEN** the launcher uses that secondary node's public host and database port
+
+#### Scenario: Known nodes have no public endpoints
+
+- **WHEN** a deployment permits logins on all nodes and infrastructure reports nodes without public database endpoints
+- **THEN** the connection attempt fails with an error identifying the missing infrastructure endpoints
 
 #### Scenario: Unmarked deployment
 
