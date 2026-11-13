@@ -16,6 +16,8 @@ type ConnectionInfo struct {
 	ClusterSize                int
 	ClusterState               string
 	Host                       string
+	Endpoints                  []ConnectionEndpoint
+	MultiNode                  bool
 	DisplayHost                string
 	DBPort                     int
 	UIPort                     int
@@ -71,6 +73,10 @@ func (info *DeploymentInfo) ConnectionInfo(deployment DeploymentDir) (*Connectio
 	}
 
 	certFingerPrint := resolveConnectionCertFingerprint(info)
+	multiNode, err := deploymentAllowsAllNodes(deployment, info.Backend)
+	if err != nil {
+		return nil, err
+	}
 
 	return &ConnectionInfo{
 		DeploymentName:             info.DeploymentId,
@@ -78,6 +84,8 @@ func (info *DeploymentInfo) ConnectionInfo(deployment DeploymentDir) (*Connectio
 		ClusterSize:                info.ClusterSize,
 		ClusterState:               info.ClusterState,
 		Host:                       host,
+		Endpoints:                  info.connectionEndpoints(multiNode),
+		MultiNode:                  multiNode,
 		DisplayHost:                displayHost,
 		DBPort:                     info.Connection.DBPort,
 		UIPort:                     info.Connection.UIPort,

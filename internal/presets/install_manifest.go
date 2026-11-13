@@ -19,11 +19,16 @@ import (
 // InstallManifest represents the installation preset workflow and metadata.
 // It is read from <deploymentDir>/installation/installation.yaml (extracted from assets).
 type InstallManifest struct {
-	Name          string         `yaml:"name"`
-	Description   string         `yaml:"description"`
-	Compatibility *Compatibility `yaml:"compatibility,omitempty"`
-	Variables     *Variables     `yaml:"variables"`
-	Install       InstallSteps   `yaml:"install"`
+	Name               string             `yaml:"name"`
+	Description        string             `yaml:"description"`
+	Compatibility      *Compatibility     `yaml:"compatibility,omitempty"`
+	Variables          *Variables         `yaml:"variables"`
+	Install            InstallSteps       `yaml:"install"`
+	DatabaseConnection DatabaseConnection `yaml:"databaseConnection,omitempty"`
+}
+
+type DatabaseConnection struct {
+	AllowAllNodes bool `yaml:"allowAllNodes,omitempty"`
 }
 
 func (m *InstallManifest) RequiredCapabilities() []string {

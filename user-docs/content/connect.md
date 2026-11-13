@@ -6,6 +6,28 @@ Run `exasol info` after installation to display database connection details. The
 See [Connect to Exasol](https://docs.exasol.com/db/latest/connect_exasol.htm) for supported drivers and
 client applications.
 
+## Find node endpoints
+
+`exasol info` lists public database node addresses and whether each accepts connections. Use
+`exasol info --json` for automation: `connection.endpoints` contains each node's `host`, `dbPort`,
+and `connectable` flag. The existing `connection.host` and `connection.dbPort` fields continue to
+describe the primary connection.
+
+For a cloud deployment that supports connections on all nodes, use the endpoints marked
+`connectable: true` to build a multi-host connection. For example, the [JDBC connection URL](https://docs.exasol.com/db/latest/connect_exasol/drivers/jdbc.htm)
+for two nodes is:
+
+```text
+jdbc:exa:203.0.113.11,203.0.113.12:8563;fingerprint=<connection.certFingerprint>
+```
+
+Use the shared database port and fingerprint reported by `info --json`, and credentials from
+`secrets.json`. Addresses without a public endpoint are omitted. Endpoint information comes from
+the saved deployment details; `info` does not probe network availability.
+
+For older deployments, other nodes are labeled `topology only` and have `connectable: false`.
+Use the primary connection for these deployments. Local deployments have a single connection.
+
 ## Use the built-in SQL client
 
 Start an interactive SQL session:

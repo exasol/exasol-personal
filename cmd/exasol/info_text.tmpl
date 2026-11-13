@@ -16,6 +16,14 @@ Cluster Size: {{ .ClusterSize }}
 Cluster State: {{ .ClusterState }}
 {{- end }}
 {{- end }}
+{{- with .Connection }}
+{{- with .Endpoints }}
+Database node endpoints:
+{{- range . }}
+  {{ if .Node }}{{ .Node }}: {{ end }}{{ .Host }}:{{ .DBPort }} ({{ if .Connectable }}connectable{{ else }}topology only{{ end }})
+{{- end }}
+{{- end }}
+{{- end }}
 {{- with .Sidecars }}
 Sidecars:
 {{- range . }}

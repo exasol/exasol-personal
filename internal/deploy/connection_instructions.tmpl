@@ -13,6 +13,13 @@ Cluster State: {{ .ClusterState }}
 {{- end }}
 {{- end }}
 {{- with .Connection }}
+{{- with .Endpoints }}
+
+Database node endpoints:
+{{- range . }}
+  {{ if .Node }}{{ .Node }}: {{ end }}{{ .Host }}:{{ .DBPort }} ({{ if .Connectable }}connectable{{ else }}topology only{{ end }})
+{{- end }}
+{{- end }}
 
 === How to Connect from a Graphical SQL Client ===
 To connect using a client of your choice:
@@ -28,6 +35,11 @@ To connect using a client of your choice:
   - Certificate Validation: disable validation / use nocertcheck for the current deployment setup
 {{- end }}
   - Password: <stored in {{ .SecretsFilePath }}>
+{{- if .MultiHost }}
+
+Multi-host server list: {{ .MultiHost }}
+Use port {{ .DBPort }} and the certificate fingerprint above for every server.
+{{- end }}
 
 === CLI Connection Instructions ===
 To connect using the CLI:
