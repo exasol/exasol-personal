@@ -26,10 +26,25 @@ installation manifest copied into the deployment directory at initialization. An
 value retains the saved primary connection. Keep this declaration consistent with the license the
 preset installs; changing a running deployment's manifest alone does not replace its license.
 
-Multi-node connections use the public addresses and database ports in `deployment.json`. The
-bundled cloud presets use one database port and a shared TLS certificate across nodes; the current
-driver requires that shared port and verifies each connection with the stored fingerprint. Endpoint
-reporting preserves individual node ports, and `connect` reports incompatible eligible ports.
+The installation declaration describes database login permission. Infrastructure presets supply
+actual node exposure through `deployment.json`: `nodes[*].publicIp` identifies each node's public
+address, and `nodes[*].database.dbPort` gives its client-facing database port. Publish those values
+only for the database endpoints the infrastructure exposes. A node may retain a public IP for
+SSH while omitting `database.dbPort` when its database port is private. A private address or DNS
+name alone does not make a public database candidate. The launcher combines the saved installation policy
+with these per-node outputs whenever it resolves connection information; a declaration permitting
+all nodes does not imply that the infrastructure exposes every node.
+
+Only the exposed subset is used for multi-node connections and graphical-client instructions.
+For known nodes without public endpoints, `info --json` reports an empty `connection.endpoints`
+array and `connect` explains that infrastructure endpoint information is required. Existing
+unmarked deployments retain their explicit primary connection. Connection-only presets can
+continue to provide an explicit host and database port without node metadata.
+
+The bundled cloud presets use one public database port and a shared TLS certificate across nodes.
+The current driver requires a shared port among the selected eligible endpoints and verifies
+connections with the stored fingerprint. Endpoint reporting preserves individual node ports.
+Network availability and firewall reachability are not probed by `info`.
 
 ## Where presets live (repository layout)
 
@@ -55,7 +70,7 @@ Required artifacts:
 
 - `deployment.json`
   - Purpose: non-sensitive *node details* used by the launcher (IPs/DNS, SSH connection info, DB/Admin UI endpoints, TLS cert).
-  - Minimal required content (high-level): a `deploymentId` plus a `nodes` map keyed by node name (e.g. `n11`) containing at least a reachable host (`dnsName` and/or `publicIp`), SSH details (user, port, key file), DB connection details (db port, UI port, URL), and the TLS certificate PEM used for fingerprinting.
+  - Minimal required content (high-level): a `deploymentId` plus a `nodes` map keyed by node name (e.g. `n11`) containing at least a reachable host (`dnsName` and/or `publicIp`), SSH details (user, port, key file), DB connection details for exposed endpoints (db port, UI port, URL), and the TLS certificate PEM used for fingerprinting.
 
 - `secrets.json`
   - Purpose: sensitive credentials used by the launcher.

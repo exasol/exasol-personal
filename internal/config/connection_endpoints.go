@@ -52,9 +52,18 @@ func deploymentAllowsAllNodes(deployment DeploymentDir, backend string) (bool, e
 	return manifest.DatabaseConnection.AllowAllNodes, nil
 }
 
-func (info *DeploymentInfo) connectionEndpoints(multiNode bool) []ConnectionEndpoint {
+func (info *DeploymentInfo) connectionEndpoints(allowAllNodes bool) []ConnectionEndpoint {
 	if info.Backend == "local" {
 		return []ConnectionEndpoint{info.singularConnectionEndpoint()}
+	}
+	if len(info.Nodes) == 0 {
+		endpoint := info.singularConnectionEndpoint()
+		if allowAllNodes &&
+			(endpoint.Host == "" || endpoint.DBPort <= 0 || endpoint.DBPort > 65535) {
+			return []ConnectionEndpoint{}
+		}
+
+		return []ConnectionEndpoint{endpoint}
 	}
 	endpoints := []ConnectionEndpoint{}
 	hasEligible := false
@@ -68,11 +77,11 @@ func (info *DeploymentInfo) connectionEndpoints(multiNode bool) []ConnectionEndp
 		}
 		endpoints = append(endpoints, ConnectionEndpoint{
 			Node: name, Host: host, DBPort: port,
-			Eligible: multiNode || info.isSingularConnectionNode(node),
+			Eligible: allowAllNodes || info.isSingularConnectionNode(node),
 		})
 		hasEligible = hasEligible || endpoints[len(endpoints)-1].Eligible
 	}
-	if len(endpoints) == 0 || !hasEligible {
+	if !allowAllNodes && !hasEligible {
 		endpoints = append([]ConnectionEndpoint{info.singularConnectionEndpoint()}, endpoints...)
 	}
 

@@ -10,18 +10,23 @@ import (
 	"github.com/exasol/exasol-personal/internal/config"
 )
 
-func databaseHosts(info *config.ConnectionInfo) (string, error) {
-	if !info.MultiNode {
-		return info.Host, nil
+func databaseAddress(info *config.ConnectionInfo) (string, int, error) {
+	if !info.AllowAllNodes {
+		return info.Host, info.DBPort, nil
 	}
 
-	hosts, err := config.ConnectionHosts(info.Endpoints, info.DBPort)
-	if err != nil {
-		return "", err
-	}
-	if len(hosts) == 0 {
-		return "", errors.New("multi-node deployment has no eligible public database endpoints")
+	for _, endpoint := range info.Endpoints {
+		if !endpoint.Eligible {
+			continue
+		}
+		hosts, err := config.ConnectionHosts(info.Endpoints, endpoint.DBPort)
+		if err != nil {
+			return "", 0, err
+		}
+
+		return strings.Join(hosts, ","), endpoint.DBPort, nil
 	}
 
-	return strings.Join(hosts, ","), nil
+	return "", 0, errors.New("no eligible public database endpoints: " +
+		"check the infrastructure preset public addresses and database ports")
 }

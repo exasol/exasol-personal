@@ -11,30 +11,34 @@ import (
 
 func TestConnectionEndpointsIncludePublicNodesInStableOrder(t *testing.T) {
 	t.Parallel()
-	for _, multiNode := range []bool{false, true} {
-		t.Run(map[bool]string{false: "legacy", true: "unlimited"}[multiNode], func(t *testing.T) {
-			t.Parallel()
-			// Given
-			info := endpointTestDeployment()
-			info.Nodes["n13"] = DeploymentNode{
-				PrivateIp: "10.0.0.13",
-				Database:  DeploymentDatabase{DbPort: "8563"},
-			}
-			info.Nodes["n14"] = DeploymentNode{
-				PublicIp: "203.0.113.14",
-				Database: DeploymentDatabase{DbPort: "65536"},
-			}
-			// When
-			endpoints := info.connectionEndpoints(multiNode)
-			// Then
-			want := []ConnectionEndpoint{
-				{Node: "n11", Host: "203.0.113.11", DBPort: 8563, Eligible: true},
-				{Node: "n12", Host: "203.0.113.12", DBPort: 8563, Eligible: multiNode},
-			}
-			if !reflect.DeepEqual(endpoints, want) {
-				t.Fatalf("endpoints = %#v, want %#v", endpoints, want)
-			}
-		})
+	for _, allowAllNodes := range []bool{false, true} {
+		t.Run(
+			map[bool]string{false: "legacy", true: "unlimited"}[allowAllNodes],
+			func(t *testing.T) {
+				t.Parallel()
+				// Given
+				info := endpointTestDeployment()
+				info.Nodes["n13"] = DeploymentNode{
+					PrivateIp: "10.0.0.13",
+					Database:  DeploymentDatabase{DbPort: "8563"},
+				}
+				info.Nodes["n14"] = DeploymentNode{
+					PublicIp: "203.0.113.14",
+					Database: DeploymentDatabase{DbPort: "65536"},
+				}
+				info.Nodes["n15"] = DeploymentNode{PublicIp: "203.0.113.15"}
+				// When
+				endpoints := info.connectionEndpoints(allowAllNodes)
+				// Then
+				want := []ConnectionEndpoint{
+					{Node: "n11", Host: "203.0.113.11", DBPort: 8563, Eligible: true},
+					{Node: "n12", Host: "203.0.113.12", DBPort: 8563, Eligible: allowAllNodes},
+				}
+				if !reflect.DeepEqual(endpoints, want) {
+					t.Fatalf("endpoints = %#v, want %#v", endpoints, want)
+				}
+			},
+		)
 	}
 }
 
@@ -128,15 +132,15 @@ func TestLegacyConnectionEndpointsPreserveCustomSavedHost(t *testing.T) {
 func TestConnectionInfoReadsSavedEligibility(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name, backend, manifest string
-		multiNode, wantError    bool
+		name, backend, manifest  string
+		allowAllNodes, wantError bool
 	}{
 		{name: "missing manifest"},
 		{name: "legacy manifest", manifest: "name: legacy\n"},
 		{
-			name:      "unlimited",
-			manifest:  "databaseConnection:\n  allowAllNodes: true\n",
-			multiNode: true,
+			name:          "unlimited",
+			manifest:      "databaseConnection:\n  allowAllNodes: true\n",
+			allowAllNodes: true,
 		},
 		{name: "local", backend: "local", manifest: "databaseConnection:\n  allowAllNodes: true\n"},
 		{name: "invalid manifest", manifest: "databaseConnection: [", wantError: true},
@@ -169,9 +173,14 @@ func TestConnectionInfoReadsSavedEligibility(t *testing.T) {
 			if (err != nil) != test.wantError {
 				t.Fatalf("error = %v, want error %v", err, test.wantError)
 			}
-			if err == nil &&
-				(connection.MultiNode != test.multiNode || connection.Host != "primary.example") {
-				t.Fatalf("unexpected eligibility or changed singular host: %#v", connection)
+			if err != nil {
+				return
+			}
+			if connection.AllowAllNodes != test.allowAllNodes {
+				t.Fatalf("unexpected installation login permission: %#v", connection)
+			}
+			if connection.Host != "primary.example" {
+				t.Fatalf("changed singular host: %#v", connection)
 			}
 		})
 	}
@@ -188,5 +197,38 @@ func endpointTestDeployment() *DeploymentInfo {
 				Database: DeploymentDatabase{DbPort: "8563"},
 			},
 		},
+	}
+}
+
+func TestAllowedNodeEndpointsFollowInfrastructureExposure(t *testing.T) {
+	t.Parallel()
+	// Given
+	info := endpointTestDeployment()
+
+	// When
+	node := info.Nodes["n11"]
+	node.PublicIp = ""
+	node.PrivateIp = "10.0.0.11"
+	info.Nodes["n11"] = node
+	endpoints := info.connectionEndpoints(true)
+
+	// Then
+	want := []ConnectionEndpoint{
+		{Node: "n12", Host: "203.0.113.12", DBPort: 8563, Eligible: true},
+	}
+	if !reflect.DeepEqual(endpoints, want) {
+		t.Fatalf("private primary must be excluded: %#v", endpoints)
+	}
+
+	// When
+	node = info.Nodes["n12"]
+	node.PublicIp = ""
+	node.PrivateIp = "10.0.0.12"
+	info.Nodes["n12"] = node
+	endpoints = info.connectionEndpoints(true)
+
+	// Then
+	if endpoints == nil || len(endpoints) != 0 {
+		t.Fatalf("known nodes without public endpoints must yield an empty list: %#v", endpoints)
 	}
 }

@@ -17,11 +17,11 @@ Cluster State: {{ .ClusterState }}
 {{- end }}
 {{- end }}
 {{- with .Connection }}
-{{- with .Endpoints }}
 Database node endpoints (saved eligibility; reachability not checked):
-{{- range . }}
+{{- range .Endpoints }}
   {{ if .Node }}{{ .Node }}: {{ end }}{{ .Host }}:{{ .DBPort }} ({{ if .Eligible }}eligible{{ else }}topology only{{ end }})
-{{- end }}
+{{- else }}
+  No public database endpoints are recorded by the infrastructure preset.
 {{- end }}
 {{- end }}
 {{- with .Sidecars }}

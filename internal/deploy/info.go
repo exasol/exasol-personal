@@ -17,7 +17,7 @@ import (
 type ConnectionDetails struct {
 	Backend         string                      `json:"backend,omitempty"`
 	Hostname        string                      `json:"host,omitempty"`
-	Endpoints       []config.ConnectionEndpoint `json:"endpoints,omitempty"`
+	Endpoints       []config.ConnectionEndpoint `json:"endpoints"`
 	DisplayHost     string                      `json:"displayHost,omitempty"`
 	DBPort          int                         `json:"dbPort,omitempty"`
 	AdminUI         *config.DeploymentAdminUI   `json:"adminUi,omitempty"`
@@ -87,8 +87,32 @@ func (details *ConnectionDetails) DisplayHostname() string {
 	return displayHostname(details)
 }
 
+func (details *ConnectionDetails) ClientEndpoint() *config.ConnectionEndpoint {
+	// A nil list represents callers supplying only explicit single-connection details.
+	if details.Endpoints == nil {
+		return &config.ConnectionEndpoint{
+			Host: details.DisplayHostname(), DBPort: details.DBPort, Eligible: true,
+		}
+	}
+	for _, endpoint := range details.Endpoints {
+		if endpoint.Eligible {
+			if details.IsLocalBackend() {
+				endpoint.Host = details.DisplayHostname()
+			}
+
+			return &endpoint
+		}
+	}
+
+	return nil
+}
+
 func (details *ConnectionDetails) MultiHost() string {
-	hosts, err := config.ConnectionHosts(details.Endpoints, details.DBPort)
+	endpoint := details.ClientEndpoint()
+	if endpoint == nil {
+		return ""
+	}
+	hosts, err := config.ConnectionHosts(details.Endpoints, endpoint.DBPort)
 	if err != nil || len(hosts) <= 1 {
 		return ""
 	}
