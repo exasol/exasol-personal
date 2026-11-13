@@ -81,16 +81,17 @@ def test_info_reports_public_endpoints_and_eligibility(
             "node": "n11",
             "host": "203.0.113.11",
             "dbPort": 8563,
-            "connectable": True,
+            "eligible": True,
         },
         {
             "node": "n12",
             "host": "203.0.113.12",
             "dbPort": 8563,
-            "connectable": all_nodes,
+            "eligible": all_nodes,
         },
     ]
-    eligibility = "connectable" if all_nodes else "topology only"
-    assert "n11: 203.0.113.11:8563 (connectable)" in text.stdout
+    assert "saved eligibility; reachability not checked" in text.stdout
+    eligibility = "eligible" if all_nodes else "topology only"
+    assert "n11: 203.0.113.11:8563 (eligible)" in text.stdout
     assert f"n12: 203.0.113.12:8563 ({eligibility})" in text.stdout
     assert "10.0.0.13" not in text.stdout

@@ -38,8 +38,8 @@ func TestMultiNodeConnection_TransportFailoverAndCertificatePinning(t *testing.T
 				Host: "localhost", DBPort: port, MultiNode: true,
 				CertFingerprint: hex.EncodeToString(fingerprint[:]),
 				Endpoints: []config.ConnectionEndpoint{
-					{Node: "n11", Host: "localhost", DBPort: port, Connectable: true},
-					{Node: "n12", Host: "127.0.0.1", DBPort: port, Connectable: true},
+					{Node: "n11", Host: "localhost", DBPort: port, Eligible: true},
+					{Node: "n12", Host: "127.0.0.1", DBPort: port, Eligible: true},
 				},
 			}
 			database, err := NewExasolConnection(
@@ -75,8 +75,8 @@ func TestMultiNodeConnection_RejectsMismatchingCertificates(t *testing.T) {
 		Host: "localhost", DBPort: port, MultiNode: true,
 		CertFingerprint: strings.Repeat("0", 64),
 		Endpoints: []config.ConnectionEndpoint{
-			{Host: "localhost", DBPort: port, Connectable: true},
-			{Host: "127.0.0.1", DBPort: port, Connectable: true},
+			{Host: "localhost", DBPort: port, Eligible: true},
+			{Host: "127.0.0.1", DBPort: port, Eligible: true},
 		},
 	}
 	database, err := NewExasolConnection(

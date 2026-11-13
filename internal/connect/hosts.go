@@ -20,7 +20,7 @@ func databaseHosts(info *config.ConnectionInfo) (string, error) {
 		return "", err
 	}
 	if len(hosts) == 0 {
-		return "", errors.New("multi-node deployment has no connectable public database endpoints")
+		return "", errors.New("multi-node deployment has no eligible public database endpoints")
 	}
 
 	return strings.Join(hosts, ","), nil

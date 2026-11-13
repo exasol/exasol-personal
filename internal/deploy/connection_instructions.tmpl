@@ -15,9 +15,9 @@ Cluster State: {{ .ClusterState }}
 {{- with .Connection }}
 {{- with .Endpoints }}
 
-Database node endpoints:
+Database node endpoints (saved eligibility; reachability not checked):
 {{- range . }}
-  {{ if .Node }}{{ .Node }}: {{ end }}{{ .Host }}:{{ .DBPort }} ({{ if .Connectable }}connectable{{ else }}topology only{{ end }})
+  {{ if .Node }}{{ .Node }}: {{ end }}{{ .Host }}:{{ .DBPort }} ({{ if .Eligible }}eligible{{ else }}topology only{{ end }})
 {{- end }}
 {{- end }}
 
