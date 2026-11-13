@@ -10,6 +10,7 @@ require (
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/gobwas/glob v0.2.3
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/hcl/v2 v2.25.0
 	github.com/lmittmann/tint v1.2.1
 	github.com/olekukonko/tablewriter v1.1.5
@@ -66,7 +67,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-containerregistry v0.22.1 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
