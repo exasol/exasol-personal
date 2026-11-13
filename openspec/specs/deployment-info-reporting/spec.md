@@ -149,11 +149,7 @@ The connection instructions that `exasol install` and `exasol start` print for a
 
 ### Requirement: Saved connection instructions follow sidecar changes
 
-When `exasol sidecar enable`, `exasol sidecar disable`,
-`exasol sidecar config set`, or `exasol sidecar config reset` changes a saved
-sidecar of a running deployment, the launcher SHALL rewrite the deployment's
-saved connection instructions so that their MCP server section matches the
-saved sidecar definitions.
+When `exasol sidecar enable`, `exasol sidecar disable`, `exasol sidecar config set`, or `exasol sidecar config reset` changes a saved sidecar of a running deployment, the launcher SHALL rewrite the deployment's saved connection instructions so that their MCP server section matches the saved sidecar definitions.
 
 #### Scenario: Saved instructions follow a sidecar port change
 
@@ -164,12 +160,30 @@ saved sidecar definitions.
 
 ### Requirement: Start prints connection instructions when only sidecars fail
 
-When `exasol start` leaves the database running and one or more sidecars fail,
-the command SHALL print the connection instructions, report each sidecar
-failure, and exit with a nonzero status.
+When `exasol start` leaves the database running and one or more sidecars fail, the command SHALL print the connection instructions, report each sidecar failure, and exit with a nonzero status.
 
 #### Scenario: Sidecar failure on start keeps the connection instructions
 
 - **WHEN** `exasol start` starts the database and a sidecar fails to start
 - **THEN** the output includes the connection instructions and the sidecar
   failure, and the command exits with a nonzero status
+
+### Requirement: Connection information reports public database endpoints
+
+`exasol info`, `exasol info --json`, and connection instructions SHALL report the public database endpoints recorded in deployment metadata, including each node identity, host, database port, and connection eligibility. Endpoint information SHALL use stable node order. Existing singular connection fields SHALL retain their values.
+
+#### Scenario: Eligible multi-node deployment
+
+- **WHEN** a user requests connection information for a deployment supporting connections on all nodes
+- **THEN** the output identifies every public database endpoint and shows how to build a multi-host connection
+
+#### Scenario: Legacy multi-node deployment
+
+- **WHEN** a user requests connection information for an unmarked deployment
+- **THEN** the output distinguishes the primary connection endpoint from other recorded public node endpoints
+- **AND** existing singular host and port fields keep their values
+
+#### Scenario: Local or connection-only metadata
+
+- **WHEN** a running deployment records a singular connection without public node metadata
+- **THEN** connection information reports that saved connection as one eligible endpoint
