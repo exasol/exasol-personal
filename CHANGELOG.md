@@ -6,6 +6,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- `exasol info` and `exasol info --json` list public database node endpoints and identify which
+  accept connections. Existing single-host connection fields remain available, and connection
+  instructions include a multi-host server list when the deployment supports it.
+
 - Added IONOS Cloud as a cloud provider. `exasol install ionos` deploys Exasol Personal on dedicated
   core servers in your IONOS Cloud contract, authenticated with an API token from `IONOS_TOKEN`.
   Nodes are sized as `<cores>x<ram_gb>` with `--instance-type`, and `--datacenter-id` deploys into an
