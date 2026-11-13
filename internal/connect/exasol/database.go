@@ -46,7 +46,7 @@ type Database struct {
 	host                      string
 	port                      int
 	validateServerCertificate bool
-	connect                   types.ConnectFunc
+	connect                   contextConnectFunc
 	importParquet             parquetImportFunc
 
 	conn              types.ExasolConnector
@@ -57,7 +57,7 @@ type Database struct {
 
 type opts struct {
 	validateServerCertificate bool
-	connect                   types.ConnectFunc
+	connect                   contextConnectFunc
 	versionOutput             io.Writer
 }
 
@@ -71,7 +71,9 @@ func WithoutValidateServerCertificate(opts *opts) {
 
 func WithConnectFunc(connect types.ConnectFunc) func(*opts) {
 	return func(opts *opts) {
-		opts.connect = connect
+		opts.connect = func(_ context.Context, input string) (types.ExasolConnector, error) {
+			return connect(input)
+		}
 	}
 }
 
@@ -111,16 +113,6 @@ func New(
 		importParquet:             connection.ImportParquetWithInferredSchema,
 		versionOutput:             opts.versionOutput,
 	}, nil
-}
-
-func defaultConnectFunc(input string) (types.ExasolConnector, error) {
-	conn, err := (&exasol.ExasolDriver{}).Open(input)
-	if err != nil {
-		return nil, err
-	}
-
-	// Should always succeed unless the Go driver changes interface.
-	return conn.(types.ExasolConnector), nil // nolint: revive,forcetypeassert
 }
 
 func (db *Database) Connect(ctx context.Context) error {
@@ -213,11 +205,7 @@ func (db *Database) Exec(
 	return result, nil
 }
 
-// connectWithContext runs db.connect in a goroutine so ctx's cancellation/
-// deadline is honored even though the underlying database/sql/driver.Open
-// signature has no context parameter of its own. The dial goroutine is not
-// forcibly stopped when ctx is done; it runs to completion in the background
-// and its (now-unused) result is discarded.
+// Custom connectors may ignore cancellation, so discard and close a late result.
 func (db *Database) connectWithContext(ctx context.Context) (types.ExasolConnector, error) {
 	type dialResult struct {
 		conn types.ExasolConnector
@@ -226,7 +214,7 @@ func (db *Database) connectWithContext(ctx context.Context) (types.ExasolConnect
 	resultCh := make(chan dialResult, 1)
 
 	go func() {
-		conn, err := db.connect(db.connectionString.value)
+		conn, err := db.connect(ctx, db.connectionString.value)
 		resultCh <- dialResult{conn, err}
 	}()
 
