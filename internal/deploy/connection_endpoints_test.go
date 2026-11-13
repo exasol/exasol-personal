@@ -20,8 +20,8 @@ func TestConnectionInstructionsAdvertiseOnlyEligibleMultiHostConnections(t *test
 				Connection: &ConnectionDetails{
 					Hostname: "primary.example", DBPort: 8563,
 					Endpoints: []config.ConnectionEndpoint{
-						{Host: "203.0.113.11", DBPort: 8563, Connectable: true},
-						{Host: "203.0.113.12", DBPort: 8563, Connectable: multiNode},
+						{Host: "203.0.113.11", DBPort: 8563, Eligible: true},
+						{Host: "203.0.113.12", DBPort: 8563, Eligible: multiNode},
 					},
 				},
 			}
@@ -45,8 +45,8 @@ func TestMultiHostInstructionsRequireSharedPort(t *testing.T) {
 	t.Parallel()
 	// Given
 	details := &ConnectionDetails{DBPort: 8563, Endpoints: []config.ConnectionEndpoint{
-		{Host: "203.0.113.11", DBPort: 8563, Connectable: true},
-		{Host: "203.0.113.12", DBPort: 9000, Connectable: true},
+		{Host: "203.0.113.11", DBPort: 8563, Eligible: true},
+		{Host: "203.0.113.12", DBPort: 9000, Eligible: true},
 	}}
 	// When
 	hosts := details.MultiHost()

@@ -6,9 +6,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
-- `exasol info` and `exasol info --json` list public database node endpoints and identify which
-  accept connections. Existing single-host connection fields remain available, and connection
-  instructions include a multi-host server list when the deployment supports it.
+- `exasol info` and `exasol info --json` list public database node endpoints with an `eligible`
+  flag derived from saved configuration. Eligibility does not indicate current network availability.
+  Existing single-host connection fields remain available, and connection instructions include a
+  multi-host server list when the deployment supports it.
 
 - Added IONOS Cloud as a cloud provider. `exasol install ionos` deploys Exasol Personal on dedicated
   core servers in your IONOS Cloud contract, authenticated with an API token from `IONOS_TOKEN`.

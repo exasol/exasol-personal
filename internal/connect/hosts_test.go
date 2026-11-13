@@ -24,7 +24,7 @@ func TestDatabaseHosts(t *testing.T) {
 			info: config.ConnectionInfo{
 				Host: "primary.example", DBPort: 8563,
 				Endpoints: []config.ConnectionEndpoint{
-					{Host: "203.0.113.12", DBPort: 8563, Connectable: true},
+					{Host: "203.0.113.12", DBPort: 8563, Eligible: true},
 				},
 			},
 			want: "primary.example",
@@ -34,9 +34,9 @@ func TestDatabaseHosts(t *testing.T) {
 			info: config.ConnectionInfo{
 				Host: "primary.example", DBPort: 8563, MultiNode: true,
 				Endpoints: []config.ConnectionEndpoint{
-					{Host: "203.0.113.11", DBPort: 8563, Connectable: true},
-					{Host: "203.0.113.12", DBPort: 8563, Connectable: true},
-					{Host: "203.0.113.12", DBPort: 8563, Connectable: true},
+					{Host: "203.0.113.11", DBPort: 8563, Eligible: true},
+					{Host: "203.0.113.12", DBPort: 8563, Eligible: true},
+					{Host: "203.0.113.12", DBPort: 8563, Eligible: true},
 					{Host: "203.0.113.13", DBPort: 8563},
 				},
 			},
@@ -47,7 +47,7 @@ func TestDatabaseHosts(t *testing.T) {
 			info: config.ConnectionInfo{
 				DBPort: 8563, MultiNode: true,
 				Endpoints: []config.ConnectionEndpoint{
-					{Node: "n12", Host: "203.0.113.12", DBPort: 9999, Connectable: true},
+					{Node: "n12", Host: "203.0.113.12", DBPort: 9999, Eligible: true},
 				},
 			},
 			err: "shared database port: node n12 uses 9999 instead of 8563",
@@ -55,7 +55,7 @@ func TestDatabaseHosts(t *testing.T) {
 		{
 			name: "missing eligible hosts fail clearly",
 			info: config.ConnectionInfo{DBPort: 8563, MultiNode: true},
-			err:  "no connectable public database endpoints",
+			err:  "no eligible public database endpoints",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

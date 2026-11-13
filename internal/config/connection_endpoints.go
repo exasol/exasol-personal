@@ -11,16 +11,16 @@ import (
 )
 
 type ConnectionEndpoint struct {
-	Node        string `json:"node,omitempty"`
-	Host        string `json:"host"`
-	DBPort      int    `json:"dbPort"`
-	Connectable bool   `json:"connectable"`
+	Node     string `json:"node,omitempty"`
+	Host     string `json:"host"`
+	DBPort   int    `json:"dbPort"`
+	Eligible bool   `json:"eligible"`
 }
 
 func ConnectionHosts(endpoints []ConnectionEndpoint, port int) ([]string, error) {
 	var hosts []string
 	for _, endpoint := range endpoints {
-		if !endpoint.Connectable {
+		if !endpoint.Eligible {
 			continue
 		}
 		if endpoint.DBPort != port {
@@ -57,7 +57,7 @@ func (info *DeploymentInfo) connectionEndpoints(multiNode bool) []ConnectionEndp
 		return []ConnectionEndpoint{info.singularConnectionEndpoint()}
 	}
 	endpoints := []ConnectionEndpoint{}
-	hasConnectable := false
+	hasEligible := false
 	names := info.ListNodes()
 	for _, name := range names {
 		node := info.Nodes[name]
@@ -68,11 +68,11 @@ func (info *DeploymentInfo) connectionEndpoints(multiNode bool) []ConnectionEndp
 		}
 		endpoints = append(endpoints, ConnectionEndpoint{
 			Node: name, Host: host, DBPort: port,
-			Connectable: multiNode || info.isSingularConnectionNode(node),
+			Eligible: multiNode || info.isSingularConnectionNode(node),
 		})
-		hasConnectable = hasConnectable || endpoints[len(endpoints)-1].Connectable
+		hasEligible = hasEligible || endpoints[len(endpoints)-1].Eligible
 	}
-	if len(endpoints) == 0 || !hasConnectable {
+	if len(endpoints) == 0 || !hasEligible {
 		endpoints = append([]ConnectionEndpoint{info.singularConnectionEndpoint()}, endpoints...)
 	}
 
@@ -90,7 +90,7 @@ func (info *DeploymentInfo) singularConnectionEndpoint() ConnectionEndpoint {
 		Host: strings.TrimSpace(
 			info.Connection.Host,
 		),
-		DBPort:      info.Connection.DBPort,
-		Connectable: true,
+		DBPort:   info.Connection.DBPort,
+		Eligible: true,
 	}
 }

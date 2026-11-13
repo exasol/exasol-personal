@@ -28,8 +28,8 @@ func TestConnectionEndpointsIncludePublicNodesInStableOrder(t *testing.T) {
 			endpoints := info.connectionEndpoints(multiNode)
 			// Then
 			want := []ConnectionEndpoint{
-				{Node: "n11", Host: "203.0.113.11", DBPort: 8563, Connectable: true},
-				{Node: "n12", Host: "203.0.113.12", DBPort: 8563, Connectable: multiNode},
+				{Node: "n11", Host: "203.0.113.11", DBPort: 8563, Eligible: true},
+				{Node: "n12", Host: "203.0.113.12", DBPort: 8563, Eligible: multiNode},
 			}
 			if !reflect.DeepEqual(endpoints, want) {
 				t.Fatalf("endpoints = %#v, want %#v", endpoints, want)
@@ -48,7 +48,7 @@ func TestConnectionEndpointsPreservePerNodePorts(t *testing.T) {
 	// When
 	endpoints := info.connectionEndpoints(true)
 	// Then
-	if endpoints[1].DBPort != 9000 || !endpoints[1].Connectable {
+	if endpoints[1].DBPort != 9000 || !endpoints[1].Eligible {
 		t.Fatalf("endpoint must report its actual port and license eligibility: %#v", endpoints[1])
 	}
 }
@@ -61,7 +61,7 @@ func TestConnectionEndpointsFallBackToSingularConnection(t *testing.T) {
 	// When
 	endpoints := info.connectionEndpoints(false)
 	// Then
-	want := []ConnectionEndpoint{{Host: "primary.example", DBPort: 8563, Connectable: true}}
+	want := []ConnectionEndpoint{{Host: "primary.example", DBPort: 8563, Eligible: true}}
 	if !reflect.DeepEqual(endpoints, want) {
 		t.Fatalf("endpoints = %#v, want %#v", endpoints, want)
 	}
@@ -76,8 +76,8 @@ func TestConnectionEndpointsPreserveLegacyHostWithoutPrimaryPublicAddress(t *tes
 	endpoints := info.connectionEndpoints(false)
 	// Then
 	want := []ConnectionEndpoint{
-		{Host: "primary.example", DBPort: 8563, Connectable: true},
-		{Node: "n12", Host: "203.0.113.12", DBPort: 8563, Connectable: false},
+		{Host: "primary.example", DBPort: 8563, Eligible: true},
+		{Node: "n12", Host: "203.0.113.12", DBPort: 8563, Eligible: false},
 	}
 	if !reflect.DeepEqual(endpoints, want) {
 		t.Fatalf("endpoints = %#v, want %#v", endpoints, want)
@@ -92,7 +92,7 @@ func TestLocalConnectionEndpointsUseOnlyTheLocalConnection(t *testing.T) {
 	// When
 	endpoints := info.connectionEndpoints(true)
 	// Then
-	want := []ConnectionEndpoint{{Host: "primary.example", DBPort: 8563, Connectable: true}}
+	want := []ConnectionEndpoint{{Host: "primary.example", DBPort: 8563, Eligible: true}}
 	if !reflect.DeepEqual(endpoints, want) {
 		t.Fatalf("endpoints = %#v, want %#v", endpoints, want)
 	}
@@ -106,7 +106,7 @@ func TestLegacyConnectionEndpointsFollowTheSavedHost(t *testing.T) {
 	// When
 	endpoints := info.connectionEndpoints(false)
 	// Then
-	if endpoints[0].Connectable || !endpoints[1].Connectable {
+	if endpoints[0].Eligible || !endpoints[1].Eligible {
 		t.Fatalf("eligibility must follow the saved host: %#v", endpoints)
 	}
 }
@@ -120,7 +120,7 @@ func TestLegacyConnectionEndpointsPreserveCustomSavedHost(t *testing.T) {
 	endpoints := info.connectionEndpoints(false)
 	// Then
 	if len(endpoints) != 3 || endpoints[0].Host != "custom.example" ||
-		!endpoints[0].Connectable || endpoints[1].Connectable || endpoints[2].Connectable {
+		!endpoints[0].Eligible || endpoints[1].Eligible || endpoints[2].Eligible {
 		t.Fatalf("eligibility must preserve the custom connection: %#v", endpoints)
 	}
 }
