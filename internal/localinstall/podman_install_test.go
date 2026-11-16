@@ -59,7 +59,7 @@ func TestPodmanInstallStart_StartsFreshPersistentDatabase(t *testing.T) {
 			"<--network><" + testContainerName + "-services><--network-alias><database>" +
 			"<--publish><127.0.0.1:28563:8563/tcp>" +
 			"<--volume><" + startConfig.DataDir + ":/exa:Z>" +
-			"<" + testLoadedImage + "><init><params=maxConnectionsLicenseLimit=20>" +
+			"<" + testLoadedImage + "><init>" +
 			"<VERSION_CHECK_ENABLED=0>",
 	})
 	if !strings.Contains(out.String(), loadedImagePrefix+" "+testLoadedImage) {
@@ -112,7 +112,7 @@ func TestPodmanInstallStart_BootstrapsInitialPasswordForFreshDatabase(t *testing
 	for _, expected := range []string{
 		"<--restart><no>",
 		"<--volume><" + startConfig.BootstrapDir + ":/run/secrets:ro,Z>",
-		"<params=maxConnectionsLicenseLimit=20><sys_password_file=/run/secrets/sys_password>",
+		"<init><sys_password_file=/run/secrets/sys_password>",
 	} {
 		if !strings.Contains(runCommand, expected) {
 			t.Fatalf("expected run command to contain %q, got %q", expected, runCommand)
@@ -472,10 +472,7 @@ func TestPodmanInstallStart_ReusesExistingDatabaseConfiguration(t *testing.T) {
 		runCommand,
 		"<"+testLoadedImage+"><init><VERSION_CHECK_ENABLED=0>",
 	) {
-		t.Fatalf("expected existing database to run init without params, got %q", runCommand)
-	}
-	if strings.Contains(runCommand, "<params=") {
-		t.Fatalf("expected first-start params to be omitted, got %q", runCommand)
+		t.Fatalf("expected existing database to run init, got %q", runCommand)
 	}
 	for _, relativePath := range nanoTLSFiles {
 		content, readErr := os.ReadFile(
@@ -1095,7 +1092,6 @@ func newPodmanInstallFixture(t *testing.T) (*NanoInstall, StartConfig, podmanIns
 		ContainerDBPort:     28563,
 		ContainerDBBindHost: "127.0.0.1",
 		DataDir:             filepath.Join(root, "runtime", "exa"),
-		InitParams:          []string{"maxConnectionsLicenseLimit=20"},
 	}
 	fixture := podmanInstallFixture{
 		logPath:       logPath,

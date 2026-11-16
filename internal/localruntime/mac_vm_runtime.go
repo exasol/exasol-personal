@@ -271,7 +271,6 @@ func (runtime *MacVMRuntime) Start(
 	startConfig := localinstall.StartConfig{
 		ContainerDBPort:      nanoDBPort,
 		DataDir:              vmSharedNanoDataDir,
-		InitParams:           append([]string(nil), nanoInitParams...),
 		VersionCheck:         runtimeConfig.VersionCheck,
 		SLCs:                 runtimeConfig.SLCs,
 		LegacyContainerNames: []string{legacyNanoContainer},

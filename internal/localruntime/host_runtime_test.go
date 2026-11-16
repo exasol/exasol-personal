@@ -71,10 +71,6 @@ func TestLinuxHostPodmanStartConfig_UsesOnlyCommonRuntimeConfig(t *testing.T) {
 	if startConfig.DataDir != filepath.Join(localRuntime.paths.WorkDir, nanoDataDirName) {
 		t.Fatalf("unexpected Nano data directory %q", startConfig.DataDir)
 	}
-	if len(startConfig.InitParams) != 1 ||
-		startConfig.InitParams[0] != "maxConnectionsLicenseLimit=20" {
-		t.Fatalf("unexpected Nano init params: %#v", startConfig.InitParams)
-	}
 	if !reflect.DeepEqual(startConfig.VersionCheck, vmConfig.VersionCheck) {
 		t.Fatalf("expected portable version-check settings, got %#v", startConfig.VersionCheck)
 	}
