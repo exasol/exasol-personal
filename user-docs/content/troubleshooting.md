@@ -207,6 +207,13 @@ A new Azure subscription does not have every required resource provider register
 as described in [Configure subscription access](cloud/azure.md#configure-subscription-access), then
 run the installation again.
 
+### Exoscale reports `Forbidden by role policy for networking`
+
+The IAM role of your Exoscale API key does not allow the `networking` service, which the launcher
+needs to create the VPC of a deployment. The portal's role editor does not offer this service, so
+add it with the Exoscale CLI or API as described in
+[Configure IAM access](cloud/exoscale.md#configure-iam-access), then run the installation again.
+
 ### The installation was interrupted
 
 Cloud resources created before an interruption are not removed automatically and can continue to

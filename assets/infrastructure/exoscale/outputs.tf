@@ -13,8 +13,8 @@ locals {
     clusterSize      = var.cluster_size
     clusterState     = length(exoscale_compute_instance.nodes) > 0 ? values(exoscale_compute_instance.nodes)[0].state : "unknown"
     instanceType     = var.instance_type
-    vpcId            = exoscale_private_network.cluster.id
-    subnetId         = exoscale_private_network.cluster.id
+    vpcId            = exoscale_vpc.cluster.id
+    subnetId         = exoscale_vpc_subnet.cluster.id
     connection = length(exoscale_compute_instance.nodes) > 0 ? {
       host        = values(exoscale_compute_instance.nodes)[0].public_ip_address
       displayHost = values(exoscale_compute_instance.nodes)[0].public_ip_address

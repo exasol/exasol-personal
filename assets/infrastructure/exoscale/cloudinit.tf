@@ -116,6 +116,31 @@ locals {
     }
   }
 
+  # Replaces the VPC's DHCP configuration of eth1, without which multi-node
+  # clusters never form: the subnet prefix with routes through the gateway, and
+  # a jumbo MTU. See "VPC Interface Configuration" in README.md.
+  vpc_netplan_by_name = {
+    for n in local.nodes : n.name => {
+      network = {
+        version = 2
+        ethernets = {
+          eth1 = {
+            dhcp4     = false
+            mtu       = var.vpc_mtu
+            addresses = ["${n.ip}/${split("/", var.vpc_subnet_ipv4_block)[1]}"]
+            routes = [
+              for half in [0, 1] : {
+                to        = cidrsubnet(var.vpc_subnet_ipv4_block, 1, half)
+                via       = cidrhost(var.vpc_subnet_ipv4_block, 1)
+                "on-link" = true
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+
   # Per-node metadata written to disk (separate from infrastructure.json for clarity).
   node_payload_by_name = {
     for n in local.nodes : n.name => {
@@ -211,12 +236,15 @@ data "cloudinit_config" "cloud_config" {
           settings = ["no_replace", "recurse_list"]
         }
       ]
-      runcmd = [
-        # Netplan configuration must not be world-readable. Apply it on first
-        # boot because systemd-networkd has already read its configuration.
-        "chmod 600 /etc/netplan/99-exoscale-private-network.yaml",
-        "netplan apply"
+      write_files = [
+        {
+          path        = "/etc/netplan/99-exoscale-vpc.yaml"
+          permissions = "0600"
+          content     = yamlencode(local.vpc_netplan_by_name[each.key])
+        }
       ]
+      # Apply on first boot because systemd-networkd has already read its configuration.
+      runcmd = ["netplan apply"]
     })
   }
 }

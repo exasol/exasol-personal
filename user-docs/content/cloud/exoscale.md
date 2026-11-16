@@ -5,23 +5,28 @@ Prepare an Exoscale organization and API credentials before deploying Exasol Per
 ## Prerequisites
 
 You need an active Exoscale organization with billing configured and sufficient quota for compute
-instances, block storage volumes, and private networks in the target zone. This procedure assumes
-basic familiarity with Exoscale IAM. See the
+instances, block storage volumes, and VPCs in the target zone. This procedure assumes basic
+familiarity with Exoscale IAM. See the
 [Exoscale documentation](https://community.exoscale.com/documentation/) for background information.
 
 ## Configure IAM access
 
-In the Exoscale portal:
+The launcher needs an API key whose role allows the `compute`, `networking`, `sos`, and `iam`
+services. The `networking` service manages the VPC that connects the nodes of a deployment.
+A key of the built-in Owner role already has these permissions; to use a restricted role:
 
-1. Open **IAM** > **Roles** and create a role for the Exasol Launcher.
-2. Grant the permissions described by the
+1. Create the role from the
    [minimal example policy](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/exoscale/iam-policy.minimal.json)
    or the
    [broad example policy](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/exoscale/iam-policy.broad.json).
-   The minimal policy is recommended. Use the JSON as a reference when entering the permissions in
-   the portal; Exoscale does not import the file directly.
-3. Open **IAM** > **API Keys**, create an API key, and assign the new role.
-4. Copy the key and secret. The secret is displayed only once.
+   The minimal policy is recommended. The portal's role editor does not offer the `networking`
+   service, so create the role, or add `networking` to an existing one, with the
+   [Exoscale CLI](https://community.exoscale.com/reference/cli/exo/iam/role/) or API, which accept
+   the policy file as it is. The
+   [preset documentation](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/exoscale/README.md#iam-role-and-api-key)
+   shows the commands.
+2. Create an API key for the role, in the portal under **IAM** > **API Keys** or with the CLI.
+3. Copy the key and secret. The secret is displayed only once.
 
 ## Configure your computer
 
@@ -59,3 +64,9 @@ exasol install exoscale --zone at-vie-1
 The supported zones are `ch-gva-2`, `de-fra-1`, `de-muc-1`, `at-vie-1`, `at-vie-2`, and `bg-sof-1`.
 See the Exoscale guides for [IAM](https://community.exoscale.com/documentation/iam/) and
 [API keys](https://community.exoscale.com/documentation/iam/quick-start/) for more information.
+
+Multi-node clusters (`--cluster-size` greater than 1) connect their nodes through an Exoscale VPC
+with jumbo frames, relying on the largest packet size the VPC carries, which Exoscale does not
+document. If a multi-node installation times out waiting for the database while single-node
+installations succeed, see
+[VPC interface configuration](https://github.com/exasol/exasol-personal/blob/main/assets/infrastructure/exoscale/README.md#vpc-interface-configuration).
