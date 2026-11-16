@@ -46,7 +46,7 @@ var cleanupDiscoverCmd = &cobra.Command{
 			scopedCollector.Scope.Reason = ""
 			res = append(res, summaries...)
 		}
-		res = shared.FilterSummariesOlderThan(res, cleanupOpts.OlderThan, time.Now())
+		res = shared.FilterSummariesOlderThan(shared.DeduplicateLocationIndependent(res), cleanupOpts.OlderThan, time.Now())
 
 		if !cleanupOpts.JSON {
 			renderCleanupScope(cmd.OutOrStdout(), plan.Scope)

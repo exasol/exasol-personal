@@ -3,7 +3,10 @@
 
 package exoscale
 
-import "time"
+import (
+	"regexp"
+	"time"
+)
 
 // Exoscale API constants
 const (
@@ -12,3 +15,6 @@ const (
 )
 
 var defaultTimeout = 30 * time.Second
+
+// resourceNamePattern matches names of resources derived from a deployment id.
+var resourceNamePattern = regexp.MustCompile(`^(exasol-[a-f0-9]{8})-.+$`)

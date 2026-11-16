@@ -26,6 +26,8 @@ func BuildPlan() CleanupPlan {
 		{Name: "iam-api-keys", Types: []ResourceType{ResourceIAMAPIKey}},
 		{Name: "iam-roles", Types: []ResourceType{ResourceIAMRole}},
 		{Name: "networking", Types: []ResourceType{ResourcePrivateNetwork, ResourceSecurityGroup}},
+		{Name: "vpc-subnets", Types: []ResourceType{ResourceVPCSubnet}},
+		{Name: "vpcs", Types: []ResourceType{ResourceVPC}},
 		{Name: "ssh-keys", Types: []ResourceType{ResourceSSHKey}},
 		{Name: "s3", Types: []ResourceType{ResourceSOSBucket}},
 	}}

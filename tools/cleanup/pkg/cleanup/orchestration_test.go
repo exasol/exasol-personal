@@ -136,6 +136,58 @@ func TestCollectLookupIndexPreservesProviderFailures(t *testing.T) {
 	}
 }
 
+func TestCollectLookupIndexReportsLocationIndependentDeploymentOnce(t *testing.T) {
+	// Given two searched zones of one provider that both report a deployment found
+	// only from location-independent resources, and one that has zonal resources in both
+	orphan := DeploymentSummary{ID: "dep-global", Provider: "exoscale", LocationIndependent: true}
+	zonal := DeploymentSummary{ID: "dep-zonal", Provider: "exoscale"}
+	scopeA := ScopeProvider{Provider: "exoscale", Location: "ch-gva-2"}
+	scopeB := ScopeProvider{Provider: "exoscale", Location: "de-fra-1"}
+	orphanA, orphanB, zonalA, zonalB := orphan, orphan, zonal, zonal
+	orphanA.Region, zonalA.Region = "ch-gva-2", "ch-gva-2"
+	orphanB.Region, zonalB.Region = "de-fra-1", "de-fra-1"
+	plan := Plan{
+		Collectors: []ScopedCollector{
+			{Collector: stubCollector{summaries: []DeploymentSummary{orphanA, zonalA}}, Scope: &scopeA},
+			{Collector: stubCollector{summaries: []DeploymentSummary{orphanB, zonalB}}, Scope: &scopeB},
+		},
+	}
+
+	// When callers build a deployment lookup index
+	index := CollectLookupIndex(context.Background(), &plan)
+
+	// Then the location-independent deployment resolves to the first zone only,
+	// while the zonal deployment stays ambiguous
+	if got := index.Matches["dep-global"]; len(got) != 1 || got[0].Resolved.Location != "ch-gva-2" {
+		t.Fatalf("dep-global matches = %v, want one match in ch-gva-2", got)
+	}
+	if got := len(index.Matches["dep-zonal"]); got != 2 {
+		t.Fatalf("dep-zonal matches = %d, want 2", got)
+	}
+}
+
+func TestDeduplicateLocationIndependentKeepsFirstReport(t *testing.T) {
+	// Given discovery results from two zones and another provider
+	summaries := []DeploymentSummary{
+		{ID: "dep-global", Provider: "exoscale", Region: "ch-gva-2", LocationIndependent: true},
+		{ID: "dep-global", Provider: "exoscale", Region: "de-fra-1", LocationIndependent: true},
+		{ID: "dep-global", Provider: "aws", Region: "eu-central-1", LocationIndependent: true},
+		{ID: "dep-zonal", Provider: "exoscale", Region: "ch-gva-2"},
+		{ID: "dep-zonal", Provider: "exoscale", Region: "de-fra-1"},
+	}
+
+	// When
+	got := DeduplicateLocationIndependent(summaries)
+
+	// Then only the second exoscale report of the location-independent deployment is dropped
+	if len(got) != 4 {
+		t.Fatalf("got %d summaries, want 4: %v", len(got), got)
+	}
+	if got[1].Provider != "aws" {
+		t.Fatalf("second summary = %v, want the aws report", got[1])
+	}
+}
+
 func TestFilterDeploymentDetailsByTypesReturnsTypedCopy(t *testing.T) {
 	createdAt := time.Unix(10, 0)
 	details := &DeploymentDetails{
@@ -203,6 +255,32 @@ func TestFilterSummariesOlderThanKeepsOnlyStaleDeployments(t *testing.T) {
 
 	if got := FilterSummariesOlderThan(summaries, 0, now); len(got) != 2 {
 		t.Fatalf("unfiltered = %v, want both summaries", got)
+	}
+}
+
+func TestStaleDeploymentIDsSkipsUndatedLocationIndependentDeployments(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	index := LookupIndex{Matches: map[string][]LookupMatch{
+		"dep-undated-global": {{Summary: DeploymentSummary{ID: "dep-undated-global", LocationIndependent: true}}},
+		"dep-dated-global": {{Summary: DeploymentSummary{
+			ID: "dep-dated-global", LocationIndependent: true, CreatedAt: now.Add(-48 * time.Hour),
+		}}},
+		"dep-undated-zonal": {{Summary: DeploymentSummary{ID: "dep-undated-zonal"}}},
+	}}
+
+	// Given undated and dated deployments, some found only from location-independent resources
+	// When stale ids are selected with and without an age
+	ids := StaleDeploymentIDs(index, 24*time.Hour, now)
+	all := StaleDeploymentIDs(index, 0, now)
+
+	// Then an age skips only the undated location-independent deployment
+	if len(ids) != 2 || ids[0] != "dep-dated-global" || ids[1] != "dep-undated-zonal" {
+		t.Fatalf("ids = %v, want [dep-dated-global dep-undated-zonal]", ids)
+	}
+	if len(all) != 3 {
+		t.Fatalf("without age ids = %v, want all three", all)
 	}
 }
 

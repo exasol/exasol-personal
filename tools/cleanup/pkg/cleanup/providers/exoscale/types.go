@@ -27,6 +27,8 @@ const (
 	ResourceComputeInstance ResourceType = "exoscale-compute-instance"
 	ResourceBlockVolume     ResourceType = "exoscale-block-storage-volume"
 	ResourcePrivateNetwork  ResourceType = "exoscale-private-network"
+	ResourceVPC             ResourceType = "exoscale-vpc"
+	ResourceVPCSubnet       ResourceType = "exoscale-vpc-subnet"
 	ResourceSecurityGroup   ResourceType = "exoscale-security-group"
 	ResourceSSHKey          ResourceType = "exoscale-ssh-key"
 	ResourceIAMRole         ResourceType = "exoscale-iam-role"
