@@ -46,6 +46,19 @@
         }
       ]
     },
+    "networking": {
+      "type": "rules",
+      "rules": [
+        {
+          "action": "allow",
+          "expression": "operation in ['list-vpcs', 'get-vpc', 'create-vpc', 'update-vpc', 'delete-vpc', 'list-vpc-routes']"
+        },
+        {
+          "action": "allow",
+          "expression": "operation in ['list-subnets', 'get-subnet', 'create-subnet', 'update-subnet', 'delete-subnet', 'attach-instance-to-subnet', 'detach-instance-from-subnet']"
+        }
+      ]
+    },
     "sos": {
       "type": "rules",
       "rules": [

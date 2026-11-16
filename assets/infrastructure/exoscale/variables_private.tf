@@ -2,22 +2,18 @@
 # If you want to make them public on Exasol Personal launcher CLI, move them to variables_public.tf
 # Some of those values are just here for visiblity so their values aren't hidden deep in some source file
 
-variable "private_network_start_ip" {
-  description = "Start of the DHCP range for the Exoscale private network"
+variable "vpc_subnet_ipv4_block" {
+  description = "Private IPv4 block of the VPC subnet that connects the cluster nodes"
   type        = string
-  default     = "172.16.0.20"
+  default     = "172.16.0.0/22"
 }
 
-variable "private_network_end_ip" {
-  description = "End of the DHCP range for the Exoscale private network"
-  type        = string
-  default     = "172.16.3.253"
-}
-
-variable "private_network_netmask" {
-  description = "Netmask for the Exoscale private network"
-  type        = string
-  default     = "255.255.252.0"
+# Measured, not documented by Exoscale; multi-node clusters stall if it exceeds
+# what the VPC carries. See "VPC Interface Configuration" in README.md.
+variable "vpc_mtu" {
+  description = "MTU of the VPC interface; the VPC carries IPv4 packets of up to 8930 bytes"
+  type        = number
+  default     = 8930
 }
 
 variable "allowed_cidr" {

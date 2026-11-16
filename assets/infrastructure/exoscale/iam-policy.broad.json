@@ -4,6 +4,9 @@
     "compute": {
       "type": "allow"
     },
+    "networking": {
+      "type": "allow"
+    },
     "sos": {
       "type": "allow"
     },

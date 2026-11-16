@@ -19,7 +19,7 @@ terraform {
     }
     exoscale = {
       source  = "exoscale/exoscale"
-      version = "~> 0.68"
+      version = "~> 0.77"
     }
     aws = {
       source  = "hashicorp/aws"

@@ -33,9 +33,11 @@ container for the archive.
 
 ### Exoscale
 
-The Exoscale preset creates a private network, security group, SSH key, and bootstrap Simple Object
-Storage (SOS) bucket. Each node has a Compute instance with its root disk, an automatically assigned
-public IP, and a separate Block Storage data volume.
+The Exoscale preset creates a VPC with one subnet, a security group, an SSH key, and a bootstrap
+Simple Object Storage (SOS) bucket. Each node has a Compute instance with its root disk, an
+automatically assigned public IP, and a separate Block Storage data volume. Deployments created with
+launcher versions before VPC support use a private network instead and keep it until they are
+destroyed.
 
 When SOS archive support is enabled, it also creates an archive bucket and scoped IAM role and API
 key.

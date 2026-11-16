@@ -3,7 +3,7 @@ locals {
 
   # Node configuration
   node_start_num = 11
-  ip_start_octet = 20 # IPs start at .20 (DHCP range begins here)
+  ip_start_octet = 20 # The first addresses of a VPC subnet are reserved
   nodes = [
     for i in range(var.cluster_size) : {
       name = "n${local.node_start_num + i}"
@@ -18,17 +18,26 @@ locals {
 
 
 
-# Private network for inter-node communication
-# Exoscale instances get public IPs automatically — no VPC/IGW/route table needed.
-resource "exoscale_private_network" "cluster" {
-  zone     = var.zone
-  name     = "${local.deployment_id}-network"
-  start_ip = var.private_network_start_ip
-  end_ip   = var.private_network_end_ip
-  netmask  = var.private_network_netmask
+# VPC for inter-node communication. Instances keep their automatically
+# assigned public IPs, so no gateway or route table is needed.
+resource "exoscale_vpc" "cluster" {
+  zone = var.zone
+  name = "${local.deployment_id}-vpc"
 
   labels = {
-    name          = "${local.deployment_id}-network"
+    name          = "${local.deployment_id}-vpc"
+    deployment_id = local.deployment_id
+  }
+}
+
+resource "exoscale_vpc_subnet" "cluster" {
+  zone       = var.zone
+  vpc_id     = exoscale_vpc.cluster.id
+  name       = "${local.deployment_id}-subnet"
+  ipv4_block = var.vpc_subnet_ipv4_block
+
+  labels = {
+    name          = "${local.deployment_id}-subnet"
     deployment_id = local.deployment_id
   }
 }
@@ -119,9 +128,14 @@ resource "exoscale_compute_instance" "nodes" {
 
   security_group_ids = [exoscale_security_group.exasol_instance.id]
 
-  network_interface {
-    network_id = exoscale_private_network.cluster.id
-    ip_address = each.value.ip
+  vpc {
+    id = exoscale_vpc.cluster.id
+    interfaces = [
+      {
+        subnet_id    = exoscale_vpc_subnet.cluster.id
+        ipv4_address = each.value.ip
+      }
+    ]
   }
 
   state = var.power_state

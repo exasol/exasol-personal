@@ -3,7 +3,8 @@ resource "exoscale_security_group" "exasol_instance" {
   name = "${local.deployment_id}-sg"
 }
 
-# Allow all internal private network traffic
+# Security groups filter VPC traffic, so cluster nodes must be allowed to
+# reach each other explicitly.
 resource "exoscale_security_group_rule" "internal_ingress" {
   security_group_id      = exoscale_security_group.exasol_instance.id
   type                   = "INGRESS"

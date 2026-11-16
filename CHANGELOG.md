@@ -88,7 +88,17 @@ Notable user-facing changes to Exasol Personal are documented here.
 
   Example: `CREATE TABLE PQ."Sales Q" AS (IMPORT FROM LOCAL PARQUET FILE 'sales.parquet')`
 
+- `exasol install exoscale` creates deployments again. Exoscale no longer allows new Private
+  Networks, so every installation failed with `Operation 'create-private-network' not enabled`;
+  new deployments connect their nodes through a VPC instead. Existing deployments keep their
+  Private Network and can still be stopped, started, and destroyed.
+
 ### Breaking Changes
+
+- The Exoscale API key needs access to the `networking` service to create the VPC of a new
+  deployment. Keys of a restricted role fail with `Forbidden by role policy for networking` until
+  the service is added to the role with the Exoscale CLI or API, as described in
+  [Configure IAM access](https://exasol.github.io/exasol-personal/latest/cloud/exoscale/#configure-iam-access).
 
 - Launcher-managed files move from `~/.exasol/personal` to platform-specific
   locations. Deployments and SQL history move to `~/.exasol/launcher` on Linux,
