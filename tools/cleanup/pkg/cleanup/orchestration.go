@@ -137,6 +137,9 @@ func CollectLookupIndex(ctx context.Context, plan *Plan) LookupIndex {
 		scopedCollector.Scope.Status = ProviderStatusSearched
 		scopedCollector.Scope.Reason = ""
 		for _, summary := range summaries {
+			if reportedElsewhere(lookupIndex.Matches[summary.ID], summary) {
+				continue
+			}
 			lookupIndex.Matches[summary.ID] = append(lookupIndex.Matches[summary.ID], LookupMatch{
 				Collector: scopedCollector.Collector,
 				Resolved: ResolvedDeployment{
@@ -150,6 +153,44 @@ func CollectLookupIndex(ctx context.Context, plan *Plan) LookupIndex {
 	}
 
 	return lookupIndex
+}
+
+// reportedElsewhere reports whether another location of the same provider
+// already reported summary's location-independent deployment.
+func reportedElsewhere(matches []LookupMatch, summary DeploymentSummary) bool {
+	for _, match := range matches {
+		if SameLocationIndependentDeployment(match.Summary, summary) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// SameLocationIndependentDeployment reports whether a and b are reports of
+// one location-independent deployment from different searched locations.
+func SameLocationIndependentDeployment(a, b DeploymentSummary) bool {
+	return a.LocationIndependent && b.LocationIndependent && a.ID == b.ID && a.Provider == b.Provider
+}
+
+// DeduplicateLocationIndependent keeps the first report of each
+// location-independent deployment.
+func DeduplicateLocationIndependent(summaries []DeploymentSummary) []DeploymentSummary {
+	result := make([]DeploymentSummary, 0, len(summaries))
+	for _, summary := range summaries {
+		duplicate := false
+		for _, kept := range result {
+			if SameLocationIndependentDeployment(kept, summary) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			result = append(result, summary)
+		}
+	}
+
+	return result
 }
 
 func LookupDeploymentInPlan(ctx context.Context, plan *Plan, deploymentID string) ([]LookupMatch, int) {
@@ -249,6 +290,17 @@ func IsOlderThan(createdAt time.Time, age time.Duration, now time.Time) bool {
 	return createdAt.Before(now.Add(-age))
 }
 
+// isStale reports whether summary's deployment is older than age. An undated
+// deployment found only from location-independent resources never is, because
+// those resources can belong to a deployment whose creation just started.
+func isStale(summary DeploymentSummary, age time.Duration, now time.Time) bool {
+	if age > 0 && summary.LocationIndependent && summary.CreatedAt.IsZero() {
+		return false
+	}
+
+	return IsOlderThan(summary.CreatedAt, age, now)
+}
+
 // FilterSummariesOlderThan keeps the summaries of deployments older than age.
 func FilterSummariesOlderThan(
 	summaries []DeploymentSummary,
@@ -261,7 +313,7 @@ func FilterSummariesOlderThan(
 
 	filtered := make([]DeploymentSummary, 0, len(summaries))
 	for _, summary := range summaries {
-		if IsOlderThan(summary.CreatedAt, age, now) {
+		if isStale(summary, age, now) {
 			filtered = append(filtered, summary)
 		}
 	}
@@ -275,7 +327,7 @@ func StaleDeploymentIDs(index LookupIndex, age time.Duration, now time.Time) []s
 	ids := make([]string, 0, len(index.Matches))
 	for id, matches := range index.Matches {
 		for _, match := range matches {
-			if IsOlderThan(match.Summary.CreatedAt, age, now) {
+			if isStale(match.Summary, age, now) {
 				ids = append(ids, id)
 
 				break

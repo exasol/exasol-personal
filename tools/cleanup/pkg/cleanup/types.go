@@ -17,6 +17,9 @@ type DeploymentSummary struct {
 	CreatedAt time.Time `json:"createdAt"`
 	State     string    `json:"state"` // e.g. active|partial|unknown
 	Resources int       `json:"resources"`
+	// LocationIndependent marks a deployment found only from resources that
+	// belong to no location, so every searched location reports it alike.
+	LocationIndependent bool `json:"locationIndependent,omitempty"`
 }
 
 // ResourceRef identifies a resource found via tagging or relationship.

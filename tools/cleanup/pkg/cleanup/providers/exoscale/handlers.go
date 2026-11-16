@@ -42,6 +42,8 @@ func initHandlers(ctx context.Context, zone string) error {
 	registry[ResourceComputeInstance] = &computeInstanceHandler{client: client, zone: zone}
 	registry[ResourceBlockVolume] = &blockStorageVolumeHandler{client: client, zone: zone}
 	registry[ResourcePrivateNetwork] = &privateNetworkHandler{client: client, zone: zone}
+	registry[ResourceVPCSubnet] = &vpcSubnetHandler{client: client}
+	registry[ResourceVPC] = &vpcHandler{client: client}
 	registry[ResourceSecurityGroup] = &securityGroupHandler{client: client, zone: zone}
 	registry[ResourceSSHKey] = &sshKeyHandler{client: client, zone: zone}
 	registry[ResourceIAMRole] = &iamRoleHandler{client: client}

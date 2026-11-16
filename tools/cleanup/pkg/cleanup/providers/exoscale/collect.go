@@ -16,6 +16,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awscreds "github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	v3 "github.com/exoscale/egoscale/v3"
 	"github.com/exoscale/egoscale/v3/credentials"
 
@@ -40,42 +41,32 @@ func createExoscaleClient(ctx context.Context, zone string) (*v3.Client, error) 
 		return nil, fmt.Errorf("EXOSCALE_API_KEY and EXOSCALE_API_SECRET environment variables are required")
 	}
 
-	creds := credentials.NewStaticCredentials(apiKey, apiSecret)
-
-	// Get the zone endpoint
-	endpoint, err := getZoneEndpoint(zone)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := v3.NewClient(creds, v3.ClientOptWithEndpoint(endpoint))
+	client, err := v3.NewClient(credentials.NewStaticCredentials(apiKey, apiSecret))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Exoscale client: %w", err)
 	}
 
-	return client, nil
+	endpoint, err := client.GetZoneAPIEndpoint(ctx, v3.ZoneName(zone))
+	if err != nil {
+		return nil, fmt.Errorf("unsupported zone %s: %w", zone, err)
+	}
+
+	return client.WithEndpoint(endpoint), nil
 }
 
-// getZoneEndpoint returns the appropriate API endpoint for a zone
-func getZoneEndpoint(zone string) (v3.Endpoint, error) {
-	switch zone {
-	case "ch-gva-2":
-		return v3.CHGva2, nil
-	case "ch-dk-2":
-		return v3.CHDk2, nil
-	case "de-fra-1":
-		return v3.DEFra1, nil
-	case "de-muc-1":
-		return v3.DEMuc1, nil
-	case "at-vie-1":
-		return v3.ATVie1, nil
-	case "at-vie-2":
-		return v3.ATVie2, nil
-	case "bg-sof-1":
-		return v3.BGSof1, nil
-	default:
-		return "", fmt.Errorf("unsupported zone: %s", zone)
+// listZoneNames returns the names of all zones available to the organization.
+func listZoneNames(ctx context.Context, client *v3.Client) ([]string, error) {
+	resp, err := client.ListZones(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list zones: %w", err)
 	}
+
+	names := make([]string, 0, len(resp.Zones))
+	for _, zone := range resp.Zones {
+		names = append(names, string(zone.Name))
+	}
+
+	return names, nil
 }
 
 // detailsAccumulator carries the mutable state that the per-resource-type
@@ -115,6 +106,7 @@ func CollectDeploymentDetails(
 	collectInstanceDetails(ctx, client, zone, deploymentID, acc)
 	collectBlockStorageVolumeDetails(ctx, client, zone, deploymentID, acc)
 	collectPrivateNetworkDetails(ctx, client, zone, deploymentID, acc)
+	collectVPCDetails(ctx, client, zone, deploymentID, acc)
 	collectSecurityGroupDetails(ctx, client, zone, deploymentID, acc)
 	collectSSHKeyDetails(ctx, client, zone, deploymentID, acc)
 	collectIAMRoleDetails(ctx, client, zone, deploymentID, acc)
@@ -576,21 +568,24 @@ func CollectDeploymentSummaries(
 
 	summaries := make(map[string]*DeploymentSummary)
 
-	// Phase 1: Discover deployments from resources with deployment_id labels
-	// These are the authoritative sources for deployment existence
 	if err := discoverSummariesFromInstances(ctx, client, zone, ownerFilter, summaries); err != nil {
 		return nil, err
 	}
 	discoverSummariesFromVolumes(ctx, client, zone, ownerFilter, summaries)
 	discoverSummariesFromPrivateNetworks(ctx, client, zone, ownerFilter, summaries)
+	discoverSummariesFromVPCs(ctx, client, zone, ownerFilter, summaries)
+	discoverSummariesFromSOSBuckets(ctx, zone, ownerFilter, summaries)
 
-	// Phase 2: Count other resources only if their deployment already exists
-	// These resources don't have deployment_id labels, so we only count them
-	countSecurityGroupsIntoSummaries(ctx, client, summaries)
-	countSSHKeysIntoSummaries(ctx, client, summaries)
-	countIAMRolesIntoSummaries(ctx, client, summaries)
-	countAPIKeysIntoSummaries(ctx, client, summaries)
-	countSOSBucketsIntoSummaries(ctx, zone, summaries)
+	// Organization-wide resources come last, once every zonal resource has
+	// established its deployment in this zone.
+	addOrganizationResourcesToSummaries(
+		ctx,
+		listOrganizationResources(ctx, client),
+		zone,
+		ownerFilter,
+		summaries,
+		deploymentsInZonesOtherThan(client, zone),
+	)
 
 	return summariesToSlice(summaries), nil
 }
@@ -739,93 +734,47 @@ func discoverSummariesFromPrivateNetworks(
 	}
 }
 
-// countResourceForMatchingSummary counts a resource against the first already-discovered
-// deployment whose ID matches the resource name
-func countResourceForMatchingSummary(summaries map[string]*DeploymentSummary, name string) {
-	for depID, sum := range summaries {
-		if matchesDeploymentName(&name, depID) {
-			sum.Resources++
-			break
-		}
-	}
-}
-
-// countSecurityGroupsIntoSummaries counts security groups of known deployments
-func countSecurityGroupsIntoSummaries(
-	ctx context.Context,
-	client *v3.Client,
-	summaries map[string]*DeploymentSummary,
-) {
-	securityGroupsResp, _ := client.ListSecurityGroups(ctx)
-	if securityGroupsResp == nil || securityGroupsResp.SecurityGroups == nil {
-		return
-	}
-
-	for _, sg := range securityGroupsResp.SecurityGroups {
-		countResourceForMatchingSummary(summaries, sg.Name)
-	}
-}
-
-// countSSHKeysIntoSummaries counts SSH keys of known deployments
-func countSSHKeysIntoSummaries(
-	ctx context.Context,
-	client *v3.Client,
-	summaries map[string]*DeploymentSummary,
-) {
-	sshKeysResp, _ := client.ListSSHKeys(ctx)
-	if sshKeysResp == nil || sshKeysResp.SSHKeys == nil {
-		return
-	}
-
-	for _, key := range sshKeysResp.SSHKeys {
-		countResourceForMatchingSummary(summaries, key.Name)
-	}
-}
-
-// countIAMRolesIntoSummaries counts IAM roles of known deployments
-func countIAMRolesIntoSummaries(
-	ctx context.Context,
-	client *v3.Client,
-	summaries map[string]*DeploymentSummary,
-) {
-	iamRolesResp, _ := client.ListIAMRoles(ctx)
-	if iamRolesResp == nil || iamRolesResp.IAMRoles == nil {
-		return
-	}
-
-	for _, role := range iamRolesResp.IAMRoles {
-		countResourceForMatchingSummary(summaries, role.Name)
-	}
-}
-
-// countAPIKeysIntoSummaries counts IAM API keys of known deployments
-func countAPIKeysIntoSummaries(
-	ctx context.Context,
-	client *v3.Client,
-	summaries map[string]*DeploymentSummary,
-) {
-	apiKeysResp, _ := client.ListAPIKeys(ctx)
-	if apiKeysResp == nil || apiKeysResp.APIKeys == nil {
-		return
-	}
-
-	for _, key := range apiKeysResp.APIKeys {
-		countResourceForMatchingSummary(summaries, key.Name)
-	}
-}
-
-// countSOSBucketsIntoSummaries counts SOS buckets of known deployments
-func countSOSBucketsIntoSummaries(
+// discoverSummariesFromSOSBuckets discovers deployments from SOS bucket names.
+// A failed apply can leave buckets behind without any labeled resource, so
+// buckets must be able to establish a deployment on their own.
+func discoverSummariesFromSOSBuckets(
 	ctx context.Context,
 	zone string,
+	ownerFilter string,
 	summaries map[string]*DeploymentSummary,
 ) {
-	for depID := range summaries {
-		buckets, _ := listSOSBuckets(ctx, zone, depID)
-		if sum, ok := summaries[depID]; ok {
-			sum.Resources += len(buckets)
-		}
+	buckets, err := listDeploymentSOSBuckets(ctx, zone)
+	if err != nil {
+		slog.Warn("SOS bucket discovery failed", "zone", zone, "error", err)
+		return
 	}
+
+	addSOSBucketsToSummaries(buckets, zone, ownerFilter, summaries)
+}
+
+// addSOSBucketsToSummaries counts the deployment buckets located in zone.
+func addSOSBucketsToSummaries(
+	buckets []s3types.Bucket,
+	zone string,
+	ownerFilter string,
+	summaries map[string]*DeploymentSummary,
+) {
+	addNamedResourcesToSummaries(sosBucketsInZone(buckets, zone), zone, ownerFilter, summaries)
+}
+
+func bucketInZone(bucket s3types.Bucket, zone string) bool {
+	return ptrString(bucket.BucketRegion) == zone
+}
+
+// deploymentIDFromResourceName returns the deployment id that prefixes a
+// resource name such as exasol-1a2b3c4d-sos-archive, or "" if there is none.
+func deploymentIDFromResourceName(name string) string {
+	match := resourceNamePattern.FindStringSubmatch(name)
+	if match == nil {
+		return ""
+	}
+
+	return match[1]
 }
 
 // summariesToSlice converts the discovered deployment map into the returned slice
@@ -1050,11 +999,29 @@ func newSOSS3Client(ctx context.Context, zone string) (*s3.Client, error) {
 	return s3.NewFromConfig(cfg), nil
 }
 
-// listSOSBuckets lists SOS buckets matching the deployment pattern
+// listSOSBuckets lists the SOS buckets belonging to a deployment
 func listSOSBuckets(ctx context.Context, zone, deploymentID string) ([]string, error) {
+	all, err := listDeploymentSOSBuckets(ctx, zone)
+	if err != nil {
+		return nil, err
+	}
+
+	var buckets []string
+	for _, bucket := range all {
+		if deploymentIDFromResourceName(ptrString(bucket.Name)) == deploymentID && bucketInZone(bucket, zone) {
+			buckets = append(buckets, *bucket.Name)
+		}
+	}
+
+	return buckets, nil
+}
+
+// listDeploymentSOSBuckets lists the buckets named after a deployment with
+// their zone. SOS lists the buckets of every zone without one.
+func listDeploymentSOSBuckets(ctx context.Context, zone string) ([]s3types.Bucket, error) {
 	if os.Getenv("EXOSCALE_API_KEY") == "" {
 		slog.Debug("SOS bucket discovery skipped: no credentials")
-		return []string{}, nil
+		return nil, nil
 	}
 
 	s3Client, err := newSOSS3Client(ctx, zone)
@@ -1062,17 +1029,39 @@ func listSOSBuckets(ctx context.Context, zone, deploymentID string) ([]string, e
 		return nil, err
 	}
 
-	output, err := s3Client.ListBuckets(ctx, &s3.ListBucketsInput{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list SOS buckets: %w", err)
-	}
-
-	var buckets []string
-	for _, bucket := range output.Buckets {
-		if bucket.Name != nil && strings.HasPrefix(*bucket.Name, deploymentID) {
-			buckets = append(buckets, *bucket.Name)
+	var buckets []s3types.Bucket
+	paginator := s3.NewListBucketsPaginator(s3Client, &s3.ListBucketsInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list SOS buckets: %w", err)
+		}
+		for _, bucket := range page.Buckets {
+			if deploymentIDFromResourceName(ptrString(bucket.Name)) == "" {
+				continue
+			}
+			if resolveSOSBucketZone(ctx, s3Client, &bucket) {
+				buckets = append(buckets, bucket)
+			}
 		}
 	}
 
 	return buckets, nil
+}
+
+// resolveSOSBucketZone sets the zone of a bucket listed without one and
+// reports whether the zone is known.
+func resolveSOSBucketZone(ctx context.Context, s3Client *s3.Client, bucket *s3types.Bucket) bool {
+	if ptrString(bucket.BucketRegion) != "" {
+		return true
+	}
+
+	location, err := s3Client.GetBucketLocation(ctx, &s3.GetBucketLocationInput{Bucket: bucket.Name})
+	if err != nil {
+		slog.Warn("skipping SOS bucket of unknown zone", "bucket", ptrString(bucket.Name), "error", err)
+		return false
+	}
+	bucket.BucketRegion = awssdk.String(string(location.LocationConstraint))
+
+	return true
 }
