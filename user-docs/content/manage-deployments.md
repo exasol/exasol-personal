@@ -25,6 +25,11 @@ Named deployments live in that same managed deployments directory, under `<name>
 differ only by case may collide on the case-insensitive filesystems commonly used by macOS and
 Windows.
 
+Named and implicit default selection use a deployment kept at the legacy
+location when no matching path exists at the new managed location. The new
+path takes precedence when both locations contain the name. The launcher
+reports the selected path and warns on stderr when it uses the legacy path.
+
 Alternatively, select an arbitrary path with `--deployment-dir <path>`. You cannot combine
 `--deployment-dir` and `--deployment`.
 
@@ -42,6 +47,9 @@ staging status=stopped preset=aws/ubuntu path=/Users/me/Library/Application Supp
 ```
 
 The list does not include deployments selected through an arbitrary `--deployment-dir` path.
+It includes deployments kept at the legacy location when no matching path
+exists at the new location. Each name appears once, with the new path taking
+precedence.
 
 ## Launcher files
 
