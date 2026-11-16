@@ -44,6 +44,91 @@ def test_deployments_list_json_is_empty_array_when_none_exist(
     assert json.loads(result.stdout) == []
 
 
+def _kept_legacy_deployment(home: Path, name: str) -> Path:
+    path = home / ".exasol" / "personal" / "deployments" / name
+    path.mkdir(parents=True)
+    (path / ".dirmutex.shared.1").touch()
+    return path
+
+
+@pytest.mark.openspec("deployment-directory-listing")
+def test_deployments_list_includes_kept_legacy_default(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a default deployment kept at the legacy root
+    home = tmp_path / "home"
+    legacy_dir = _kept_legacy_deployment(home, "default")
+
+    # When managed deployments are listed
+    result = subprocess.run(
+        [str(Path(exasol_path).resolve()), "deployments", "list", "--json"],
+        env=env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Then the default entry uses the legacy path
+    entries = json.loads(result.stdout)
+    assert [(entry["name"], entry["path"]) for entry in entries] == [
+        ("default", str(legacy_dir))
+    ]
+
+
+@pytest.mark.openspec("deployment-directory-listing")
+def test_deployments_list_includes_kept_legacy_named_deployment(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a named deployment kept at the legacy root and one at the new root
+    home = tmp_path / "home"
+    legacy_dir = _kept_legacy_deployment(home, "alpha")
+    new_dir = deployments_root(home) / "zeta"
+    new_dir.mkdir(parents=True)
+
+    # When managed deployments are listed
+    result = subprocess.run(
+        [str(Path(exasol_path).resolve()), "deployments", "list", "--json"],
+        env=env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Then both entries appear in name order with their selected paths
+    entries = json.loads(result.stdout)
+    assert [(entry["name"], entry["path"]) for entry in entries] == [
+        ("alpha", str(legacy_dir)),
+        ("zeta", str(new_dir)),
+    ]
+
+
+@pytest.mark.openspec("deployment-directory-listing")
+def test_deployments_list_prefers_new_path_on_name_collision(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given paths with the same name at both managed roots
+    home = tmp_path / "home"
+    legacy_dir = _kept_legacy_deployment(home, "shared")
+    new_dir = deployments_root(home) / "shared"
+    new_dir.mkdir(parents=True)
+
+    # When managed deployments are listed
+    result = subprocess.run(
+        [str(Path(exasol_path).resolve()), "deployments", "list", "--json"],
+        env=env_with_home(home),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Then one entry uses the new path and the kept legacy path still exists
+    entries = json.loads(result.stdout)
+    assert [(entry["name"], entry["path"]) for entry in entries] == [
+        ("shared", str(new_dir))
+    ]
+    assert legacy_dir.is_dir()
+
+
 def test_deployments_list_reports_named_deployments(
     exasol_path: str, tmp_path: Path
 ) -> None:
