@@ -346,3 +346,53 @@ func TestResolveDeploymentDirAndDeploymentDirFromRawArgs_AgreeOnSameInputs(t *te
 		}
 	}
 }
+
+//nolint:paralleltest // t.Chdir and t.Setenv change process state.
+func TestResolveDeploymentDirAndRawArgs_SelectKeptLegacyPaths(t *testing.T) {
+	// Given: named and default deployments kept at the legacy root.
+	setTestHome(t, t.TempDir())
+	t.Chdir(t.TempDir())
+	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"staging", "default"} {
+		mkdirTest(t, filepath.Join(legacyRoot, name))
+	}
+
+	for _, testCase := range []struct {
+		name           string
+		deploymentName string
+		args           []string
+	}{
+		{
+			name: "named", deploymentName: "staging",
+			args: []string{"config", "set", "--deployment", "staging"},
+		},
+		{name: "default", deploymentName: "default", args: []string{"config", "set"}},
+	} {
+		// When: command and early flag resolution select a deployment.
+		nameFlag := ""
+		if testCase.name == "named" {
+			nameFlag = testCase.deploymentName
+		}
+		cmd, state := commandWithDeploymentSelection(t, "", nameFlag)
+		fromCommand, _, err := resolveDeploymentDir(cmd, state)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fromRawArgs, err := deploymentDirFromRawArgs(testCase.args)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Then: both use the kept legacy directory.
+		expected := filepath.Join(legacyRoot, testCase.deploymentName)
+		if fromCommand.Root() != expected || fromRawArgs.Root() != expected {
+			t.Fatalf(
+				"expected %q, got command=%q raw=%q",
+				expected, fromCommand.Root(), fromRawArgs.Root(),
+			)
+		}
+	}
+}

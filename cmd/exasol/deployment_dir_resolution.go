@@ -82,11 +82,23 @@ func addResolvedDeploymentDirNotice(
 	case deploymentDirSourceCurrent:
 		addTerminalNotice("Using deployment in current directory: " + deployment.Root())
 	case deploymentDirSourceDefault:
-		addTerminalNotice("Using default deployment directory: " + deployment.Root())
+		if isLegacyManagedDeploymentDir(deployment.Root()) {
+			addTerminalNotice(
+				"Warning: Using default deployment directory at legacy location: " +
+					deployment.Root(),
+			)
+		} else {
+			addTerminalNotice("Using default deployment directory: " + deployment.Root())
+		}
 	case deploymentDirSourceNamed:
-		addTerminalNotice(fmt.Sprintf(
-			"Using named deployment directory %q: %s", name, deployment.Root(),
-		))
+		message := fmt.Sprintf("Using named deployment directory %q: %s", name, deployment.Root())
+		if isLegacyManagedDeploymentDir(deployment.Root()) {
+			message = fmt.Sprintf(
+				"Warning: Using named deployment directory %q at legacy location: %s",
+				name, deployment.Root(),
+			)
+		}
+		addTerminalNotice(message)
 	default:
 	}
 }
@@ -151,7 +163,7 @@ func resolveDeploymentDirFromValues(
 		return config.NewDeploymentDir(values.deploymentDir), deploymentDirSourceExplicit, nil
 	}
 	if values.nameChanged {
-		namedDir, err := launcherpaths.NamedDeploymentDirPath(values.name)
+		namedDir, err := resolveManagedDeploymentDir(values.name)
 		if err != nil {
 			return config.DeploymentDir{}, deploymentDirSourceNone, err
 		}
@@ -172,12 +184,54 @@ func resolveDeploymentDirFromValues(
 		return config.NewDeploymentDir(cwd), deploymentDirSourceCurrent, nil
 	}
 
-	defaultDir, err := defaultDeploymentDir()
+	defaultDir, err := resolveManagedDeploymentDir("default")
 	if err != nil {
 		return config.DeploymentDir{}, deploymentDirSourceNone, err
 	}
 
 	return config.NewDeploymentDir(defaultDir), deploymentDirSourceDefault, nil
+}
+
+func resolveManagedDeploymentDir(name string) (string, error) {
+	newPath, err := launcherpaths.NamedDeploymentDirPath(name)
+	if err != nil {
+		return "", err
+	}
+	if exists, err := managedPathExists(newPath); err != nil {
+		return "", fmt.Errorf("inspect deployment path %s: %w", newPath, err)
+	} else if exists {
+		return newPath, nil
+	}
+
+	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
+	if err != nil {
+		return "", err
+	}
+	legacyPath := filepath.Join(legacyRoot, name)
+	if exists, err := managedPathExists(legacyPath); err != nil {
+		return "", fmt.Errorf("inspect deployment path %s: %w", legacyPath, err)
+	} else if exists {
+		return legacyPath, nil
+	}
+
+	return newPath, nil
+}
+
+func managedPathExists(path string) (bool, error) {
+	_, err := os.Lstat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+
+	return false, err
+}
+
+func isLegacyManagedDeploymentDir(path string) bool {
+	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
+	return err == nil && sameLocation(filepath.Dir(path), legacyRoot)
 }
 
 // followMigratedDeployment keeps a legacy managed deployment path working after

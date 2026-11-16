@@ -116,6 +116,44 @@ func TestResolveDeploymentDir_NamedFlagWins(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // home-directory environment is process-global.
+func TestResolveManagedDeploymentDir_PrefersNewPathAndReportsInspectionErrors(t *testing.T) {
+	// Given: a kept legacy deployment and an occupied path at the new root.
+	setTestHome(t, t.TempDir())
+	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	newRoot, err := launcherpaths.DeploymentsRootPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mkdirTest(t, filepath.Join(legacyRoot, "staging"))
+	mkdirTest(t, filepath.Join(newRoot, "staging"))
+
+	// When: the name is resolved.
+	selected, err := resolveManagedDeploymentDir("staging")
+
+	// Then: the new path takes precedence.
+	if err != nil || selected != filepath.Join(newRoot, "staging") {
+		t.Fatalf("expected new path, got %q, %v", selected, err)
+	}
+
+	// Given: the new managed root cannot contain a child path.
+	if err := os.RemoveAll(newRoot); err != nil {
+		t.Fatal(err)
+	}
+	writeTestMarker(t, newRoot)
+
+	// When: the name is resolved again.
+	_, err = resolveManagedDeploymentDir("staging")
+
+	// Then: the inspection error identifies the new path.
+	if err == nil || !strings.Contains(err.Error(), filepath.Join(newRoot, "staging")) {
+		t.Fatalf("expected path inspection error, got %v", err)
+	}
+}
+
 //nolint:paralleltest // t.Chdir changes process state.
 func TestResolveDeploymentDir_NamedFlagWinsOverCurrentDeploymentDir(t *testing.T) {
 	// Given: the current working directory is itself a different recognized deployment directory.
