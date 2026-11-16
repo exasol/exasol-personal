@@ -105,7 +105,11 @@ Notable user-facing changes to Exasol Personal are documented here.
   each later command moves it once nothing keeps it there. Cache settings and
   SQL history already at the new location take precedence over the old files.
   A `--deployment-dir` path to the old location of a moved deployment selects
-  its new location. Earlier launcher versions do not find migrated deployments.
+  its new location. Named and implicit default selection use a deployment
+  kept at the old location when no matching path exists at the new location,
+  and `exasol deployments list` includes it. A matching new path takes
+  precedence for selection and listing. Earlier launcher versions do not
+  find migrated deployments.
 
 ## 2.4.0 - 2026-11-04
 
