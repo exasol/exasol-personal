@@ -75,25 +75,28 @@ var deploymentsListCmd = &cobra.Command{
 	},
 }
 
-// listDeploymentDirectories scans launcherpaths.DeploymentsRootPath for deployment
-// directories. It intentionally does not accept --deployment-dir or
+// listDeploymentDirectories scans both managed roots. It does not accept
+// --deployment-dir or
 // --deployment/-d: deploymentsListCmd registers neither flag, so root's
 // PersistentPreRunE never resolves a deployment directory (and never emits
 // the resolved-directory notice) for this command; see
 // registerDeploymentsCommands.
 func listDeploymentDirectories(ctx context.Context) ([]deploymentListEntry, error) {
-	root, err := launcherpaths.DeploymentsRootPath()
+	newRoot, err := launcherpaths.DeploymentsRootPath()
 	if err != nil {
 		return nil, err
 	}
-
-	dirEntries, err := os.ReadDir(root)
+	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return []deploymentListEntry{}, nil
-		}
-
-		return nil, fmt.Errorf("read deployments directory %q: %w", root, err)
+		return nil, err
+	}
+	newDirs, err := readManagedDeploymentDirectories(newRoot)
+	if err != nil {
+		return nil, err
+	}
+	legacyDirs, err := readManagedDeploymentDirectories(legacyRoot)
+	if err != nil {
+		return nil, err
 	}
 
 	statusCtx, cancel, err := contextWithStatusTimeout(ctx, defaultStatusTimeoutSeconds)
@@ -102,16 +105,23 @@ func listDeploymentDirectories(ctx context.Context) ([]deploymentListEntry, erro
 	}
 	defer cancel()
 
-	entries := make([]deploymentListEntry, 0, len(dirEntries))
-	for _, dirEntry := range dirEntries {
-		if !dirEntry.IsDir() {
-			continue
-		}
-
-		path := filepath.Join(root, dirEntry.Name())
+	entries := make([]deploymentListEntry, 0, len(newDirs)+len(legacyDirs))
+	for _, dirEntry := range newDirs {
 		entries = append(entries, deploymentListEntry{
 			Name: dirEntry.Name(),
-			Path: path,
+			Path: filepath.Join(newRoot, dirEntry.Name()),
+		})
+	}
+	for _, dirEntry := range legacyDirs {
+		newPath := filepath.Join(newRoot, dirEntry.Name())
+		if exists, err := managedPathExists(newPath); err != nil {
+			return nil, fmt.Errorf("inspect deployment path %s: %w", newPath, err)
+		} else if exists {
+			continue
+		}
+		entries = append(entries, deploymentListEntry{
+			Name: dirEntry.Name(),
+			Path: filepath.Join(legacyRoot, dirEntry.Name()),
 		})
 	}
 
@@ -129,6 +139,18 @@ func listDeploymentDirectories(ctx context.Context) ([]deploymentListEntry, erro
 	})
 
 	return entries, nil
+}
+
+func readManagedDeploymentDirectories(root string) ([]os.DirEntry, error) {
+	entries, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read deployments directory %q: %w", root, err)
+	}
+
+	return slices.DeleteFunc(entries, func(entry os.DirEntry) bool { return !entry.IsDir() }), nil
 }
 
 // deploymentListEntryFor never fails on its own: an unreadable or malformed

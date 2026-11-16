@@ -31,6 +31,51 @@ func TestListDeploymentDirectories_EmptyWhenRootMissing(t *testing.T) {
 }
 
 //nolint:paralleltest // t.Chdir and t.Setenv change process state.
+func TestListDeploymentDirectories_MergesLegacyAndNewLocations(t *testing.T) {
+	// Given: a legacy-only deployment, a new-only deployment, and a name collision.
+	setTestHome(t, t.TempDir())
+	t.Chdir(t.TempDir())
+	newRoot, err := launcherpaths.DeploymentsRootPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		filepath.Join(legacyRoot, "alpha"),
+		filepath.Join(legacyRoot, "shared"),
+		filepath.Join(newRoot, "shared"),
+		filepath.Join(newRoot, "zeta"),
+	} {
+		mkdirTest(t, path)
+	}
+	writeTestMarker(t, filepath.Join(legacyRoot, "file"))
+
+	// When: managed deployment directories are listed.
+	entries, err := listDeploymentDirectories(context.Background())
+	// Then: names are sorted and each path follows managed location preference.
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := []deploymentListEntry{
+		{Name: "alpha", Path: filepath.Join(legacyRoot, "alpha")},
+		{Name: "shared", Path: filepath.Join(newRoot, "shared")},
+		{Name: "zeta", Path: filepath.Join(newRoot, "zeta")},
+	}
+	if len(entries) != len(expected) {
+		t.Fatalf("expected %d entries, got %#v", len(expected), entries)
+	}
+	for index, entry := range entries {
+		if entry.Name != expected[index].Name || entry.Path != expected[index].Path {
+			t.Fatalf("expected %q at %q, got %q at %q", expected[index].Name,
+				expected[index].Path, entry.Name, entry.Path)
+		}
+	}
+}
+
+//nolint:paralleltest // t.Chdir and t.Setenv change process state.
 func TestListDeploymentDirectories_SortsAlphabeticallyAndIgnoresNonDirectories(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)
