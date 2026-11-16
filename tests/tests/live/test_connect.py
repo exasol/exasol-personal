@@ -258,22 +258,12 @@ def test_connect_interactive_shows_version_and_exit_hint(
     assert re.search(r"\bExasol \d+\.\d+\.\d+\b", output) is not None
 
 
-LOCAL_SESSION_LIMIT: Final = 20
-SESSIONS_BEYOND_LOCAL_LIMIT: Final = 5
+FORMER_SESSION_LIMIT: Final = 20
+SESSIONS_BEYOND_FORMER_LIMIT: Final = 5
 
 
-@pytest.mark.providers("local")
-def test_local_session_limit(shared_live_deployment: Deployment) -> None:
-    alive = _count_alive_sessions(
-        shared_live_deployment, LOCAL_SESSION_LIMIT + SESSIONS_BEYOND_LOCAL_LIMIT
-    )
-
-    assert alive == LOCAL_SESSION_LIMIT
-
-
-@pytest.mark.providers("aws", "azure", "exoscale", "ionos")
-def test_cloud_sessions_unlimited(shared_live_deployment: Deployment) -> None:
-    session_count: Final = LOCAL_SESSION_LIMIT + SESSIONS_BEYOND_LOCAL_LIMIT
+def test_sessions_unlimited(shared_live_deployment: Deployment) -> None:
+    session_count: Final = FORMER_SESSION_LIMIT + SESSIONS_BEYOND_FORMER_LIMIT
 
     alive = _count_alive_sessions(shared_live_deployment, session_count)
 

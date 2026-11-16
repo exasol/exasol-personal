@@ -65,10 +65,6 @@ func TestPodmanInstallStart_QuarantinesInterruptedInitialCreate(t *testing.T) {
 	) {
 		t.Fatalf("expected clean live data directory, got %v", statErr)
 	}
-	runCommand := commands[len(commands)-1]
-	if !strings.Contains(runCommand, "<params=maxConnectionsLicenseLimit=20>") {
-		t.Fatalf("expected recovered deployment to receive first-start params: %q", runCommand)
-	}
 }
 
 func TestPodmanInstallStart_RemovesStaleTLSOnlyForFreshDeployment(t *testing.T) {

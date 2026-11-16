@@ -29,8 +29,6 @@ const (
 	hostLoopbackHost = "127.0.0.1"
 )
 
-var nanoInitParams = []string{"maxConnectionsLicenseLimit=20"}
-
 // dockerDataDirMode lets the unprivileged UDF sandbox traverse the data
 // directory under a rootful engine.
 const dockerDataDirMode = 0o755
@@ -653,7 +651,6 @@ func (runtime *HostRuntime) podmanStartConfig(
 		// technical-documentation/localhost.md
 		ContainerDBBindHost: hostLoopbackHost,
 		DataDir:             filepath.Join(runtime.paths.WorkDir, nanoDataDirName),
-		InitParams:          append([]string(nil), nanoInitParams...),
 		VersionCheck:        runtimeConfig.VersionCheck,
 		SLCs:                runtimeConfig.SLCs,
 		BootstrapDir:        runtime.paths.BootstrapDir,

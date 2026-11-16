@@ -53,12 +53,6 @@ func TestPodmanInstallStart_MigratesLegacyOverlayDataAtomically(t *testing.T) {
 	if readErr != nil || string(content) != "payload" {
 		t.Fatalf("expected migrated data, got %q, %v", content, readErr)
 	}
-	if strings.Contains(commands[len(commands)-1], "<params=") {
-		t.Fatalf(
-			"migrated initialized data must not receive first-start params: %q",
-			commands[len(commands)-1],
-		)
-	}
 	assertNoMigrationStagingDirs(t, startConfig.DataDir)
 }
 

@@ -229,7 +229,6 @@ func (install *NanoInstall) Start(
 		containerName: containerName,
 		loadedImage:   loadedImage,
 		slcs:          availableSLCs,
-		fresh:         freshDeployment,
 		bootstrap:     bootstrap,
 		network:       services.NetworkName(),
 	})
@@ -348,7 +347,6 @@ type nanoRunOptions struct {
 	containerName string
 	loadedImage   string
 	slcs          []SLCConfig
-	fresh         bool
 	bootstrap     bool
 	network       string
 }
@@ -402,9 +400,6 @@ func nanoRunSpec(startConfig StartConfig, options nanoRunOptions) ContainerSpec 
 		}
 	}
 	spec.Args = []string{"init"}
-	if options.fresh && len(startConfig.InitParams) > 0 {
-		spec.Args = append(spec.Args, "params="+strings.Join(startConfig.InitParams, " "))
-	}
 	if options.bootstrap {
 		spec.Args = append(
 			spec.Args,
