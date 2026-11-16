@@ -18,6 +18,12 @@ def _seed_legacy_deployment(home: Path, name: str) -> Path:
     return legacy_dir
 
 
+def _seed_kept_legacy_deployment(home: Path, name: str) -> Path:
+    legacy_dir = _seed_legacy_deployment(home, name)
+    (legacy_dir / ".dirmutex.shared.1").touch()
+    return legacy_dir
+
+
 def _legacy_history_path(home: Path) -> Path:
     if sys.platform == "win32":
         return home / "AppData" / "Local" / "exasol_history"
@@ -125,6 +131,50 @@ def test_kept_legacy_deployment_warns_and_the_command_runs(
     assert str(new_dir) in result.stderr
     assert json.loads(result.stdout)["deploymentDir"] == str(new_dir)
     assert (legacy_dir / "marker.txt").read_text() == "state"
+
+
+@pytest.mark.openspec("deployment-directory-resolution")
+def test_named_selection_uses_kept_legacy_deployment(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a named deployment kept at the legacy location
+    home = tmp_path / "home"
+    legacy_dir = _seed_kept_legacy_deployment(home, "prod")
+
+    # When status selects the deployment by name
+    result = _run(exasol_path, home, "status", "--json", "--deployment", "prod")
+
+    # Then status uses the legacy path and warns once on stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["deploymentDir"] == str(legacy_dir)
+    notice = (
+        'Warning: Using named deployment directory "prod" at legacy location: '
+        f"{legacy_dir}"
+    )
+    assert result.stderr.count(notice) == 1
+    assert legacy_dir.is_dir()
+
+
+@pytest.mark.openspec("deployment-directory-resolution")
+def test_implicit_default_selection_uses_kept_legacy_deployment(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a default deployment kept at the legacy location and an unrelated cwd
+    home = tmp_path / "home"
+    legacy_dir = _seed_kept_legacy_deployment(home, "default")
+    cwd = tmp_path / "work"
+    cwd.mkdir()
+
+    # When status selects the implicit default deployment
+    result = _run(exasol_path, home, "status", "--json", cwd=cwd)
+
+    # Then status uses the legacy path and warns once on stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["deploymentDir"] == str(legacy_dir)
+    prefix = "Warning: Using default deployment directory at legacy location: "
+    notice = f"{prefix}{legacy_dir}"
+    assert result.stderr.count(notice) == 1
+    assert legacy_dir.is_dir()
 
 
 @pytest.mark.openspec("sql-history-storage")
