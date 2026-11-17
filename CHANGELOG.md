@@ -108,10 +108,10 @@ Notable user-facing changes to Exasol Personal are documented here.
   [Configure IAM access](https://exasol.github.io/exasol-personal/latest/cloud/exoscale/#configure-iam-access).
 
 - Launcher-managed files move from `~/.exasol/personal` to platform-specific
-  locations. Deployments and SQL history move to `~/.exasol/launcher` on Linux,
-  `~/Library/Application Support/exasol/launcher` on macOS, and
-  `%LOCALAPPDATA%\exasol\launcher` on Windows. The cache settings file becomes
-  `resources.yaml` in the platform configuration directory, and the runtime
+  locations. Deployments and SQL history move to `~/.exasol/launcher` on Linux
+  and macOS, and `%LOCALAPPDATA%\exasol\launcher` on Windows. The cache settings
+  file becomes `resources.yaml` under `~/.exasol/launcher` on macOS and in the
+  platform configuration directory on Linux and Windows. The runtime
   cache moves to `exasol/launcher/resources` in the platform cache directory.
   The first command after an upgrade moves existing files, reports each move,
   deletes the old runtime cache, and removes the old directories it leaves

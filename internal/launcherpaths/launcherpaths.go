@@ -66,6 +66,19 @@ func HistoryFilePath() (string, error) {
 }
 
 func ResourceConfigFilePath() (string, error) {
+	return resourceConfigFilePathForOS(runtime.GOOS)
+}
+
+func resourceConfigFilePathForOS(goos string) (string, error) {
+	if goos == "darwin" {
+		root, err := durableRootPathForOS(goos)
+		if err != nil {
+			return "", err
+		}
+
+		return filepath.Join(root, resourceConfigFileName), nil
+	}
+
 	return namespacedPath(os.UserConfigDir, resourceConfigFileName)
 }
 
@@ -115,11 +128,14 @@ func namespacedPath(baseDir func() (string, error), name string) (string, error)
 	return filepath.Join(launcherNamespaceRoot(base), name), nil
 }
 
-// Linux keeps durable data in a dotfile location separate from config.
 // Windows uses %LOCALAPPDATA% (os.UserCacheDir) because deployments hold
 // machine-bound state and %APPDATA% roams with the user profile.
 func durableRootPath() (string, error) {
-	if runtime.GOOS == "linux" {
+	return durableRootPathForOS(runtime.GOOS)
+}
+
+func durableRootPathForOS(goos string) (string, error) {
+	if goos == "linux" || goos == "darwin" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("resolve home directory for launcher durable root: %w", err)
@@ -129,7 +145,7 @@ func durableRootPath() (string, error) {
 	}
 
 	baseDir := os.UserConfigDir
-	if runtime.GOOS == "windows" {
+	if goos == "windows" {
 		baseDir = os.UserCacheDir
 	}
 	base, err := baseDir()
