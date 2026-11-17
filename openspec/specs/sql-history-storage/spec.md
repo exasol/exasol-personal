@@ -8,7 +8,7 @@ The interactive shell's SQL history SHALL be stored under the launcher's own nam
 
 #### Scenario: Platform-specific history location
 - **WHEN** the interactive shell resolves the SQL history file path
-- **THEN** it uses `~/.exasol/launcher/history/exasol_history` on Linux, `~/Library/Application Support/exasol/launcher/history/exasol_history` on macOS, and `%LOCALAPPDATA%\exasol\launcher\history\exasol_history` on Windows
+- **THEN** it uses `~/.exasol/launcher/history/exasol_history` on Linux, `~/.exasol/launcher/history/exasol_history` on macOS, and `%LOCALAPPDATA%\exasol\launcher\history\exasol_history` on Windows
 
 ### Requirement: An existing legacy history file SHALL be migrated with its contents preserved
 On CLI startup, before any command records an operation in progress, an existing history file at the legacy, unnamespaced location SHALL be moved to the new history location when no file exists there yet.

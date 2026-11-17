@@ -333,11 +333,11 @@ The cache root SHALL be a platform-conventional, launcher-owned cache directory,
 - **THEN** it uses `${XDG_CACHE_HOME:-~/.cache}/exasol/launcher/resources` on Linux, `~/Library/Caches/exasol/launcher/resources` on macOS, and `%LOCALAPPDATA%\exasol\launcher\resources` on Windows
 
 ### Requirement: The cache configuration file SHALL live at a platform-specific configuration location
-The resource cache's configuration SHALL be one `resources.yaml` file per user, located at the platform's conventional configuration directory.
+The resource cache's configuration SHALL be one `resources.yaml` file per user, located under the platform's launcher configuration root.
 
 #### Scenario: Platform-specific cache config file location
 - **WHEN** the launcher resolves the cache configuration file path
-- **THEN** it uses `${XDG_CONFIG_HOME:-~/.config}/exasol/launcher/resources.yaml` on Linux, `~/Library/Application Support/exasol/launcher/resources.yaml` on macOS, and `%APPDATA%\exasol\launcher\resources.yaml` on Windows
+- **THEN** it uses `${XDG_CONFIG_HOME:-~/.config}/exasol/launcher/resources.yaml` on Linux, `~/.exasol/launcher/resources.yaml` on macOS, and `%APPDATA%\exasol\launcher\resources.yaml` on Windows
 
 ### Requirement: An existing legacy cache config file SHALL be moved to resources.yaml
 On CLI startup, before any command records an operation in progress, an existing `runtime-artifacts.yaml` cache config file SHALL be moved to `resources.yaml` when `resources.yaml` does not exist yet.
