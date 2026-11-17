@@ -4,6 +4,8 @@
 import json
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -144,13 +146,10 @@ def test_named_selection_uses_kept_legacy_deployment(
     # When status selects the deployment by name
     result = _run(exasol_path, home, "status", "--json", "--deployment", "prod")
 
-    # Then status uses the legacy path and warns once on stderr
+    # Then status uses the legacy path with its ordinary selected-directory notice
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["deploymentDir"] == str(legacy_dir)
-    notice = (
-        'Warning: Using named deployment directory "prod" at legacy location: '
-        f"{legacy_dir}"
-    )
+    notice = f'Using named deployment directory "prod": {legacy_dir}'
     assert result.stderr.count(notice) == 1
     assert legacy_dir.is_dir()
 
@@ -168,10 +167,10 @@ def test_implicit_default_selection_uses_kept_legacy_deployment(
     # When status selects the implicit default deployment
     result = _run(exasol_path, home, "status", "--json", cwd=cwd)
 
-    # Then status uses the legacy path and warns once on stderr
+    # Then status uses the legacy path with its ordinary selected-directory notice
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["deploymentDir"] == str(legacy_dir)
-    prefix = "Warning: Using default deployment directory at legacy location: "
+    prefix = "Using default deployment directory: "
     notice = f"{prefix}{legacy_dir}"
     assert result.stderr.count(notice) == 1
     assert legacy_dir.is_dir()
@@ -193,3 +192,126 @@ def test_legacy_history_file_is_migrated(exasol_path: str, tmp_path: Path) -> No
     new_history = deployments_root(home).parent / "history" / "exasol_history"
     assert new_history.read_text() == "SELECT 1;\n"
     assert not legacy_history.exists()
+
+
+@pytest.mark.openspec("launcher-path-migration", "deployment-directory-resolution")
+def test_daily_migration_guidance_survives_json_and_is_not_repeated(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a locked legacy deployment whose ordinary selection remains usable
+    home = tmp_path / "home"
+    legacy_dir = _seed_kept_legacy_deployment(home, "prod")
+
+    # When JSON runs before the day's text invocations
+    structured = _run(exasol_path, home, "status", "--json", "-d", "prod")
+    assert structured.returncode == 0, structured.stderr
+    assert json.loads(structured.stdout)["deploymentDir"] == str(legacy_dir)
+    assert "Migration pending" not in structured.stderr
+    assert not list(legacy_dir.glob(".launcher-path-migration-reminder-*"))
+    first = _run(exasol_path, home, "deployments", "list")
+    repeated = _run(exasol_path, home, "status", "-d", "prod")
+
+    # Then redirected text output gets one CTA on stderr for that deployment
+    assert first.returncode == 0, first.stderr
+    assert repeated.returncode == 0, repeated.stderr
+    assert first.stderr.count(f"Migration pending for {legacy_dir}") == 1
+    assert "Support for the old location is temporary" in first.stderr
+    assert "If none is running" in first.stderr
+    assert str(deployments_root(home) / "prod") in first.stderr
+    assert "Migration pending" not in first.stdout
+    assert "Migration pending" not in repeated.stderr
+    assert "Warning: Using" not in repeated.stderr
+
+
+@pytest.mark.openspec("launcher-path-migration")
+def test_daily_migration_guidance_uses_each_deployments_saved_date(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a previous-day claim and a future claim on separate legacy deployments
+    home = tmp_path / "home"
+    due = _seed_kept_legacy_deployment(home, "due")
+    future = _seed_kept_legacy_deployment(home, "future")
+    today = datetime.now(tz=UTC).astimezone().date()
+    yesterday = today - timedelta(days=1)
+    tomorrow = today + timedelta(days=1)
+    old_marker = due / f".launcher-path-migration-reminder-{yesterday.isoformat()}"
+    old_marker.touch()
+    (future / f".launcher-path-migration-reminder-{tomorrow.isoformat()}").touch()
+
+    # When an invocation encounters both deployments
+    result = _run(exasol_path, home, "deployments", "list")
+
+    # Then only the due deployment receives guidance and older state is retired
+    assert result.returncode == 0, result.stderr
+    assert f"Migration pending for {due}" in result.stderr
+    assert f"Migration pending for {future}" not in result.stderr
+    assert not old_marker.exists()
+
+
+@pytest.mark.openspec("launcher-path-migration")
+def test_concurrent_commands_share_one_daily_migration_reminder(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given independent launcher processes sharing a locked legacy deployment
+    home = tmp_path / "home"
+    legacy_dir = _seed_kept_legacy_deployment(home, "prod")
+
+    # When multiple text commands encounter it concurrently
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(
+            executor.map(
+                lambda _: _run(exasol_path, home, "deployments", "list"), range(8)
+            )
+        )
+
+    # Then every command completes and exactly one claims the daily CTA
+    assert all(result.returncode == 0 for result in results), results
+    assert sum(result.stderr.count("Migration pending") for result in results) == 1
+    assert (legacy_dir / ".dirmutex.shared.1").exists()
+    assert len(list(legacy_dir.glob(".dirmutex.*"))) == 1
+
+
+@pytest.mark.openspec("launcher-path-migration")
+def test_a_daily_reminder_does_not_delay_later_migration(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a legacy deployment that already received today's reminder
+    home = tmp_path / "home"
+    legacy_dir = _seed_kept_legacy_deployment(home, "prod")
+    first = _run(exasol_path, home, "deployments", "list")
+    assert first.returncode == 0, first.stderr
+    assert "Migration pending" in first.stderr
+    (legacy_dir / ".dirmutex.shared.1").unlink()
+
+    # When the next command retries after the lock is released
+    result = _run(exasol_path, home, "status", "--json", "-d", "prod")
+
+    # Then it moves immediately and retires migration-specific reminder state
+    current = deployments_root(home) / "prod"
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["deploymentDir"] == str(current)
+    assert not legacy_dir.exists()
+    assert (current / "marker.txt").read_text() == "state"
+    assert not list(current.glob(".launcher-path-migration-reminder-*"))
+
+
+@pytest.mark.openspec("launcher-path-migration")
+@pytest.mark.parametrize(
+    "args",
+    [("status", "--unknown-option"), ("status", "--help"), ("completion", "bash")],
+)
+def test_rejected_commands_help_and_completion_preserve_the_daily_reminder(
+    exasol_path: str, tmp_path: Path, args: tuple[str, ...]
+) -> None:
+    # Given a legacy deployment whose reminder has not yet been shown
+    home = tmp_path / "home"
+    legacy_dir = _seed_kept_legacy_deployment(home, "prod")
+
+    # When a command is rejected or only renders help/completion
+    _run(exasol_path, home, *args)
+
+    # Then the next ordinary text invocation still gets its daily reminder
+    assert not list(legacy_dir.glob(".launcher-path-migration-reminder-*"))
+    result = _run(exasol_path, home, "deployments", "list")
+    assert result.returncode == 0, result.stderr
+    assert f"Migration pending for {legacy_dir}" in result.stderr

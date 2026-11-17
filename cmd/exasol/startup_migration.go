@@ -30,14 +30,13 @@ const (
 var (
 	errDestinationExists       = errors.New("migration destination already exists")
 	errDeploymentNameCollision = errors.New("a deployment with the same name exists")
-	errLegacyDeploymentInUse   = errors.New("the deployment is in use")
 )
 
 var legacyDeploymentRunningFn = deploy.LocalDeploymentRunning
 
 // runStartupMigration runs on every start, so an item it warns about and
 // keeps at its legacy location moves on a later start.
-func runStartupMigration(ctx context.Context, out io.Writer) {
+func runStartupMigration(ctx context.Context, out io.Writer) []pathMigrationDeferralError {
 	for _, step := range []func() (string, error){
 		moveLegacyFileStep(
 			"cache configuration",
@@ -59,8 +58,10 @@ func runStartupMigration(ctx context.Context, out io.Writer) {
 			warnMigration(out, err)
 		}
 	}
-	migrateLegacyDeployments(ctx, out)
+	deferred := migrateLegacyDeployments(ctx, out)
 	removeEmptyLegacyDirs()
+
+	return deferred
 }
 
 func warnMigration(out io.Writer, err error) {
@@ -98,32 +99,41 @@ func removeEmptyLegacyDirs() {
 	}
 }
 
-func migrateLegacyDeployments(ctx context.Context, out io.Writer) {
+func migrateLegacyDeployments(ctx context.Context, out io.Writer) []pathMigrationDeferralError {
 	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
 	if err != nil {
 		warnMigration(out, err)
 
-		return
+		return nil
 	}
 	names, err := deploymentNames(legacyRoot)
 	if err != nil {
 		warnMigration(out, err)
 
-		return
+		return nil
 	}
 	newRoot, err := launcherpaths.DeploymentsRootPath()
 	if err != nil {
 		warnMigration(out, err)
 
-		return
+		return nil
 	}
 
 	var kept []error
+	var deferred []pathMigrationDeferralError
 	movedAny := false
 	for _, name := range names {
 		legacyPath := filepath.Join(legacyRoot, name)
 		moved, err := migrateLegacyDeployment(ctx, legacyPath, filepath.Join(newRoot, name))
-		if err != nil {
+		if pending, ok := errors.AsType[*pathMigrationDeferralError](err); ok {
+			deferred = append(deferred, *pending)
+			if pending.cause != nil {
+				kept = append(
+					kept,
+					fmt.Errorf("check deployment %s: %w", legacyPath, pending.cause),
+				)
+			}
+		} else if err != nil {
 			kept = append(kept, fmt.Errorf("kept %s at its legacy location: %w", legacyPath, err))
 		}
 		movedAny = movedAny || moved
@@ -134,6 +144,8 @@ func migrateLegacyDeployments(ctx context.Context, out io.Writer) {
 	for _, err := range kept {
 		warnMigration(out, err)
 	}
+
+	return deferred
 }
 
 // migrateLegacyDeployment leaves a deployment in use where it is, because
@@ -163,25 +175,33 @@ func migrateLegacyDeployment(ctx context.Context, legacyPath, newPath string) (b
 		return false, err
 	}
 	if status.Locked {
-		return false, fmt.Errorf(
-			"%w; close every exasol shell or other launcher command using it, or run "+
-				"`exasol diag unlock --deployment-dir %s` if none is running",
-			errLegacyDeploymentInUse, legacyPath,
-		)
+		return false, &pathMigrationDeferralError{
+			legacyPath: legacyPath,
+			newPath:    newPath,
+			reason:     migrationLocked,
+		}
 	}
 
 	running, err := legacyDeploymentRunningFn(ctx, config.NewDeploymentDir(legacyPath))
 	if err != nil {
-		return false, fmt.Errorf("check whether the deployment is running: %w", err)
+		return false, &pathMigrationDeferralError{
+			legacyPath: legacyPath, newPath: newPath, reason: migrationStateUnknown, cause: err,
+		}
 	}
 	if running {
-		return false, fmt.Errorf(
-			"%w; stop it with `exasol stop --deployment-dir %s`",
-			errLegacyDeploymentInUse, legacyPath,
-		)
+		return false, &pathMigrationDeferralError{
+			legacyPath: legacyPath,
+			newPath:    newPath,
+			reason:     migrationRunning,
+		}
 	}
 
-	return migrate(legacyPath, newPath)
+	moved, err := migrate(legacyPath, newPath)
+	if moved {
+		removePathMigrationReminders(newPath)
+	}
+
+	return moved, err
 }
 
 func deploymentNames(root string) ([]string, error) {

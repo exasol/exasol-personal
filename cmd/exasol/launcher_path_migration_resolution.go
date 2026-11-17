@@ -50,11 +50,6 @@ func managedPathExists(path string) (bool, error) {
 	return false, err
 }
 
-func isLegacyManagedDeploymentDir(path string) bool {
-	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
-	return err == nil && sameLocation(filepath.Dir(path), legacyRoot)
-}
-
 // followMigratedDeployment keeps a legacy managed deployment path working after
 // startup migration moved that deployment, including on later invocations.
 func followMigratedDeployment(path string) (string, bool) {

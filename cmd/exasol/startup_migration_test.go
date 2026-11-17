@@ -59,7 +59,10 @@ func runStartupMigrationForTest(t *testing.T) string {
 	t.Helper()
 
 	var out strings.Builder
-	runStartupMigration(context.Background(), &out)
+	resetTerminalMessages()
+	ctx := runStartupPathMigration(context.Background(), &out)
+	queueDeferredPathMigrationCTAs(ctx, false)
+	writeTerminalCallsToAction(&out, true)
 
 	return out.String()
 }
@@ -272,7 +275,7 @@ func TestRunStartupMigration_KeepsRunningLegacyDeploymentAndMigratesTheRest(t *t
 	out := runStartupMigrationForTest(t)
 
 	// Then
-	require.Contains(t, out, "Warning: kept "+legacyPath)
+	require.Contains(t, out, "Migration pending for "+legacyPath)
 	require.Contains(t, out, "exasol stop --deployment-dir "+legacyPath)
 	require.DirExists(t, legacyPath)
 	require.NoDirExists(t, legacyCache)
@@ -289,7 +292,7 @@ func TestRunStartupMigration_KeepsLegacyDeploymentWhoseStateIsUnknown(t *testing
 	out := runStartupMigrationForTest(t)
 
 	// Then
-	require.Contains(t, out, "Warning: kept "+legacyPath)
+	require.Contains(t, out, "Migration pending for "+legacyPath)
 	require.Contains(t, out, "engine unavailable")
 	require.DirExists(t, legacyPath)
 }
@@ -308,8 +311,8 @@ func TestRunStartupMigration_KeepsLockedLegacyDeployment(t *testing.T) {
 	out := runStartupMigrationForTest(t)
 
 	// Then
-	require.Contains(t, out, "Warning: kept "+legacyPath)
-	require.Contains(t, out, "close every exasol shell or other launcher command using it")
+	require.Contains(t, out, "Migration pending for "+legacyPath)
+	require.Contains(t, out, "Close every exasol shell or other launcher command using it")
 	require.Contains(t, out, "exasol diag unlock --deployment-dir "+legacyPath)
 	require.DirExists(t, legacyPath)
 }

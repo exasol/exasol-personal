@@ -28,7 +28,8 @@ Windows.
 Named and implicit default selection use a deployment kept at the legacy
 location when no matching path exists at the new managed location. The new
 path takes precedence when both locations contain the name. The launcher
-reports the selected path and warns on stderr when it uses the legacy path.
+reports the selected path on stderr. See [Launcher files](#launcher-files)
+for migration guidance.
 
 Alternatively, select an arbitrary path with `--deployment-dir <path>`. You cannot combine
 `--deployment-dir` and `--deployment`.
@@ -72,11 +73,21 @@ location and ignores the old one. A `--deployment-dir` path to a deployment at
 its old location keeps working after the move: the launcher uses the new
 location and reports it on stderr.
 
-An item the launcher cannot move yet stays at its old location with a warning,
-and the command runs as usual. Each later command retries until every item is
-moved. A deployment stays at its old location while it is in use, while its
-state cannot be checked, or while a deployment with the same name exists at the
-new location. Stop a running local deployment at its old location:
+An item the launcher cannot move yet stays at its old location, and the command
+runs as usual. Each later command retries until every item is moved. A deployment
+stays at its old location while it is in use, while its state cannot be checked,
+or while a deployment with the same name exists at the new location.
+
+For a running or locked deployment, the launcher shows migration guidance once
+per local calendar day per deployment on stderr, including in scripts that use
+text output. The guidance explains how to complete the move; support for the old
+location is temporary. `--json` suppresses this guidance and leaves the next text
+invocation eligible for its daily reminder. State-check failures, naming
+collisions and other migration failures are still reported on every attempt.
+Reminder dates are saved only in the affected legacy deployment and removed when
+it moves; if the location is unwritable, guidance may repeat.
+
+Stop a running local deployment at its old location:
 
 ```bash
 exasol stop --deployment-dir ~/.exasol/personal/deployments/<name>

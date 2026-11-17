@@ -132,6 +132,7 @@ var rootCmd = &cobra.Command{
 		if err := resolveDeploymentDirForCommand(cmd, commonFlags); err != nil {
 			return err
 		}
+		queueDeferredPathMigrationCTAs(cmd.Context(), commonFlags.OutputJson)
 		printTerminalMessages()
 		deployment := commonFlags.Deployment()
 
@@ -216,7 +217,7 @@ func Execute() error {
 	// renders without touching launcher-owned paths, and shell completion
 	// discards stderr, which would hide the migration report.
 	if !rawArgsRequestHelp(os.Args[1:]) && !rawArgsRequestShellCompletion(os.Args[1:]) {
-		runStartupMigration(ctx, rootCmd.ErrOrStderr())
+		ctx = runStartupPathMigration(ctx, rootCmd.ErrOrStderr())
 	}
 
 	// Register infrastructure variable flags only for commands that need them.

@@ -116,11 +116,15 @@ Notable user-facing changes to Exasol Personal are documented here.
   The first command after an upgrade moves existing files, reports each move,
   deletes the old runtime cache, and removes the old directories it leaves
   empty. A deployment that is in use, whose state cannot be checked, or whose
-  name already exists at the new location stays at the old location with a
-  warning that says what to do, for example
-  `exasol stop --deployment-dir ~/.exasol/personal/deployments/default`, and
-  each later command moves it once nothing keeps it there. Cache settings and
-  SQL history already at the new location take precedence over the old files.
+  name already exists at the new location stays at the old location. A daily
+  call to action explains how to release a running or locked deployment, for
+  example `exasol stop --deployment-dir ~/.exasol/personal/deployments/default`.
+  Guidance appears once per local calendar day per deployment in text output;
+  `--json` suppresses it without consuming the next text reminder. State-check
+  failures, collisions and other migration failures remain visible diagnostics.
+  Each later command retries the move, independently of reminder frequency.
+  Cache settings and SQL history already at the new location take precedence
+  over the old files.
   A `--deployment-dir` path to the old location of a moved deployment selects
   its new location. Named and implicit default selection use a deployment
   kept at the old location when no matching path exists at the new location,
