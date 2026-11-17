@@ -87,11 +87,7 @@ deployment directory selection.
   from the implicit default
 
 ### Requirement: CLI SHALL keep the resolved deployment directory visible
-Commands that resolve to the default deployment directory, to a named
-deployment directory, or to a recognized current working directory SHALL emit
-one clear human-facing message containing the resolved path on standard error
-before command-specific execution begins. The message SHALL warn when named or
-implicit default selection uses a legacy deployment directory.
+Commands that resolve to the default deployment directory, to a named deployment directory, or to a recognized current working directory SHALL emit one clear human-facing message containing the resolved path on standard error before command-specific execution begins. The message SHALL warn when named or implicit default selection uses a legacy deployment directory.
 
 #### Scenario: Default directory message is shown early
 - **WHEN** a deployment command resolves to the default deployment directory
@@ -258,9 +254,7 @@ explain location precedence, legacy fallback, and cloud cleanup implications.
   be kept until cloud resources are destroyed
 
 ### Requirement: Launcher-managed deployment directory reuse SHALL avoid stale preset deployment
-When commands resolve to the default deployment directory or to a named
-deployment directory, they SHALL validate requested preset identity against
-initialized local state before deploying resources.
+When commands resolve to the default deployment directory or to a named deployment directory, they SHALL validate requested preset identity against initialized local state before deploying resources.
 
 #### Scenario: Same default directory install retry uses same preset state
 - **WHEN** a user reruns `exasol install <infra-preset>` outside a recognized
@@ -309,7 +303,7 @@ The managed-deployments root SHALL be a platform-conventional, launcher-owned di
 
 #### Scenario: Platform-specific managed-deployments root
 - **WHEN** the CLI resolves the managed-deployments root
-- **THEN** it uses `~/.exasol/launcher/deployments` on Linux, `~/Library/Application Support/exasol/launcher/deployments` on macOS, and `%LOCALAPPDATA%\exasol\launcher\deployments` on Windows
+- **THEN** it uses `~/.exasol/launcher/deployments` on Linux, `~/.exasol/launcher/deployments` on macOS, and `%LOCALAPPDATA%\exasol\launcher\deployments` on Windows
 
 ### Requirement: Existing deployments at the legacy location SHALL be migrated
 On CLI startup, before any command records an operation in progress, a deployment directory found only at the legacy managed-deployments root SHALL be moved to the new managed-deployments root.
