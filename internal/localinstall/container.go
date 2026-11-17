@@ -27,6 +27,16 @@ var ErrUnsupportedContainerEngine = errors.New("unsupported container engine")
 //nolint:interfacebloat // The surface is as wide as the launcher's use.
 type ContainerRuntime interface {
 	Create(ctx context.Context, spec ContainerSpec, out, outErr io.Writer) error
+	// CreateStopped creates a container without starting it.
+	CreateStopped(ctx context.Context, spec ContainerSpec, out, outErr io.Writer) error
+	Start(ctx context.Context, name string, out, outErr io.Writer) error
+	// CopyTo extracts a tar archive into a container at destination.
+	CopyTo(
+		ctx context.Context,
+		container, destination string,
+		archive io.Reader,
+		out, outErr io.Writer,
+	) error
 	// RunToCompletion runs a container in the foreground and removes it after it exits.
 	RunToCompletion(ctx context.Context, spec ContainerSpec, out, outErr io.Writer) error
 	Remove(ctx context.Context, name string, force bool, out, outErr io.Writer) error

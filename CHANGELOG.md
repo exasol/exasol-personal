@@ -6,6 +6,14 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Added
 
+- Sidecar definitions in `sidecars.yaml` accept Kubernetes secret volumes. A `volumes` entry beside
+  `container` with a `secret` from `exasol-database`, mounted through `volumeMounts`, gives the
+  application database connection values as files, which `podman inspect` and `docker inspect` do
+  not show. Applications that can read the password from a file should receive it this way;
+  passwords passed as environment variables remain visible to container inspection. A sidecar
+  enabled from an earlier catalog template adopts a newer one after
+  `exasol sidecar disable <name> --remove` and `exasol sidecar enable <name>`.
+
 - `exasol info` and `exasol info --json` list public database node endpoints with an `eligible`
   flag derived from saved installation policy and infrastructure endpoint outputs. Eligibility
   does not indicate current network availability.
@@ -66,6 +74,9 @@ Notable user-facing changes to Exasol Personal are documented here.
   sample.sql`. Existing deployments keep their version.
 
 ### Fixed
+
+- A sidecar's definition label, which container inspection shows, no longer contains a hash
+  derived from the database password.
 
 - A `docker` command that reaches a Podman daemon, such as one a Podman machine serves on Windows,
   is no longer reported as an outdated Docker Engine. With `container_engine` set to `auto`, the

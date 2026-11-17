@@ -4,12 +4,15 @@
 package deploy
 
 import (
+	"archive/tar"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
 	"os"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -60,14 +63,20 @@ func newContainerRuntimeFake(database string) *containerRuntimeFake {
 }
 
 func (fake *containerRuntimeFake) Run(
-	_ context.Context, _ io.Reader, stdout, _ io.Writer, command ...string,
+	_ context.Context, stdin io.Reader, stdout, _ io.Writer, command ...string,
 ) error {
 	fake.mutex.Lock()
 	defer fake.mutex.Unlock()
 	args := command[1:]
+	// Creating without starting is a run split in two, so it shares the
+	// injected failures and counts of a run.
+	subcommand := args[0]
+	if subcommand == "create" {
+		subcommand = "run"
+	}
 	// Record the attempt before any injected failure, because the tests ask
 	// what the driver tried to do, not what the runtime let it finish.
-	switch args[0] {
+	switch subcommand {
 	case "run":
 		fake.runCalls++
 		if err := fake.captureEnvironment(args); err != nil {
@@ -79,14 +88,18 @@ func (fake *containerRuntimeFake) Run(
 		fake.execs = append(fake.execs, slices.Clone(args[1:]))
 	default:
 	}
-	if err := fake.failures[args[0]]; err != nil {
+	if err := fake.failures[subcommand]; err != nil {
 		return err
 	}
 	switch args[0] {
 	case "ps":
 		return fake.list(stdout, args)
-	case "run":
-		return fake.create(args)
+	case "run", "create":
+		return fake.create(args, args[0] == "run")
+	case "cp":
+		return fake.copyTo(stdin, args)
+	case "start":
+		return fake.start(args)
 	case "rm":
 		return fake.remove(args)
 	case "network":
@@ -95,6 +108,8 @@ func (fake *containerRuntimeFake) Run(
 		return fake.inspect(stdout, args)
 	case "exec":
 		return nil
+	case "image":
+		return fake.image(stdout, args)
 	default:
 		return fmt.Errorf("unexpected container command: %q", command)
 	}
@@ -307,10 +322,10 @@ func (fake *containerRuntimeFake) list(stdout io.Writer, args []string) error {
 	return json.NewEncoder(stdout).Encode(listings)
 }
 
-func (fake *containerRuntimeFake) create(args []string) error {
+func (fake *containerRuntimeFake) create(args []string, running bool) error {
 	name := flagValue(args, "--name")
 	container := &fakeContainer{
-		name: name, id: name, labels: map[string]string{}, running: true, env: fake.lastEnv,
+		name: name, id: name, labels: map[string]string{}, running: running, env: fake.lastEnv,
 		started: time.Now().Add(-fake.age),
 	}
 	for _, label := range flagValues(args, "--label") {
@@ -333,17 +348,69 @@ func (fake *containerRuntimeFake) create(args []string) error {
 // container is created.
 func (fake *containerRuntimeFake) captureEnvironment(args []string) error {
 	fake.lastEnv = ""
-	envFile := flagValue(args, "--env-file")
-	if envFile == "" {
-		return nil
+	if envFile := flagValue(args, "--env-file"); envFile != "" {
+		content, err := os.ReadFile(envFile)
+		if err != nil {
+			return err
+		}
+		fake.lastEnv = string(content)
 	}
-	content, err := os.ReadFile(envFile)
-	if err != nil {
-		return err
-	}
-	fake.lastEnv = string(content)
 
 	return nil
+}
+
+// copyTo adds the files copied into a container to what it carries, as its
+// entrypoint exports them beside the environment file.
+func (fake *containerRuntimeFake) copyTo(stdin io.Reader, args []string) error {
+	name, _, _ := strings.Cut(args[len(args)-1], ":")
+	container, exists := fake.containers[name]
+	if !exists {
+		return fmt.Errorf("no such container: %s", name)
+	}
+	reader := tar.NewReader(stdin)
+	for {
+		header, err := reader.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		content, err := io.ReadAll(reader)
+		if err != nil {
+			return err
+		}
+		if header.Typeflag == tar.TypeReg {
+			line := path.Base(header.Name) + "=" + string(content) + "\n"
+			fake.lastEnv += line
+			container.env += line
+		}
+	}
+}
+
+func (fake *containerRuntimeFake) start(args []string) error {
+	container, exists := fake.containers[args[len(args)-1]]
+	if !exists {
+		return fmt.Errorf("no such container: %s", args[len(args)-1])
+	}
+	container.running = true
+	container.started = time.Now().Add(-fake.age)
+
+	return nil
+}
+
+// Every image is present, with a command for the driver to keep.
+func (*containerRuntimeFake) image(stdout io.Writer, args []string) error {
+	switch args[1] {
+	case "exists":
+		return nil
+	case "inspect":
+		_, err := fmt.Fprint(stdout, `{"Cmd":["serve"]}`)
+
+		return err
+	default:
+		return fmt.Errorf("unexpected image command: %q", args)
+	}
 }
 
 func (fake *containerRuntimeFake) remove(args []string) error {

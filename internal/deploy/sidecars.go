@@ -486,7 +486,7 @@ func (sidecars *deploymentSidecars) applyAndReport(
 		document, readErr := config.ReadSidecars(sidecars.deployment)
 		failures = append(failures, readErr)
 		if readErr == nil {
-			failures = append(failures, sidecars.apply(ctx, document.Containers()))
+			failures = append(failures, sidecars.apply(ctx, document.Desired()))
 		}
 	}
 	result, err := sidecars.status(ctx, name)
@@ -494,7 +494,7 @@ func (sidecars *deploymentSidecars) applyAndReport(
 	return result, errors.Join(append(failures, err)...)
 }
 
-func (sidecars *deploymentSidecars) apply(ctx context.Context, desired []sidecar.Container) error {
+func (sidecars *deploymentSidecars) apply(ctx context.Context, desired []sidecar.Definition) error {
 	result, applyErr := sidecars.applySidecars(ctx, desired)
 	if errors.Is(applyErr, ErrSidecarRestartRequired) {
 		applyErr = nil
@@ -790,7 +790,7 @@ type sidecarRuntime interface {
 }
 
 func (sidecars *deploymentSidecars) applySidecars(
-	ctx context.Context, desired []sidecar.Container,
+	ctx context.Context, desired []sidecar.Definition,
 ) (SidecarApplyResult, error) {
 	running, err := sidecars.runtime.SidecarHostRunning(ctx)
 	if err != nil || !running {
@@ -820,17 +820,14 @@ func (sidecars *deploymentSidecars) applySidecars(
 	}
 	result := SidecarApplyResult{Applied: true, Failures: map[string]error{}}
 	for _, definition := range desired {
+		name := definition.Container.Name
 		if unreachable != nil {
-			result.Failures[definition.Name] = fmt.Errorf(
-				"sidecar %q: %w",
-				definition.Name,
-				unreachable,
-			)
+			result.Failures[name] = fmt.Errorf("sidecar %q: %w", name, unreachable)
 
 			continue
 		}
 		if err := manager.Ensure(ctx, definition, secrets); err != nil {
-			result.Failures[definition.Name] = err
+			result.Failures[name] = err
 		}
 	}
 	if err := removeUndesired(ctx, manager, desired, result.Failures); err != nil {
@@ -916,7 +913,7 @@ func observeSidecar(
 	if observation.Running {
 		observation.Health = probeSidecar(ctx, manager, container, definition.Container, now)
 	}
-	matches, err := manager.Matches(container, definition.Container, secrets)
+	matches, err := manager.Matches(container, definition, secrets)
 	observation.Matches = matches
 
 	return observation, err
@@ -925,7 +922,7 @@ func observeSidecar(
 func removeUndesired(
 	ctx context.Context,
 	manager *localinstall.SidecarRuntime,
-	desired []sidecar.Container,
+	desired []sidecar.Definition,
 	failures map[string]error,
 ) error {
 	containers, err := manager.List(ctx)
@@ -933,19 +930,25 @@ func removeUndesired(
 		return err
 	}
 	for _, name := range ownedNames(containers) {
-		if slices.ContainsFunc(desired, func(c sidecar.Container) bool { return c.Name == name }) {
+		if slices.ContainsFunc(desired, func(definition sidecar.Definition) bool {
+			return definition.Container.Name == name
+		}) {
 			continue
 		}
 		if failure := manager.Remove(ctx, name); failure != nil {
 			failures[name] = failure
 		}
 	}
+	names := make([]string, 0, len(desired))
+	for _, definition := range desired {
+		names = append(names, definition.Container.Name)
+	}
 
-	return nil
+	return manager.PruneRecords(names)
 }
 
 func (sidecars *deploymentSidecars) publish(
-	ctx context.Context, manager *localinstall.SidecarRuntime, desired []sidecar.Container,
+	ctx context.Context, manager *localinstall.SidecarRuntime, desired []sidecar.Definition,
 ) error {
 	// A runtime whose containers bind on the user's machine opens nothing.
 	containers, err := manager.List(ctx)
@@ -955,14 +958,15 @@ func (sidecars *deploymentSidecars) publish(
 	bound := boundContainerPorts(containers)
 	ports := []sidecar.PublishedPort{}
 	for _, definition := range desired {
-		for index, port := range definition.Defaults().Ports {
+		container := definition.Container
+		for index, port := range container.Defaults().Ports {
 			if port.HostPort == 0 {
 				continue
 			}
 			ports = append(ports, sidecar.PublishedPort{
-				Sidecar: definition.Name, Index: index, Name: port.Name,
+				Sidecar: container.Name, Index: index, Name: port.Name,
 				HostIP: port.HostIP, HostPort: port.HostPort,
-				RuntimePort: bound[sidecarPortKey{definition.Name, port.ContainerPort}],
+				RuntimePort: bound[sidecarPortKey{container.Name, port.ContainerPort}],
 			})
 		}
 	}
@@ -1173,7 +1177,7 @@ func (sidecars *deploymentSidecars) reconcile(
 	if err != nil && !cleanup {
 		return nil, err
 	}
-	desired := document.Containers()
+	desired := document.Desired()
 	if cleanup {
 		desired = nil
 	}
@@ -1193,13 +1197,13 @@ func (sidecars *deploymentSidecars) recordDefinitionFailures(
 	document sidecar.Document,
 	failure error,
 ) (map[string]error, error) {
-	desired := document.Containers()
+	desired := document.Desired()
 	if len(desired) == 0 {
 		return nil, failure
 	}
 	perSidecar := make(map[string]error, len(desired))
-	for _, container := range desired {
-		perSidecar[container.Name] = failure
+	for _, definition := range desired {
+		perSidecar[definition.Container.Name] = failure
 	}
 
 	return perSidecar, sidecars.recordFailures(perSidecar)
@@ -1230,7 +1234,7 @@ func sidecarSecrets(deployment config.DeploymentDir) (sidecar.Secrets, error) {
 		if err != nil {
 			return nil, err
 		}
-		database["password"] = sidecar.SecretValue{
+		database[sidecar.DatabasePasswordKey] = sidecar.SecretValue{
 			Value: secrets.DbPassword, Sensitive: true,
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {

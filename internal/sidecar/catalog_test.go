@@ -446,7 +446,7 @@ func TestSavedDocumentCarriesEnabledState(t *testing.T) {
 			// Then
 			require.NoError(t, err)
 			require.Equal(t, fixture.enabled, document.Sidecars["example"].IsEnabled())
-			require.Len(t, document.Containers(), map[bool]int{true: 1, false: 0}[fixture.enabled])
+			require.Len(t, document.Desired(), map[bool]int{true: 1, false: 0}[fixture.enabled])
 		})
 	}
 }

@@ -319,7 +319,11 @@ func TestSidecarPortPublicationUsesExplicitLoopbackMappings(t *testing.T) {
 				Name: "example", Image: "caddy:2", Ports: []sidecar.Port{fixture.port},
 			}
 			// When
-			err := runtime.Ensure(context.Background(), definition, nil)
+			err := runtime.Ensure(
+				context.Background(),
+				definitionFor(definition),
+				nil,
+			)
 			// Then
 			require.NoError(t, err)
 			args := environment.createCalls[0]

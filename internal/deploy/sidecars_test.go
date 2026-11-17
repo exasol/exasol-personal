@@ -85,6 +85,68 @@ func TestSidecarStartupRunsBeforeDatabaseWait(t *testing.T) {
 	}
 }
 
+func sidecarTestVolumeCatalog(t *testing.T) *sidecar.Catalog {
+	t.Helper()
+	catalog, err := sidecar.LoadCatalog([]byte(`version: 1
+sidecars:
+  example:
+    description: Test service
+    architectures: [amd64, arm64]
+    container:
+      image: docker.io/library/caddy:2-alpine
+      volumeMounts:
+        - name: database
+          mountPath: /run/exasol-database
+    volumes:
+      - name: database
+        secret:
+          secretName: exasol-database
+          items:
+            - key: password
+              path: password
+`))
+	require.NoError(t, err)
+
+	return catalog
+}
+
+func TestSidecarDisableRemovesTheRecordOfAnExternallyRemovedContainer(t *testing.T) {
+	// Given
+	t.Setenv(localSkipDatabaseWaitEnv, "1")
+	operations, selected := newSidecarOperationsFixture(t)
+	materializeTestSidecar(t, operations.deployment, sidecarTestVolumeCatalog(t))
+	endpoint := &localruntime.VMRuntimeEndpoint{RuntimeEndpoint: *selected.endpoint}
+	result := writeLocalRuntimeArtifactsAndWait(
+		context.Background(), selected, endpoint, 0, nil, nil,
+	)
+	require.Empty(t, result.Sidecars)
+	record := filepath.Join(selected.manager.EnvDir.HostPath, "example.applied")
+	require.FileExists(t, record)
+	selected.containers.Clear()
+	// When
+	_, err := operations.disable(t.Context(), "example", false)
+	// Then
+	require.NoError(t, err)
+	require.NoFileExists(t, record)
+}
+
+func TestSidecarStartCopiesSecretVolumeFiles(t *testing.T) {
+	// Given
+	t.Setenv(localSkipDatabaseWaitEnv, "1")
+	operations, selected := newSidecarOperationsFixture(t)
+	catalog := sidecarTestVolumeCatalog(t)
+	materializeTestSidecar(t, operations.deployment, catalog)
+	endpoint := &localruntime.VMRuntimeEndpoint{RuntimeEndpoint: *selected.endpoint}
+	// When
+	result := writeLocalRuntimeArtifactsAndWait(
+		context.Background(), selected, endpoint, 0, nil, nil,
+	)
+	// Then
+	require.Empty(t, result.Sidecars)
+	require.Equal(t, 1, selected.created())
+	require.Contains(t, selected.lastEnvironment(), "password="+localDBPassword)
+}
+
 func TestSidecarDestroyRemovesObservedState(t *testing.T) {
 	t.Parallel()
 	// Given

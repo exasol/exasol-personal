@@ -27,6 +27,7 @@ const (
 	podmanBridgeDriver = "bridge"
 	formatFlag         = "--format"
 	filterFlag         = "--filter"
+	createCommand      = "create"
 )
 
 type podmanRuntime struct {
@@ -65,6 +66,36 @@ func (runtime podmanRuntime) Create(
 	}
 
 	return runtime.run(ctx, out, outErr, args...)
+}
+
+func (runtime podmanRuntime) CreateStopped(
+	ctx context.Context, spec ContainerSpec, out, outErr io.Writer,
+) error {
+	args, err := createArgs(spec, runtime.dialect, true)
+	if err != nil {
+		return err
+	}
+	// The same options as a detached run, without starting the process.
+	args = append([]string{createCommand}, args[2:]...)
+
+	return runtime.run(ctx, out, outErr, args...)
+}
+
+func (runtime podmanRuntime) Start(ctx context.Context, name string, out, outErr io.Writer) error {
+	return runtime.run(ctx, out, outErr, "start", name)
+}
+
+func (runtime podmanRuntime) CopyTo(
+	ctx context.Context, container, destination string, archive io.Reader, out, outErr io.Writer,
+) error {
+	tail := &stderrTail{}
+	streams := newCommandStreams(out, outErr, tail)
+	err := runtime.environment.Run(
+		ctx, archive, streams.stdout, streams.stderr,
+		runtime.binary, "cp", "-", container+":"+destination,
+	)
+
+	return newCommandError(err, tail)
 }
 
 func (runtime podmanRuntime) RunToCompletion(
@@ -268,7 +299,7 @@ func (runtime podmanRuntime) CreateNetwork(
 	ctx context.Context, spec NetworkSpec, out, outErr io.Writer,
 ) error {
 	// An existing network is accepted rather than reported.
-	args := []string{"network", "create", "--ignore", "--driver", podmanBridgeDriver}
+	args := []string{"network", createCommand, "--ignore", "--driver", podmanBridgeDriver}
 	if !spec.DNS {
 		args = append(args, "--disable-dns")
 	}
