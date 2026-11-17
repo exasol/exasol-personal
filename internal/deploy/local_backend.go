@@ -433,14 +433,17 @@ func validateLocalPlatform(goos, goarch string) error {
 // most preferred first: `auto` selects the first one installed. The macOS VM
 // ships its own engine, so it offers no choice.
 func localContainerEnginesForPlatform(goos, goarch string) []localinstall.ContainerEngine {
-	switch {
-	case goos == localMacOS && goarch == localMacArch:
+	if goos == localMacOS && goarch == localMacArch {
 		return nil
-	case goos == localWindowsOS:
-		return []localinstall.ContainerEngine{localinstall.EnginePodman, localinstall.EngineDocker}
-	default:
-		return []localinstall.ContainerEngine{localinstall.EnginePodman, localinstall.EngineDocker}
 	}
+
+	return []localinstall.ContainerEngine{localinstall.EngineDocker, localinstall.EnginePodman}
+}
+
+// containerEngineInstallOrder puts Podman first, because Docker Desktop needs
+// a paid subscription for larger organizations.
+var containerEngineInstallOrder = []localinstall.ContainerEngine{
+	localinstall.EnginePodman, localinstall.EngineDocker,
 }
 
 func formatContainerEngines(engines []localinstall.ContainerEngine) string {
@@ -958,7 +961,7 @@ func (b *localBackend) chooseContainerEngineToInstall(
 			return options, nil
 		}
 	}
-	installOptions, err := b.engineInstallOptions(engines)
+	installOptions, err := b.engineInstallOptions(containerEngineInstallOrder)
 	if err != nil {
 		return options, err
 	}
@@ -1016,7 +1019,7 @@ func (b *localBackend) reportSkippedDocker(
 ) {
 	if b.goos != localWindowsOS || options.Progress == nil ||
 		containerEngineOf(localRuntime) != localinstall.EnginePodman ||
-		b.engineInstalled(ctx, localinstall.EnginePodman) || !b.dockerRunsWindows(ctx) {
+		!b.dockerRunsWindows(ctx) {
 		return
 	}
 	_, _ = fmt.Fprintln(options.Progress,

@@ -46,6 +46,13 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
+- On Linux and Windows, `container_engine` `auto` uses an installed Docker before Podman. If Docker
+  Desktop is set to Windows containers, `auto` uses Podman instead and says how to switch Docker
+  Desktop to Linux containers. A Docker whose daemon is not running is still chosen, so start it or
+  select Podman with `exasol config set --container-engine podman`.
+  Without either engine, Linux still uses Podman, and `--auto-approve` on Windows still installs
+  Podman. Deployments that already started keep their engine.
+
 - New cloud and local deployments accept any number of database sessions, and `exasol connect`
   can use the public database endpoints exposed by the infrastructure preset with the shared
   certificate fingerprint. Deployments without recorded multi-node support keep using their primary

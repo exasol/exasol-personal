@@ -494,15 +494,24 @@ func TestChoosesContainerEngineAutomatically_OnlyForAutoBeforeTheFirstStart(t *t
 
 func TestReportSkippedDocker_ExplainsWhyPodmanIsUsed(t *testing.T) {
 	t.Parallel()
-	fixture := newEngineOfferFixture(t)
-	fixture.backend.dockerRunsWindows = func(context.Context) bool { return true }
-	var progress bytes.Buffer
+	for name, installed := range map[string][]localinstall.ContainerEngine{
+		"podman missing":   nil,
+		"podman installed": {localinstall.EnginePodman},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fixture := newEngineOfferFixture(t, installed...)
+			fixture.backend.dockerRunsWindows = func(context.Context) bool { return true }
+			var progress bytes.Buffer
 
-	fixture.backend.reportSkippedDocker(
-		context.Background(), localruntime.PrepareOptions{Progress: &progress}, fixture.other,
-	)
+			fixture.backend.reportSkippedDocker(
+				context.Background(), localruntime.PrepareOptions{Progress: &progress},
+				fixture.other,
+			)
 
-	if !strings.Contains(progress.String(), "Docker runs Windows containers") {
-		t.Errorf("expected the reason Docker is skipped, got %q", progress.String())
+			if !strings.Contains(progress.String(), "Docker runs Windows containers") {
+				t.Errorf("expected the reason Docker is skipped, got %q", progress.String())
+			}
+		})
 	}
 }

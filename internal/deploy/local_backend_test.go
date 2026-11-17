@@ -635,7 +635,7 @@ func TestLocalContainerEngineOption_FollowsPlatformEngines(t *testing.T) {
 				return
 			}
 			if definition.DefaultDisplay != "auto" ||
-				!strings.Contains(definition.Description, "auto, podman, docker") {
+				!strings.Contains(definition.Description, "auto, docker, podman") {
 				t.Fatalf("unexpected container engine definition: %#v", definition)
 			}
 		})
@@ -699,7 +699,7 @@ func TestLocalBackendConfigure_RejectsUnsupportedContainerEngine(t *testing.T) {
 
 			// Then
 			if err == nil ||
-				!strings.Contains(err.Error(), "must be one of auto, podman, docker") {
+				!strings.Contains(err.Error(), "must be one of auto, docker, podman") {
 				t.Fatalf("expected an error naming the supported engines, got %v", err)
 			}
 			if manifest.Local.ContainerEngine != "" {
