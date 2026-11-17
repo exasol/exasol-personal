@@ -87,7 +87,7 @@ deployment directory selection.
   from the implicit default
 
 ### Requirement: CLI SHALL keep the resolved deployment directory visible
-Commands that resolve to the default deployment directory, to a named deployment directory, or to a recognized current working directory SHALL emit one clear human-facing message containing the resolved path on standard error before command-specific execution begins. The message SHALL warn when named or implicit default selection uses a legacy deployment directory.
+Commands that resolve to the default deployment directory, to a named deployment directory, or to a recognized current working directory SHALL emit one clear human-facing message containing the resolved path on standard error before command-specific execution begins. Migration guidance SHALL follow the daily CTA contract in `launcher-path-migration`.
 
 #### Scenario: Default directory message is shown early
 - **WHEN** a deployment command resolves to the default deployment directory
@@ -104,13 +104,10 @@ Commands that resolve to the default deployment directory, to a named deployment
 - **AND** the message does not appear again after command-specific execution
   ends
 
-#### Scenario: Legacy selection warns before command execution
-- **WHEN** named or implicit default selection uses a deployment directory at
-  the legacy location
-- **THEN** its resolved-path message on standard error warns that the selected
-  deployment is at the legacy location
-- **AND** the warning names the selected path before command-specific
-  execution begins
+#### Scenario: Legacy selection reports its resolved directory
+- **WHEN** named or implicit default selection uses a retained legacy deployment
+- **THEN** the ordinary selected-directory notice names that path on standard error before command-specific execution
+- **AND** migration guidance follows the daily CTA contract in `launcher-path-migration`
 
 #### Scenario: Current directory message is shown early
 - **WHEN** a deployment command resolves to the current working directory
