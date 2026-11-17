@@ -7,15 +7,19 @@ deployment on the engine it started with, and run Nano and its UDFs under Docker
 ## Requirements
 
 ### Requirement: Direct-host deployments use an installed engine
-The system SHALL run a fresh Linux or Windows local deployment whose `container_engine` is `auto` through the first installed engine in the platform's order of preference, which is Podman then Docker on Linux and on Windows, through the host Podman path on Linux when neither is installed, and through the engine installed for it on Windows when neither is installed.
+The system SHALL run a fresh Linux or Windows local deployment whose `container_engine` is `auto` through the first installed engine in the platform's order of preference, which is Docker then Podman on Linux and on Windows, through the host Podman path on Linux when neither is installed, and through the engine installed for it on Windows when neither is installed.
 
 #### Scenario: Podman and Docker are installed
-- **WHEN** a user installs a fresh local deployment on Linux or Windows where both Podman and Docker are installed
-- **THEN** the launcher prepares and uses host Podman
+- **WHEN** a user installs a fresh local deployment on Linux or Windows where both Podman and Docker are installed and Docker runs Linux containers
+- **THEN** the launcher checks that Docker is ready and runs Nano in a Docker container named for the deployment
 
 #### Scenario: Only Docker is installed
 - **WHEN** a user installs a fresh local deployment on Linux or Windows where `docker` resolves to Docker and Podman is not installed
 - **THEN** the launcher checks that Docker is ready and runs Nano in a Docker container named for the deployment
+
+#### Scenario: Only Podman is installed
+- **WHEN** a user installs a fresh local deployment on Linux or Windows where Podman is installed and no Docker CLI resolves
+- **THEN** the launcher prepares and uses host Podman
 
 #### Scenario: Neither engine is installed on Linux
 - **WHEN** a user installs a fresh local deployment on Linux where neither Podman nor Docker is installed
