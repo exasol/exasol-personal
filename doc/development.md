@@ -297,6 +297,8 @@ Configuration files:
 
 See [Best Practices](best_practices.md) for project-specific coding guidelines and conventions.
 
+The temporary legacy layout compatibility has a [removal checklist](launcher-path-migration.md).
+
 ## Common Issues
 
 **OpenTofu binary not found:**

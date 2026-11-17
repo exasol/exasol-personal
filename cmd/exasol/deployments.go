@@ -9,13 +9,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"sync"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
-	"github.com/exasol/exasol-personal/internal/launcherpaths"
 	"github.com/spf13/cobra"
 )
 
@@ -82,19 +80,7 @@ var deploymentsListCmd = &cobra.Command{
 // the resolved-directory notice) for this command; see
 // registerDeploymentsCommands.
 func listDeploymentDirectories(ctx context.Context) ([]deploymentListEntry, error) {
-	newRoot, err := launcherpaths.DeploymentsRootPath()
-	if err != nil {
-		return nil, err
-	}
-	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
-	if err != nil {
-		return nil, err
-	}
-	newDirs, err := readManagedDeploymentDirectories(newRoot)
-	if err != nil {
-		return nil, err
-	}
-	legacyDirs, err := readManagedDeploymentDirectories(legacyRoot)
+	entries, err := managedDeploymentEntries()
 	if err != nil {
 		return nil, err
 	}
@@ -104,26 +90,6 @@ func listDeploymentDirectories(ctx context.Context) ([]deploymentListEntry, erro
 		return nil, err
 	}
 	defer cancel()
-
-	entries := make([]deploymentListEntry, 0, len(newDirs)+len(legacyDirs))
-	for _, dirEntry := range newDirs {
-		entries = append(entries, deploymentListEntry{
-			Name: dirEntry.Name(),
-			Path: filepath.Join(newRoot, dirEntry.Name()),
-		})
-	}
-	for _, dirEntry := range legacyDirs {
-		newPath := filepath.Join(newRoot, dirEntry.Name())
-		if exists, err := managedPathExists(newPath); err != nil {
-			return nil, fmt.Errorf("inspect deployment path %s: %w", newPath, err)
-		} else if exists {
-			continue
-		}
-		entries = append(entries, deploymentListEntry{
-			Name: dirEntry.Name(),
-			Path: filepath.Join(legacyRoot, dirEntry.Name()),
-		})
-	}
 
 	var waitGroup sync.WaitGroup
 	for index := range entries {

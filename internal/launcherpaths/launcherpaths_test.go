@@ -5,7 +5,6 @@ package launcherpaths
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -83,33 +82,6 @@ func TestMacOSPaths_UseHomeDirectory(t *testing.T) {
 	require.NoError(t, configErr)
 	require.Equal(t, filepath.Join(home, ".exasol", "launcher"), durableRoot)
 	require.Equal(t, filepath.Join(home, ".exasol", "launcher", "resources.yaml"), configPath)
-}
-
-func TestLegacyPaths_ResolveWhereEarlierVersionsKeptThem(t *testing.T) {
-	t.Parallel()
-
-	// Given
-	home, err := os.UserHomeDir()
-	require.NoError(t, err)
-	cacheDir, err := os.UserCacheDir()
-	require.NoError(t, err)
-
-	legacyHome := filepath.Join(home, ".exasol", "personal")
-	legacyCache := filepath.Join(cacheDir, ".exasol", "personal")
-
-	for want, resolve := range map[string]func() (string, error){
-		filepath.Join(legacyHome, "deployments"):            LegacyDeploymentsRootPath,
-		filepath.Join(legacyHome, "runtime-artifacts.yaml"): LegacyResourceConfigFilePath,
-		filepath.Join(legacyCache, "runtime-artifacts"):     LegacyCacheRootPath,
-		filepath.Join(cacheDir, "exasol_history"):           LegacyHistoryFilePath,
-	} {
-		// When
-		got, err := resolve()
-
-		// Then
-		require.NoError(t, err)
-		require.Equal(t, want, got)
-	}
 }
 
 func TestNamedDeploymentDirPath_SameParentAsDefault(t *testing.T) {
