@@ -4,12 +4,15 @@
 """Runtime-artifact cache CLI: list, clean, unlock, diag, locking, output (offline)."""
 
 import json
+import sys
 from pathlib import Path
 from subprocess import CalledProcessError
 
 import pytest
 
 from tests.testcase_helpers import run_command
+
+from .helpers import env_with_home
 
 pytestmark = pytest.mark.openspec("runtime-artifact-cache")
 
@@ -94,6 +97,37 @@ def test_diag_cache_does_not_mutate(exasol_path: str) -> None:
     # Then the cache listing is unchanged (the command is read-only)
     after = run_command([exasol_path, "cache", "list"]).stdout
     assert before == after
+
+
+def test_cache_paths_and_legacy_configuration_use_platform_locations(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given cache settings in the released legacy layout
+    home = tmp_path / "home"
+    retention_days = 17
+    settings = f"retention_days: {retention_days}\n"
+    legacy_config = home / ".exasol" / "personal" / "runtime-artifacts.yaml"
+    legacy_config.parent.mkdir(parents=True)
+    legacy_config.write_text(settings)
+    if sys.platform == "win32":
+        config = home / "AppData" / "Roaming" / "exasol" / "launcher" / "resources.yaml"
+        cache = home / "AppData" / "Local" / "exasol" / "launcher" / "resources"
+    elif sys.platform == "darwin":
+        config = home / ".exasol" / "launcher" / "resources.yaml"
+        cache = home / "Library" / "Caches" / "exasol" / "launcher" / "resources"
+    else:
+        config = home / ".config" / "exasol" / "launcher" / "resources.yaml"
+        cache = home / ".cache" / "exasol" / "launcher" / "resources"
+
+    # When the user inspects the cache
+    result = run_command([exasol_path, "diag", "cache"], env=env_with_home(home))
+
+    # Then the report and migrated settings use the platform's final paths
+    assert f"Config file: {config}" in result.stdout
+    assert f"Cache root: {cache}" in result.stdout
+    assert f"Config status: ok (retention_days={retention_days})" in result.stdout
+    assert config.read_text() == settings
+    assert not legacy_config.exists()
 
 
 NOISY_LINES = ("using deployment directory", "deployment log file")

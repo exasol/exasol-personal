@@ -57,16 +57,6 @@ def deployments_root(home: Path) -> Path:
     """Where the launcher keeps managed deployments below an isolated home."""
     if sys.platform == "win32":
         return home / "AppData" / "Local" / "exasol" / "launcher" / "deployments"
-    if sys.platform == "darwin":
-        return (
-            home
-            / "Library"
-            / "Application Support"
-            / "exasol"
-            / "launcher"
-            / "deployments"
-        )
-
     return home / ".exasol" / "launcher" / "deployments"
 
 

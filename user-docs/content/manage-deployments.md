@@ -42,8 +42,8 @@ exasol deployments list
 Example output:
 
 ```text
-default status=database_ready preset=local/ubuntu path=/Users/me/Library/Application Support/exasol/launcher/deployments/default
-staging status=stopped preset=aws/ubuntu path=/Users/me/Library/Application Support/exasol/launcher/deployments/staging
+default status=database_ready preset=local/ubuntu path=/Users/me/.exasol/launcher/deployments/default
+staging status=stopped preset=aws/ubuntu path=/Users/me/.exasol/launcher/deployments/staging
 ```
 
 The list does not include deployments selected through an arbitrary `--deployment-dir` path.
@@ -57,9 +57,9 @@ The launcher keeps its own files in these platform-specific locations:
 
 | Purpose | Linux | macOS | Windows |
 | --- | --- | --- | --- |
-| Managed deployments | `~/.exasol/launcher/deployments` | `~/Library/Application Support/exasol/launcher/deployments` | `%LOCALAPPDATA%\exasol\launcher\deployments` |
-| SQL history | `~/.exasol/launcher/history/exasol_history` | `~/Library/Application Support/exasol/launcher/history/exasol_history` | `%LOCALAPPDATA%\exasol\launcher\history\exasol_history` |
-| Cache settings | `${XDG_CONFIG_HOME:-~/.config}/exasol/launcher/resources.yaml` | `~/Library/Application Support/exasol/launcher/resources.yaml` | `%APPDATA%\exasol\launcher\resources.yaml` |
+| Managed deployments | `~/.exasol/launcher/deployments` | `~/.exasol/launcher/deployments` | `%LOCALAPPDATA%\exasol\launcher\deployments` |
+| SQL history | `~/.exasol/launcher/history/exasol_history` | `~/.exasol/launcher/history/exasol_history` | `%LOCALAPPDATA%\exasol\launcher\history\exasol_history` |
+| Cache settings | `${XDG_CONFIG_HOME:-~/.config}/exasol/launcher/resources.yaml` | `~/.exasol/launcher/resources.yaml` | `%APPDATA%\exasol\launcher\resources.yaml` |
 | [Runtime cache](launcher-cache.md) | `${XDG_CACHE_HOME:-~/.cache}/exasol/launcher/resources` | `~/Library/Caches/exasol/launcher/resources` | `%LOCALAPPDATA%\exasol\launcher\resources` |
 
 Earlier launcher versions kept deployments and cache settings below

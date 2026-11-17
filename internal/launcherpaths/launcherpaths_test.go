@@ -4,31 +4,85 @@
 package launcherpaths
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestPurposePaths_ResolveUnderTheLauncherNamespace(t *testing.T) {
-	t.Parallel()
+func TestPurposePaths_ResolveUnderPlatformRoots(t *testing.T) {
+	for _, override := range []bool{false, true} {
+		t.Run(fmt.Sprintf("override=%t", override), func(t *testing.T) {
+			// Given
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
+			t.Setenv("XDG_CONFIG_HOME", "")
+			t.Setenv("XDG_CACHE_HOME", "")
+			configRoot := filepath.Join(home, ".config", "exasol", "launcher")
+			cacheRoot := filepath.Join(home, ".cache", "exasol", "launcher")
+			durableRoot := filepath.Join(home, ".exasol", "launcher")
+			roaming := filepath.Join(home, "AppData", "Roaming")
+			local := filepath.Join(home, "AppData", "Local")
+			if override {
+				t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "custom-config"))
+				t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "custom-cache"))
+				configRoot = filepath.Join(home, "custom-config", "exasol", "launcher")
+				cacheRoot = filepath.Join(home, "custom-cache", "exasol", "launcher")
+				roaming = filepath.Join(home, "custom-roaming")
+				local = filepath.Join(home, "custom-local")
+			}
+			t.Setenv("APPDATA", roaming)
+			t.Setenv("LOCALAPPDATA", local)
+			switch runtime.GOOS {
+			case "darwin":
+				configRoot = durableRoot
+				cacheRoot = filepath.Join(home, "Library", "Caches", "exasol", "launcher")
+			case "windows":
+				durableRoot = filepath.Join(local, "exasol", "launcher")
+				configRoot = filepath.Join(roaming, "exasol", "launcher")
+				cacheRoot = durableRoot
+			case "linux":
+			default:
+				t.Skip("platform-specific path contract covers Linux, macOS and Windows")
+			}
 
-	for relative, resolve := range map[string]func() (string, error){
-		"deployments":            DeploymentsRootPath,
-		"history/exasol_history": HistoryFilePath,
-		"resources.yaml":         ResourceConfigFilePath,
-		"resources":              CacheRootPath,
-	} {
-		// When
-		got, err := resolve()
+			for want, resolve := range map[string]func() (string, error){
+				filepath.Join(durableRoot, "deployments"):               DeploymentsRootPath,
+				filepath.Join(durableRoot, "history", "exasol_history"): HistoryFilePath,
+				filepath.Join(configRoot, "resources.yaml"):             ResourceConfigFilePath,
+				filepath.Join(cacheRoot, "resources"):                   CacheRootPath,
+			} {
+				// When
+				got, err := resolve()
 
-		// Then
-		require.NoError(t, err)
-		want := filepath.Join("launcher", filepath.FromSlash(relative))
-		require.True(t, strings.HasSuffix(got, want), got)
+				// Then
+				require.NoError(t, err)
+				require.Equal(t, want, got)
+			}
+		})
 	}
+}
+
+func TestMacOSPaths_UseHomeDirectory(t *testing.T) {
+	// Given
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "custom-config"))
+
+	// When
+	durableRoot, durableErr := durableRootPathForOS("darwin")
+	configPath, configErr := resourceConfigFilePathForOS("darwin")
+
+	// Then
+	require.NoError(t, durableErr)
+	require.NoError(t, configErr)
+	require.Equal(t, filepath.Join(home, ".exasol", "launcher"), durableRoot)
+	require.Equal(t, filepath.Join(home, ".exasol", "launcher", "resources.yaml"), configPath)
 }
 
 func TestLegacyPaths_ResolveWhereEarlierVersionsKeptThem(t *testing.T) {
