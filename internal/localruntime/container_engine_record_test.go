@@ -79,6 +79,9 @@ func TestDetectContainerEngine_SelectsTheFirstInstalledEngine(t *testing.T) {
 	podmanFirst := []localinstall.ContainerEngine{
 		localinstall.EnginePodman, localinstall.EngineDocker,
 	}
+	dockerFirst := []localinstall.ContainerEngine{
+		localinstall.EngineDocker, localinstall.EnginePodman,
+	}
 	tests := []struct {
 		name       string
 		preference []localinstall.ContainerEngine
@@ -92,11 +95,24 @@ func TestDetectContainerEngine_SelectsTheFirstInstalledEngine(t *testing.T) {
 			expected: localinstall.EnginePodman,
 		},
 		{
-			name: "both installed, docker preferred",
-			preference: []localinstall.ContainerEngine{
-				localinstall.EngineDocker, localinstall.EnginePodman,
-			},
+			name: "both installed, docker preferred", preference: dockerFirst,
 			podman: true, docker: linuxDocker, expected: localinstall.EngineDocker,
+		},
+		{
+			name:       "both installed, docker preferred but running windows containers",
+			preference: dockerFirst, podman: true,
+			docker: `case "$1" in --version) printf 'Docker version 29.9.1\n' ;; ` +
+				`*) printf 'windows\n' ;; esac`,
+			expected: localinstall.EnginePodman,
+		},
+		{
+			name: "podman and its docker command, docker preferred", preference: dockerFirst,
+			podman: true, docker: `printf 'podman version 5.4.0\n'`,
+			expected: localinstall.EnginePodman,
+		},
+		{
+			name: "nothing installed, docker preferred", preference: dockerFirst,
+			expected: localinstall.EnginePodman,
 		},
 		{
 			name: "only docker", preference: podmanFirst, docker: linuxDocker,

@@ -246,10 +246,10 @@ func TestNewLocalRuntimeForPlatform_SelectsConfiguredContainerEngine(t *testing.
 	}
 }
 
-func TestNewLocalRuntimeForPlatform_DetectsAutoInPodmanFirstOrder(t *testing.T) {
+func TestNewLocalRuntimeForPlatform_DetectsAutoInDockerFirstOrder(t *testing.T) {
 	t.Parallel()
 	expected := []localinstall.ContainerEngine{
-		localinstall.EnginePodman, localinstall.EngineDocker,
+		localinstall.EngineDocker, localinstall.EnginePodman,
 	}
 
 	for _, platform := range []struct{ goos, goarch string }{
@@ -339,7 +339,7 @@ func TestNewLocalRuntimeForPlatform_RejectsUnsupportedContainerEngine(t *testing
 		localLinuxAMD64,
 		detectEngine(localinstall.EnginePodman),
 	)
-	if err == nil || !strings.Contains(err.Error(), "must be one of auto, podman, docker") {
+	if err == nil || !strings.Contains(err.Error(), "must be one of auto, docker, podman") {
 		t.Fatalf("expected the configuration error for the stored engine, got %v", err)
 	}
 }

@@ -290,7 +290,7 @@ Installation variable flags of preset `ubuntu`:
 
 ```text
 Infrastructure variable flags of preset `local`:
-      --container-engine string   Container engine for the local deployment: auto, podman, docker. auto uses the first of them that is installed (default: auto)
+      --container-engine string   Container engine for the local deployment: auto, docker, podman. auto uses the first of them that is installed (default: auto)
       --ports string              Database port override for the local deployment
 ```
 
@@ -444,7 +444,7 @@ Installation variable flags of preset `ubuntu`:
 
 ```text
 Infrastructure variable flags of preset `local`:
-      --container-engine string   Container engine for the local deployment: auto, podman, docker. auto uses the first of them that is installed (default: auto)
+      --container-engine string   Container engine for the local deployment: auto, docker, podman. auto uses the first of them that is installed (default: auto)
       --ports string              Database port override for the local deployment
 ```
 

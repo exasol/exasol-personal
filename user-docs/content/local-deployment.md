@@ -60,9 +60,11 @@ unavailable; see
 On Linux and Windows, a local deployment runs on Docker or Podman. The `container_engine` option
 chooses which:
 
-- `auto` (the default) uses Podman when it is installed, and otherwise Docker when it is installed
-  and runs Linux containers. With neither, it uses Podman on Linux, and on Windows asks which of the
-  two to install. A Podman command installed under the name `docker` counts as Podman.
+- `auto` (the default) uses Docker when it is installed, and otherwise Podman. If Docker Desktop is
+  set to Windows containers, `auto` uses Podman instead, and a Podman command installed under the
+  name `docker` counts as Podman. A Docker whose daemon is not running still counts, so start
+  Docker before deploying or select Podman. With neither engine, `auto` uses Podman on Linux, and
+  on Windows asks which of the two to install.
 - `docker` or `podman` uses that engine. On Windows, the launcher installs a missing engine after
   approval. It uses an installed Docker as found; if Docker cannot be used, the command fails and
   explains what to check.

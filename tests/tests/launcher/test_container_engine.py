@@ -119,7 +119,7 @@ def test_unsupported_container_engine_is_rejected(
     result = _config_set(exasol_path, deployment_dir, engine)
     # Then
     assert result.returncode != 0
-    assert "must be one of auto, podman, docker" in result.stderr
+    assert "must be one of auto, docker, podman" in result.stderr
     assert _configured_engine(exasol_path, deployment_dir) == "docker"
 
 
@@ -206,6 +206,54 @@ def test_unattended_deploy_names_the_other_engine_when_auto_cannot_use_docker(
     assert "exasol config set --container-engine podman" in result.stderr
     # And the deployment keeps auto
     assert _configured_engine(exasol_path, deployment_dir) == "auto"
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="the fake engine commands are POSIX shell scripts",
+)
+def test_auto_uses_docker_when_podman_is_also_installed(
+    exasol_path: str, tmp_path: Path
+) -> None:
+    # Given a deployment left to auto on a host with Podman and a Docker whose
+    # daemon does not answer
+    deployment_dir = tmp_path / "deployment"
+    _init(exasol_path, deployment_dir)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo "Docker version 29.0.1"; exit 0; fi\n'
+        'echo "Cannot connect to the Docker daemon" >&2\n'
+        "exit 1\n"
+    )
+    docker.chmod(0o755)
+    podman = bin_dir / "podman"
+    podman.write_text('#!/bin/sh\necho "fake podman was run" >&2\nexit 1\n')
+    podman.chmod(0o755)
+    env = {**os.environ, "PATH": str(bin_dir)}
+    # When deploying unattended
+    result = subprocess.run(
+        [
+            exasol_path,
+            "deploy",
+            "--auto-approve",
+            "--deployment-dir",
+            str(deployment_dir),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        stdin=subprocess.DEVNULL,
+        env=env,
+        check=False,
+    )
+    # Then it chose Docker and fails with Docker's error and how to select Podman
+    assert result.returncode != 0
+    assert "Cannot connect to the Docker daemon" in result.stderr
+    assert "exasol config set --container-engine podman" in result.stderr
+    assert "fake podman was run" not in result.stderr
 
 
 @pytest.mark.skipif(
