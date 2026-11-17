@@ -14,8 +14,7 @@ import (
 )
 
 const (
-	rootDirName     = ".exasol"
-	personalDirName = "personal"
+	rootDirName = ".exasol"
 
 	namespaceDirName         = "exasol"
 	appDirName               = "launcher"
@@ -25,9 +24,6 @@ const (
 	historyFileName          = "exasol_history"
 	resourceConfigFileName   = "resources.yaml"
 	resourceCacheDirName     = "resources"
-
-	legacyResourceConfigFileName = "runtime-artifacts.yaml"
-	legacyResourceCacheDirName   = "runtime-artifacts"
 )
 
 func DeploymentsRootPath() (string, error) {
@@ -84,39 +80,6 @@ func resourceConfigFilePathForOS(goos string) (string, error) {
 
 func CacheRootPath() (string, error) {
 	return namespacedPath(os.UserCacheDir, resourceCacheDirName)
-}
-
-// The legacy paths below exist only so startup migration can move or delete
-// what earlier launcher versions left there.
-
-func LegacyDeploymentsRootPath() (string, error) {
-	return legacyPath(os.UserHomeDir, deploymentsDirName)
-}
-
-func LegacyHistoryFilePath() (string, error) {
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve base directory for legacy %s: %w", historyFileName, err)
-	}
-
-	return filepath.Join(cacheDir, historyFileName), nil
-}
-
-func LegacyResourceConfigFilePath() (string, error) {
-	return legacyPath(os.UserHomeDir, legacyResourceConfigFileName)
-}
-
-func LegacyCacheRootPath() (string, error) {
-	return legacyPath(os.UserCacheDir, legacyResourceCacheDirName)
-}
-
-func legacyPath(baseDir func() (string, error), name string) (string, error) {
-	base, err := baseDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve base directory for legacy %s: %w", name, err)
-	}
-
-	return filepath.Join(base, rootDirName, personalDirName, name), nil
 }
 
 func namespacedPath(baseDir func() (string, error), name string) (string, error) {
