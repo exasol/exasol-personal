@@ -80,23 +80,11 @@ func addResolvedDeploymentDirNotice(
 	case deploymentDirSourceCurrent:
 		addTerminalNotice("Using deployment in current directory: " + deployment.Root())
 	case deploymentDirSourceDefault:
-		if isLegacyManagedDeploymentDir(deployment.Root()) {
-			addTerminalNotice(
-				"Warning: Using default deployment directory at legacy location: " +
-					deployment.Root(),
-			)
-		} else {
-			addTerminalNotice("Using default deployment directory: " + deployment.Root())
-		}
+		addTerminalNotice("Using default deployment directory: " + deployment.Root())
 	case deploymentDirSourceNamed:
-		message := fmt.Sprintf("Using named deployment directory %q: %s", name, deployment.Root())
-		if isLegacyManagedDeploymentDir(deployment.Root()) {
-			message = fmt.Sprintf(
-				"Warning: Using named deployment directory %q at legacy location: %s",
-				name, deployment.Root(),
-			)
-		}
-		addTerminalNotice(message)
+		addTerminalNotice(
+			fmt.Sprintf("Using named deployment directory %q: %s", name, deployment.Root()),
+		)
 	default:
 	}
 }
