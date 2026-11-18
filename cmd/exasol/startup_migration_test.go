@@ -229,6 +229,21 @@ func TestRunStartupMigration_RemovesEmptiedLegacyDirectories(t *testing.T) {
 	require.NoDirExists(t, filepath.Dir(filepath.Dir(legacyCache)))
 }
 
+//nolint:paralleltest // home-directory environment is process-global.
+func TestRunStartupMigration_LeavesLegacyDirectoriesAloneWhenNothingMoves(t *testing.T) {
+	// Given an empty legacy deployments root left behind by an earlier start
+	setTestHome(t, t.TempDir())
+	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(legacyRoot, 0o700))
+
+	// When a start finds nothing to migrate
+	runStartupMigrationForTest(t)
+
+	// Then it does not attempt to remove legacy directories
+	require.DirExists(t, legacyRoot)
+}
+
 //nolint:paralleltest // home-directory environment and working directory are process-global.
 func TestRunStartupMigration_KeepsLegacyDirectoryThatIsTheWorkingDirectory(t *testing.T) {
 	// Given the working directory is the legacy deployments root

@@ -37,6 +37,7 @@ var legacyDeploymentRunningFn = deploy.LocalDeploymentRunning
 // runStartupMigration runs on every start, so an item it warns about and
 // keeps at its legacy location moves on a later start.
 func runStartupMigration(ctx context.Context, out io.Writer) []pathMigrationDeferralError {
+	changed := false
 	for _, step := range []func() (string, error){
 		moveLegacyFileStep(
 			"cache configuration",
@@ -52,14 +53,19 @@ func runStartupMigration(ctx context.Context, out io.Writer) []pathMigrationDefe
 	} {
 		message, err := step()
 		if message != "" {
+			changed = true
 			_, _ = fmt.Fprintln(out, message)
 		}
 		if err != nil {
 			warnMigration(out, err)
 		}
 	}
-	deferred := migrateLegacyDeployments(ctx, out)
-	removeEmptyLegacyDirs()
+	deferred, movedDeployment := migrateLegacyDeployments(ctx, out)
+	// Removal attempts disturb concurrent launchers on Windows, so only a start
+	// that moved something out of the legacy directories cleans them up.
+	if changed || movedDeployment {
+		removeEmptyLegacyDirs()
+	}
 
 	return deferred
 }
@@ -75,9 +81,11 @@ func rawArgsRequestShellCompletion(args []string) bool {
 	)
 }
 
-// removeEmptyLegacyDirs removes each legacy directory up to its .exasol
-// ancestor. os.Remove refuses a non-empty directory, so anything still kept
-// there, such as a deployment in use or a stray file, survives. The working
+// removeEmptyLegacyDirs removes each empty legacy directory up to its .exasol
+// ancestor and ignores failures, so a leftover directory only stays behind.
+// It attempts only directories it saw empty, because on Windows a removal
+// attempt opens the directory for deletion, which makes a concurrent
+// launcher's listing of it fail with a sharing violation. The working
 // directory is kept because removing it breaks relative paths and the user's
 // shell.
 func removeEmptyLegacyDirs() {
@@ -91,7 +99,7 @@ func removeEmptyLegacyDirs() {
 			continue
 		}
 		for range legacyDirDepth {
-			if cwdErr != nil || !isWithin(cwd, path) {
+			if (cwdErr != nil || !isWithin(cwd, path)) && isEmptyDir(path) {
 				_ = os.Remove(path)
 			}
 			path = filepath.Dir(path)
@@ -99,24 +107,33 @@ func removeEmptyLegacyDirs() {
 	}
 }
 
-func migrateLegacyDeployments(ctx context.Context, out io.Writer) []pathMigrationDeferralError {
+func isEmptyDir(path string) bool {
+	entries, err := os.ReadDir(path)
+
+	return err == nil && len(entries) == 0
+}
+
+// migrateLegacyDeployments also reports whether it moved any deployment.
+func migrateLegacyDeployments(
+	ctx context.Context, out io.Writer,
+) ([]pathMigrationDeferralError, bool) {
 	legacyRoot, err := launcherpaths.LegacyDeploymentsRootPath()
 	if err != nil {
 		warnMigration(out, err)
 
-		return nil
+		return nil, false
 	}
 	names, err := deploymentNames(legacyRoot)
 	if err != nil {
 		warnMigration(out, err)
 
-		return nil
+		return nil, false
 	}
 	newRoot, err := launcherpaths.DeploymentsRootPath()
 	if err != nil {
 		warnMigration(out, err)
 
-		return nil
+		return nil, false
 	}
 
 	var kept []error
@@ -145,7 +162,7 @@ func migrateLegacyDeployments(ctx context.Context, out io.Writer) []pathMigratio
 		warnMigration(out, err)
 	}
 
-	return deferred
+	return deferred, movedAny
 }
 
 // migrateLegacyDeployment leaves a deployment in use where it is, because
