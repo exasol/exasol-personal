@@ -43,6 +43,8 @@ Shared release:
 
 Unlock operations retry every 500 ms on racing state transitions (`ENOENT`/`EEXIST`). Unlock is bounded by a default timeout and returns `ErrUnlockTimeout` if it cannot complete in time.
 
+On Windows, acquire and unlock also retry when a file operation fails because another process briefly holds a conflicting handle (sharing, access, or lock violation), such as a concurrent directory listing or a virus scanner. If that error persists until an acquire deadline, acquire returns it instead of a timeout, because the lock may never have been held.
+
 ## Consistency goals
 
 - updates are linearizable for cooperating processes using this protocol

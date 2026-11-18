@@ -62,7 +62,8 @@ type Status struct {
 
 // DirectoryMutex manages cross-process directory locks backed by marker files.
 type DirectoryMutex struct {
-	path string
+	path        string
+	isTransient func(error) bool
 }
 
 // IsMarkerName reports whether name is one of this package's lock marker file
@@ -81,7 +82,7 @@ func New(path string) (*DirectoryMutex, error) {
 		return nil, ErrPathNotDirectory
 	}
 
-	return &DirectoryMutex{path: path}, nil
+	return &DirectoryMutex{path: path, isTransient: isTransientFileError}, nil
 }
 
 // AcquireShared acquires a shared lock.
@@ -187,21 +188,23 @@ func (m *DirectoryMutex) acquire(ctx context.Context, mode lockMode) error {
 	lockCtx, cancel := withTimeoutIfMissing(ctx, defaultAcquireTimeout)
 	defer cancel()
 
+	var transientErr error
 	for {
 		if err := lockCtx.Err(); err != nil {
-			return wrapAcquireError(err)
+			return wrapAcquireError(err, transientErr)
 		}
 
 		locked, err := m.tryAcquire(mode)
 		if err == nil && locked {
 			return nil
 		}
-		if err != nil && !errors.Is(err, errWouldBlock) {
+		transientErr = m.transientError(err)
+		if err != nil && transientErr == nil && !errors.Is(err, errWouldBlock) {
 			return err
 		}
 
 		if err := sleepWithContext(lockCtx, defaultRetryInterval); err != nil {
-			return wrapAcquireError(err)
+			return wrapAcquireError(err, transientErr)
 		}
 	}
 }
@@ -215,12 +218,13 @@ func (m *DirectoryMutex) release(ctx context.Context, mode lockMode) error {
 		if err == nil && unlocked {
 			return nil
 		}
-		if err != nil && !errors.Is(err, errWouldBlock) {
+		transientErr := m.transientError(err)
+		if err != nil && transientErr == nil && !errors.Is(err, errWouldBlock) {
 			return err
 		}
 
 		if err := sleepWithContext(unlockCtx, defaultRetryInterval); err != nil {
-			return errors.Join(ErrUnlockTimeout, err)
+			return errors.Join(ErrUnlockTimeout, err, transientErr)
 		}
 	}
 }
@@ -419,12 +423,27 @@ func sharedMarkerName(count int) string {
 	return sharedMarkerPrefix + strconv.Itoa(count)
 }
 
-func wrapAcquireError(err error) error {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return errors.Join(ErrAcquireTimeout, err)
+// transientError returns err if a retry can succeed once another process
+// closes a conflicting file handle, and nil otherwise.
+func (m *DirectoryMutex) transientError(err error) error {
+	if err != nil && m.isTransient(err) {
+		return err
 	}
 
-	return err
+	return nil
+}
+
+// wrapAcquireError reports a transient file error that persisted until the
+// acquire deadline as itself, because the lock may never have been held.
+func wrapAcquireError(err, transientErr error) error {
+	if !errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if transientErr != nil {
+		return transientErr
+	}
+
+	return errors.Join(ErrAcquireTimeout, err)
 }
 
 func withTimeoutIfMissing(
