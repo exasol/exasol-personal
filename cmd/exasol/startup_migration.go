@@ -17,6 +17,7 @@ import (
 	"github.com/exasol/exasol-personal/internal/deploy"
 	"github.com/exasol/exasol-personal/internal/directorymutex"
 	"github.com/exasol/exasol-personal/internal/launcherpaths"
+	"github.com/exasol/exasol-personal/internal/util"
 	"github.com/spf13/cobra"
 )
 
@@ -30,6 +31,7 @@ const (
 var (
 	errDestinationExists       = errors.New("migration destination already exists")
 	errDeploymentNameCollision = errors.New("a deployment with the same name exists")
+	errMigrationInterrupted    = errors.New("migration interrupted")
 )
 
 var legacyDeploymentRunningFn = deploy.LocalDeploymentRunning
@@ -136,7 +138,7 @@ func migrateLegacyDeployments(
 		return nil, false
 	}
 
-	var kept []error
+	var warnings []error
 	var deferred []pathMigrationDeferralError
 	movedAny := false
 	for _, name := range names {
@@ -145,20 +147,25 @@ func migrateLegacyDeployments(
 		if pending, ok := errors.AsType[*pathMigrationDeferralError](err); ok {
 			deferred = append(deferred, *pending)
 			if pending.cause != nil {
-				kept = append(
-					kept,
+				warnings = append(
+					warnings,
 					fmt.Errorf("check deployment %s: %w", legacyPath, pending.cause),
 				)
 			}
+		} else if err != nil && moved {
+			warnings = append(warnings, err)
 		} else if err != nil {
-			kept = append(kept, fmt.Errorf("kept %s at its legacy location: %w", legacyPath, err))
+			warnings = append(
+				warnings,
+				fmt.Errorf("kept %s at its legacy location: %w", legacyPath, err),
+			)
 		}
 		movedAny = movedAny || moved
 	}
 	if movedAny {
 		_, _ = fmt.Fprintln(out, "Migrated managed deployments to "+newRoot)
 	}
-	for _, err := range kept {
+	for _, err := range warnings {
 		warnMigration(out, err)
 	}
 
@@ -167,7 +174,10 @@ func migrateLegacyDeployments(
 
 // migrateLegacyDeployment leaves a deployment in use where it is, because
 // renaming it under a running database or another launcher process leaves
-// that process working against the legacy path.
+// that process working against the legacy path. It holds the deployment's
+// exclusive lock from the in-use checks through the rename, so no other
+// launcher starts using the deployment in between and then loses it. The
+// lock marker moves with the directory and is released at the new location.
 func migrateLegacyDeployment(ctx context.Context, legacyPath, newPath string) (bool, error) {
 	if collides, err := pathsExist(newPath, legacyPath); err != nil {
 		return false, err
@@ -185,13 +195,13 @@ func migrateLegacyDeployment(ctx context.Context, legacyPath, newPath string) (b
 	} else if err != nil {
 		return false, err
 	}
-	status, err := mutex.Status()
+	acquired, err := mutex.AcquireExclusiveIfUnlocked()
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	} else if err != nil {
 		return false, err
 	}
-	if status.Locked {
+	if !acquired {
 		return false, &pathMigrationDeferralError{
 			legacyPath: legacyPath,
 			newPath:    newPath,
@@ -199,26 +209,64 @@ func migrateLegacyDeployment(ctx context.Context, legacyPath, newPath string) (b
 		}
 	}
 
+	return migrateLockedLegacyDeployment(ctx, mutex, legacyPath, newPath)
+}
+
+func migrateLockedLegacyDeployment(
+	ctx context.Context, mutex *directorymutex.DirectoryMutex, legacyPath, newPath string,
+) (bool, error) {
+	releaseCtx := context.WithoutCancel(ctx)
+	// The running check can query the container engine for a while, so an
+	// interruption must not leave the lock behind.
+	keepLock, _ := util.RegisterOnceSignalHandler(func() {
+		_ = mutex.ReleaseExclusive(releaseCtx)
+	})
 	running, err := legacyDeploymentRunningFn(ctx, config.NewDeploymentDir(legacyPath))
-	if err != nil {
-		return false, &pathMigrationDeferralError{
-			legacyPath: legacyPath, newPath: newPath, reason: migrationStateUnknown, cause: err,
-		}
+	if !keepLock() {
+		return false, errMigrationInterrupted
 	}
-	if running {
-		return false, &pathMigrationDeferralError{
-			legacyPath: legacyPath,
-			newPath:    newPath,
-			reason:     migrationRunning,
+
+	if err != nil || running {
+		if releaseErr := releaseMigrationLock(releaseCtx, legacyPath); releaseErr != nil {
+			return false, releaseErr
 		}
+		deferral := &pathMigrationDeferralError{
+			legacyPath: legacyPath, newPath: newPath, reason: migrationRunning,
+		}
+		if err != nil {
+			deferral.reason, deferral.cause = migrationStateUnknown, err
+		}
+
+		return false, deferral
 	}
 
 	moved, err := migrate(legacyPath, newPath)
+	lockedPath := legacyPath
 	if moved {
+		lockedPath = newPath
 		removePathMigrationReminders(newPath)
+	}
+	if releaseErr := releaseMigrationLock(releaseCtx, lockedPath); releaseErr != nil {
+		return moved, errors.Join(err, releaseErr)
 	}
 
 	return moved, err
+}
+
+func releaseMigrationLock(ctx context.Context, path string) error {
+	mutex, err := directorymutex.New(path)
+	if err == nil {
+		err = mutex.ReleaseExclusive(ctx)
+	}
+	if err != nil {
+		return fmt.Errorf(
+			"release the migration lock on %s: %w; if no launcher is running, "+
+				"clear it with `exasol diag unlock%s`",
+			path, err, config.NewDeploymentDir(path).CLISelection(),
+		)
+	}
+
+	return nil
 }
 
 func deploymentNames(root string) ([]string, error) {

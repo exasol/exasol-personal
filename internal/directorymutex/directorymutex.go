@@ -94,6 +94,17 @@ func (m *DirectoryMutex) AcquireExclusive(ctx context.Context) error {
 	return m.acquire(ctx, modeExclusive)
 }
 
+// AcquireExclusiveIfUnlocked acquires an exclusive lock only if the directory is
+// unlocked right now, and reports whether it did.
+func (m *DirectoryMutex) AcquireExclusiveIfUnlocked() (bool, error) {
+	acquired, err := m.tryAcquire(modeExclusive)
+	if errors.Is(err, errWouldBlock) {
+		return false, nil
+	}
+
+	return acquired, err
+}
+
 // ReleaseShared releases a shared lock.
 func (m *DirectoryMutex) ReleaseShared(ctx context.Context) error {
 	return m.release(ctx, modeShared)

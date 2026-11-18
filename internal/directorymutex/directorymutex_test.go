@@ -369,3 +369,40 @@ func holdShared(mutex *DirectoryMutex, acquired chan<- struct{}, release <-chan 
 
 	return nil
 }
+
+func TestAcquireExclusiveIfUnlockedAcquiresOnlyAnUnlockedDirectory(t *testing.T) {
+	t.Parallel()
+
+	// Given one mutex holding a shared lock and another on an unlocked directory
+	locked, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("new mutex: %v", err)
+	}
+	if err := locked.AcquireShared(context.Background()); err != nil {
+		t.Fatalf("acquire shared: %v", err)
+	}
+	unlocked, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("new mutex: %v", err)
+	}
+
+	// When each tries to acquire an exclusive lock without waiting
+	lockedAcquired, lockedErr := locked.AcquireExclusiveIfUnlocked()
+	unlockedAcquired, unlockedErr := unlocked.AcquireExclusiveIfUnlocked()
+
+	// Then only the unlocked directory is acquired and the shared lock is untouched
+	if lockedErr != nil || lockedAcquired {
+		t.Fatalf("locked directory: acquired=%t err=%v", lockedAcquired, lockedErr)
+	}
+	if unlockedErr != nil || !unlockedAcquired {
+		t.Fatalf("unlocked directory: acquired=%t err=%v", unlockedAcquired, unlockedErr)
+	}
+	status, err := locked.Status()
+	if err != nil || status.Mode != modeSharedString || status.SharedCount != 1 {
+		t.Fatalf("expected one shared lock, got %+v err=%v", status, err)
+	}
+	status, err = unlocked.Status()
+	if err != nil || status.Mode != modeExclusiveString {
+		t.Fatalf("expected exclusive lock, got %+v err=%v", status, err)
+	}
+}

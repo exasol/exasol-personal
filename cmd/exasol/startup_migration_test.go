@@ -332,6 +332,78 @@ func TestRunStartupMigration_KeepsLockedLegacyDeployment(t *testing.T) {
 	require.DirExists(t, legacyPath)
 }
 
+//nolint:paralleltest // home-directory environment is process-global.
+func TestRunStartupMigration_KeepsSharedLockedLegacyDeploymentAndItsLock(t *testing.T) {
+	// Given another launcher holds a shared lock on a legacy deployment
+	setTestHome(t, t.TempDir())
+	legacyPath := seedLegacyDeployment(t, "default")
+	mutex, err := directorymutex.New(legacyPath)
+	require.NoError(t, err)
+	require.NoError(t, mutex.AcquireShared(context.Background()))
+	t.Cleanup(func() { _ = mutex.ReleaseShared(context.Background()) })
+
+	// When
+	out := runStartupMigrationForTest(t)
+
+	// Then the deployment stays and the other launcher's lock is unchanged
+	require.Contains(t, out, "Migration pending for "+legacyPath)
+	status, err := mutex.Status()
+	require.NoError(t, err)
+	require.Equal(t, "shared", status.Mode)
+	require.Equal(t, 1, status.SharedCount)
+}
+
+//nolint:paralleltest // home-directory environment is process-global.
+func TestRunStartupMigration_MovesLegacyDeploymentUnderItsExclusiveLock(t *testing.T) {
+	// Given a legacy deployment whose running check observes its lock
+	setTestHome(t, t.TempDir())
+	seedLegacyDeployment(t, "default")
+	var observed directorymutex.Status
+	original := legacyDeploymentRunningFn
+	legacyDeploymentRunningFn = func(
+		_ context.Context, deployment config.DeploymentDir,
+	) (bool, error) {
+		mutex, err := directorymutex.New(deployment.Root())
+		require.NoError(t, err)
+		observed, err = mutex.Status()
+		require.NoError(t, err)
+
+		return false, nil
+	}
+	t.Cleanup(func() { legacyDeploymentRunningFn = original })
+
+	// When
+	runStartupMigrationForTest(t)
+
+	// Then the deployment was exclusively locked while checked and moved unlocked
+	require.Equal(t, "exclusive", observed.Mode)
+	newPath := newDeploymentPath(t, "default")
+	require.DirExists(t, newPath)
+	mutex, err := directorymutex.New(newPath)
+	require.NoError(t, err)
+	status, err := mutex.Status()
+	require.NoError(t, err)
+	require.False(t, status.Locked)
+}
+
+//nolint:paralleltest // home-directory environment is process-global.
+func TestRunStartupMigration_ReleasesTheLockOfAKeptRunningDeployment(t *testing.T) {
+	// Given a running legacy deployment
+	setTestHome(t, t.TempDir())
+	fakeLegacyDeploymentRunning(t, true, nil)
+	legacyPath := seedLegacyDeployment(t, "default")
+
+	// When
+	runStartupMigrationForTest(t)
+
+	// Then it stays at its legacy location without a lock
+	mutex, err := directorymutex.New(legacyPath)
+	require.NoError(t, err)
+	status, err := mutex.Status()
+	require.NoError(t, err)
+	require.False(t, status.Locked)
+}
+
 func TestRawArgsRequestShellCompletion_SkipsShellCompletion(t *testing.T) {
 	t.Parallel()
 
