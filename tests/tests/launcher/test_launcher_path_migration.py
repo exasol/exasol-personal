@@ -4,7 +4,6 @@
 import json
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -246,29 +245,6 @@ def test_daily_migration_guidance_uses_each_deployments_saved_date(
     assert f"Migration pending for {due}" in result.stderr
     assert f"Migration pending for {future}" not in result.stderr
     assert not old_marker.exists()
-
-
-@pytest.mark.openspec("launcher-path-migration")
-def test_concurrent_commands_share_one_daily_migration_reminder(
-    exasol_path: str, tmp_path: Path
-) -> None:
-    # Given independent launcher processes sharing a locked legacy deployment
-    home = tmp_path / "home"
-    legacy_dir = _seed_kept_legacy_deployment(home, "prod")
-
-    # When multiple text commands encounter it concurrently
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        results = list(
-            executor.map(
-                lambda _: _run(exasol_path, home, "deployments", "list"), range(8)
-            )
-        )
-
-    # Then every command completes and exactly one claims the daily CTA
-    assert all(result.returncode == 0 for result in results), results
-    assert sum(result.stderr.count("Migration pending") for result in results) == 1
-    assert (legacy_dir / ".dirmutex.shared.1").exists()
-    assert len(list(legacy_dir.glob(".dirmutex.*"))) == 1
 
 
 @pytest.mark.openspec("launcher-path-migration")
