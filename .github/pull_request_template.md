@@ -47,6 +47,7 @@ Fixes #
 - [ ] Ran `task fmt` and `task lint`
 - [ ] Updated documentation (if applicable) - `user-docs/` for user-facing changes, `doc/` for contributor-facing changes
 - [ ] Updated `CHANGELOG.md` for user-facing changes, including examples for new features when useful
+- [ ] Updated the [upgrade guide](user-docs/content/upgrade.md) if existing deployments need manual steps
 - [ ] Added/updated tests
 - [ ] All tests pass locally
 - [ ] Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) format
