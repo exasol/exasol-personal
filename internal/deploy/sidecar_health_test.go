@@ -108,8 +108,8 @@ func TestSidecarHealthIsServingWhenReadinessSucceeds(t *testing.T) {
 	require.Equal(t, "running", result.State)
 }
 
+//nolint:paralleltest // Real elapsed time must stay within the probe window's last second.
 func TestSidecarHealthIsStartingInsideTheProbeWindow(t *testing.T) {
-	t.Parallel()
 	// Given
 	catalog := probedCatalog(t, closedPort(t), "      readinessProbe: {tcpSocket: {port: web}}\n")
 	// When
