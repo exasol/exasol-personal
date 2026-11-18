@@ -25,6 +25,8 @@ Exclusive acquire:
 - if unlocked: create `.dirmutex.exclusive` atomically (`O_CREATE|O_EXCL`)
 - if shared or exclusive: wait and retry
 
+`AcquireExclusiveIfUnlocked` makes a single exclusive attempt and reports whether it acquired the lock instead of waiting.
+
 Acquisition retries every 500 ms until one of these happens:
 - acquisition succeeds
 - context is canceled or reaches deadline
