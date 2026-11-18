@@ -63,6 +63,7 @@ nav:
       - STACKIT account setup: cloud/stackit.md
       - IONOS Cloud account setup: cloud/ionos.md
   - Manage deployments: manage-deployments.md
+  - Upgrade the launcher: upgrade.md
   - Use the database:
       - Connect to the database: connect.md
       - Connect an AI agent: ai-agents.md
