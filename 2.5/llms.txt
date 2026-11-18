@@ -1,0 +1,14 @@
+# Exasol Personal
+
+> Exasol Personal runs a full Exasol analytics database locally or in your own cloud account,
+> managed by the `exasol` command-line launcher.
+
+## AI agents
+
+- [Connect an AI agent](ai-agents/): enable the Exasol MCP server on a local deployment with
+  `exasol mcp enable` and show client setup instructions with `exasol mcp instructions <client>`.
+
+## Documentation
+
+- [Exasol Personal documentation](./): installation, deployment, and database usage.
+- [CLI reference](cli-reference/): every launcher command and option.
