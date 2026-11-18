@@ -4,6 +4,8 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ## Unreleased
 
+## 2.5.0 - 2026-11-18
+
 ### Added
 
 - `exasol info` and `exasol info --json` list public database node endpoints with an `eligible`
