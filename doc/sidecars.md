@@ -26,9 +26,14 @@ Declare an `endpoints` section beside `container` when a published port speaks
 an application protocol, naming the port it applies to, so status reports a
 complete URL. Enablement saves the declarations with the definition.
 
-Use `env[].valueFrom.secretKeyRef` for runtime database connection values.
-Choose environment names expected by the application. Include only the
-connection keys it needs. Configure the application to retry database
+Deliver the password through a secret volume and point the application at
+the file, as the
+[user guide](../user-docs/content/sidecars.md#database-connection-values)
+shows, so container inspection does not reveal it. Use
+`env[].valueFrom.secretKeyRef` for other connection values, and for the
+password only when the application cannot read it from a file. Choose
+environment names expected by the application. Include only the connection
+keys it needs. Configure the application to retry database
 connections because sidecar startup can precede SQL readiness.
 
 Catalog changes supply templates for new enablement. Existing deployments
@@ -85,7 +90,12 @@ its owner and removed once the container is created, so credentials stay out of
 process arguments and launcher command logs. The file lives under the
 deployment's shared directory, which a runtime behind a virtual machine
 boundary reaches at its own mapped path. Values the file format cannot carry
-are rejected naming the variable.
+are rejected naming the variable. The engine keeps those variables in the
+container's inspectable configuration, so
+[secret volume files](../internal/localinstall/sidecar_files.go) take another
+route: the driver creates the container without starting it, copies the files
+in through the runtime's copy command, and then starts it. The files live as
+long as the container does.
 
 Keep container networking in the runtime. Local hosts use one managed bridge
 per deployment, where the database answers to `database` and each sidecar to
@@ -116,7 +126,7 @@ diagnostics alone instead of clearing them against a runtime nobody saw.
 `InspectSidecars` reports facts rather than verdicts: per sidecar, whether it
 runs, its exit code, whether it was created from the definition that was
 applied, and the endpoints a user can reach. Two of those need the backend's
-own knowledge. Matching reads the salted definition label, and endpoints
+own knowledge. Matching reads the definition label, and endpoints
 resolve whatever the runtime published on top of what the container bound. The
 comparison against saved definitions stays in the deployment layer, so status
 has one definition of `complete`, `pending`, and `unknown`.
@@ -140,12 +150,15 @@ verify reachability and stop/start behavior on the target runtime using
 disposable deployments.
 
 Reconciliation compares the defaulted saved definition's hash with the live
-container's applied-definition label and running state. Runtime-resolved
-connection values take effect on recreation. Treat `sidecars-state.json` as
-unresolved diagnostics and cleanup hints. Status takes the exclusive lock to
-clear failures after verifying the desired outcome. Verify applied-definition
-hashes for running sidecars, that the deployment serves exactly the declared
-endpoints, and absence of containers and opened endpoints for cleanup.
+container's applied-definition label and running state. The hash leaves out
+sensitive values, because inspection shows the label; an owner-only record of
+the sensitive values a container received recreates it when they change.
+Runtime-resolved connection values take effect on recreation. Treat
+`sidecars-state.json` as unresolved diagnostics and cleanup hints. Status takes
+the exclusive lock to clear failures after verifying the desired outcome. Verify
+applied-definition hashes for running sidecars, that the deployment serves
+exactly the declared endpoints, and absence of containers and opened endpoints
+for cleanup.
 Runtimes must report orphaned endpoints among their opened ports so cleanup
 stays retryable. Keep runtime inspection read-only and report pending or
 unknown reconciliation separately from running state.

@@ -182,6 +182,12 @@ Supported fields follow the Kubernetes Container shape:
 | `ports` | `name`, `containerPort`, `hostPort`, `hostIP`, `protocol: TCP` |
 | `restartPolicy` | `Always`, `OnFailure`, `Never` |
 | `readinessProbe` | See [Readiness and health](#readiness-and-health) |
+| `volumeMounts` | `name` of a volume, absolute `mountPath`, `readOnly` |
+
+`volumes` beside `container` declares the volumes its mounts name, as a
+Kubernetes pod does. Each volume has a `name` and a `secret` with `secretName`,
+optional `items` of `key` and relative `path`, and `optional`. See
+[Database connection values](#database-connection-values).
 
 The default restart policy is `Always`. Explicit stop and disable take
 precedence over process restart. Individual Container restart policies require
@@ -250,22 +256,65 @@ The launcher resolves the `exasol-database` source at container creation:
 | `username` | Saved database connection username |
 | `password` | Saved database password |
 
-Environment names are selected by the template. Saved definitions retain
-references; resolved credentials are supplied at runtime. An unavailable
-required reference fails startup. `optional: true` on `secretKeyRef` omits an
-unavailable variable.
+A definition receives these values in one of two ways, and saved definitions
+retain the reference either way; resolved credentials are supplied at runtime.
 
-Removing a password reference from a saved definition takes effect at the
-next reconciliation. Changing a database connection value, such as the
+- As files, through a secret volume. The launcher copies each item into the
+  container as a file below its mount before the container starts, readable by
+  any user in the container. The files and their directories are read-only to
+  every user except `root`; `readOnly` is accepted for Kubernetes
+  compatibility and does not change this. Without `items`, every key becomes a file named
+  after it. Use this for the password whenever the application can read it
+  from a file, because the values stay out of the container's configuration
+  and `podman inspect` or `docker inspect` does not show them.
+- As environment variables, through `env[].valueFrom.secretKeyRef`. The
+  container's configuration holds these values, so inspecting the container
+  shows them, including the password.
+
+```yaml
+    container:
+      env:
+        - name: DB_PASSWORD_FILE
+          value: /run/exasol-database/password
+      volumeMounts:
+        - name: database
+          mountPath: /run/exasol-database
+          readOnly: true
+    volumes:
+      - name: database
+        secret:
+          secretName: exasol-database
+          items:
+            - key: password
+              path: password
+```
+
+An unavailable required reference or item fails startup. `optional: true` on
+`secretKeyRef` omits an unavailable variable, and on a volume's `secret` omits
+unavailable items.
+
+A sidecar enabled from a catalog template keeps the definition it was saved
+with. To adopt a template that has moved its password to a file, remove the
+saved definition and enable the sidecar again, which also resets edits such as
+host ports:
+
+```bash
+exasol sidecar disable <name> --remove
+exasol sidecar enable <name>
+```
+
+Removing a password reference or volume from a saved definition takes effect
+at the next reconciliation. Changing a database connection value, such as the
 password, replaces the running services that use it on the next
 reconciliation.
 
 Command and argument strings expand `$(NAME)` from the container environment.
 Literal environment values can refer to earlier entries. `$$` escapes a dollar
 sign, and unresolved references remain literal. Expanding a password into
-application arguments or output exposes it to that application; choose those
-settings with care. Launcher diagnostics withhold injected passwords and keep
-other values legible.
+command, arguments, or literal values places it in the container's
+configuration, and expanding it into application output exposes it to that
+application; choose those settings with care. Launcher diagnostics withhold
+injected passwords and keep other values legible.
 
 ## Networking
 

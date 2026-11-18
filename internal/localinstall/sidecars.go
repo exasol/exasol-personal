@@ -64,22 +64,40 @@ func (runtime *SidecarRuntime) ContainerName(sidecarName string) string {
 }
 
 func (runtime *SidecarRuntime) Matches(
-	container ContainerListing, definition sidecar.Container, secrets sidecar.Secrets,
+	container ContainerListing, definition sidecar.Definition, secrets sidecar.Secrets,
 ) (bool, error) {
 	// Reachability depends on the host, so published ports stand in for it.
-	if !container.Running() || container.SidecarName() != definition.Name {
+	if !container.Running() || container.SidecarName() != definition.Container.Name {
 		return false, nil
 	}
-	resolved, err := sidecar.Resolve(definition, secrets)
+	resolved, files, err := resolveDefinition(definition, secrets)
 	if err != nil {
 		return false, err
 	}
-	fingerprint, err := runtime.fingerprint(resolved.Container)
+	fingerprint, err := runtime.fingerprint(resolved, definition.Volumes)
 	if err != nil {
 		return false, err
+	}
+	if container.Labels[sidecarDefinitionLabel] != fingerprint {
+		return false, nil
 	}
 
-	return container.Labels[sidecarDefinitionLabel] == fingerprint, nil
+	return runtime.appliedCurrent(definition.Container.Name, resolved, files)
+}
+
+func resolveDefinition(
+	definition sidecar.Definition, secrets sidecar.Secrets,
+) (sidecar.Resolved, []sidecar.File, error) {
+	resolved, err := sidecar.Resolve(definition.Container, secrets)
+	if err != nil {
+		return sidecar.Resolved{}, nil, err
+	}
+	files, err := sidecar.ResolveFiles(definition, secrets)
+	if err != nil {
+		return sidecar.Resolved{}, nil, err
+	}
+
+	return resolved.WithFiles(files), files, nil
 }
 
 func (runtime *SidecarRuntime) List(ctx context.Context) ([]ContainerListing, error) {
@@ -96,18 +114,32 @@ func (runtime *SidecarRuntime) List(ctx context.Context) ([]ContainerListing, er
 }
 
 func (runtime *SidecarRuntime) Ensure(
-	ctx context.Context, definition sidecar.Container, secrets sidecar.Secrets,
+	ctx context.Context, definition sidecar.Definition, secrets sidecar.Secrets,
 ) error {
-	resolved, err := sidecar.Resolve(definition, secrets)
+	name := definition.Container.Name
+	resolved, files, err := resolveDefinition(definition, secrets)
 	if err != nil {
 		return err
 	}
-	fingerprint, err := runtime.fingerprint(resolved.Container)
+	fingerprint, err := runtime.fingerprint(resolved, definition.Volumes)
 	if err != nil {
 		return err
 	}
-	converged, err := runtime.converge(ctx, definition, fingerprint)
+	current, err := runtime.appliedCurrent(name, resolved, files)
+	if err != nil {
+		return err
+	}
+	converged, err := runtime.converge(ctx, definition.Container, fingerprint, current)
 	if err != nil || converged {
+		return err
+	}
+	// A replacement interrupted before it records its values must not inherit
+	// the record of the container it replaced.
+	if err := runtime.removeRecord(name); err != nil {
+		return err
+	}
+	archive, err := filesArchive(files)
+	if err != nil {
 		return err
 	}
 	values := make(map[string]string, len(resolved.Container.Env))
@@ -117,7 +149,7 @@ func (runtime *SidecarRuntime) Ensure(
 	envPath := RuntimePath{}
 	remove := noCleanup
 	if len(values) > 0 {
-		envPath, remove, err = envFile(runtime.EnvDir, definition.Name, values)
+		envPath, remove, err = envFile(runtime.EnvDir, name, values)
 		if err != nil {
 			return err
 		}
@@ -125,16 +157,21 @@ func (runtime *SidecarRuntime) Ensure(
 	defer remove()
 	spec := runtime.createSpec(resolved.Container, fingerprint, envPath.RuntimePath)
 	var diagnostic bytes.Buffer
-	if err := runtime.client.Create(ctx, spec, io.Discard, &diagnostic); err != nil {
+	if len(files) == 0 {
+		err = runtime.client.Create(ctx, spec, io.Discard, &diagnostic)
+	} else {
+		err = runtime.createWithFiles(ctx, spec, archive, &diagnostic)
+	}
+	if err != nil {
 		if commandErr, ok := errors.AsType[*CommandError](err); ok {
 			err = commandErr.Err
 		}
 
 		return sidecar.ClassifyPortConflict(
-			definition.Name,
-			definition.Ports,
+			name,
+			definition.Container.Ports,
 			sidecar.NewStartupError(
-				definition.Name,
+				name,
 				resolved.Redact(diagnostic.String()),
 				resolved.Redact(err.Error()),
 			),
@@ -142,7 +179,7 @@ func (runtime *SidecarRuntime) Ensure(
 		)
 	}
 
-	return nil
+	return runtime.recordApplied(name, resolved, files)
 }
 
 func (runtime *SidecarRuntime) Exec(
@@ -169,12 +206,15 @@ func (runtime *SidecarRuntime) Remove(ctx context.Context, name string) error {
 			}
 		}
 	}
+	if len(failures) == 0 {
+		failures = append(failures, runtime.removeRecord(name))
+	}
 
 	return errors.Join(failures...)
 }
 
 func (runtime *SidecarRuntime) converge(
-	ctx context.Context, definition sidecar.Container, fingerprint string,
+	ctx context.Context, definition sidecar.Container, fingerprint string, appliedCurrent bool,
 ) (bool, error) {
 	containers, err := runtime.List(ctx)
 	if err != nil {
@@ -184,7 +224,8 @@ func (runtime *SidecarRuntime) converge(
 		if container.SidecarName() != definition.Name {
 			continue
 		}
-		if container.Running() && container.Labels[sidecarDefinitionLabel] == fingerprint {
+		if container.Running() && appliedCurrent &&
+			container.Labels[sidecarDefinitionLabel] == fingerprint {
 			return true, nil
 		}
 		if err := runtime.removeContainer(ctx, container); err != nil {
@@ -248,10 +289,28 @@ func (runtime *SidecarRuntime) createSpec(
 }
 
 // Probes leave the container itself unchanged, so editing one keeps it running.
-func (*SidecarRuntime) fingerprint(resolved sidecar.Container) (string, error) {
-	identity := resolved.Defaults()
+// The label is inspectable, so sensitive values stay out of it and the applied
+// record decides whether a container is current.
+func (*SidecarRuntime) fingerprint(
+	resolved sidecar.Resolved, volumes []sidecar.Volume,
+) (string, error) {
+	identity := resolved.Container.Defaults()
 	identity.ReadinessProbe = nil
-	data, err := yaml.Marshal(identity)
+	identity.Env = slices.Clone(identity.Env)
+	for index, variable := range identity.Env {
+		if resolved.Sensitive(variable.Name) {
+			placeholder := "[sensitive]"
+			identity.Env[index].Value = &placeholder
+		}
+	}
+	var subject any = identity
+	if len(volumes) > 0 {
+		subject = struct {
+			Container sidecar.Container `yaml:"container"`
+			Volumes   []sidecar.Volume  `yaml:"volumes"`
+		}{identity, volumes}
+	}
+	data, err := yaml.Marshal(subject)
 	if err != nil {
 		return "", err
 	}

@@ -14,6 +14,8 @@ import (
 type Resolved struct {
 	Container Container
 	redactor  *strings.Replacer
+	sensitive map[string]bool
+	withheld  []string
 }
 
 func Resolve(container Container, secrets Secrets) (Resolved, error) {
@@ -24,6 +26,7 @@ func Resolve(container Container, secrets Secrets) (Resolved, error) {
 	result.Env = nil
 	values := make(map[string]string)
 	sensitive := []string{}
+	sensitiveNames := map[string]bool{}
 	for _, env := range container.Env {
 		value, present, err := resolveEnv(container.Name, env, secrets, values)
 		if err != nil {
@@ -43,6 +46,7 @@ func Resolve(container Container, secrets Secrets) (Resolved, error) {
 			ref := env.ValueFrom.SecretKeyRef
 			if secrets[ref.Name][ref.Key].Sensitive {
 				sensitive = append(sensitive, value)
+				sensitiveNames[env.Name] = true
 			}
 		}
 		values[env.Name] = value
@@ -55,7 +59,28 @@ func Resolve(container Container, secrets Secrets) (Resolved, error) {
 		result.Args[index] = Expand(value, values)
 	}
 
-	return Resolved{Container: result, redactor: newRedactor(sensitive)}, nil
+	return Resolved{
+		Container: result, redactor: newRedactor(sensitive), sensitive: sensitiveNames,
+		withheld: sensitive,
+	}, nil
+}
+
+// WithFiles also withholds the sensitive file contents from diagnostics.
+func (resolved Resolved) WithFiles(files []File) Resolved {
+	withheld := slices.Clone(resolved.withheld)
+	for _, file := range files {
+		if file.Sensitive {
+			withheld = append(withheld, file.Content)
+		}
+	}
+	resolved.withheld = withheld
+	resolved.redactor = newRedactor(withheld)
+
+	return resolved
+}
+
+func (resolved Resolved) Sensitive(name string) bool {
+	return resolved.sensitive[name]
 }
 
 // An absent optional source drops the variable instead of passing an empty one.

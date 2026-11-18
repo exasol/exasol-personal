@@ -82,6 +82,51 @@ def test_sidecar_edited_definition_drops_password(service: SidecarDeployment) ->
     )
 
 
+def test_sidecar_secret_volume_delivers_password_as_file(
+    service: SidecarDeployment,
+) -> None:
+    # Given
+    service.sidecar("enable")
+    definition = service.definition()
+    definition["env"] = [v for v in definition["env"] if v["name"] != "DB_PASSWORD"]
+    definition["args"] = [
+        "respond",
+        "--listen",
+        ":8080",
+        "--body",
+        "{file./run/exasol-database/password}",
+    ]
+    definition["volumeMounts"] = [
+        {"name": "database", "mountPath": "/run/exasol-database", "readOnly": True}
+    ]
+    service.save(definition)
+    path = service.directory / "sidecars.yaml"
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    document["sidecars"][service.sidecar_name]["volumes"] = [
+        {
+            "name": "database",
+            "secret": {
+                "secretName": "exasol-database",
+                "items": [{"key": "password", "path": "password"}],
+            },
+        }
+    ]
+    path.write_text(yaml.safe_dump(document), encoding="utf-8")
+    password = service.randomize_password()
+    # When
+    service.deployment.start()
+    # Then
+    assert service.response() == password
+    assert password not in service.podman("inspect", service.container)
+
+    # When
+    rotated = service.randomize_password()
+    service.deployment.start()
+    # Then
+    assert service.response() == rotated
+    assert rotated not in service.podman("inspect", service.container)
+
+
 def test_sidecar_rotated_credentials(service: SidecarDeployment) -> None:
     # Given
     service.sidecar("enable")

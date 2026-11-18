@@ -186,7 +186,7 @@ func (runtime dockerRuntime) CreateNetwork(
 	if _, present, err := runtime.Network(ctx, spec.Name, outErr); err != nil || present {
 		return err
 	}
-	args := []string{dockerNetworkCommand, "create", "--driver", dockerDefaultBridge}
+	args := []string{dockerNetworkCommand, createCommand, "--driver", dockerDefaultBridge}
 	for _, key := range slices.Sorted(maps.Keys(spec.Labels)) {
 		args = append(args, "--label", key+"="+spec.Labels[key])
 	}

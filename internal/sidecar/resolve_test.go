@@ -117,3 +117,33 @@ func TestResolvedDiagnosticsRedactAllValueForms(t *testing.T) {
 		t.Fatal("saved reference mutated")
 	}
 }
+
+func passwordContainer() sidecar.Container {
+	return sidecar.Container{Name: "example", Image: "caddy:2", Env: []sidecar.EnvVar{{
+		Name: "PASSWORD", ValueFrom: &sidecar.EnvSource{SecretKeyRef: &sidecar.SecretKeyRef{
+			Name: sidecar.DatabaseSecret, Key: "password",
+		}},
+	}}}
+}
+
+func TestResolveMarksOnlySensitiveVariables(t *testing.T) {
+	t.Parallel()
+	// Given
+	container := passwordContainer()
+	container.Env = append(container.Env, sidecar.EnvVar{
+		Name: "DB_PORT", ValueFrom: &sidecar.EnvSource{
+			SecretKeyRef: &sidecar.SecretKeyRef{Name: sidecar.DatabaseSecret, Key: "port"},
+		},
+	})
+	// When
+	resolved, err := sidecar.Resolve(container, sidecar.Secrets{
+		sidecar.DatabaseSecret: {
+			"password": {Value: "disposable-secret", Sensitive: true},
+			"port":     {Value: "8563"},
+		},
+	})
+	// Then
+	require.NoError(t, err)
+	require.True(t, resolved.Sensitive("PASSWORD"))
+	require.False(t, resolved.Sensitive("DB_PORT"))
+}

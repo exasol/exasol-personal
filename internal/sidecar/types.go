@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	DatabaseAlias  = "database"
-	DatabasePort   = 8563
-	DatabaseSecret = "exasol-database"
+	DatabaseAlias       = "database"
+	DatabasePort        = 8563
+	DatabaseSecret      = "exasol-database"
+	DatabasePasswordKey = "password"
 
 	Always       = "Always"
 	IfNotPresent = "IfNotPresent"
@@ -60,6 +61,32 @@ type Definition struct {
 	Enabled   *bool      `yaml:"enabled,omitempty"`
 	Container Container  `yaml:"container"`
 	Endpoints []Endpoint `yaml:"endpoints,omitempty"`
+	// Volumes sit beside the container, as they do in a Kubernetes pod.
+	Volumes []Volume `yaml:"volumes,omitempty"`
+}
+
+type Volume struct {
+	Name   string        `yaml:"name"`
+	Secret *SecretVolume `yaml:"secret"`
+}
+
+// SecretVolume projects keys of a launcher-owned source into files, so the
+// values stay out of the container's inspectable configuration.
+type SecretVolume struct {
+	SecretName string      `yaml:"secretName"`
+	Items      []KeyToPath `yaml:"items,omitempty"`
+	Optional   bool        `yaml:"optional,omitempty"`
+}
+
+type KeyToPath struct {
+	Key  string `yaml:"key"`
+	Path string `yaml:"path"`
+}
+
+type VolumeMount struct {
+	Name      string `yaml:"name"`
+	MountPath string `yaml:"mountPath"`
+	ReadOnly  bool   `yaml:"readOnly,omitempty"`
 }
 
 func (definition Definition) IsEnabled() bool {
@@ -75,16 +102,17 @@ type Endpoint struct {
 }
 
 type Container struct {
-	Name            string   `yaml:"name"`
-	Image           string   `yaml:"image"`
-	ImagePullPolicy string   `yaml:"imagePullPolicy,omitempty"`
-	Command         []string `yaml:"command,omitempty"`
-	Args            []string `yaml:"args,omitempty"`
-	WorkingDir      string   `yaml:"workingDir,omitempty"`
-	Env             []EnvVar `yaml:"env,omitempty"`
-	Ports           []Port   `yaml:"ports,omitempty"`
-	RestartPolicy   string   `yaml:"restartPolicy,omitempty"`
-	ReadinessProbe  *Probe   `yaml:"readinessProbe,omitempty"`
+	Name            string        `yaml:"name"`
+	Image           string        `yaml:"image"`
+	ImagePullPolicy string        `yaml:"imagePullPolicy,omitempty"`
+	Command         []string      `yaml:"command,omitempty"`
+	Args            []string      `yaml:"args,omitempty"`
+	WorkingDir      string        `yaml:"workingDir,omitempty"`
+	Env             []EnvVar      `yaml:"env,omitempty"`
+	Ports           []Port        `yaml:"ports,omitempty"`
+	RestartPolicy   string        `yaml:"restartPolicy,omitempty"`
+	ReadinessProbe  *Probe        `yaml:"readinessProbe,omitempty"`
+	VolumeMounts    []VolumeMount `yaml:"volumeMounts,omitempty"`
 }
 
 type EnvVar struct {
@@ -161,16 +189,16 @@ func (document Document) Names() []string {
 	return slices.Sorted(maps.Keys(document.Sidecars))
 }
 
-// Containers lists the enabled sidecars, which are the ones that should run.
-func (document Document) Containers() []Container {
-	containers := make([]Container, 0, len(document.Sidecars))
+// Desired lists the enabled sidecars, which are the ones that should run.
+func (document Document) Desired() []Definition {
+	definitions := make([]Definition, 0, len(document.Sidecars))
 	for _, name := range document.Names() {
 		if definition := document.Sidecars[name]; definition.IsEnabled() {
-			containers = append(containers, definition.Container)
+			definitions = append(definitions, definition)
 		}
 	}
 
-	return containers
+	return definitions
 }
 
 func (entry Entry) Clone() Entry {
@@ -187,6 +215,14 @@ func (definition Definition) Clone() Definition {
 	}
 	definition.Container = definition.Container.Clone()
 	definition.Endpoints = slices.Clone(definition.Endpoints)
+	definition.Volumes = slices.Clone(definition.Volumes)
+	for index, volume := range definition.Volumes {
+		if volume.Secret != nil {
+			secret := *volume.Secret
+			secret.Items = slices.Clone(secret.Items)
+			definition.Volumes[index].Secret = &secret
+		}
+	}
 
 	return definition
 }
@@ -196,6 +232,7 @@ func (container Container) Clone() Container {
 	container.Args = slices.Clone(container.Args)
 	container.Ports = slices.Clone(container.Ports)
 	container.Env = slices.Clone(container.Env)
+	container.VolumeMounts = slices.Clone(container.VolumeMounts)
 	container.ReadinessProbe = container.ReadinessProbe.clone()
 	for index, env := range container.Env {
 		if env.Value != nil {

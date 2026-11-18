@@ -6,6 +6,7 @@ package sidecar
 import (
 	"fmt"
 	"net/netip"
+	pathpkg "path"
 	"regexp"
 	"slices"
 	"strings"
@@ -34,6 +35,11 @@ func (definition Definition) named(name string) (Definition, error) {
 func (definition Definition) validate(name string) error {
 	location := "sidecars." + name
 	if err := definition.Container.Validate(location + ".container"); err != nil {
+		return err
+	}
+	if err := validateVolumes(
+		definition.Volumes, definition.Container.VolumeMounts, location,
+	); err != nil {
 		return err
 	}
 
@@ -67,6 +73,9 @@ func (container Container) Validate(path string) error {
 	}
 
 	if err := validatePorts(container.Ports, path); err != nil {
+		return err
+	}
+	if err := validateVolumeMounts(container.VolumeMounts, path+".volumeMounts"); err != nil {
 		return err
 	}
 
@@ -183,4 +192,67 @@ func (port Port) Validate(path string) error {
 	}
 
 	return nil
+}
+
+func validateVolumes(volumes []Volume, mounts []VolumeMount, path string) error {
+	names := make(map[string]bool)
+	for index, volume := range volumes {
+		location := fmt.Sprintf("%s.volumes[%d]", path, index)
+		if len(volume.Name) > 63 || !dnsLabel.MatchString(volume.Name) || names[volume.Name] {
+			return fmt.Errorf("%s.name: expected a unique DNS label", location)
+		}
+		names[volume.Name] = true
+		if volume.Secret == nil || volume.Secret.SecretName == "" {
+			return fmt.Errorf("%s.secret.secretName: a secret source is required", location)
+		}
+		paths := make(map[string]bool)
+		for item, projection := range volume.Secret.Items {
+			itemLocation := fmt.Sprintf("%s.secret.items[%d]", location, item)
+			if projection.Key == "" {
+				return fmt.Errorf("%s.key: is required", itemLocation)
+			}
+			if !relativeFilePath(projection.Path) || paths[projection.Path] {
+				return fmt.Errorf(
+					"%s.path: expected a unique relative path without '..' segments",
+					itemLocation,
+				)
+			}
+			paths[projection.Path] = true
+		}
+	}
+	for index, mount := range mounts {
+		if !names[mount.Name] {
+			return fmt.Errorf(
+				"%s.container.volumeMounts[%d].name: names no volume of this sidecar",
+				path, index,
+			)
+		}
+	}
+
+	return nil
+}
+
+func validateVolumeMounts(mounts []VolumeMount, path string) error {
+	targets := make(map[string]bool)
+	for index, mount := range mounts {
+		location := fmt.Sprintf("%s[%d]", path, index)
+		target := mount.MountPath
+		if !strings.HasPrefix(target, "/") || target == "/" ||
+			pathpkg.Clean(target) != target || targets[target] {
+			return fmt.Errorf(
+				"%s.mountPath: expected a unique absolute path other than /", location,
+			)
+		}
+		targets[target] = true
+	}
+
+	return nil
+}
+
+func relativeFilePath(path string) bool {
+	if path == "" || strings.HasPrefix(path, "/") || strings.ContainsRune(path, '\x00') {
+		return false
+	}
+
+	return !slices.Contains(strings.Split(path, "/"), "..") && pathpkg.Clean(path) == path
 }
