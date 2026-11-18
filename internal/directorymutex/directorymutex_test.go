@@ -6,8 +6,10 @@ package directorymutex
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -404,5 +406,91 @@ func TestAcquireExclusiveIfUnlockedAcquiresOnlyAnUnlockedDirectory(t *testing.T)
 	status, err = unlocked.Status()
 	if err != nil || status.Mode != modeExclusiveString {
 		t.Fatalf("expected exclusive lock, got %+v err=%v", status, err)
+	}
+}
+
+// newPermissionDeniedMutex returns a mutex on a read-only directory that treats
+// the resulting permission errors like Windows' transient handle conflicts.
+func newPermissionDeniedMutex(t *testing.T) (*DirectoryMutex, func()) {
+	t.Helper()
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("relies on POSIX directory permissions enforced for a non-root user")
+	}
+	dir := t.TempDir()
+	//nolint:gosec,mnd // A read-only directory makes marker updates fail.
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	allow := func() {
+		_ = os.Chmod(dir, 0o700) // nolint:gosec,mnd
+	}
+	t.Cleanup(allow)
+	mutex, err := New(dir)
+	if err != nil {
+		t.Fatalf("new mutex: %v", err)
+	}
+	mutex.isTransient = func(err error) bool { return errors.Is(err, fs.ErrPermission) }
+
+	return mutex, allow
+}
+
+func TestAcquireRetriesTransientFileErrorsUntilTheyClear(t *testing.T) {
+	t.Parallel()
+
+	// Given a directory that refuses marker creation for a moment
+	mutex, allow := newPermissionDeniedMutex(t)
+	time.AfterFunc(3*defaultRetryInterval, allow)
+
+	// When acquiring with time to spare
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := mutex.AcquireExclusive(ctx)
+	// Then the lock is acquired once the error clears
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+}
+
+func TestAcquireReportsATransientFileErrorThatOutlastsTheTimeout(t *testing.T) {
+	t.Parallel()
+
+	// Given a directory that keeps refusing marker creation
+	mutex, _ := newPermissionDeniedMutex(t)
+
+	// When acquiring until the deadline
+	ctx, cancel := context.WithTimeout(context.Background(), 3*defaultRetryInterval)
+	defer cancel()
+	err := mutex.AcquireExclusive(ctx)
+
+	// Then the file error is reported instead of a held lock
+	if !errors.Is(err, fs.ErrPermission) || errors.Is(err, ErrAcquireTimeout) {
+		t.Fatalf("expected the permission error without ErrAcquireTimeout, got %v", err)
+	}
+}
+
+func TestReleaseRetriesTransientFileErrorsUntilTheyClear(t *testing.T) {
+	t.Parallel()
+
+	// Given a held lock whose directory refuses marker removal for a moment
+	mutex, allow := newPermissionDeniedMutex(t)
+	allow()
+	if err := mutex.AcquireExclusive(context.Background()); err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	//nolint:gosec,mnd // A read-only directory makes marker removal fail.
+	if err := os.Chmod(mutex.path, 0o500); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	time.AfterFunc(3*defaultRetryInterval, allow)
+
+	// When releasing
+	err := mutex.ReleaseExclusive(context.Background())
+	// Then the lock is released once the error clears
+	if err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	status, err := mutex.Status()
+	if err != nil || status.Locked {
+		t.Fatalf("expected unlocked, got %+v err=%v", status, err)
 	}
 }

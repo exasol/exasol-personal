@@ -67,6 +67,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- On Windows, launcher commands that use the same deployment at the same time no longer fail or
+  leave its lock behind when another process briefly holds one of its lock files open. The
+  launcher retries the lock operation instead.
+
 - A `docker` command that reaches a Podman daemon, such as one a Podman machine serves on Windows,
   is no longer reported as an outdated Docker Engine. With `container_engine` set to `auto`, the
   launcher uses Podman for it, and a `docker` deployment fails with a message that names Podman.
