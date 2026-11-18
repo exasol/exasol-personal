@@ -11,9 +11,8 @@ import (
 	"github.com/exasol/exasol-personal/internal/directorymutex"
 )
 
-const lockUnavailableMessage = "Deployment directory is locked by another operation. " +
-	"Please wait. Do not use `unlock` unless you are certain that no other exasol " +
-	"launcher instance is running."
+const lockUnavailableMessage = "Deployment directory is locked by another exasol command. " +
+	"Wait for it to finish or stop it."
 
 var (
 	ErrDeploymentDirectoryLocked = errors.New("deployment directory is locked")
@@ -89,6 +88,9 @@ func mapDeploymentLockError(deployment config.DeploymentDir, err error) error {
 		return err
 	}
 
+	if message := olderLauncherLockMessage(deployment); message != "" {
+		return &deploymentDirectoryLockedError{message: message}
+	}
 	if operation := lockedOperationName(deployment); operation != "" {
 		return &deploymentDirectoryLockedError{
 			message: activeOperationInProgressMessage(operation),
@@ -116,9 +118,25 @@ func lockedOperationName(deployment config.DeploymentDir) string {
 }
 
 func activeOperationInProgressMessage(operation string) string {
-	return "Operation '" + operation + "' is currently in progress. Please wait. " +
-		"Do not use `unlock` unless you are certain that no other exasol " +
-		"launcher instance is running."
+	return "Operation '" + operation + "' is currently in progress in another exasol command. " +
+		"Wait for it to finish or stop it."
+}
+
+// olderLauncherLockMessage describes a lock held by an older launcher's
+// marker file, which no running process may release.
+func olderLauncherLockMessage(deployment config.DeploymentDir) string {
+	mutex, err := directorymutex.New(deployment.Root())
+	if err != nil {
+		return ""
+	}
+	status, err := mutex.Status()
+	if err != nil || status.MarkerPath == "" {
+		return ""
+	}
+
+	return "Deployment directory is locked by an older exasol launcher version through " +
+		status.MarkerPath + ". If no older launcher is running, clear the lock with " +
+		"`exasol diag unlock" + deployment.CLISelection() + "`."
 }
 
 func deploymentLockMessage(err error) string {

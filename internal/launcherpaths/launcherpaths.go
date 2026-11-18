@@ -21,6 +21,7 @@ const (
 	deploymentsDirName       = "deployments"
 	defaultDeploymentDirName = "default"
 	historyDirName           = "history"
+	locksDirName             = "locks"
 	historyFileName          = "exasol_history"
 	resourceConfigFileName   = "resources.yaml"
 	resourceCacheDirName     = "resources"
@@ -59,6 +60,17 @@ func HistoryFilePath() (string, error) {
 	}
 
 	return filepath.Join(root, historyDirName, historyFileName), nil
+}
+
+// LocksRootPath returns where the launcher keeps lock files for directories
+// that cannot hold their own.
+func LocksRootPath() (string, error) {
+	root, err := durableRootPath()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(root, locksDirName), nil
 }
 
 func ResourceConfigFilePath() (string, error) {

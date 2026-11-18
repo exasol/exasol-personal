@@ -605,8 +605,14 @@ Flags:
 ```text
 Clear a stale runtime artifact cache lock.
 
-Only use this command when you are certain that no launcher process is currently
-using the runtime artifact cache.
+Launcher processes lock the runtime artifact cache while they use it, and the
+operating system releases that lock when the process exits, also after a crash.
+
+Older launcher versions locked it with a marker file instead, which stays behind
+when such a launcher is terminated. This command removes that marker file. It
+cannot tell whether an older launcher that created the marker is still running,
+so make sure none is. It fails while a running launcher of this version holds
+the lock.
 
 Usage:
 	exasol cache unlock [flags]
@@ -814,7 +820,7 @@ Additional Commands:
 	cache                         Inspect the runtime artifact cache
 	info                          Print all deployment info
 	local                         Report local deployment runtime and reachability state
-	unlock                        Unlock a deployment.
+	unlock                        Clear a stale deployment lock.
 ```
 
 #### `exasol diag cache` { data-toc-label="diag cache" }
@@ -866,12 +872,15 @@ Flags:
 #### `exasol diag unlock` { data-toc-label="diag unlock" }
 
 ```text
-Get the status of a deployment
+Clear a stale deployment lock.
 
-	The lock file will be removed.
+	Launcher commands lock the deployment directory while they run, and the operating
+	system releases that lock when the command exits, also after a crash.
 
-	The lock file prevents multiple instances of the exasol launcher running simultaneously.
-	Unlocking the directory may cause inconsistent file states in the deployment directory.
+	Older launcher versions locked it with a marker file instead, which stays behind when
+	such a launcher is terminated. This command removes those marker files. It cannot tell
+	whether an older launcher that created them is still running, so make sure none is.
+	It fails while a running launcher command of this version holds the lock.
 
 Usage:
 	exasol diag unlock [flags]

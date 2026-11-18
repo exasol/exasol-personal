@@ -104,8 +104,14 @@ var cacheUnlockCmd = &cobra.Command{
 	Short: "Clear a stale runtime artifact cache lock",
 	Long: `Clear a stale runtime artifact cache lock.
 
-Only use this command when you are certain that no launcher process is currently
-using the runtime artifact cache.
+Launcher processes lock the runtime artifact cache while they use it, and the
+operating system releases that lock when the process exits, also after a crash.
+
+Older launcher versions locked it with a marker file instead, which stays behind
+when such a launcher is terminated. This command removes that marker file. It
+cannot tell whether an older launcher that created the marker is still running,
+so make sure none is. It fails while a running launcher of this version holds
+the lock.
 `,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {

@@ -23,8 +23,7 @@ import (
 // - lock primitives (`withExclusiveLock`, `lockStatus`, `clearLock`) create the
 //   cache root before constructing directorymutex, serialize cache reads and
 //   mutations with exclusive locks, map contention to cache-specific errors,
-//   report lock state without acquiring the lock, and release locks with a
-//   cancellation-independent context.
+//   and report lock state with a non-blocking probe.
 // - index primitives (`readIndex`, `readIndexRaw`, `writeIndex`) treat a
 //   missing index as an empty cache, reject unsupported schema versions,
 //   validate relative cache paths for normal operations, and write metadata
@@ -133,13 +132,12 @@ func (c *Cache) lockStatus() CacheLockStatus {
 
 	status.Locked = lockStatus.Locked
 	status.Mode = lockStatus.Mode
-	status.SharedCount = lockStatus.SharedCount
 	status.MarkerPath = lockStatus.MarkerPath
 
 	return status
 }
 
-//nolint:contextcheck // Lock release must outlive caller cancellation.
+//nolint:contextcheck // A nil context falls back to Background.
 func (c *Cache) withExclusiveLock(ctx context.Context, function func() error) error {
 	if ctx == nil {
 		ctx = context.Background()

@@ -162,11 +162,13 @@ func TestCacheCleanRejectsMultipleCleanupSelectors(t *testing.T) {
 	}
 }
 
-func TestCacheUnlockHelpWarnsAboutActiveLauncherProcesses(t *testing.T) {
+func TestCacheUnlockHelpExplainsWhichLocksItClears(t *testing.T) {
 	t.Parallel()
 
-	if !strings.Contains(cacheUnlockCmd.Long, "no launcher process") {
-		t.Fatalf("expected cache unlock warning, got %q", cacheUnlockCmd.Long)
+	for _, want := range []string{"Older launcher versions", "fails while a running launcher"} {
+		if !strings.Contains(cacheUnlockCmd.Long, want) {
+			t.Fatalf("expected cache unlock help to contain %q, got %q", want, cacheUnlockCmd.Long)
+		}
 	}
 }
 

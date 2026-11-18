@@ -52,6 +52,7 @@ func TestPurposePaths_ResolveUnderPlatformRoots(t *testing.T) {
 			for want, resolve := range map[string]func() (string, error){
 				filepath.Join(durableRoot, "deployments"):               DeploymentsRootPath,
 				filepath.Join(durableRoot, "history", "exasol_history"): HistoryFilePath,
+				filepath.Join(durableRoot, "locks"):                     LocksRootPath,
 				filepath.Join(configRoot, "resources.yaml"):             ResourceConfigFilePath,
 				filepath.Join(cacheRoot, "resources"):                   CacheRootPath,
 			} {

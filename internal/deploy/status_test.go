@@ -63,7 +63,7 @@ func TestStatus_ReportsOperationInProgressWhenLockedBeforeStateFileExists(t *tes
 		t.Fatalf("expected exclusive lock to succeed, got: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = mutex.ReleaseExclusive(context.Background())
+		_ = mutex.Release()
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)

@@ -949,7 +949,7 @@ func TestSidecarStatusRequiresExclusiveLock(t *testing.T) {
 	mutex, err := directorymutex.New(deployment.Root())
 	require.NoError(t, err)
 	require.NoError(t, mutex.AcquireShared(t.Context()))
-	t.Cleanup(func() { _ = mutex.ReleaseShared(context.Background()) })
+	t.Cleanup(func() { _ = mutex.Release() })
 	// When
 	_, err = GetSidecarStatus(t.Context(), deployment, "example")
 	// Then

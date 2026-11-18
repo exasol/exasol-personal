@@ -9,19 +9,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/exasol/exasol-personal/internal/util"
+	"github.com/exasol/exasol-personal/internal/filelock"
 )
 
 var (
-	ErrInvalidMarker    = errors.New("invalid marker")
 	ErrAcquireTimeout   = errors.New("lock acquire timed out")
-	ErrLockStateChanged = errors.New("lock state changed")
-	ErrUnlockTimeout    = errors.New("unlock timed out")
 	ErrPathNotDirectory = errors.New("path is not a directory")
+	ErrAlreadyHeld      = errors.New("directory mutex handle already holds a lock")
+	ErrHeldByProcess    = errors.New(
+		"the directory is locked by a running launcher process and unlocks when it exits",
+	)
 )
 
 const (
@@ -29,46 +30,58 @@ const (
 	modeExclusiveString = "exclusive"
 )
 
+// Older launchers lock with these marker files. Their names must never match
+// lockFileName, or those launchers fail on the directory.
 const (
 	markerStem          = ".dirmutex"
-	markerPrefix        = markerStem + "."
 	exclusiveMarkerName = markerStem + ".exclusive"
 	sharedMarkerPrefix  = markerStem + ".shared."
 )
 
+const lockFileName = ".exasol-launcher.lock"
+
 const (
 	defaultAcquireTimeout = 1 * time.Second
-	defaultUnlockTimeout  = 5 * time.Second
 	defaultRetryInterval  = 200 * time.Millisecond
+	// A lock file that changes while being locked belongs to a directory that
+	// was just renamed or removed, so a few attempts settle on its fate.
+	maxChangedAttempts = 3
+	lockDirPerm        = 0o700
+	lockFilePerm       = 0o600
 )
 
-type lockMode int
+var errDirectoryChanged = errors.New("directory changed while locking")
 
-const (
-	modeShared lockMode = iota + 1
-	modeExclusive
-)
-
-var errWouldBlock = errors.New("lock unavailable")
-
-// Status reports the observed lock state in a directory.
+// Status reports the observed lock state in a directory. MarkerPath is set
+// when an older launcher's marker file holds the lock.
 type Status struct {
-	Locked      bool
-	Mode        string
-	SharedCount int
-	MarkerName  string
-	MarkerPath  string
+	Locked     bool
+	Mode       string
+	MarkerPath string
 }
 
-// DirectoryMutex manages cross-process directory locks backed by marker files.
+// DirectoryMutex locks a directory across processes with an operating system
+// file lock, which the operating system releases when the holder exits.
+// A handle holds at most one lock at a time.
 type DirectoryMutex struct {
-	path        string
-	isTransient func(error) bool
+	path string
+	// keyedLockDir holds lock files named by directory identity instead of a
+	// lock file inside the directory; empty selects the lock file inside.
+	keyedLockDir string
+	isTransient  func(error) bool
+	beforeLock   func()
+
+	mu   sync.Mutex
+	held *os.File
 }
 
-// IsMarkerName reports whether name is one of this package's lock marker file
-// names.
-func IsMarkerName(name string) bool {
+// IsLockFileName reports whether name is a lock file of this package or a
+// marker of an older launcher, which directory cleanup must leave in place.
+func IsLockFileName(name string) bool {
+	return name == lockFileName || isMarkerName(name)
+}
+
+func isMarkerName(name string) bool {
 	return name == exclusiveMarkerName || strings.HasPrefix(name, sharedMarkerPrefix)
 }
 
@@ -81,43 +94,101 @@ func New(path string) (*DirectoryMutex, error) {
 	if !info.IsDir() {
 		return nil, ErrPathNotDirectory
 	}
+	keyedLockDir, err := defaultKeyedLockDir()
+	if err != nil {
+		return nil, err
+	}
 
-	return &DirectoryMutex{path: path, isTransient: isTransientFileError}, nil
+	return &DirectoryMutex{
+		path:         path,
+		keyedLockDir: keyedLockDir,
+		isTransient:  isTransientFileError,
+	}, nil
+}
+
+// RemoveDirectory removes the empty directory path together with its lock
+// file. The caller holds the exclusive lock. The directory first moves to a
+// hidden sibling, so launchers waiting for the lock find it gone instead of
+// recreating a lock file that keeps it from being removed. A waiter whose
+// open raced the move can still recreate the lock file in the moved
+// directory, so removal retries while that file is all that is left.
+func RemoveDirectory(path string) error {
+	removing := filepath.Join(
+		filepath.Dir(path),
+		fmt.Sprintf(".%s.removing-%d", filepath.Base(path), os.Getpid()),
+	)
+	if err := os.Rename(path, removing); errors.Is(err, os.ErrNotExist) {
+		return err
+	} else if err != nil {
+		removing = path
+	}
+
+	for attempt := 1; ; attempt++ {
+		if err := os.Remove(filepath.Join(removing, lockFileName)); err != nil &&
+			!errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		err := os.Remove(removing)
+		if err == nil || attempt == removeDirectoryAttempts || !onlyLockFileLeft(removing) {
+			return err
+		}
+	}
+}
+
+const removeDirectoryAttempts = 5
+
+func onlyLockFileLeft(path string) bool {
+	entries, err := os.ReadDir(path)
+
+	return err == nil && len(entries) == 1 && entries[0].Name() == lockFileName
 }
 
 // AcquireShared acquires a shared lock.
 func (m *DirectoryMutex) AcquireShared(ctx context.Context) error {
-	return m.acquire(ctx, modeShared)
+	return m.acquire(ctx, false)
 }
 
 // AcquireExclusive acquires an exclusive lock.
 func (m *DirectoryMutex) AcquireExclusive(ctx context.Context) error {
-	return m.acquire(ctx, modeExclusive)
+	return m.acquire(ctx, true)
 }
 
 // AcquireExclusiveIfUnlocked acquires an exclusive lock only if the directory is
 // unlocked right now, and reports whether it did.
 func (m *DirectoryMutex) AcquireExclusiveIfUnlocked() (bool, error) {
-	acquired, err := m.tryAcquire(modeExclusive)
-	if errors.Is(err, errWouldBlock) {
-		return false, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.held != nil {
+		return false, ErrAlreadyHeld
 	}
+	file, err := m.tryLock(true)
+	if errors.Is(err, filelock.ErrWouldBlock) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	m.held = file
 
-	return acquired, err
+	return true, nil
 }
 
-// ReleaseShared releases a shared lock.
-func (m *DirectoryMutex) ReleaseShared(ctx context.Context) error {
-	return m.release(ctx, modeShared)
-}
+// Release releases the lock this handle holds, if any.
+func (m *DirectoryMutex) Release() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-// ReleaseExclusive releases an exclusive lock.
-func (m *DirectoryMutex) ReleaseExclusive(ctx context.Context) error {
-	return m.release(ctx, modeExclusive)
+	if m.held == nil {
+		return nil
+	}
+	file := m.held
+	m.held = nil
+
+	return releaseLockFile(file)
 }
 
 func (m *DirectoryMutex) WithShared(ctx context.Context, arg any, function func(any) error) error {
-	return m.withLock(ctx, arg, function, modeShared)
+	return m.withLock(ctx, arg, function, false)
 }
 
 func (m *DirectoryMutex) WithExclusive(
@@ -125,66 +196,105 @@ func (m *DirectoryMutex) WithExclusive(
 	arg any,
 	function func(any) error,
 ) error {
-	return m.withLock(ctx, arg, function, modeExclusive)
+	return m.withLock(ctx, arg, function, true)
 }
 
-// ClearLock force-removes the current marker file if one exists.
+// ClearLock removes marker files that older launchers left behind. A lock
+// held by a running launcher cannot be cleared, so it reports
+// ErrHeldByProcess for one.
 func (m *DirectoryMutex) ClearLock() error {
-	marker, err := m.findMarker()
+	entries, err := os.ReadDir(m.path)
 	if err != nil {
 		return err
 	}
-	if marker == nil {
-		return nil
-	}
-	if err := os.Remove(marker.path); err != nil {
-		if os.IsNotExist(err) {
-			return nil
+	for _, entry := range entries {
+		if entry.IsDir() || !isMarkerName(entry.Name()) {
+			continue
 		}
+		err := os.Remove(filepath.Join(m.path, entry.Name()))
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
 
+	mode, err := m.probe()
+	if err != nil {
 		return err
+	}
+	if mode != "" {
+		return ErrHeldByProcess
 	}
 
 	return nil
 }
 
-// Status reports the current observed lock state.
+// Status reports the current observed lock state. A probe cannot count shared
+// holders, and it briefly takes the lock itself when the directory is
+// unlocked.
 func (m *DirectoryMutex) Status() (Status, error) {
 	marker, err := m.findMarker()
 	if err != nil {
 		return Status{}, err
 	}
-	if marker == nil {
-		return Status{Locked: false}, nil
+	if marker != "" {
+		mode := modeSharedString
+		if filepath.Base(marker) == exclusiveMarkerName {
+			mode = modeExclusiveString
+		}
+
+		return Status{Locked: true, Mode: mode, MarkerPath: marker}, nil
 	}
 
-	status := Status{
-		Locked:      true,
-		SharedCount: marker.count,
-		MarkerName:  marker.name,
-		MarkerPath:  marker.path,
+	mode, err := m.probe()
+	if err != nil {
+		return Status{}, err
 	}
 
-	switch marker.mode {
-	case modeShared:
-		status.Mode = modeSharedString
-	case modeExclusive:
-		status.Mode = modeExclusiveString
-	default:
-		return Status{}, errors.ErrUnsupported
-	}
-
-	return status, nil
+	return Status{Locked: mode != "", Mode: mode}, nil
 }
 
-type markerInfo struct {
-	name  string
-	path  string
-	mode  lockMode
-	count int
+// probe returns the mode of the lock that another handle holds, or "" if
+// there is none.
+func (m *DirectoryMutex) probe() (string, error) {
+	file, _, err := m.openLockFile(false)
+	if errors.Is(err, os.ErrNotExist) {
+		if _, statErr := os.Stat(m.path); statErr != nil {
+			return "", statErr
+		}
+
+		return "", nil
+	} else if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	for _, attempt := range []struct {
+		exclusive bool
+		heldMode  string
+	}{
+		{exclusive: true, heldMode: ""},
+		{exclusive: false, heldMode: modeSharedString},
+	} {
+		err := filelock.TryLock(file, attempt.exclusive)
+		if err == nil {
+			return attempt.heldMode, filelock.Unlock(file)
+		}
+		if !errors.Is(err, filelock.ErrWouldBlock) {
+			return "", err
+		}
+	}
+
+	return modeExclusiveString, nil
 }
 
-func (m *DirectoryMutex) acquire(ctx context.Context, mode lockMode) error {
+func (m *DirectoryMutex) acquire(ctx context.Context, exclusive bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.held != nil {
+		return ErrAlreadyHeld
+	}
+
 	lockCtx, cancel := withTimeoutIfMissing(ctx, defaultAcquireTimeout)
 	defer cancel()
 
@@ -194,12 +304,13 @@ func (m *DirectoryMutex) acquire(ctx context.Context, mode lockMode) error {
 			return wrapAcquireError(err, transientErr)
 		}
 
-		locked, err := m.tryAcquire(mode)
-		if err == nil && locked {
+		file, err := m.tryLock(exclusive)
+		if err == nil {
+			m.held = file
 			return nil
 		}
 		transientErr = m.transientError(err)
-		if err != nil && transientErr == nil && !errors.Is(err, errWouldBlock) {
+		if transientErr == nil && !errors.Is(err, filelock.ErrWouldBlock) {
 			return err
 		}
 
@@ -209,218 +320,142 @@ func (m *DirectoryMutex) acquire(ctx context.Context, mode lockMode) error {
 	}
 }
 
-func (m *DirectoryMutex) release(ctx context.Context, mode lockMode) error {
-	unlockCtx, cancel := withTimeoutIfMissing(ctx, defaultUnlockTimeout)
-	defer cancel()
-
-	for {
-		unlocked, err := m.tryRelease(mode)
-		if err == nil && unlocked {
-			return nil
+// tryLock returns the locked lock file, or filelock.ErrWouldBlock while
+// another handle or an older launcher's marker holds the lock. It returns
+// an error matching os.ErrNotExist once the directory is gone.
+func (m *DirectoryMutex) tryLock(exclusive bool) (*os.File, error) {
+	for range maxChangedAttempts {
+		file, err := m.tryLockOnce(exclusive)
+		if !errors.Is(err, errDirectoryChanged) {
+			return file, err
 		}
-		transientErr := m.transientError(err)
-		if err != nil && transientErr == nil && !errors.Is(err, errWouldBlock) {
-			return err
-		}
-
-		if err := sleepWithContext(unlockCtx, defaultRetryInterval); err != nil {
-			return errors.Join(ErrUnlockTimeout, err, transientErr)
+		if _, err := os.Stat(m.path); err != nil {
+			return nil, err
 		}
 	}
+
+	return nil, filelock.ErrWouldBlock
 }
 
-func (m *DirectoryMutex) tryAcquire(mode lockMode) (bool, error) {
-	marker, err := m.findMarker()
-	if err != nil {
-		return false, err
-	}
-
-	switch mode {
-	case modeExclusive:
-		return m.tryAcquireExclusive(marker)
-	case modeShared:
-		return m.tryAcquireShared(marker)
-	default:
-		return false, fmt.Errorf("unsupported lock mode: %d", mode)
-	}
-}
-
-func (m *DirectoryMutex) tryAcquireExclusive(marker *markerInfo) (bool, error) {
-	if marker != nil {
-		return false, errWouldBlock
-	}
-
-	return m.createMarker(exclusiveMarkerName)
-}
-
-func (m *DirectoryMutex) tryAcquireShared(marker *markerInfo) (bool, error) {
-	if marker == nil {
-		return m.createMarker(sharedMarkerName(1))
-	}
-	if marker.mode == modeExclusive {
-		return false, errWouldBlock
-	}
-	if marker.mode != modeShared {
-		return false, ErrInvalidMarker
-	}
-
-	nextName := sharedMarkerName(marker.count + 1)
-	nextPath := filepath.Join(m.path, nextName)
-	if err := os.Rename(marker.path, nextPath); err != nil {
-		if os.IsNotExist(err) || os.IsExist(err) {
-			return false, errWouldBlock
-		}
-
-		return false, err
-	}
-
-	return true, nil
-}
-
-func (m *DirectoryMutex) tryRelease(mode lockMode) (bool, error) {
-	marker, err := m.findMarker()
-	if err != nil {
-		return false, err
-	}
-	if marker == nil {
-		return true, nil
-	}
-
-	switch mode {
-	case modeExclusive:
-		return m.tryReleaseExclusive(marker)
-	case modeShared:
-		return m.tryReleaseShared(marker)
-	default:
-		return false, fmt.Errorf("unsupported lock mode: %d", mode)
-	}
-}
-
-func (*DirectoryMutex) tryReleaseExclusive(marker *markerInfo) (bool, error) {
-	if marker.mode != modeExclusive {
-		return false, ErrLockStateChanged
-	}
-
-	return removeMarkerFile(marker.path)
-}
-
-func (m *DirectoryMutex) tryReleaseShared(marker *markerInfo) (bool, error) {
-	if marker.mode != modeShared {
-		return false, ErrLockStateChanged
-	}
-
-	if marker.count == 1 {
-		return removeMarkerFile(marker.path)
-	}
-
-	nextName := sharedMarkerName(marker.count - 1)
-	nextPath := filepath.Join(m.path, nextName)
-	if err := os.Rename(marker.path, nextPath); err != nil {
-		if os.IsNotExist(err) || os.IsExist(err) {
-			return false, errWouldBlock
-		}
-
-		return false, err
-	}
-
-	return true, nil
-}
-
-func removeMarkerFile(path string) (bool, error) {
-	if err := os.Remove(path); err != nil {
-		if os.IsNotExist(err) {
-			return false, errWouldBlock
-		}
-
-		return false, err
-	}
-
-	return true, nil
-}
-
-func (m *DirectoryMutex) createMarker(name string) (bool, error) {
-	path := filepath.Join(m.path, name)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) // nolint:mnd
-	if err == nil {
-		_ = file.Close()
-		return true, nil
-	}
-	if os.IsExist(err) {
-		return false, errWouldBlock
-	}
-
-	return false, err
-}
-
-func (m *DirectoryMutex) findMarker() (*markerInfo, error) {
-	entries, err := os.ReadDir(m.path)
+func (m *DirectoryMutex) tryLockOnce(exclusive bool) (*os.File, error) {
+	file, unchanged, err := m.openLockFile(true)
 	if err != nil {
 		return nil, err
 	}
+	if m.beforeLock != nil {
+		m.beforeLock()
+	}
 
-	var match *markerInfo
+	if err := filelock.TryLock(file, exclusive); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	err = unchanged()
+	if err == nil {
+		err = m.blockedByMarker()
+	}
+	if err != nil {
+		_ = releaseLockFile(file)
+		return nil, err
+	}
+
+	return file, nil
+}
+
+// releaseLockFile unlocks before closing, because a child process forked
+// meanwhile shares the open file until it executes and would keep holding the
+// lock after a plain close, and Windows may release the lock of a closed file
+// only later.
+func releaseLockFile(file *os.File) error {
+	unlockErr := filelock.Unlock(file)
+
+	return errors.Join(unlockErr, file.Close())
+}
+
+// openLockFile also returns a check that reports errDirectoryChanged once
+// the lock file no longer belongs to the directory at m.path. Locking a file
+// whose directory was renamed or removed after opening must not count.
+func (m *DirectoryMutex) openLockFile(create bool) (*os.File, func() error, error) {
+	flag := os.O_RDWR
+	if create {
+		flag |= os.O_CREATE
+	}
+
+	if m.keyedLockDir != "" {
+		return m.openKeyedLockFile(flag)
+	}
+
+	path := filepath.Join(m.path, lockFileName)
+	file, err := os.OpenFile(path, flag, lockFilePerm)
+	if err != nil {
+		return nil, nil, err
+	}
+	unchanged := func() error {
+		opened, err := file.Stat()
+		if err != nil {
+			return err
+		}
+		current, err := os.Stat(path)
+		if errors.Is(err, os.ErrNotExist) || (err == nil && !os.SameFile(opened, current)) {
+			return errDirectoryChanged
+		}
+
+		return err
+	}
+
+	return file, unchanged, nil
+}
+
+func (m *DirectoryMutex) openKeyedLockFile(flag int) (*os.File, func() error, error) {
+	dirID, err := directoryID(m.path)
+	if err != nil {
+		return nil, nil, err
+	}
+	if flag&os.O_CREATE != 0 {
+		if err := os.MkdirAll(m.keyedLockDir, lockDirPerm); err != nil {
+			return nil, nil, err
+		}
+	}
+	file, err := os.OpenFile(filepath.Join(m.keyedLockDir, dirID+".lock"), flag, lockFilePerm)
+	if err != nil {
+		return nil, nil, err
+	}
+	unchanged := func() error {
+		current, err := directoryID(m.path)
+		if errors.Is(err, os.ErrNotExist) || (err == nil && current != dirID) {
+			return errDirectoryChanged
+		}
+
+		return err
+	}
+
+	return file, unchanged, nil
+}
+
+func (m *DirectoryMutex) blockedByMarker() error {
+	marker, err := m.findMarker()
+	if err != nil {
+		return err
+	}
+	if marker != "" {
+		return filelock.ErrWouldBlock
+	}
+
+	return nil
+}
+
+func (m *DirectoryMutex) findMarker() (string, error) {
+	entries, err := os.ReadDir(m.path)
+	if err != nil {
+		return "", err
+	}
 	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if !strings.HasPrefix(name, markerPrefix) {
-			continue
-		}
-
-		marker, parseErr := parseMarker(name, m.path)
-		if parseErr != nil {
-			return nil, parseErr
-		}
-		if match != nil {
-			return nil, ErrInvalidMarker
-		}
-
-		match = marker
-	}
-
-	return match, nil
-}
-
-func parseMarker(name, directory string) (*markerInfo, error) {
-	if name == exclusiveMarkerName {
-		return &markerInfo{
-			name: name,
-			path: filepath.Join(directory, name),
-			mode: modeExclusive,
-		}, nil
-	}
-
-	if !strings.HasPrefix(name, sharedMarkerPrefix) {
-		return nil, ErrInvalidMarker
-	}
-
-	countToken := strings.TrimPrefix(name, sharedMarkerPrefix)
-	if countToken == "" {
-		return nil, ErrInvalidMarker
-	}
-	for _, character := range countToken {
-		if character < '0' || character > '9' {
-			return nil, ErrInvalidMarker
+		if !entry.IsDir() && isMarkerName(entry.Name()) {
+			return filepath.Join(m.path, entry.Name()), nil
 		}
 	}
 
-	count, err := strconv.Atoi(countToken)
-	if err != nil || count <= 0 {
-		return nil, ErrInvalidMarker
-	}
-
-	return &markerInfo{
-		name:  name,
-		path:  filepath.Join(directory, name),
-		mode:  modeShared,
-		count: count,
-	}, nil
-}
-
-func sharedMarkerName(count int) string {
-	return sharedMarkerPrefix + strconv.Itoa(count)
+	return "", nil
 }
 
 // transientError returns err if a retry can succeed once another process
@@ -464,76 +499,16 @@ func (m *DirectoryMutex) withLock(
 	ctx context.Context,
 	arg any,
 	function func(any) error,
-	mode lockMode,
-) error {
-	var err error
-
-	switch mode {
-	case modeExclusive:
-		err = m.AcquireExclusive(ctx)
-	case modeShared:
-		err = m.AcquireShared(ctx)
-	default:
-	}
-
-	if err != nil {
+	exclusive bool,
+) (err error) {
+	if err := m.acquire(ctx, exclusive); err != nil {
 		return err
 	}
-
-	releaseCtx := context.WithoutCancel(ctx)
-	release := func() error {
-		switch mode {
-		case modeExclusive:
-			return m.ReleaseExclusive(releaseCtx)
-		case modeShared:
-			return m.ReleaseShared(releaseCtx)
-		default:
-			return nil
-		}
-	}
-	releaseOnce := releaseOnInterruptOnce(release)
-
-	var callbackErr error
 	defer func() {
-		releaseErr := releaseOnce()
-		if releaseErr == nil {
-			return
-		}
-		if callbackErr == nil {
-			callbackErr = releaseErr
-			return
-		}
-		callbackErr = errors.Join(callbackErr, releaseErr)
-	}()
-
-	callbackErr = callWithPanicSafetyError(function, arg)
-
-	return callbackErr
-}
-
-func callWithPanicSafetyError(function func(any) error, arg any) error {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			panic(recovered)
-		}
+		err = errors.Join(err, m.Release())
 	}()
 
 	return function(arg)
-}
-
-func releaseOnInterruptOnce(release func() error) func() error {
-	// Run the release function no matter what
-	unregister, _ := util.RegisterOnceSignalHandler(func() {
-		_ = release()
-	})
-
-	return func() error {
-		if unregister() {
-			return release()
-		}
-
-		return nil
-	}
 }
 
 func sleepWithContext(ctx context.Context, duration time.Duration) error {

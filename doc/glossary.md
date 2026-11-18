@@ -24,7 +24,7 @@ The lifecycle state a deployment directory records between command invocations, 
 See [Deployment state & locking](launcher_state.md).
 
 ### State Files
-The files through which the launcher carries deployment state across invocations: the persistent workflow state, the temporary deployment lock, and the plain-text deployment version marker.
+The files through which the launcher carries deployment state across invocations: the persistent workflow state, the deployment lock file, and the plain-text deployment version marker.
 
 See [Deployment state & locking](launcher_state.md).
 

@@ -460,8 +460,19 @@ func TestCacheLockStatusAndUnlockUseDirectoryMutex(t *testing.T) {
 		t.Fatalf("expected exclusive lock status, got %+v", status)
 	}
 
+	if err := cache.Unlock(); !errors.Is(err, directorymutex.ErrHeldByProcess) {
+		t.Fatalf("expected unlock to report the running holder, got %v", err)
+	}
+	if err := mutex.Release(); err != nil {
+		t.Fatalf("failed to release mutex: %v", err)
+	}
+	marker := filepath.Join(cache.Root(), ".dirmutex.exclusive")
+	if err := os.WriteFile(marker, nil, filePerm); err != nil {
+		t.Fatalf("failed to write older launcher marker: %v", err)
+	}
+
 	if err := cache.Unlock(); err != nil {
-		t.Fatalf("expected unlock to clear marker, got %v", err)
+		t.Fatalf("expected unlock to clear the marker, got %v", err)
 	}
 	status = cache.lockStatus()
 	if status.Locked || status.Error != "" {
@@ -484,7 +495,7 @@ func TestCacheLockContentionReturnsUserFacingError(t *testing.T) {
 		t.Fatalf("failed to acquire mutex: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = mutex.ReleaseExclusive(context.Background())
+		_ = mutex.Release()
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)

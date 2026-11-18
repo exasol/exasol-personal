@@ -31,22 +31,15 @@ func RemoveLocalDeploymentDirectory(ctx context.Context, deployment config.Deplo
 
 	slog.Info("removing local deployment directory", "path", deployment.Root())
 
-	removeDeploymentDir := false
 	if err := withDeploymentExclusiveLock(ctx, deployment,
 		func(deployment config.DeploymentDir) error {
 			if err := prepareDeploymentDirectoryRemoval(deployment); err != nil {
 				return err
 			}
-			removeDeploymentDir = true
 
-			return nil
+			return removeDeploymentDirectoryRoot(deployment)
 		}); err != nil {
 		return err
-	}
-	if removeDeploymentDir {
-		if err := removeDeploymentDirectoryRoot(deployment); err != nil {
-			return err
-		}
 	}
 
 	slog.Info("removed local deployment directory", "path", deployment.Root())
@@ -66,7 +59,7 @@ func prepareDeploymentDirectoryRemoval(deployment config.DeploymentDir) error {
 
 	for _, entry := range entries {
 		name := entry.Name()
-		if directorymutex.IsMarkerName(name) {
+		if directorymutex.IsLockFileName(name) {
 			continue
 		}
 		path := filepath.Join(deployment.Root(), name)
@@ -138,7 +131,7 @@ func pathIsInside(parent, child string) bool {
 }
 
 func removeDeploymentDirectoryRoot(deployment config.DeploymentDir) error {
-	if err := os.Remove(deployment.Root()); err != nil {
+	if err := directorymutex.RemoveDirectory(deployment.Root()); err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}

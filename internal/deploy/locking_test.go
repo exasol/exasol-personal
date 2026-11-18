@@ -7,10 +7,10 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/directorymutex"
@@ -35,7 +35,7 @@ func TestWithDeploymentExclusiveLockReturnsOperationInProgressMessage(t *testing
 		t.Fatalf("acquire exclusive: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = mutex.ReleaseExclusive(context.Background())
+		_ = mutex.Release()
 	})
 
 	// When
@@ -70,7 +70,7 @@ func TestWithDeploymentSharedLockReturnsGenericMessageWhenStatusNotInProgress(t 
 		t.Fatalf("acquire exclusive: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = mutex.ReleaseExclusive(context.Background())
+		_ = mutex.Release()
 	})
 
 	// When
@@ -88,6 +88,37 @@ func TestWithDeploymentSharedLockReturnsGenericMessageWhenStatusNotInProgress(t 
 	}
 	if err.Error() != lockUnavailableMessage {
 		t.Fatalf("expected %q, got %q", lockUnavailableMessage, err.Error())
+	}
+}
+
+func TestWithDeploymentSharedLockNamesAnOlderLauncherMarker(t *testing.T) {
+	t.Parallel()
+
+	// Given a marker file left by an older launcher version
+	deploymentDir := t.TempDir()
+	deployment := config.NewDeploymentDir(deploymentDir)
+	marker := filepath.Join(deploymentDir, ".dirmutex.exclusive")
+	if err := os.WriteFile(marker, nil, 0o600); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	// When
+	err := withDeploymentSharedLock(
+		context.Background(),
+		deployment,
+		func(config.DeploymentDir) error {
+			return nil
+		},
+	)
+
+	// Then the error names the marker and how to clear it
+	if err == nil {
+		t.Fatal("expected lock error, got nil")
+	}
+	for _, want := range []string{"older exasol launcher version", marker, "exasol diag unlock"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected %q in %q", want, err.Error())
+		}
 	}
 }
 
@@ -111,16 +142,14 @@ func TestWithDeploymentSharedLockPreservesContextCancellation(t *testing.T) {
 	}
 }
 
-// nolint:paralleltest
-func TestWithDeploymentExclusiveLockReleasesOnSignal(t *testing.T) {
-	// Given
+//nolint:paralleltest // The signal handler is process-global.
+func TestWithDeploymentExclusiveLockHoldsTheLockThroughASignalUntilReturn(t *testing.T) {
+	// Given an operation holding the exclusive lock
 	util.StopSignalHandler()
-	t.Cleanup(func() {
-		util.StopSignalHandler()
-	})
-
+	t.Cleanup(util.StopSignalHandler)
 	signalChannel := make(chan os.Signal, 1)
-	util.StartSignalHandlerWithChannel(signalChannel, func(os.Signal) {})
+	signalHandled := make(chan struct{})
+	util.StartSignalHandlerWithChannel(signalChannel, func(os.Signal) { close(signalHandled) })
 
 	deploymentDir := t.TempDir()
 	deployment := config.NewDeploymentDir(deploymentDir)
@@ -132,7 +161,6 @@ func TestWithDeploymentExclusiveLockReleasesOnSignal(t *testing.T) {
 	acquired := make(chan struct{})
 	releaseCallback := make(chan struct{})
 	lockDone := make(chan error, 1)
-
 	go func() {
 		lockDone <- withDeploymentExclusiveLock(
 			context.Background(),
@@ -145,19 +173,19 @@ func TestWithDeploymentExclusiveLockReleasesOnSignal(t *testing.T) {
 			},
 		)
 	}()
-
 	<-acquired
 
-	// When
+	// When the process is interrupted
 	signalChannel <- syscall.SIGINT
+	<-signalHandled
 
-	// Then
-	waitForUnlocked(t, mutex, 2*time.Second)
-
+	// Then the operation keeps the lock until it returns
+	requireLockState(t, mutex, true)
 	close(releaseCallback)
 	if err := <-lockDone; err != nil {
 		t.Fatalf("withDeploymentExclusiveLock failed: %v", err)
 	}
+	requireLockState(t, mutex, false)
 }
 
 func writeWorkflowState(t *testing.T, deploymentDir string, workflowState any) {
@@ -170,21 +198,14 @@ func writeWorkflowState(t *testing.T, deploymentDir string, workflowState any) {
 	}
 }
 
-func waitForUnlocked(t *testing.T, mutex *directorymutex.DirectoryMutex, timeout time.Duration) {
+func requireLockState(t *testing.T, mutex *directorymutex.DirectoryMutex, locked bool) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		status, err := mutex.Status()
-		if err != nil {
-			t.Fatalf("status failed: %v", err)
-		}
-		if !status.Locked {
-			return
-		}
-
-		time.Sleep(25 * time.Millisecond)
+	status, err := mutex.Status()
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
 	}
-
-	t.Fatal("expected lock to be released after signal")
+	if status.Locked != locked {
+		t.Fatalf("expected locked=%t, got %+v", locked, status)
+	}
 }

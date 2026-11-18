@@ -37,8 +37,10 @@ Keep it until the deployment is destroyed, and do not commit it to version contr
 
 ## Deployment lock
 
-A marker in the deployment directory that stops two launcher processes from operating on the same
-deployment at once. `exasol status` reports `operation_in_progress` while it is held. See
+An operating system file lock that stops two launcher processes from operating on the same
+deployment at once and is released when the holding process exits. `exasol status` reports
+`operation_in_progress` while it is held, and also after a launcher was killed before it could
+record the result of its operation. See
 [Troubleshooting](troubleshooting.md#status-is-operation_in_progress-but-nothing-is-running).
 
 ## Exasol Admin

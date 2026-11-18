@@ -35,5 +35,6 @@ exasol cache clean --partial-downloads --dry-run
 exasol cache clean --partial-downloads
 ```
 
-The launcher downloads a removed artifact again when it is next required. Do not clear cache locks
-while another launcher process might be running.
+The launcher downloads a removed artifact again when it is next required. `exasol cache unlock`
+clears a cache lock that a terminated older launcher version left behind. It cannot tell whether
+that older launcher is still running, so make sure none is.

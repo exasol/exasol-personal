@@ -46,6 +46,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Changed
 
+- `exasol diag unlock` and `exasol cache unlock` clear only the marker files that older launcher
+  versions lock with, and fail while a running launcher of this version holds the lock. They cannot
+  tell whether an older launcher is still running, so make sure none is before running them.
+
 - On Linux and Windows, `container_engine` `auto` uses an installed Docker before Podman. If Docker
   Desktop is set to Windows containers, `auto` uses Podman instead and says how to switch Docker
   Desktop to Linux containers. A Docker whose daemon is not running is still chosen, so start it or
@@ -67,9 +71,11 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
-- On Windows, launcher commands that use the same deployment at the same time no longer fail or
-  leave its lock behind when another process briefly holds one of its lock files open. The
-  launcher retries the lock operation instead.
+- Deployment and runtime artifact cache locks are released when the launcher process exits, also
+  after a crash or kill, so later commands no longer fail because a deployment is locked by a
+  launcher that is gone. Launcher commands that use the same deployment at the same time no
+  longer leave its lock behind, also on Windows when another process briefly holds a lock file
+  open.
 
 - A `docker` command that reaches a Podman daemon, such as one a Podman machine serves on Windows,
   is no longer reported as an outdated Docker Engine. With `container_engine` set to `auto`, the
@@ -105,6 +111,9 @@ Notable user-facing changes to Exasol Personal are documented here.
   Private Network and can still be stopped, started, and destroyed.
 
 ### Breaking Changes
+
+- This launcher version and earlier ones do not lock each other out of a deployment or the runtime
+  artifact cache. Do not run them at the same time on the same deployments.
 
 - The Exoscale API key needs access to the `networking` service to create the VPC of a new
   deployment. Keys of a restricted role fail with `Forbidden by role policy for networking` until

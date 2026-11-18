@@ -227,16 +227,22 @@ If you do not want to retry, remove the provisioned resources with `exasol destr
 
 ### Status is `operation_in_progress` but nothing is running
 
-The deployment directory stays locked while a launcher operation runs, and a process that was
-terminated can leave the lock behind. Confirm that no other launcher process is running, then
-release the lock:
+The status message says which operation did not finish and how to recover, for example by running
+`deploy` or `destroy` again. A launcher that was killed or crashed during the operation could not
+record its result, so the deployment keeps this status until you run one of those commands.
+
+If a command instead fails because the deployment directory is locked, another `exasol` command is
+still using the deployment. Wait for it to finish or stop it. The lock is released when that
+launcher process exits, also after a crash. Only an older launcher version that was terminated can
+leave its lock behind, and the error then names its marker file. Make sure no older launcher is
+running, then clear it with:
 
 ```bash
 exasol diag unlock
 ```
 
-Unlocking a directory that another process is still using can leave the deployment in an
-inconsistent state, so check first.
+The command fails while a running launcher of this version holds the lock, but it cannot tell
+whether an older launcher is still running.
 
 ### `failed to remove Nano container` after uninstalling the container engine
 

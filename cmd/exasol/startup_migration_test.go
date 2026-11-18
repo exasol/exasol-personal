@@ -320,7 +320,7 @@ func TestRunStartupMigration_KeepsLockedLegacyDeployment(t *testing.T) {
 	mutex, err := directorymutex.New(legacyPath)
 	require.NoError(t, err)
 	require.NoError(t, mutex.AcquireExclusive(context.Background()))
-	t.Cleanup(func() { _ = mutex.ReleaseExclusive(context.Background()) })
+	t.Cleanup(func() { _ = mutex.Release() })
 
 	// When
 	out := runStartupMigrationForTest(t)
@@ -340,7 +340,7 @@ func TestRunStartupMigration_KeepsSharedLockedLegacyDeploymentAndItsLock(t *test
 	mutex, err := directorymutex.New(legacyPath)
 	require.NoError(t, err)
 	require.NoError(t, mutex.AcquireShared(context.Background()))
-	t.Cleanup(func() { _ = mutex.ReleaseShared(context.Background()) })
+	t.Cleanup(func() { _ = mutex.Release() })
 
 	// When
 	out := runStartupMigrationForTest(t)
@@ -350,7 +350,6 @@ func TestRunStartupMigration_KeepsSharedLockedLegacyDeploymentAndItsLock(t *test
 	status, err := mutex.Status()
 	require.NoError(t, err)
 	require.Equal(t, "shared", status.Mode)
-	require.Equal(t, 1, status.SharedCount)
 }
 
 //nolint:paralleltest // home-directory environment is process-global.

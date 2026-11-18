@@ -43,7 +43,7 @@ fi
 | --- | --- |
 | `not_initialized` | The selected deployment directory has not been initialized. |
 | `initialized` | Configuration exists and is ready to deploy. |
-| `operation_in_progress` | Another deployment operation holds the deployment lock. |
+| `operation_in_progress` | Another deployment operation holds the deployment lock, or a killed operation did not record its result. |
 | `interrupted` | A deployment operation was interrupted before completion. |
 | `stopped` | The deployment exists but its database is stopped. |
 | `running` | The deployment infrastructure is running; database readiness was not established. |

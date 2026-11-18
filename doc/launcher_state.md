@@ -2,10 +2,10 @@
 
 Exasol deployments have a lifecycle that begins with `init` (or `install`), continues with `deploy`, and ends with `destroy`.
 
-The launcher keeps this lifecycle consistent across command invocations using two files in the deployment directory:
+The launcher keeps this lifecycle consistent across command invocations using a persistent state file and a deployment lock:
 
-- A **persistent state file** (`.exasolLauncherState.json`) that records the deployment's current workflow state and additional launcher metadata.
-- A **temporary lock file** (`.exasolLock.json`) that prevents concurrent, conflicting operations.
+- The **persistent state file** (`.exasolLauncherState.json`) records the deployment's current workflow state and additional launcher metadata.
+- The **deployment lock** prevents concurrent, conflicting operations.
 
 Deployment compatibility also relies on a stable, plain-text deployment-version marker file (`.exasolLauncher.version`).
 
@@ -89,21 +89,17 @@ Commands that mutate a deployment directory should follow a consistent, conserva
 Some operations that only read state (for example, `status`) generally do not need to take the lock.
 Operations that update the persistent state (including version-check bookkeeping) should use the lock to avoid races with lifecycle commands.
 
-## Temporary lock: `.exasolLock.json`
+## Deployment lock
 
-The lock file is created at the start of deployment-directory-dependent operations and removed when the operation finishes.
+The deployment lock is an operating system file lock with shared and exclusive modes, described in the [directory mutex documentation](../internal/directorymutex/directorymutex.md).
+Operations wait briefly for it and then fail with a message naming the operation in progress.
+The operating system releases it when the holding process exits, so an interrupted or crashed launcher does not leave it behind, and an interrupt does not release it before the process exits.
 
-- If the lock already exists, the launcher must fail fast (the deployment directory is assumed to be in use).
-- Lock acquisition/release should be robust against interrupts so that locks are not leaked.
+### Clearing stale locks (`exasol diag unlock`)
 
-### Forceful unlocking (`exasol unlock`)
-
-The `unlock` command deletes the lock file.
-
-This is a recovery tool for cases where a previous launcher process crashed and did not clean up.
-It does **not** repair the workflow state and it cannot guarantee that the deployment directory is consistent.
-
-As a rule: do not `unlock` unless you are certain no other launcher instance is running for that deployment directory.
+Older launcher versions locked with marker files that a terminated launcher leaves behind.
+`exasol diag unlock` removes those markers and fails while a running launcher holds the lock.
+It does **not** repair the workflow state.
 
 ## Workflow diagram
 

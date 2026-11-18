@@ -4,409 +4,449 @@
 package directorymutex
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
+
+type mutexFactory func(t *testing.T, path string) *DirectoryMutex
+
+// lockStrategies returns mutex factories for lock files inside the directory
+// and for lock files keyed by directory identity, as used on Windows.
+func lockStrategies(t *testing.T) map[string]mutexFactory {
+	t.Helper()
+
+	factory := func(keyedLockDir string) mutexFactory {
+		return func(t *testing.T, path string) *DirectoryMutex {
+			t.Helper()
+
+			mutex, err := New(path)
+			require.NoError(t, err)
+			mutex.keyedLockDir = keyedLockDir
+			t.Cleanup(func() { _ = mutex.Release() })
+
+			return mutex
+		}
+	}
+	strategies := map[string]mutexFactory{"keyed lock files": factory(t.TempDir())}
+	// Windows cannot rename a directory holding an open lock file.
+	if runtime.GOOS != "windows" {
+		strategies["lock file inside"] = factory("")
+	}
+
+	return strategies
+}
+
+func requireStatus(t *testing.T, mutex *DirectoryMutex, mode string) {
+	t.Helper()
+
+	status, err := mutex.Status()
+	require.NoError(t, err)
+	require.Equal(t, mode != "", status.Locked, status)
+	require.Equal(t, mode, status.Mode)
+}
 
 func TestNewRejectsNonDirectory(t *testing.T) {
 	t.Parallel()
 
 	// Given a file path (not a directory)
-	dir := t.TempDir()
-	file := filepath.Join(dir, "file")
-	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil { // nolint:mnd
-		t.Fatalf("write file: %v", err)
-	}
+	file := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(file, []byte("x"), 0o600))
 
 	// When creating a DirectoryMutex with that path
 	_, err := New(file)
 
 	// Then ErrPathNotDirectory is returned
-	if !errors.Is(err, ErrPathNotDirectory) {
-		t.Fatalf("expected ErrPathNotDirectory, got %v", err)
+	require.ErrorIs(t, err, ErrPathNotDirectory)
+}
+
+func TestIsLockFileNameRecognizesLockFilesAndOlderMarkers(t *testing.T) {
+	t.Parallel()
+
+	for input, match := range map[string]bool{
+		lockFileName:         true,
+		exclusiveMarkerName:  true,
+		".dirmutex.shared.3": true,
+		"notes.txt":          false,
+	} {
+		// When
+		got := IsLockFileName(input)
+
+		// Then
+		require.Equal(t, match, got, input)
 	}
 }
 
-func TestIsMarkerNameRecognizesDirectoryMutexMarkers(t *testing.T) {
+func TestExclusiveLockBlocksOtherHandlesUntilTimeout(t *testing.T) {
 	t.Parallel()
 
-	for _, test := range []struct {
-		name  string
-		input string
-		match bool
-	}{
-		{name: "exclusive", input: exclusiveMarkerName, match: true},
-		{name: "shared", input: sharedMarkerName(3), match: true},
-		{name: "non-marker", input: "notes.txt", match: false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
+	for name, newMutex := range lockStrategies(t) {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := IsMarkerName(test.input); got != test.match {
-				t.Fatalf("expected %q match=%t, got %t", test.input, test.match, got)
-			}
+			// Given an exclusive lock is held
+			dir := t.TempDir()
+			holder := newMutex(t, dir)
+			require.NoError(t, holder.AcquireExclusive(context.Background()))
+			other := newMutex(t, dir)
+
+			// When another handle tries to acquire a shared lock with a short deadline
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+			err := other.AcquireShared(ctx)
+
+			// Then the acquisition times out and the exclusive lock stays
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+			require.ErrorIs(t, err, ErrAcquireTimeout)
+			requireStatus(t, other, modeExclusiveString)
+
+			// When the holder releases
+			require.NoError(t, holder.Release())
+
+			// Then the other handle acquires the lock
+			require.NoError(t, other.AcquireShared(context.Background()))
 		})
 	}
 }
 
-func TestExclusiveLockBlocksSharedUntilTimeout(t *testing.T) {
+func TestSharedLocksCoexistUntilTheLastRelease(t *testing.T) {
 	t.Parallel()
 
-	// Given an exclusive lock is held
-	dir := t.TempDir()
-	mutex, err := New(dir)
-	if err != nil {
-		t.Fatalf("new mutex: %v", err)
-	}
+	for name, newMutex := range lockStrategies(t) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	exclusiveAcquired := make(chan struct{})
-	releaseExclusive := make(chan struct{})
-	done := make(chan error, 1)
-	go func() {
-		done <- holdExclusive(mutex, exclusiveAcquired, releaseExclusive)
-	}()
-	<-exclusiveAcquired
+			// Given two shared lock holders on the same directory
+			dir := t.TempDir()
+			first := newMutex(t, dir)
+			second := newMutex(t, dir)
+			require.NoError(t, first.AcquireShared(context.Background()))
+			require.NoError(t, second.AcquireShared(context.Background()))
+			observer := newMutex(t, dir)
 
-	// When trying to acquire a shared lock with a short deadline
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	err = mutex.AcquireShared(ctx)
+			// Then the directory is locked in shared mode
+			requireStatus(t, observer, modeSharedString)
 
-	// Then the acquisition times out
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("expected context deadline exceeded, got %v", err)
-	}
-	if !errors.Is(err, ErrAcquireTimeout) {
-		t.Fatalf("expected ErrAcquireTimeout, got %v", err)
-	}
+			// When one holder releases
+			require.NoError(t, second.Release())
 
-	close(releaseExclusive)
-	if err := <-done; err != nil {
-		t.Fatalf("exclusive lock goroutine failed: %v", err)
-	}
-}
+			// Then it stays locked
+			requireStatus(t, observer, modeSharedString)
 
-func TestSharedLockCountsAndRelease(t *testing.T) {
-	t.Parallel()
+			// When the last holder releases
+			require.NoError(t, first.Release())
 
-	// Given two shared lock holders on the same directory
-	dir := t.TempDir()
-	mutexA, err := New(dir)
-	if err != nil {
-		t.Fatalf("new mutex A: %v", err)
-	}
-	mutexB, err := New(dir)
-	if err != nil {
-		t.Fatalf("new mutex B: %v", err)
-	}
-
-	acquiredA := make(chan struct{})
-	acquiredB := make(chan struct{})
-	releaseA := make(chan struct{})
-	releaseB := make(chan struct{})
-	doneA := make(chan error, 1)
-	doneB := make(chan error, 1)
-
-	go func() {
-		doneA <- holdShared(mutexA, acquiredA, releaseA)
-	}()
-	go func() {
-		doneB <- holdShared(mutexB, acquiredB, releaseB)
-	}()
-
-	<-acquiredA
-	<-acquiredB
-
-	// When both shared locks are active
-	status, err := mutexA.Status()
-	if err != nil {
-		t.Fatalf("status: %v", err)
-	}
-
-	// Then count is 2 and mode is shared
-	if !status.Locked {
-		t.Fatalf("expected locked status, got %+v", status)
-	}
-	if status.Mode != modeSharedString {
-		t.Fatalf("expected mode %q, got %q", modeSharedString, status.Mode)
-	}
-	if status.SharedCount != 2 {
-		t.Fatalf("expected shared count 2, got %d", status.SharedCount)
-	}
-
-	// When one holder releases
-	close(releaseB)
-	if err := <-doneB; err != nil {
-		t.Fatalf("shared lock B failed: %v", err)
-	}
-
-	// Then count is decremented
-	status, err = mutexA.Status()
-	if err != nil {
-		t.Fatalf("status after first release: %v", err)
-	}
-	if status.SharedCount != 1 {
-		t.Fatalf("expected shared count 1, got %d", status.SharedCount)
-	}
-
-	// When the last holder releases
-	close(releaseA)
-	if err := <-doneA; err != nil {
-		t.Fatalf("shared lock A failed: %v", err)
-	}
-
-	// Then lock state is unlocked
-	status, err = mutexA.Status()
-	if err != nil {
-		t.Fatalf("status after second release: %v", err)
-	}
-	if status.Locked {
-		t.Fatalf("expected unlocked status, got %+v", status)
-	}
-}
-
-func TestSharedAcquireTimeoutLeavesExclusiveMarkerUntouched(t *testing.T) {
-	t.Parallel()
-
-	// Given an exclusive lock is held
-	dir := t.TempDir()
-	mutex, err := New(dir)
-	if err != nil {
-		t.Fatalf("new mutex: %v", err)
-	}
-
-	exclusiveAcquired := make(chan struct{})
-	releaseExclusive := make(chan struct{})
-	done := make(chan error, 1)
-	go func() {
-		done <- holdExclusive(mutex, exclusiveAcquired, releaseExclusive)
-	}()
-	<-exclusiveAcquired
-
-	// When shared acquisition times out
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Millisecond)
-	defer cancel()
-	err = mutex.AcquireShared(ctx)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("expected context deadline exceeded, got %v", err)
-	}
-
-	// Then the lock marker still reports exclusive
-	status, err := mutex.Status()
-	if err != nil {
-		t.Fatalf("status: %v", err)
-	}
-	if status.Mode != modeExclusiveString {
-		t.Fatalf("expected mode %q, got %q", modeExclusiveString, status.Mode)
-	}
-
-	close(releaseExclusive)
-	if err := <-done; err != nil {
-		t.Fatalf("exclusive lock goroutine failed: %v", err)
-	}
-}
-
-func TestInvalidMarkerFailsStatus(t *testing.T) {
-	t.Parallel()
-
-	// Given an invalid marker file
-	dir := t.TempDir()
-	mutex, err := New(dir)
-	if err != nil {
-		t.Fatalf("new mutex: %v", err)
-	}
-
-	invalidMarker := filepath.Join(dir, markerStem+".broken")
-	if err := os.WriteFile(invalidMarker, nil, 0o600); err != nil { // nolint:mnd
-		t.Fatalf("write invalid marker: %v", err)
-	}
-
-	// When reading status
-	_, err = mutex.Status()
-
-	// Then the invalid marker is rejected
-	if !errors.Is(err, ErrInvalidMarker) {
-		t.Fatalf("expected ErrInvalidMarker, got %v", err)
-	}
-}
-
-func TestClearLockRemovesMarker(t *testing.T) {
-	t.Parallel()
-
-	// Given an exclusive lock is held
-	dir := t.TempDir()
-	mutex, err := New(dir)
-	if err != nil {
-		t.Fatalf("new mutex: %v", err)
-	}
-
-	exclusiveAcquired := make(chan struct{})
-	releaseExclusive := make(chan struct{})
-	done := make(chan error, 1)
-	go func() {
-		done <- holdExclusive(mutex, exclusiveAcquired, releaseExclusive)
-	}()
-	<-exclusiveAcquired
-
-	// When force-clearing the lock
-	if err := mutex.ClearLock(); err != nil {
-		t.Fatalf("clear lock: %v", err)
-	}
-
-	// Then no marker remains
-	status, err := mutex.Status()
-	if err != nil {
-		t.Fatalf("status: %v", err)
-	}
-	if status.Locked {
-		t.Fatalf("expected unlocked status, got %+v", status)
-	}
-
-	close(releaseExclusive)
-	if err := <-done; err != nil {
-		t.Fatalf("exclusive lock goroutine failed: %v", err)
-	}
-}
-
-// nolint: paralleltest
-func TestSharedLockStressLeavesUnlocked(t *testing.T) {
-	t.Skip("Flaky. With 'invalid marker' error. Somebody fix it")
-
-	// Given many concurrent shared lock attempts
-	dir := t.TempDir()
-	mutex, err := New(dir)
-	if err != nil {
-		t.Fatalf("new mutex: %v", err)
-	}
-
-	const (
-		workers        = 4
-		iterations     = 20
-		acquireTimeout = 3 * time.Second
-	)
-
-	// When all workers repeatedly acquire and release shared locks
-	start := make(chan struct{})
-	var waitGroup sync.WaitGroup
-	errCh := make(chan error, workers)
-
-	for range workers {
-		waitGroup.Go(func() {
-			<-start
-			acquireReleaseSharedRepeatedly(mutex, iterations, acquireTimeout, errCh)
+			// Then it is unlocked
+			requireStatus(t, observer, "")
 		})
 	}
-	close(start)
-	waitGroup.Wait()
-	close(errCh)
-
-	for err := range errCh {
-		if err != nil {
-			t.Fatalf("shared lock stress failed: %v", err)
-		}
-	}
-
-	// Then final status is unlocked
-	status, err := mutex.Status()
-	if err != nil {
-		t.Fatalf("status: %v", err)
-	}
-	if status.Locked {
-		t.Fatalf("expected unlocked status, got %+v", status)
-	}
 }
 
-func acquireReleaseSharedRepeatedly(
-	mutex *DirectoryMutex,
-	iterations int,
-	acquireTimeout time.Duration,
-	errCh chan<- error,
-) {
-	for range iterations {
-		ctx, cancel := context.WithTimeout(context.Background(), acquireTimeout)
-		err := mutex.AcquireShared(ctx)
-		cancel()
-		if err != nil {
-			errCh <- err
-			return
-		}
-		if err := mutex.ReleaseShared(context.Background()); err != nil {
-			errCh <- err
-			return
-		}
-	}
-}
+func TestAcquireTwiceOnOneHandleFails(t *testing.T) {
+	t.Parallel()
 
-func holdExclusive(mutex *DirectoryMutex, acquired chan<- struct{}, release <-chan struct{}) error {
-	if err := mutex.AcquireExclusive(context.Background()); err != nil {
-		return err
-	}
-	defer func() {
-		_ = mutex.ReleaseExclusive(context.Background())
-	}()
+	// Given a handle that holds a lock
+	mutex, err := New(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, mutex.AcquireShared(context.Background()))
+	t.Cleanup(func() { _ = mutex.Release() })
 
-	close(acquired)
-	<-release
+	// When it acquires again
+	err = mutex.AcquireShared(context.Background())
 
-	return nil
-}
-
-func holdShared(mutex *DirectoryMutex, acquired chan<- struct{}, release <-chan struct{}) error {
-	if err := mutex.AcquireShared(context.Background()); err != nil {
-		return err
-	}
-	defer func() {
-		_ = mutex.ReleaseShared(context.Background())
-	}()
-
-	close(acquired)
-	<-release
-
-	return nil
+	// Then it refuses
+	require.ErrorIs(t, err, ErrAlreadyHeld)
 }
 
 func TestAcquireExclusiveIfUnlockedAcquiresOnlyAnUnlockedDirectory(t *testing.T) {
 	t.Parallel()
 
-	// Given one mutex holding a shared lock and another on an unlocked directory
-	locked, err := New(t.TempDir())
-	if err != nil {
-		t.Fatalf("new mutex: %v", err)
-	}
-	if err := locked.AcquireShared(context.Background()); err != nil {
-		t.Fatalf("acquire shared: %v", err)
-	}
-	unlocked, err := New(t.TempDir())
-	if err != nil {
-		t.Fatalf("new mutex: %v", err)
-	}
+	for name, newMutex := range lockStrategies(t) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	// When each tries to acquire an exclusive lock without waiting
-	lockedAcquired, lockedErr := locked.AcquireExclusiveIfUnlocked()
-	unlockedAcquired, unlockedErr := unlocked.AcquireExclusiveIfUnlocked()
+			// Given one directory with a shared lock and another unlocked one
+			lockedDir := t.TempDir()
+			require.NoError(t, newMutex(t, lockedDir).AcquireShared(context.Background()))
+			locked := newMutex(t, lockedDir)
+			unlocked := newMutex(t, t.TempDir())
 
-	// Then only the unlocked directory is acquired and the shared lock is untouched
-	if lockedErr != nil || lockedAcquired {
-		t.Fatalf("locked directory: acquired=%t err=%v", lockedAcquired, lockedErr)
+			// When each tries to acquire an exclusive lock without waiting
+			lockedAcquired, lockedErr := locked.AcquireExclusiveIfUnlocked()
+			unlockedAcquired, unlockedErr := unlocked.AcquireExclusiveIfUnlocked()
+
+			// Then only the unlocked directory is acquired and the shared lock is untouched
+			require.NoError(t, lockedErr)
+			require.False(t, lockedAcquired)
+			require.NoError(t, unlockedErr)
+			require.True(t, unlockedAcquired)
+			requireStatus(t, locked, modeSharedString)
+			requireStatus(t, unlocked, modeExclusiveString)
+		})
 	}
-	if unlockedErr != nil || !unlockedAcquired {
-		t.Fatalf("unlocked directory: acquired=%t err=%v", unlockedAcquired, unlockedErr)
+}
+
+func TestLockMovesWithARenamedDirectory(t *testing.T) {
+	t.Parallel()
+
+	for name, newMutex := range lockStrategies(t) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given an exclusively locked directory
+			root := t.TempDir()
+			oldPath := filepath.Join(root, "old")
+			newPath := filepath.Join(root, "new")
+			require.NoError(t, os.Mkdir(oldPath, 0o700))
+			holder := newMutex(t, oldPath)
+			require.NoError(t, holder.AcquireExclusive(context.Background()))
+
+			// When the holder renames it
+			require.NoError(t, os.Rename(oldPath, newPath))
+
+			// Then it stays locked at the new path until the holder releases
+			moved := newMutex(t, newPath)
+			requireStatus(t, moved, modeExclusiveString)
+			require.NoError(t, holder.Release())
+			requireStatus(t, moved, "")
+		})
 	}
-	status, err := locked.Status()
-	if err != nil || status.Mode != modeSharedString || status.SharedCount != 1 {
-		t.Fatalf("expected one shared lock, got %+v err=%v", status, err)
+}
+
+func TestAcquireOnADirectoryRenamedWhileLockingLeavesItUnlocked(t *testing.T) {
+	t.Parallel()
+
+	for name, newMutex := range lockStrategies(t) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given a directory that another launcher renames after this one opened its lock file
+			root := t.TempDir()
+			oldPath := filepath.Join(root, "old")
+			newPath := filepath.Join(root, "new")
+			require.NoError(t, os.Mkdir(oldPath, 0o700))
+			mutex := newMutex(t, oldPath)
+			mutex.beforeLock = func() {
+				require.NoError(t, os.Rename(oldPath, newPath))
+			}
+
+			// When it acquires the lock without waiting
+			acquired, err := mutex.AcquireExclusiveIfUnlocked()
+
+			// Then it reports the directory as gone and the moved directory is unlocked
+			require.ErrorIs(t, err, os.ErrNotExist)
+			require.False(t, acquired)
+			requireStatus(t, newMutex(t, newPath), "")
+		})
 	}
-	status, err = unlocked.Status()
-	if err != nil || status.Mode != modeExclusiveString {
-		t.Fatalf("expected exclusive lock, got %+v err=%v", status, err)
+}
+
+func TestAcquireOnADirectoryReplacedWhileLockingLocksTheReplacement(t *testing.T) {
+	t.Parallel()
+
+	for name, newMutex := range lockStrategies(t) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given a directory replaced by a new one after its lock file was opened
+			root := t.TempDir()
+			path := filepath.Join(root, "dir")
+			movedPath := filepath.Join(root, "moved")
+			require.NoError(t, os.Mkdir(path, 0o700))
+			mutex := newMutex(t, path)
+			mutex.beforeLock = func() {
+				mutex.beforeLock = nil
+				require.NoError(t, os.Rename(path, movedPath))
+				require.NoError(t, os.Mkdir(path, 0o700))
+			}
+
+			// When it acquires the lock
+			err := mutex.AcquireExclusive(context.Background())
+
+			// Then it holds the lock of the directory now at the path
+			require.NoError(t, err)
+			requireStatus(t, newMutex(t, path), modeExclusiveString)
+			requireStatus(t, newMutex(t, movedPath), "")
+		})
 	}
+}
+
+func TestRemoveDirectoryUnderTheLockFailsWaitingAcquires(t *testing.T) {
+	t.Parallel()
+
+	for name, newMutex := range lockStrategies(t) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given an exclusively locked directory and another handle on it
+			dir := filepath.Join(t.TempDir(), "dir")
+			require.NoError(t, os.Mkdir(dir, 0o700))
+			holder := newMutex(t, dir)
+			require.NoError(t, holder.AcquireExclusive(context.Background()))
+			waiter := newMutex(t, dir)
+
+			// When the holder removes the directory and releases
+			require.NoError(t, RemoveDirectory(dir))
+			require.NoError(t, holder.Release())
+
+			// Then the other handle reports the directory as gone
+			require.ErrorIs(t, waiter.AcquireExclusive(context.Background()), os.ErrNotExist)
+			require.NoDirExists(t, dir)
+		})
+	}
+}
+
+func TestRemoveDirectoryWhileAnotherLauncherWaitsLeavesNothingBehind(t *testing.T) {
+	t.Parallel()
+
+	for name, newMutex := range lockStrategies(t) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			for range 50 {
+				// Given an exclusively locked directory and a launcher waiting for it
+				parent := t.TempDir()
+				dir := filepath.Join(parent, "dir")
+				require.NoError(t, os.Mkdir(dir, 0o700))
+				holder := newMutex(t, dir)
+				require.NoError(t, holder.AcquireExclusive(context.Background()))
+				waiter := newMutex(t, dir)
+				waited := make(chan error, 1)
+				go func() { waited <- waiter.AcquireShared(context.Background()) }()
+
+				// When the holder removes the directory and releases
+				require.NoError(t, RemoveDirectory(dir))
+				require.NoError(t, holder.Release())
+
+				// Then the waiter finds it gone and nothing is left in the parent
+				require.ErrorIs(t, <-waited, os.ErrNotExist)
+				entries, err := os.ReadDir(parent)
+				require.NoError(t, err)
+				require.Empty(t, entries)
+			}
+		})
+	}
+}
+
+func TestOlderLauncherMarkerHoldsTheLockUntilCleared(t *testing.T) {
+	t.Parallel()
+
+	for marker, mode := range map[string]string{
+		exclusiveMarkerName:  modeExclusiveString,
+		".dirmutex.shared.2": modeSharedString,
+	} {
+		t.Run(marker, func(t *testing.T) {
+			t.Parallel()
+
+			// Given a marker file left by an older launcher
+			dir := t.TempDir()
+			markerPath := filepath.Join(dir, marker)
+			require.NoError(t, os.WriteFile(markerPath, nil, 0o600))
+			mutex, err := New(dir)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = mutex.Release() })
+
+			// When acquiring the lock
+			acquired, ifUnlockedErr := mutex.AcquireExclusiveIfUnlocked()
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+			sharedErr := mutex.AcquireShared(ctx)
+			status, statusErr := mutex.Status()
+
+			// Then the marker holds it
+			require.NoError(t, ifUnlockedErr)
+			require.False(t, acquired)
+			require.ErrorIs(t, sharedErr, ErrAcquireTimeout)
+			require.NoError(t, statusErr)
+			require.Equal(t, Status{Locked: true, Mode: mode, MarkerPath: markerPath}, status)
+
+			// When the lock is cleared
+			require.NoError(t, mutex.ClearLock())
+
+			// Then the marker is gone and the lock can be acquired
+			require.NoFileExists(t, markerPath)
+			require.NoError(t, mutex.AcquireExclusive(context.Background()))
+		})
+	}
+}
+
+func TestClearLockReportsALockHeldByARunningProcess(t *testing.T) {
+	t.Parallel()
+
+	for name, newMutex := range lockStrategies(t) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Given an exclusive lock is held
+			dir := t.TempDir()
+			require.NoError(t, newMutex(t, dir).AcquireExclusive(context.Background()))
+			other := newMutex(t, dir)
+
+			// When clearing the lock
+			err := other.ClearLock()
+
+			// Then it reports the holder and the lock stays
+			require.ErrorIs(t, err, ErrHeldByProcess)
+			requireStatus(t, other, modeExclusiveString)
+		})
+	}
+}
+
+const helperProcessEnv = "DIRECTORYMUTEX_HELPER_PROCESS"
+
+// TestHelperProcessHoldsExclusiveLock locks its working directory when run as
+// a helper process.
+func TestHelperProcessHoldsExclusiveLock(t *testing.T) {
+	t.Parallel()
+
+	if os.Getenv(helperProcessEnv) == "" {
+		t.Skip("runs only as a helper process")
+	}
+	mutex, err := New(".")
+	require.NoError(t, err)
+	require.NoError(t, mutex.AcquireExclusive(context.Background()))
+	_, _ = os.Stdout.WriteString("locked\n")
+	time.Sleep(time.Minute)
+}
+
+func TestKilledProcessLeavesTheDirectoryUnlocked(t *testing.T) {
+	t.Parallel()
+
+	// Given another process holds the exclusive lock
+	dir := t.TempDir()
+	//nolint:gosec // Re-runs this test binary as the helper process.
+	cmd := exec.CommandContext(
+		t.Context(), os.Args[0], "-test.run=^TestHelperProcessHoldsExclusiveLock$",
+	)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), helperProcessEnv+"=1")
+	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	scanner := bufio.NewScanner(stdout)
+	require.True(t, scanner.Scan(), "helper process did not report its lock")
+	require.Equal(t, "locked", scanner.Text())
+	mutex, err := New(dir)
+	require.NoError(t, err)
+	requireStatus(t, mutex, modeExclusiveString)
+
+	// When it is killed
+	require.NoError(t, cmd.Process.Kill())
+	_ = cmd.Wait()
+
+	// Then the directory is unlocked
+	require.NoError(t, mutex.AcquireExclusive(context.Background()))
+	require.NoError(t, mutex.Release())
 }
 
 // newPermissionDeniedMutex returns a mutex on a read-only directory that treats
@@ -417,19 +457,16 @@ func newPermissionDeniedMutex(t *testing.T) (*DirectoryMutex, func()) {
 		t.Skip("relies on POSIX directory permissions enforced for a non-root user")
 	}
 	dir := t.TempDir()
-	//nolint:gosec,mnd // A read-only directory makes marker updates fail.
-	if err := os.Chmod(dir, 0o500); err != nil {
-		t.Fatalf("chmod: %v", err)
-	}
+	//nolint:gosec // A read-only directory makes lock file creation fail.
+	require.NoError(t, os.Chmod(dir, 0o500))
 	allow := func() {
-		_ = os.Chmod(dir, 0o700) // nolint:gosec,mnd
+		_ = os.Chmod(dir, 0o700) //nolint:gosec // Restores the test directory.
 	}
 	t.Cleanup(allow)
 	mutex, err := New(dir)
-	if err != nil {
-		t.Fatalf("new mutex: %v", err)
-	}
+	require.NoError(t, err)
 	mutex.isTransient = func(err error) bool { return errors.Is(err, fs.ErrPermission) }
+	t.Cleanup(func() { _ = mutex.Release() })
 
 	return mutex, allow
 }
@@ -437,7 +474,7 @@ func newPermissionDeniedMutex(t *testing.T) (*DirectoryMutex, func()) {
 func TestAcquireRetriesTransientFileErrorsUntilTheyClear(t *testing.T) {
 	t.Parallel()
 
-	// Given a directory that refuses marker creation for a moment
+	// Given a directory that refuses lock file creation for a moment
 	mutex, allow := newPermissionDeniedMutex(t)
 	time.AfterFunc(3*defaultRetryInterval, allow)
 
@@ -445,16 +482,15 @@ func TestAcquireRetriesTransientFileErrorsUntilTheyClear(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err := mutex.AcquireExclusive(ctx)
+
 	// Then the lock is acquired once the error clears
-	if err != nil {
-		t.Fatalf("acquire: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestAcquireReportsATransientFileErrorThatOutlastsTheTimeout(t *testing.T) {
 	t.Parallel()
 
-	// Given a directory that keeps refusing marker creation
+	// Given a directory that keeps refusing lock file creation
 	mutex, _ := newPermissionDeniedMutex(t)
 
 	// When acquiring until the deadline
@@ -463,34 +499,6 @@ func TestAcquireReportsATransientFileErrorThatOutlastsTheTimeout(t *testing.T) {
 	err := mutex.AcquireExclusive(ctx)
 
 	// Then the file error is reported instead of a held lock
-	if !errors.Is(err, fs.ErrPermission) || errors.Is(err, ErrAcquireTimeout) {
-		t.Fatalf("expected the permission error without ErrAcquireTimeout, got %v", err)
-	}
-}
-
-func TestReleaseRetriesTransientFileErrorsUntilTheyClear(t *testing.T) {
-	t.Parallel()
-
-	// Given a held lock whose directory refuses marker removal for a moment
-	mutex, allow := newPermissionDeniedMutex(t)
-	allow()
-	if err := mutex.AcquireExclusive(context.Background()); err != nil {
-		t.Fatalf("acquire: %v", err)
-	}
-	//nolint:gosec,mnd // A read-only directory makes marker removal fail.
-	if err := os.Chmod(mutex.path, 0o500); err != nil {
-		t.Fatalf("chmod: %v", err)
-	}
-	time.AfterFunc(3*defaultRetryInterval, allow)
-
-	// When releasing
-	err := mutex.ReleaseExclusive(context.Background())
-	// Then the lock is released once the error clears
-	if err != nil {
-		t.Fatalf("release: %v", err)
-	}
-	status, err := mutex.Status()
-	if err != nil || status.Locked {
-		t.Fatalf("expected unlocked, got %+v err=%v", status, err)
-	}
+	require.ErrorIs(t, err, fs.ErrPermission)
+	require.NotErrorIs(t, err, ErrAcquireTimeout)
 }

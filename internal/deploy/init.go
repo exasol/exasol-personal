@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
+	"github.com/exasol/exasol-personal/internal/directorymutex"
 	"github.com/exasol/exasol-personal/internal/presets"
 	"github.com/exasol/exasol-personal/internal/util"
 )
@@ -279,6 +280,9 @@ func ensureDirectoryIsEmpty(deployment config.DeploymentDir) error {
 	if err != nil {
 		return err
 	}
+	entries = slices.DeleteFunc(entries, func(entry os.DirEntry) bool {
+		return directorymutex.IsLockFileName(entry.Name())
+	})
 
 	if len(entries) != 0 {
 		badFile := filepath.Join(deployment.Root(), entries[0].Name())

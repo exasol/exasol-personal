@@ -98,7 +98,6 @@ type CacheLockStatus struct {
 	CacheExists bool   `json:"cacheExists"`
 	Locked      bool   `json:"locked"`
 	Mode        string `json:"mode,omitempty"`
-	SharedCount int    `json:"sharedCount,omitempty"`
 	MarkerPath  string `json:"markerPath,omitempty"`
 	Error       string `json:"error,omitempty"`
 }
@@ -511,7 +510,7 @@ func (c *Cache) wipeCacheContents(index *cacheIndex) error {
 	}
 
 	for _, entry := range entries {
-		if directorymutex.IsMarkerName(entry.Name()) {
+		if directorymutex.IsLockFileName(entry.Name()) {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(c.root, entry.Name())); err != nil {

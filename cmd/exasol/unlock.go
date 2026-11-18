@@ -8,14 +8,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const unlockCmdShortDesc = `Unlock a deployment.`
+const unlockCmdShortDesc = `Clear a stale deployment lock.`
 
-const unlockCmdLongDesc = statusCmdShortDesc + `
+const unlockCmdLongDesc = unlockCmdShortDesc + `
 
-	The lock file will be removed.
+	Launcher commands lock the deployment directory while they run, and the operating
+	system releases that lock when the command exits, also after a crash.
 
-	The lock file prevents multiple instances of the exasol launcher running simultaneously.
-	Unlocking the directory may cause inconsistent file states in the deployment directory.
+	Older launcher versions locked it with a marker file instead, which stays behind when
+	such a launcher is terminated. This command removes those marker files. It cannot tell
+	whether an older launcher that created them is still running, so make sure none is.
+	It fails while a running launcher command of this version holds the lock.
 `
 
 var unlockCmd = &cobra.Command{
