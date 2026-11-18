@@ -235,7 +235,7 @@ func TestPathMigrationCTA_QuotesPathsAndConditionsUnlocking(t *testing.T) {
 	// Then it names both paths and offers unlock only after operations have stopped
 	require.Contains(t, message, pending.legacyPath)
 	require.Contains(t, message, pending.newPath)
-	require.Contains(t, message, "If none is running")
+	require.Contains(t, message, "If no exasol launcher of any version is running")
 	require.Contains(t, message, "--deployment-dir '/home/user'\\''s deployments/prod'")
 }
 

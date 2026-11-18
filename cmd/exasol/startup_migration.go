@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"syscall"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/deploy"
@@ -25,6 +26,8 @@ const (
 	// Both legacy roots sit two levels below a launcher-owned .exasol
 	// directory: .exasol/personal/deployments and .exasol/personal/runtime-artifacts.
 	legacyDirDepth = 3
+	// Long enough for another launcher to check and move every deployment.
+	migrationLockTimeout = time.Minute
 )
 
 var (
@@ -124,12 +127,33 @@ func migrateLegacyDeployments(
 		return nil, false
 	}
 	names, err := deploymentNames(legacyRoot)
+	if err != nil || len(names) == 0 {
+		if err != nil {
+			warnMigration(out, err)
+		}
+
+		return nil, false
+	}
+	newRoot, err := launcherpaths.DeploymentsRootPath()
 	if err != nil {
 		warnMigration(out, err)
 
 		return nil, false
 	}
-	newRoot, err := launcherpaths.DeploymentsRootPath()
+
+	migrationLock, err := lockDeploymentMigration(ctx, out, newRoot)
+	if err != nil {
+		warnMigration(out, err)
+
+		return nil, false
+	}
+	defer func() {
+		if err := migrationLock.Release(); err != nil {
+			warnMigration(out, fmt.Errorf("release the deployment migration lock: %w", err))
+		}
+	}()
+	// Another launcher may have moved deployments while this one waited.
+	names, err = deploymentNames(legacyRoot)
 	if err != nil {
 		warnMigration(out, err)
 
@@ -168,6 +192,38 @@ func migrateLegacyDeployments(
 	}
 
 	return deferred, movedAny
+}
+
+// lockDeploymentMigration serializes startup migrations of concurrent
+// launchers, so a launcher waits for another one's moves instead of
+// reporting the deployments that one holds as locked.
+func lockDeploymentMigration(
+	ctx context.Context, out io.Writer, newRoot string,
+) (*directorymutex.DirectoryMutex, error) {
+	if err := os.MkdirAll(newRoot, migrationDirPerm); err != nil {
+		return nil, fmt.Errorf("create deployments root %s: %w", newRoot, err)
+	}
+	mutex, err := directorymutex.New(newRoot)
+	if err != nil {
+		return nil, err
+	}
+	if acquired, err := mutex.AcquireExclusiveIfUnlocked(); err == nil && acquired {
+		return mutex, nil
+	}
+	_, _ = fmt.Fprintln(out, "Waiting for another launcher to finish migrating managed deployments")
+	waitCtx, cancel := context.WithTimeout(ctx, migrationLockTimeout)
+	defer cancel()
+	err = mutex.AcquireExclusive(waitCtx)
+	if errors.Is(err, directorymutex.ErrAcquireTimeout) {
+		return nil, errors.New(
+			"another launcher is still migrating managed deployments; " +
+				"the next invocation retries the move",
+		)
+	} else if err != nil {
+		return nil, fmt.Errorf("lock deployments root %s for migration: %w", newRoot, err)
+	}
+
+	return mutex, nil
 }
 
 // migrateLegacyDeployment leaves a deployment in use where it is, because

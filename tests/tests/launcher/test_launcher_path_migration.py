@@ -215,7 +215,7 @@ def test_daily_migration_guidance_survives_json_and_is_not_repeated(
     assert repeated.returncode == 0, repeated.stderr
     assert first.stderr.count(f"Migration pending for {legacy_dir}") == 1
     assert "Support for the old location is temporary" in first.stderr
-    assert "If none is running" in first.stderr
+    assert "If no exasol launcher of any version is running" in first.stderr
     assert str(deployments_root(home) / "prod") in first.stderr
     assert "Migration pending" not in first.stdout
     assert "Migration pending" not in repeated.stderr

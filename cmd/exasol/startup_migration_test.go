@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/exasol/exasol-personal/internal/config"
 	"github.com/exasol/exasol-personal/internal/directorymutex"
@@ -386,6 +387,28 @@ func TestRunStartupMigration_MovesLegacyDeploymentUnderItsExclusiveLock(t *testi
 }
 
 //nolint:paralleltest // home-directory environment is process-global.
+func TestRunStartupMigration_ReportsWaitingForAnotherLaunchersMigration(t *testing.T) {
+	// Given another launcher migrating while a legacy deployment exists
+	setTestHome(t, t.TempDir())
+	seedLegacyDeployment(t, "default")
+	newRoot, err := launcherpaths.DeploymentsRootPath()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(newRoot, 0o700))
+	other, err := directorymutex.New(newRoot)
+	require.NoError(t, err)
+	require.NoError(t, other.AcquireExclusive(context.Background()))
+	time.AfterFunc(300*time.Millisecond, func() { _ = other.Release() })
+
+	// When
+	out := runStartupMigrationForTest(t)
+
+	// Then it says it waits and migrates once the other launcher is done
+	require.Contains(t, out, "Waiting for another launcher to finish migrating managed deployments")
+	require.NotContains(t, out, "Warning")
+	require.DirExists(t, newDeploymentPath(t, "default"))
+}
+
+//nolint:paralleltest // home-directory environment is process-global.
 func TestRunStartupMigration_ReleasesTheLockOfAKeptRunningDeployment(t *testing.T) {
 	// Given a running legacy deployment
 	setTestHome(t, t.TempDir())
@@ -477,20 +500,33 @@ func TestRunStartupMigration_ConcurrentInvocationsBothSucceed(t *testing.T) {
 		}
 
 		// When
-		outs := make(chan string, 2)
+		type result struct {
+			out      string
+			deferred []pathMigrationDeferralError
+		}
+		results := make(chan result, 2)
 		for range 2 {
 			go func() {
 				var out strings.Builder
-				runStartupMigration(context.Background(), &out)
-				outs <- out.String()
+				deferred := runStartupMigration(context.Background(), &out)
+				results <- result{out: out.String(), deferred: deferred}
 			}()
 		}
 
-		// Then
-		require.NotContains(t, <-outs, "Warning")
-		require.NotContains(t, <-outs, "Warning")
+		// Then both complete without deferring or warning, and nothing stays locked
+		for range 2 {
+			result := <-results
+			require.NotContains(t, result.out, "Warning")
+			require.Empty(t, result.deferred)
+		}
 		for i := range 30 {
-			require.DirExists(t, newDeploymentPath(t, fmt.Sprintf("d%d", i)))
+			path := newDeploymentPath(t, fmt.Sprintf("d%d", i))
+			require.DirExists(t, path)
+			mutex, err := directorymutex.New(path)
+			require.NoError(t, err)
+			status, err := mutex.Status()
+			require.NoError(t, err)
+			require.False(t, status.Locked, path)
 		}
 	}
 }

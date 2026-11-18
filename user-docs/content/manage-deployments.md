@@ -95,7 +95,7 @@ exasol stop --deployment-dir ~/.exasol/personal/deployments/<name>
 
 Close every `exasol` shell or other launcher command that uses a deployment at
 the old location. If no launcher is running and the deployment is still
-reported as in use, clear its lock:
+reported as in use, clear the lock an older launcher version left behind:
 
 ```bash
 exasol diag unlock --deployment-dir ~/.exasol/personal/deployments/<name>

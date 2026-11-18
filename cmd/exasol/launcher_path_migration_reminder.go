@@ -81,7 +81,9 @@ func pathMigrationCTA(migration pathMigrationDeferralError) string {
 	case migrationLocked:
 		reason = "a launcher operation holds its lock"
 		action = "Close every exasol shell or other launcher command using it. " +
-			"If none is running, clear the stale lock with `exasol diag unlock" + selection + "`."
+			"If no exasol launcher of any version is running, clear a lock left by an " +
+			"older launcher version with " +
+			"`exasol diag unlock" + selection + "`."
 	case migrationStateUnknown:
 		reason = "its running state could not be checked"
 		action = "Check the reported state-check error and run " +
