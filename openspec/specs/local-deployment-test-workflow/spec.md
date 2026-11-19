@@ -47,7 +47,7 @@ The local deployment test suite SHALL run portable lifecycle coverage on every e
 - **THEN** initialization, deployment, query, stop, start, and cleanup execute against the macOS VM runtime and the published connection metadata reports shell access as supported
 
 #### Scenario: VM-specific behavior is selected on Linux
-- **WHEN** the Linux AMD64 local row collects memory-sizing, historical-update, or VM-daemon recovery cases
+- **WHEN** the Linux AMD64 local row collects memory-sizing or VM-daemon recovery cases
 - **THEN** those cases are explicitly skipped as macOS VM-specific
 
 #### Scenario: A test rejects local deployments
