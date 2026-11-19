@@ -15,6 +15,9 @@ on:
 
 permissions: {}
 
+env:
+  EXASOL_VERSION_CHECK_URL: https://metrics-test.exasol.com/v1/version-check
+
 jobs:
   plan-tests-launcher:
     runs-on: ubuntu-latest

@@ -7,6 +7,9 @@ on:
 
 permissions: {}
 
+env:
+  EXASOL_VERSION_CHECK_URL: https://metrics-test.exasol.com/v1/version-check
+
 jobs:
   cleanup:
     name: cleanup (${{ matrix.awsRegion }})
