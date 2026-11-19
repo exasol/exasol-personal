@@ -28,6 +28,7 @@ on:
 permissions: {}
 
 env:
+  EXASOL_VERSION_CHECK_URL: https://metrics-test.exasol.com/v1/version-check
   STATUS_DESC: "Deployment tests testing Exasol launcher end to end"
 
 jobs:
