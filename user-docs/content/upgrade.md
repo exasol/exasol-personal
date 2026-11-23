@@ -1,6 +1,7 @@
 # Upgrade the launcher
 
-Upgrade the Exasol Launcher by running the installer again:
+Stop your local deployments with `exasol stop` before upgrading, and start them with the new launcher
+afterwards. Upgrade the Exasol Launcher by running the installer again:
 
 ```bash
 curl https://downloads.exasol.com/exasol-personal/installer.sh | sh
