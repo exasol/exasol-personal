@@ -4,6 +4,12 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ## Unreleased
 
+### Fixed
+
+- Launcher commands started at the same time no longer leave a deployment locked after one of
+  them moves it from its legacy location, which previously warned to clear the lock with
+  `exasol diag unlock`.
+
 ## 2.5.0 - 2026-11-18
 
 ### Added

@@ -225,6 +225,11 @@ func migrateLockedLegacyDeployment(
 	if !keepLock() {
 		return false, errMigrationInterrupted
 	}
+	// Creating the lock marker can race a concurrent migration's move, which
+	// then carries the marker to newPath.
+	if _, statErr := os.Lstat(legacyPath); errors.Is(statErr, os.ErrNotExist) {
+		return false, releaseMigrationLock(releaseCtx, newPath)
+	}
 
 	if err != nil || running {
 		if releaseErr := releaseMigrationLock(releaseCtx, legacyPath); releaseErr != nil {

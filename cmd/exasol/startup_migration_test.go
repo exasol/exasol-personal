@@ -387,6 +387,34 @@ func TestRunStartupMigration_MovesLegacyDeploymentUnderItsExclusiveLock(t *testi
 }
 
 //nolint:paralleltest // home-directory environment is process-global.
+func TestRunStartupMigration_ReleasesALockCarriedAlongByAConcurrentMove(t *testing.T) {
+	// Given a concurrent invocation moves the legacy deployment after its lock
+	// was taken, so the lock marker moves with the directory
+	setTestHome(t, t.TempDir())
+	legacyPath := seedLegacyDeployment(t, "default")
+	newPath := newDeploymentPath(t, "default")
+	original := legacyDeploymentRunningFn
+	legacyDeploymentRunningFn = func(context.Context, config.DeploymentDir) (bool, error) {
+		require.NoError(t, os.MkdirAll(filepath.Dir(newPath), 0o700))
+		require.NoError(t, os.Rename(legacyPath, newPath))
+
+		return false, nil
+	}
+	t.Cleanup(func() { legacyDeploymentRunningFn = original })
+
+	// When
+	out := runStartupMigrationForTest(t)
+
+	// Then the moved deployment is left unlocked without a warning
+	require.NotContains(t, out, "Warning")
+	mutex, err := directorymutex.New(newPath)
+	require.NoError(t, err)
+	status, err := mutex.Status()
+	require.NoError(t, err)
+	require.False(t, status.Locked)
+}
+
+//nolint:paralleltest // home-directory environment is process-global.
 func TestRunStartupMigration_ReleasesTheLockOfAKeptRunningDeployment(t *testing.T) {
 	// Given a running legacy deployment
 	setTestHome(t, t.TempDir())
