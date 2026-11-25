@@ -6,6 +6,10 @@ Notable user-facing changes to Exasol Personal are documented here.
 
 ### Fixed
 
+- On macOS, a sidecar whose host port is already in use no longer leaves the other sidecars
+  without host endpoints. Only that sidecar fails, with the port conflict and the
+  `exasol sidecar config` commands that select another port.
+
 - Launcher commands started at the same time no longer leave a deployment locked after one of
   them moves it from its legacy location, which previously warned to clear the lock with
   `exasol diag unlock`.

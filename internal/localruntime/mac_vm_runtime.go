@@ -1198,6 +1198,8 @@ func (forwards macForwards) open(ctx context.Context, ports []sidecar.PublishedP
 			return err
 		}
 	}
+	// One unavailable host port must not withhold the other sidecars' forwards.
+	var failures []error
 	for _, name := range slices.Sorted(maps.Keys(wanted)) {
 		port := wanted[name]
 		if current[name] == port {
@@ -1206,14 +1208,15 @@ func (forwards macForwards) open(ctx context.Context, ports []sidecar.PublishedP
 		if err := forwards.update(ctx, "add", "--host-ip", port.HostIP,
 			fmt.Sprintf("%s:%d:%d", name, port.GuestPort, port.HostPort)); err != nil {
 			source := published[name]
-
-			return sidecar.ClassifyPortConflict(source.Sidecar, []sidecar.Port{
-				{Name: source.Name, HostPort: source.HostPort},
-			}, err, err.Error())
+			failures = append(failures, sidecar.ClassifyPortConflict(
+				source.Sidecar,
+				[]sidecar.Port{{Name: source.Name, HostPort: source.HostPort}},
+				err, err.Error(),
+			))
 		}
 	}
 
-	return nil
+	return errors.Join(failures...)
 }
 
 func forwardName(port sidecar.PublishedPort) string {
