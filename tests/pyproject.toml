@@ -7,7 +7,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "mcp>=2.3.0",
-    "pytest>=9.1.1",
+    "pytest>=9.2.0",
     "websocket-client>=1.8.0",
     "pydantic>=2.14.1",
     "semver>=3.1.0",
