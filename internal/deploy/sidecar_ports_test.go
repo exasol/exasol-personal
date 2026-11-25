@@ -4,6 +4,9 @@
 package deploy
 
 import (
+	"errors"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/exasol/exasol-personal/internal/config"
@@ -225,4 +228,50 @@ func TestSidecarConfigResetKeepsPortItsRunningContainerHolds(t *testing.T) {
 	// Then
 	require.NoError(t, err)
 	require.Equal(t, "http:18080", result.Ports)
+}
+
+func TestSidecarPortConflictFailsOnlyTheOwningSidecar(t *testing.T) {
+	t.Parallel()
+	// Given
+	operations, selected := newSidecarOperationsFixture(t)
+	catalog, err := sidecar.LoadCatalog([]byte(`version: 1
+sidecars:
+  example:
+    description: Test service
+    architectures: [amd64, arm64]
+    container:
+      image: docker.io/library/caddy:2-alpine
+      ports:
+        - name: http
+          containerPort: 8080
+          hostPort: 18080
+          hostIP: 127.0.0.1
+  other:
+    description: Second test service
+    architectures: [amd64, arm64]
+    container:
+      image: docker.io/library/caddy:2-alpine
+`))
+	require.NoError(t, err)
+	operations.templates = catalog
+	for _, name := range []string{"example", "other"} {
+		_, err := operations.enable(t.Context(), name, "")
+		require.NoError(t, err)
+	}
+	conflict := &sidecar.PortConflictError{
+		Sidecar:  "example",
+		Port:     "http",
+		HostPort: 18080,
+		Cause:    errors.New("address already in use"),
+	}
+	selected.publishErr = errors.Join(conflict)
+	// When
+	failures, err := operations.reconcile(t.Context(), false)
+	// Then
+	require.NoError(t, err)
+	require.Equal(t, []string{"example"}, slices.Sorted(maps.Keys(failures)))
+	require.ErrorIs(t, failures["example"], conflict)
+	recorded, err := config.ReadSidecarState(operations.deployment)
+	require.NoError(t, err)
+	require.Equal(t, []string{"example"}, slices.Sorted(maps.Keys(recorded)))
 }

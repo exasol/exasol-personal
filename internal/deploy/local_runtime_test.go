@@ -778,6 +778,7 @@ type endpointRuntimeStub struct {
 	onStart        func()
 	publishedPorts []sidecar.PublishedPort
 	publishCalls   int
+	publishErr     error
 	// A forwarding runtime serves endpoints itself, the way a VM boundary
 	// requires; a direct runtime leaves publication to the container runtime.
 	forwarding bool
@@ -802,7 +803,7 @@ func (runtime *endpointRuntimeStub) OpenPorts(
 	runtime.publishedPorts = slices.Clone(ports)
 	runtime.publishCalls++
 
-	return nil
+	return runtime.publishErr
 }
 
 func (runtime *endpointRuntimeStub) OpenedPorts(

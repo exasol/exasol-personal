@@ -837,7 +837,36 @@ func (sidecars *deploymentSidecars) applySidecars(
 		return result, err
 	}
 
-	return result, sidecars.publish(ctx, manager, desired)
+	unattributed := attributePortConflicts(sidecars.publish(ctx, manager, desired), result.Failures)
+
+	return result, unattributed
+}
+
+// attributePortConflicts records each port conflict against the sidecar that
+// owns the port and returns the failures no single sidecar owns.
+func attributePortConflicts(err error, failures map[string]error) error {
+	if err == nil {
+		return nil
+	}
+	causes := []error{err}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		causes = joined.Unwrap()
+	}
+	var unattributed []error
+	for _, cause := range causes {
+		conflict, ok := errors.AsType[*sidecar.PortConflictError](cause)
+		if !ok {
+			unattributed = append(unattributed, cause)
+
+			continue
+		}
+		if earlier := failures[conflict.Sidecar]; earlier != nil {
+			cause = errors.Join(earlier, cause)
+		}
+		failures[conflict.Sidecar] = cause
+	}
+
+	return errors.Join(unattributed...)
 }
 
 func (sidecars *deploymentSidecars) inspectSidecars(

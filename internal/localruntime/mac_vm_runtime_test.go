@@ -433,6 +433,8 @@ type forwardStub struct {
 	state map[string]runnerForwardState
 	calls [][]string
 	err   error
+	// Fails adding the named forwards only.
+	addErrs map[string]error
 }
 
 func (stub *forwardStub) forwards() macForwards {
@@ -446,6 +448,12 @@ func (stub *forwardStub) forwards() macForwards {
 		},
 		update: func(_ context.Context, args ...string) error {
 			stub.calls = append(stub.calls, args)
+			if args[0] == "add" {
+				name, _, _ := strings.Cut(args[len(args)-1], ":")
+				if err := stub.addErrs[name]; err != nil {
+					return err
+				}
+			}
 			if stub.err == nil && args[0] == "remove" {
 				delete(stub.state, args[1])
 			}
@@ -563,6 +571,27 @@ func TestMacForwardsClassifyHeldHostPort(t *testing.T) {
 	require.Equal(t, "caddy", conflict.Sidecar)
 	require.Equal(t, "http", conflict.Port)
 	require.Equal(t, 18080, conflict.HostPort)
+}
+
+func TestMacForwardsOpenRemainingEndpointsAfterHeldHostPort(t *testing.T) {
+	t.Parallel()
+	// Given
+	stub := &forwardStub{addErrs: map[string]error{
+		"sidecar.alpha.0": errors.New("listen tcp 127.0.0.1:5100: address already in use"),
+	}}
+	held := sidecar.PublishedPort{
+		Sidecar: "alpha", Name: "http", HostIP: "127.0.0.1", HostPort: 5100, RuntimePort: 30100,
+	}
+	// When
+	err := stub.forwards().open(t.Context(), []sidecar.PublishedPort{held, caddyEndpoint()})
+	// Then
+	conflict, ok := errors.AsType[*sidecar.PortConflictError](err)
+	require.True(t, ok, "expected a port conflict, got %v", err)
+	require.Equal(t, "alpha", conflict.Sidecar)
+	require.Equal(t, [][]string{
+		{"add", "--host-ip", "127.0.0.1", "sidecar.alpha.0:30100:5100"},
+		{"add", "--host-ip", "127.0.0.1", "sidecar.caddy.0:30080:18080"},
+	}, stub.calls)
 }
 
 func TestMacRuntimeReportsNoEndpointsBeforeTheVMStarts(t *testing.T) {
